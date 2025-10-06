@@ -170,6 +170,7 @@ nav:
       - Kernel (Journal + CAS): architecture/kernel.md
       - Self‑Model (Metacognition): architecture/self_model.md
       - Logic Units: architecture/logic_units.md
+      - Modular Cognitive Stack: architecture/modular_cognitive_stack.md
       - Agent Orchestrator: architecture/agent_orchestrator.md
       - Memory Abstraction Layer: architecture/memory_abstraction.md
       - Memory Overlay Service: architecture/memory_overlay_service.md

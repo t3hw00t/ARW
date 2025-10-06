@@ -12,7 +12,7 @@ Type: How‑to
 Key ideas
 - One stream: a single SSE connection to `/events` powers all views.
 - One graph: read‑models live under `/state/*` and publish JSON Patch deltas as `state.read.model.patch`.
-- Universal sidecar: lanes for Timeline, Context, Policy, Metrics, Models, and Activity.
+- Universal sidecar: lanes for Timeline, Context, Policy, Metrics, Models, Activity, and the upcoming Provenance lane for modular stack validation/tool evidence summaries.
 
 Windows
 - Project Hub: Launcher → Windows → Project Hub
@@ -28,6 +28,8 @@ Compare
 - Hub → Runs actions: View and Pin buttons expose descriptive ARIA labels so screen reader users hear the run or artifact context when navigating the table.
 - Chat: Pin any message to A/B and run the same Text/JSON diff below; after image capture, consistent toolbar (Annotate, Copy MD, Save to project).
 - Activity lane listens for `screenshots.captured`; thumbnails expose annotate/blur, copy Markdown, save-to-project, and open actions for recent captures.
+- Provenance lane (rolling out with the modular cognitive stack) displays validation status badges, evidence links, and tool traces with screen-reader-friendly summaries and keyboard shortcuts mirroring the other lanes.
+- Subscribe to `modular.agent.accepted` / `modular.tool.accepted` events when wiring the provenance lane so accepted responses and tool runs appear without scraping generic action logs.
 
 SSE & Read‑models
 - Subscribe with `GET /events?replay=25&prefix=state.` (or use the launcher Events window).

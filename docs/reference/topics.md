@@ -241,6 +241,13 @@ Related docs:
 | `tool.cache` | `TOPIC_TOOL_CACHE` |
 | `tool.ran` | `TOPIC_TOOL_RAN` |
 
+## Modular stack
+
+| Topic | Constant |
+|-------|----------|
+| `modular.agent.accepted` | `TOPIC_MODULAR_AGENT_ACCEPTED` |
+| `modular.tool.accepted` | `TOPIC_MODULAR_TOOL_ACCEPTED` |
+
 ## Screenshots
 
 | Topic | Constant |

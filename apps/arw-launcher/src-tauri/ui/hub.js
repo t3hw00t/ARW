@@ -41,7 +41,8 @@ document.addEventListener('DOMContentLoaded', async () => {
   };
   let base = ARW.base(port);
   let curProj = typeof hubPrefs.lastProject === 'string' ? hubPrefs.lastProject : null;
-  const defaultLanes = ensureLane(['timeline','context','policy','metrics','models','activity'], 'approvals', { after: 'timeline' });
+  const baseLanes = ensureLane(['timeline','context','provenance','policy','metrics','models','activity'], 'provenance', { after: 'context' });
+  const defaultLanes = ensureLane(baseLanes, 'approvals', { after: 'timeline' });
   let sc = ARW.sidecar.mount('sidecar', defaultLanes, { base, getProject: () => curProj });
   const elRuntimeBadge = document.getElementById('runtimeBadge');
   const elRuntimeTable = document.getElementById('runtimeTbl');
@@ -2962,7 +2963,11 @@ document.addEventListener('DOMContentLoaded', async () => {
   });
   document.getElementById('btn-save').addEventListener('click', async ()=>{
     const layout = {
-      lanes: ensureLane(['timeline','context','policy','metrics','models','activity'], 'approvals', { after: 'timeline' }),
+      lanes: ensureLane(
+        ensureLane(['timeline','context','provenance','policy','metrics','models','activity'], 'provenance', { after: 'context' }),
+        'approvals',
+        { after: 'timeline' },
+      ),
       grid: 'cols-2',
       focused: document.querySelector('.layout').classList.contains('full')
     };

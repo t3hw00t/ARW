@@ -10,6 +10,7 @@ Core idea: treat the system as two things — a shared object graph (entities + 
 
 Global scope (inventories)
 - Models, Tools, Policies, Hardware targets, Sandboxes/Containers, Plugins/Extensions, Logic Units
+- Modular Cognitive Stack agents (chat, recall, compression, validation, tooling) registered through the orchestrator with typed contracts.
 
 Project scope (bindings and use)
 - Projects, Agent Profiles (definitions), Agent Instances (profile + runtime + policy), Data Sources, Memory Mounts (vector/graph/kv/doc indexes), Context Recipes (how to assemble the enhanced context), Logic Unit bindings (slots)
@@ -24,6 +25,7 @@ Relationships (examples)
 - Project ↔ Files/Notes/Artifacts
 - Agent Profile ↔ Tools/Policies/Runtime Preferences
 - Agent Profile ↔ Logic Unit Slots (Retrieval, Reasoning, Sampling, Policy, Memory, Evaluation)
+- Agent Profile ↔ Modular agent roster (assign which specialist LLM handles chat vs. recall); provenance states reference [Modular Cognitive Stack](modular_cognitive_stack.md).
 - Agent Instance ↔ Project, Model, Hardware/Sandbox
 - Memory Mounts ↔ Indexes and Datasets, referenced by Context Recipes
 

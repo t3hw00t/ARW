@@ -170,6 +170,10 @@ pub const TOPIC_TOOL_RAN: &str = "tool.ran";
 pub const TOPIC_SCREENSHOTS_CAPTURED: &str = "screenshots.captured";
 pub const TOPIC_SCREENSHOTS_OCR_COMPLETED: &str = "screenshots.ocr.completed";
 
+// Modular stack
+pub const TOPIC_MODULAR_AGENT_ACCEPTED: &str = "modular.agent.accepted";
+pub const TOPIC_MODULAR_TOOL_ACCEPTED: &str = "modular.tool.accepted";
+
 // Connectors & policy plane
 pub const TOPIC_CONNECTORS_REGISTERED: &str = "connectors.registered";
 pub const TOPIC_CONNECTORS_TOKEN_UPDATED: &str = "connectors.token.updated";

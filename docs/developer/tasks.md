@@ -8,6 +8,9 @@ Updated: 2025-10-05 23:12 UTC
 
 
 ## To Do
+- [t-202510060901-msc01] Modular cognitive stack: define agent contracts, typed envelopes, and orchestrator lifecycle (lease scopes, validation hooks).
+- [t-202510060903-msc02] Memory fabric wiring: attach short-term buffers, episodic log hooks, and compression loops with loss metrics + hygiene jobs.
+- [t-202510060906-msc03] Validation & tool guardrails: integrate validation agent decisions, sandboxed tool brokerage, and provenance surfaces.
 
 ## In Progress
 
@@ -217,4 +220,3 @@ Updated: 2025-10-05 23:12 UTC
 - [t-250909170247-6008] Start service and verify /about — done (updated: 2025-09-09 15:02:47 UTC)
 - [t-250909170247-6435] Configure Dependabot — done (updated: 2025-09-09 15:02:47 UTC)
 - [t-250909170247-9910] Integrate tasks tracker with docs — done (updated: 2025-09-09 15:02:47 UTC)
-

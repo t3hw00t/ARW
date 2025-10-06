@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated": "2025-10-05 23:12 UTC",
+  "updated": "2025-10-06 09:10 UTC",
   "tasks": [
     {
       "id": "t-phase-a-01",
@@ -1399,6 +1399,45 @@
       ],
       "updated": "2025-10-05 23:02:12 UTC",
       "done_at": "2025-10-05 23:02:12 UTC"
+    },
+    {
+      "id": "t-202510060901-msc01",
+      "title": "Modular cognitive stack: agent contracts",
+      "desc": "Author typed envelopes, lease scopes, and orchestrator lifecycle state machine before enabling multi-agent routing.",
+      "status": "todo",
+      "notes": [
+        {
+          "time": "2025-10-06 09:10:00 UTC",
+          "text": "Seeded from modular cognitive stack spec; needs schema drafts, policy hooks, and docs alignment."
+        }
+      ],
+      "updated": "2025-10-06 09:10:00 UTC"
+    },
+    {
+      "id": "t-202510060903-msc02",
+      "title": "Modular cognitive stack: memory fabric wiring",
+      "desc": "Attach short-term buffers, episodic log hooks, and compression loops with loss metrics and hygiene jobs.",
+      "status": "todo",
+      "notes": [
+        {
+          "time": "2025-10-06 09:10:00 UTC",
+          "text": "Track Memory Abstraction Layer integration plus provenance metadata for episodic/summary/distilled tiers."
+        }
+      ],
+      "updated": "2025-10-06 09:10:00 UTC"
+    },
+    {
+      "id": "t-202510060906-msc03",
+      "title": "Modular cognitive stack: validation & tool guardrails",
+      "desc": "Integrate validation agent decisions, sandboxed tool brokerage, and provenance surfaces across UI and telemetry.",
+      "status": "todo",
+      "notes": [
+        {
+          "time": "2025-10-06 09:10:00 UTC",
+          "text": "Coordinate guardrail rules, tool audit logging, and Evaluation Harness hooks for the new stack."
+        }
+      ],
+      "updated": "2025-10-06 09:10:00 UTC"
     }
   ]
 }

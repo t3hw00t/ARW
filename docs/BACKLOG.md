@@ -54,6 +54,11 @@ Never‑Out‑Of‑Context (High Priority)
 - [Pack: Research] [t-250918120205-tp02] Launcher Training Park window: replace stub UI with live metrics + control bindings — plan
 - **Recently shipped:** Context Working Set doc; Context API budgets + stable IDs; Memory hygiene janitor; Context telemetry guardrails.
 
+Modular Cognitive Stack (Kickoff)
+- [Kernel][Pack: Research] [t-202510060901-msc01] Agent contracts & orchestrator schema — todo (author typed envelopes, lease scopes, and lifecycle state machine; land docs + tests before enabling the stack).
+- [Kernel][Pack: Research] [t-202510060903-msc02] Memory fabric wiring — todo (introduce short-term buffers, episodic log hooks, and compression loops with loss metrics and hygiene jobs).
+- [Kernel][Pack: Collaboration] [t-202510060906-msc03] Validation & tool guardrails — todo (route Validation Agent decisions through orchestrator, gate tool brokerage with sandbox requirements, and surface provenance in UI dashboards + Evaluation Harness).
+
 UI Coherence
 - [Pack: Collaboration] Universal right‑sidecar across Hub/Chat/Training; subscribe once to `/events` — done (initial lanes)
 - [Pack: Collaboration] Command Palette: global search + actions; attach agent to project; grant scoped permissions with TTL — done (initial)
@@ -308,6 +313,11 @@ Specs & Interop
 
 Docs & Distribution
 - [Pack: Collaboration] Showcase readiness: polish docs, packaging, and installer paths
+
+Modular Cognitive Stack (Follow-up)
+- [Pack: Research][Future] Planner and simulation agent prototypes feeding Evaluation Harness scoring loops.
+- [Pack: Collaboration] UI provenance panes for validation outcomes, memory lineage, and tool audit trails in Chat/Hub sidecars.
+- [Kernel][Pack: Research] Multimodal recall/compression expansion (voice transcripts + visual embeddings) once runtime supervisor phases unlock modalities.
 
 ## Notes
 - [Kernel] For live status of all tracked tasks, see Developer → Tasks, which renders from `.arw/tasks.json`.

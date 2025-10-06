@@ -94,6 +94,12 @@ pub struct AutonomySummary {
 }
 
 #[derive(Clone, Serialize, Default)]
+pub struct ModularSummary {
+    pub agent_totals: BTreeMap<String, u64>,
+    pub tool_totals: BTreeMap<String, u64>,
+}
+
+#[derive(Clone, Serialize, Default)]
 pub struct MemoryGcSummary {
     pub expired_total: u64,
     pub evicted_total: u64,
@@ -107,6 +113,7 @@ pub struct MetricsSummary {
     pub compatibility: CompatibilitySummary,
     pub memory_gc: MemoryGcSummary,
     pub autonomy: AutonomySummary,
+    pub modular: ModularSummary,
 }
 
 #[derive(Clone, Serialize, Default)]
@@ -255,6 +262,29 @@ impl MemoryGcCounters {
     }
 }
 
+#[derive(Default)]
+struct ModularCounters {
+    agents: BTreeMap<String, u64>,
+    tools: BTreeMap<String, u64>,
+}
+
+impl ModularCounters {
+    fn record_agent(&mut self, agent: &str) {
+        *self.agents.entry(agent.to_string()).or_default() += 1;
+    }
+
+    fn record_tool(&mut self, tool: &str) {
+        *self.tools.entry(tool.to_string()).or_default() += 1;
+    }
+
+    fn snapshot(&self) -> ModularSummary {
+        ModularSummary {
+            agent_totals: self.agents.clone(),
+            tool_totals: self.tools.clone(),
+        }
+    }
+}
+
 impl TaskStat {
     fn on_start(&mut self) {
         self.started = self.started.saturating_add(1);
@@ -305,6 +335,7 @@ pub struct Metrics {
     legacy_capsule_headers: AtomicU64,
     memory_gc: MemoryGcCounters,
     autonomy_interrupts: Mutex<BTreeMap<String, u64>>,
+    modular: Mutex<ModularCounters>,
 }
 
 impl Default for Metrics {
@@ -341,6 +372,7 @@ impl Metrics {
             legacy_capsule_headers: AtomicU64::new(0),
             memory_gc: MemoryGcCounters::default(),
             autonomy_interrupts: Mutex::new(BTreeMap::new()),
+            modular: Mutex::new(ModularCounters::default()),
         }
     }
 
@@ -400,6 +432,11 @@ impl Metrics {
                 interrupts: map.clone(),
             })
             .unwrap_or_default();
+        let modular = self
+            .modular
+            .lock()
+            .map(|counters| counters.snapshot())
+            .unwrap_or_default();
         MetricsSummary {
             events,
             routes,
@@ -407,6 +444,7 @@ impl Metrics {
             compatibility,
             memory_gc,
             autonomy,
+            modular,
         }
     }
 
@@ -483,6 +521,18 @@ impl Metrics {
             *map.entry(key.to_string()).or_default() += 1;
         }
     }
+
+    pub fn record_modular_agent(&self, agent_id: &str) {
+        if let Ok(mut counters) = self.modular.lock() {
+            counters.record_agent(agent_id);
+        }
+    }
+
+    pub fn record_modular_tool(&self, tool_id: &str) {
+        if let Ok(mut counters) = self.modular.lock() {
+            counters.record_tool(tool_id);
+        }
+    }
 }
 
 pub fn route_stats_snapshot(
@@ -504,6 +554,7 @@ pub fn route_stats_snapshot(
         "cache": cache_stats_snapshot(cache),
         "memory_gc": summary.memory_gc,
         "autonomy": summary.autonomy,
+        "modular": summary.modular,
     })
 }
 

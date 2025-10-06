@@ -34,6 +34,7 @@ Notes
 - If a file is missing, `exists` is false and size is 0.
 - Spec health also includes `modified_ms` (Unix epoch ms) when available and a summary of JSON schemas (`schemas.{exists,count,files}`).
 - Override locations with `ARW_SPEC_DIR` (for spec files) and `ARW_INTERFACES_DIR` (for the interface catalog).
+- Featured schemas: `modular_agent_message.json` (specialist agent envelopes) and `modular_tool_invocation.json` (tool brokerage contracts) underpin the modular cognitive stack rollout.
 
 Related
 - [CLI Guide](../guide/cli.md)

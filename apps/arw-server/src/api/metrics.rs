@@ -90,6 +90,29 @@ fn render_prometheus(
     }
 
     out.push_str(
+        "# HELP arw_modular_agent_total Modular agent responses accepted\n# TYPE arw_modular_agent_total counter\n",
+    );
+    for (agent, count) in summary.modular.agent_totals.iter() {
+        write_metric_line(
+            &mut out,
+            "arw_modular_agent_total",
+            &[("agent", agent.clone())],
+            count,
+        );
+    }
+    out.push_str(
+        "# HELP arw_modular_tool_total Modular tool invocations accepted\n# TYPE arw_modular_tool_total counter\n",
+    );
+    for (tool, count) in summary.modular.tool_totals.iter() {
+        write_metric_line(
+            &mut out,
+            "arw_modular_tool_total",
+            &[("tool", tool.clone())],
+            count,
+        );
+    }
+
+    out.push_str(
         "# HELP arw_route_hits_total HTTP hits per route\n# TYPE arw_route_hits_total counter\n",
     );
     out.push_str("# HELP arw_route_errors_total HTTP errors per route\n# TYPE arw_route_errors_total counter\n");

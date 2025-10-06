@@ -29,6 +29,7 @@ Badges can be combined (for example, `[Pack: Collaboration][Future]`) to show bo
 - [Pack: Collaboration] Contextual launcher tray actions with recent commands
 - [Pack: Collaboration] Inline doc hints and contextual tooltips
 - [Pack: Collaboration] Command palette/quick-action menu in the launcher
+- [Pack: Collaboration] Chat/Hub provenance panes showing validation outcomes, memory evidence, and tool audit trails (Modular Cognitive Stack phase 2)
  - [Pack: Collaboration] Canonical admin routes: `/admin/debug`, `/admin/ui/*` (legacy `/debug` alias removed)
  - [Pack: Collaboration] SSE robustness: status badges + auto-reconnect with backoff and Last-Event-ID resume
  - [Pack: Collaboration] Connections: per-connection admin token and open app windows for that base
@@ -42,6 +43,7 @@ Badges can be combined (for example, `[Pack: Collaboration][Future]`) to show bo
 - [Pack: Collaboration] Live linting for macros and one-click tool sandboxing
 - [Pack: Collaboration] Integrated monitoring/analytics modules
 - [Pack: Collaboration] Voice/terminal parity for key commands
+- [Pack: Collaboration][Future] Planner orchestration dashboards with agent lineage timelines (Modular Cognitive Stack phase 3)
 
 ## Long‑Term (6+ Months)
 - [Pack: Collaboration][Future] Timeline-based activity stream with timeline scrubber

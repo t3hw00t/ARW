@@ -26,6 +26,7 @@ Type: Explanation
 - You can see and replay everything: sources, steps, tools used, and cost; snapshot any run and compare later.
 - It grows with you: start on one laptop; federation preview lets invited machines help or co-drive under your supervision.
 - Configurable, not brittle: “[Logic Units](architecture/logic_units.md)” are safe strategy packs you can A/B test, apply, and roll back.
+- Modular by design: a cognitive stack of specialist agents keeps dialogue, memory, validation, and tooling aligned with full provenance.
 
 ## What You Can Do
 - Turn messy folders, PDFs, and links into clean briefs, reports, or knowledge bases.

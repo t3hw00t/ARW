@@ -37,6 +37,7 @@ Good defaults to ship
 - Resource Forecaster: predict tokens/latency/$ for chosen recipes and feed budgets.
 - Failure Modes Router: route fragile tasks (e.g., OCR tables, JS‑heavy sites) to safer plans.
 - Never-Out-Of-Context: config-only unit that enforces slot budgets, diversity floor, and on-demand rehydration for context assembly (ships as `interfaces/logic_units/never_out_of_context.json`).
+- Modular Stack Roster: declares which specialist agents (chat, recall, compression, validation, tooling) to activate per project and maps their leases/prompts to the [Modular Cognitive Stack](modular_cognitive_stack.md) contracts.
 
 Endpoints (planned)
 - `GET /logic-units` (list installed/experimental/suggested)
@@ -59,4 +60,4 @@ Governance & safety
 Schemas
 - See `spec/schemas/logic_unit_manifest.json` for the manifest.
 
-See also: Evaluation Harness, Permissions & Policies, Events Vocabulary, Replay & Time Travel.
+See also: Modular Cognitive Stack, Evaluation Harness, Permissions & Policies, Events Vocabulary, Replay & Time Travel.

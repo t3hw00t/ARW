@@ -1,0 +1,96 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/t3hw00t/ARW/spec/schemas/modular_agent_message.json",
+  "title": "ModularAgentMessage",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "agent_id",
+    "turn_id",
+    "intent",
+    "payload",
+    "context_refs",
+    "evidence_ids",
+    "confidence",
+    "latency_budget_ms",
+    "policy_scope"
+  ],
+  "properties": {
+    "agent_id": {
+      "type": "string",
+      "description": "Specialist agent emitting the message (e.g., chat, recall, validation)."
+    },
+    "turn_id": {
+      "type": "string",
+      "description": "Conversation turn or corr_id tying the exchange together."
+    },
+    "intent": {
+      "type": "string",
+      "description": "Structured purpose of the message (e.g., draft_response, recall_summary, validation_report)."
+    },
+    "payload": {
+      "type": "object",
+      "description": "Agent-specific content that downstream specialists consume."
+    },
+    "context_refs": {
+      "type": "array",
+      "items": {"type": "string"},
+      "description": "Pointers to memory or evidence items relied upon."
+    },
+    "evidence_ids": {
+      "type": "array",
+      "items": {"type": "string"},
+      "description": "Identifiers for tool outputs or provenance artifacts referenced in the payload."
+    },
+    "confidence": {
+      "type": "number",
+      "minimum": 0.0,
+      "maximum": 1.0,
+      "description": "Calibrated confidence score for the payload."
+    },
+    "latency_budget_ms": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Remaining latency budget for follow-up work."
+    },
+    "policy_scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["leases"],
+      "properties": {
+        "leases": {
+          "type": "array",
+          "items": {"type": "string"},
+          "description": "Active permission leases the agent relied on."
+        },
+        "capabilities": {
+          "type": "array",
+          "items": {"type": "string"},
+          "description": "Capabilities requested for subsequent steps."
+        },
+        "requires_human_review": {
+          "type": "boolean",
+          "description": "Flag indicating the payload must be reviewed before user delivery."
+        }
+      },
+      "description": "Policy envelope governing the agent’s output."
+    },
+    "handoff_state": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": ["pending", "complete", "blocked", "degraded"]
+        },
+        "notes": {"type": "string"}
+      },
+      "description": "Optional hand-off metadata for orchestrator bookkeeping."
+    },
+    "created_ms": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Unix epoch milliseconds when the message was generated."
+    }
+  }
+}

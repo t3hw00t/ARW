@@ -12,7 +12,9 @@ use crate::{runtime::RuntimeRestoreError, AppState};
 use arw_topics as topics;
 
 use arw_runtime::RuntimeRestartBudget;
-use chrono::SecondsFormat as ChronoSecondsFormat;
+use chrono::{Duration as ChronoDuration, SecondsFormat as ChronoSecondsFormat};
+use tracing::warn;
+use uuid::Uuid;
 
 /// List available mini-agents (placeholder).
 #[utoipa::path(
@@ -290,6 +292,105 @@ pub async fn orchestrator_start_training(
         state2
             .bus()
             .publish(topics::TOPIC_LOGICUNIT_SUGGESTED, &suggested_payload);
+
+        let lease_id = Uuid::new_v4().to_string();
+        let ttl_until = (chrono::Utc::now() + ChronoDuration::minutes(5))
+            .to_rfc3339_opts(ChronoSecondsFormat::Millis, true);
+        if let Err(err) = state2
+            .kernel()
+            .insert_lease_async(
+                lease_id.clone(),
+                "orchestrator".into(),
+                "modular:write".into(),
+                Some("orchestrator".into()),
+                ttl_until,
+                None,
+                None,
+            )
+            .await
+        {
+            warn!(target: "arw::orchestrator", error = %err, "failed to insert modular lease");
+        } else {
+            let agent_action_id = Uuid::new_v4().to_string();
+            let modular_payload = json!({
+                "agent_id": "orchestrator.trainer",
+                "turn_id": id_clone,
+                "intent": "orchestrator.summary",
+                "payload": {
+                    "goal": goal,
+                    "logic_unit_id": lu_id,
+                    "hints": hints_map,
+                    "training_meta": training_meta_map,
+                },
+                "context_refs": [],
+                "evidence_ids": [lu_id.clone()],
+                "confidence": 0.6,
+                "latency_budget_ms": 0,
+                "policy_scope": {
+                    "leases": [lease_id.clone()],
+                    "capabilities": ["modular:write"],
+                }
+            });
+            if let Err(err) = state2
+                .kernel()
+                .insert_action_async(
+                    &agent_action_id,
+                    "modular.agent_message",
+                    &modular_payload,
+                    None,
+                    None,
+                    "queued",
+                )
+                .await
+            {
+                warn!(
+                    target: "arw::orchestrator",
+                    error = %err,
+                    "failed to enqueue modular.agent_message"
+                );
+            } else {
+                state2.signal_action_queue();
+            }
+
+            let tool_action_id = Uuid::new_v4().to_string();
+            let modular_tool_payload = json!({
+                "invocation_id": format!("invoke-{}", id_clone),
+                "requested_by": "orchestrator.trainer",
+                "tool_id": "training.job",
+                "operation_id": "training.job@1.0.0",
+                "input_payload": {
+                    "goal": goal,
+                    "job_id": id_clone,
+                    "preset": preset_value,
+                    "training_meta": training_meta_map,
+                },
+                "sandbox_requirements": {
+                    "needs_network": false,
+                    "filesystem_scopes": [],
+                },
+                "evidence_id": lu_id,
+            });
+            if let Err(err) = state2
+                .kernel()
+                .insert_action_async(
+                    &tool_action_id,
+                    "modular.tool_invocation",
+                    &modular_tool_payload,
+                    None,
+                    None,
+                    "queued",
+                )
+                .await
+            {
+                warn!(
+                    target: "arw::orchestrator",
+                    error = %err,
+                    "failed to enqueue modular.tool_invocation"
+                );
+            } else {
+                state2.signal_action_queue();
+            }
+        }
     });
     (
         axum::http::StatusCode::ACCEPTED,

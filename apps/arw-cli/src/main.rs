@@ -1013,6 +1013,8 @@ enum EventsCmd {
     Observations(EventsObservationsArgs),
     /// Tail the journal via /admin/events/journal
     Journal(EventsJournalArgs),
+    /// Tail modular events (modular.agent/tool accepted) with sensible defaults
+    Modular(ModularTailArgs),
 }
 
 #[derive(Args)]
@@ -1272,7 +1274,7 @@ struct EventsObservationsArgs {
     watch: bool,
 }
 
-#[derive(Args)]
+#[derive(Args, Clone)]
 struct EventsJournalArgs {
     /// Base URL of the service (e.g., http://127.0.0.1:8091)
     #[arg(long, default_value = "http://127.0.0.1:8091")]
@@ -1317,6 +1319,12 @@ struct EventsJournalArgs {
     /// Maximum characters to display for payload/policy lines (0 hides them)
     #[arg(long, default_value_t = 160)]
     payload_width: usize,
+}
+
+#[derive(Args, Clone)]
+struct ModularTailArgs {
+    #[command(flatten)]
+    journal: EventsJournalArgs,
 }
 
 #[derive(Args)]
@@ -1737,6 +1745,12 @@ fn main() {
             }
             EventsCmd::Journal(args) => {
                 if let Err(e) = cmd_events_journal(&args) {
+                    eprintln!("{}", e);
+                    std::process::exit(1);
+                }
+            }
+            EventsCmd::Modular(args) => {
+                if let Err(e) = cmd_events_modular(&args) {
                     eprintln!("{}", e);
                     std::process::exit(1);
                 }
@@ -5674,6 +5688,31 @@ fn cmd_events_journal(args: &EventsJournalArgs) -> Result<()> {
             args.prefix.as_deref(),
         )?;
     }
+}
+
+fn cmd_events_modular(args: &ModularTailArgs) -> Result<()> {
+    let mut journal = args.journal.clone();
+    if journal
+        .prefix
+        .as_ref()
+        .map(|s| s.trim().is_empty())
+        .unwrap_or(true)
+    {
+        journal.prefix = Some("modular.".to_string());
+    }
+    if !journal.json {
+        journal.follow = true;
+        if journal.interval == 5 {
+            journal.interval = 3;
+        }
+        if journal.payload_width == 160 {
+            journal.payload_width = 200;
+        }
+    }
+    if journal.limit == 200 {
+        journal.limit = 100;
+    }
+    cmd_events_journal(&journal)
 }
 
 fn fetch_journal_snapshot(

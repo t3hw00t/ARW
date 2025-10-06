@@ -1026,7 +1026,7 @@ window.ARW = {
   async setSlo(v){ try{ const p = await this.getPrefs('launcher')||{}; p.sloP95 = Number(v)||150; await this.setPrefs('launcher', p); this.toast('SLO set to '+p.sloP95+' ms'); }catch(e){ console.error(e); } },
   // Minimal sidecar mount helper (lanes placeholder + basic wiring)
   sidecar: {
-    mount(el, lanes = ["timeline","metrics","models"], opts = {}) {
+    mount(el, lanes = ["timeline","provenance","metrics","models"], opts = {}) {
       const node = (typeof el === 'string') ? document.getElementById(el) : el;
       if (!node) return { dispose(){} };
       node.classList.add('arw-sidecar');
@@ -1045,6 +1045,17 @@ window.ARW = {
         sections.push([name, body]);
       }
       const bodyFor = (lane) => sections.find(([n]) => n === lane)?.[1] || null;
+      const renderLaneMessage = (lane, text, tone = 'info') => {
+        const el = bodyFor(lane);
+        if (!el) return;
+        el.dataset.emptyMsg = 'true';
+        const span = document.createElement('div');
+        span.className = 'context-msg';
+        if (tone === 'warn') span.classList.add('warn');
+        span.textContent = text;
+        el.innerHTML = '';
+        el.appendChild(span);
+      };
       let approvalsSub = null;
       if (lanes.includes('approvals')) {
         const approvalsState = {
@@ -1969,6 +1980,130 @@ window.ARW = {
       const rModels = (env) => { if (!(env && (env.kind.startsWith('models.') || env.kind==='state.read.model.patch'))) return; mdQ.push(env); if (mdTimer) return; mdTimer = setTimeout(()=>{
         try{ const el = sections.find(([n])=>n==='models')?.[1]; if (!el) return; const frag=document.createDocumentFragment(); const take = mdQ.splice(0, mdQ.length); for (const e of take){ const d=document.createElement('div'); d.className='evt mono'; d.textContent = `${e.kind}: ${safeJson(e.env?.payload)}`.slice(0, 800); frag.prepend ? frag.prepend(d) : frag.appendChild(d); } el.prepend(frag); while (el.childElementCount>60) el.removeChild(el.lastChild); }finally{ mdTimer=null; }
       }, 50); };
+      let provQ = []; let provTimer = null;
+      const rProvenance = ({ kind, env }) => {
+        if (!kind || !kind.startsWith('modular.')) return;
+        provQ.push({ kind, env });
+        if (provTimer) return;
+        provTimer = setTimeout(() => {
+          try {
+            const el = sections.find(([n]) => n === 'provenance')?.[1];
+            if (!el) {
+              provQ = [];
+              return;
+            }
+            if (el.dataset.emptyMsg) {
+              el.innerHTML = '';
+              delete el.dataset.emptyMsg;
+            }
+            const frag = document.createDocumentFragment();
+            const take = provQ.splice(0, provQ.length);
+            for (const entry of take) {
+              const payload = entry.env?.payload || entry.env || {};
+              const ts = entry.env?.time ? new Date(entry.env.time) : new Date();
+              const card = document.createElement('article');
+              card.className = 'evt provenance-card';
+              card.setAttribute('tabindex', '0');
+              const header = document.createElement('div');
+              header.className = 'dim';
+              header.textContent = `${ts.toLocaleTimeString()} · ${entry.kind}`;
+              card.appendChild(header);
+              const body = document.createElement('div');
+              body.className = 'prov-body';
+              const addLine = (label, value) => {
+                if (value === null || value === undefined) return;
+                let text = '';
+                if (Array.isArray(value)) {
+                  if (!value.length) return;
+                  const joined = value.map((v) => (typeof v === 'string' ? v : safeJson(v))).join(', ');
+                  text = joined.length > 180 ? `${joined.slice(0, 177)}…` : joined;
+                } else if (typeof value === 'object') {
+                  try { text = JSON.stringify(value); } catch { text = String(value); }
+                } else {
+                  text = String(value);
+                  if (!text.trim()) return;
+                }
+                const row = document.createElement('div');
+                row.className = 'prov-row';
+                const tag = document.createElement('span');
+                tag.className = 'pill';
+                tag.textContent = label;
+                const span = document.createElement('span');
+                span.textContent = text;
+                row.append(tag, span);
+                body.appendChild(row);
+              };
+              if (entry.kind === 'modular.agent.accepted') {
+                addLine('Agent', payload.agent_id || 'unknown');
+                addLine('Intent', payload.intent);
+                if (Number.isFinite(payload.confidence)) {
+                  addLine('Confidence', `${(Number(payload.confidence) * 100).toFixed(1)}%`);
+                }
+                addLine('Latency budget', Number.isFinite(payload.latency_budget_ms) ? `${payload.latency_budget_ms} ms` : null);
+                if (Array.isArray(payload.context_refs) && payload.context_refs.length) {
+                  addLine('Context refs', payload.context_refs.slice(0, 4));
+                }
+                if (payload.policy_scope && typeof payload.policy_scope === 'object') {
+                  const scope = payload.policy_scope;
+                  const caps = Array.isArray(scope.capabilities) ? scope.capabilities : [];
+                  if (caps.length) addLine('Capabilities', caps);
+                  const leases = Array.isArray(scope.leases)
+                    ? scope.leases
+                        .map((lease) => lease.capability || lease.id || '')
+                        .filter(Boolean)
+                    : [];
+                  if (leases.length) addLine('Leases', leases);
+                  if (scope.requires_human_review) addLine('Requires review', 'yes');
+                }
+              } else if (entry.kind === 'modular.tool.accepted') {
+                addLine('Tool', payload.tool_id || 'unknown');
+                addLine('Operation', payload.operation_id);
+                addLine('Requested by', payload.requested_by);
+                if (payload.sandbox_requirements && typeof payload.sandbox_requirements === 'object') {
+                  const req = payload.sandbox_requirements;
+                  const details = [];
+                  if (req.needs_network) details.push('network');
+                  if (Array.isArray(req.filesystem_scopes) && req.filesystem_scopes.length) {
+                    details.push(`fs: ${req.filesystem_scopes.slice(0, 4).join(', ')}`);
+                  }
+                  if (req.environment && typeof req.environment === 'object') {
+                    const keys = Object.keys(req.environment);
+                    if (keys.length) details.push(`env vars: ${keys.length}`);
+                  }
+                  if (details.length) addLine('Sandbox', details.join(' · '));
+                }
+                addLine('Evidence', payload.evidence_id);
+              }
+              if (Number.isFinite(payload.created_ms)) {
+                const created = new Date(Number(payload.created_ms));
+                if (!Number.isNaN(created.getTime())) {
+                  addLine('Created', created.toLocaleTimeString());
+                }
+              }
+              const actions = document.createElement('div');
+              actions.className = 'row';
+              const copyBtn = document.createElement('button');
+              copyBtn.type = 'button';
+              copyBtn.className = 'ghost btn-small';
+              copyBtn.textContent = 'Copy JSON';
+              copyBtn.addEventListener('click', () => {
+                try { ARW.copy(JSON.stringify(payload, null, 2)); } catch {}
+              });
+              actions.appendChild(copyBtn);
+              card.appendChild(body);
+              card.appendChild(actions);
+              frag.prepend ? frag.prepend(card) : frag.appendChild(card);
+            }
+            const elBody = sections.find(([n]) => n === 'provenance')?.[1];
+            if (elBody) {
+              elBody.prepend(frag);
+              while (elBody.childElementCount > 30) elBody.removeChild(elBody.lastChild);
+            }
+          } finally {
+            provTimer = null;
+          }
+        }, 75);
+      };
       // Policy lane: poll /state/policy (read-only) if base provided
       let policyTimer = null;
       const rPolicy = async () => {
@@ -2497,6 +2632,7 @@ window.ARW = {
       function safeJson(v){ try { return JSON.stringify(v); } catch { return String(v) } }
       const idAll = ARW.sse.subscribe('*', rTimeline);
       const idModels = ARW.sse.subscribe((k)=> k.startsWith('models.'), rModels);
+      const idProvenance = ARW.sse.subscribe((k)=> k.startsWith('modular.'), rProvenance);
       const idMetrics = ARW.read.subscribe('route_stats', rMetrics);
       const idSnappy = ARW.read.subscribe('snappy', rMetrics);
       // Activity lane: listen for screenshots.captured and render thumbnails
@@ -2533,12 +2669,18 @@ window.ARW = {
         while (el.childElementCount>6) el.removeChild(el.lastChild);
       };
       const idActivity = ARW.sse.subscribe((k)=> k.startsWith('screenshots.'), rActivity);
+      if (!opts.base) {
+        renderLaneMessage('provenance', 'Connect to the server to see modular agent and tool evidence.', 'warn');
+      } else {
+        renderLaneMessage('provenance', 'Waiting for modular events…');
+      }
       // initial render for metrics if any
       rMetrics();
       return {
         dispose() {
           ARW.sse.unsubscribe(idAll);
           ARW.sse.unsubscribe(idModels);
+          ARW.sse.unsubscribe(idProvenance);
           ARW.read.unsubscribe(idMetrics);
           ARW.read.unsubscribe(idSnappy);
           if (approvalsSub) ARW.read.unsubscribe(approvalsSub);

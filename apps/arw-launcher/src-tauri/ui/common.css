@@ -176,6 +176,11 @@ table[data-runtime-table] tr[data-runtime-pending="true"] button{ cursor:wait }
 .context-pointer code{ font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size:12px; background:none; border:none; padding:0; white-space:nowrap }
 .context-actions{ display:flex; gap:6px; flex-wrap:wrap }
 .context-empty{ font-size:13px; color:var(--color-muted); padding:8px 0 }
+.provenance-card{ border:1px solid var(--color-line); border-radius:10px; padding:10px 12px; background:linear-gradient(180deg,#ffffff,#f8fafc); box-shadow:var(--shadow-1); margin-bottom:8px }
+.provenance-card .prov-body{ display:grid; gap:6px; margin-top:6px; font-size:12px; color:var(--color-ink) }
+.provenance-card .prov-row{ display:flex; flex-wrap:wrap; gap:6px; align-items:center }
+.provenance-card .prov-row .pill{ font-size:11px; text-transform:uppercase; letter-spacing:.05em }
+.provenance-card .row{ margin-top:8px }
 .context-restore{ display:none; flex-direction:column; gap:6px; margin-top:12px }
 .context-restore.active{ display:flex }
 .context-restore .row{ align-items:center; gap:8px }
@@ -296,8 +301,18 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .arw-sidecar .approval-actions button{ flex:0 0 auto }
 button.btn-small{ padding:4px 8px; font-size:12px; box-shadow:none }
 button.btn-small.ghost{ border-color:#d5dbe4 }
-.arw-sidecar .context-msg{ font-size:12px; color:var(--color-muted); padding:6px 0 }
-.arw-sidecar .context-msg.warn{ color:var(--status-warn) }
+.arw-sidecar .context-msg{
+  font-size:12px;
+  color:var(--color-muted);
+  padding:10px 12px;
+  border:1px dashed var(--color-line);
+  border-radius:10px;
+  background:linear-gradient(180deg,#ffffff,#f8fafc);
+}
+.arw-sidecar .context-msg.warn{
+  color:var(--status-warn);
+  border-color: rgba(var(--status-warn-rgb,217,119,6),0.6);
+}
 .arw-sidecar .context-item{ border:1px solid var(--color-line); border-radius:10px; padding:8px; margin-bottom:8px; background:linear-gradient(180deg,#ffffff,#f6f7f9); box-shadow: inset 0 1px 0 rgba(255,255,255,0.75) }
 .arw-sidecar .context-item:last-child{ margin-bottom:0 }
 .arw-sidecar .context-head{ display:flex; align-items:flex-start; justify-content:space-between; gap:8px; margin-bottom:4px }

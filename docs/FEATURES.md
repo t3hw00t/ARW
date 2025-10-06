@@ -19,6 +19,7 @@ Type: Explanation
 - Unified object graph with a single live event stream (SSE); every surface looks at the same state.
 - Inspectable and replayable runs with sources, steps, tools used, and cost.
 - Configurable strategies via Logic Units you can A/B, apply, and roll back without code changes.
+- Modular multi-agent stack coordinates chat, memory, validation, and tooling specialists so context stays coherent and auditable.
 
 ## Scaling & Sharing (Opt‑In)
 - Stay local-first by default; federation and co-drive remain disabled until you enable them.
@@ -37,6 +38,7 @@ Type: Explanation
 - Observability: OpenTelemetry traces/logs/metrics; in-process event bus (optional journal, SSE replay). See: Admin Endpoints (guide/admin_endpoints.md).
 - Caching layers: Action Cache with CAS and singleflight; digest-addressed blob serving with strong validators; read-models over SSE (JSON Patch deltas with coalescing); llama.cpp prompt caching. See: Architecture → Caching Layers.
 - Security & Policy: Central gating keys and deny contracts; ingress/egress guards; Policy Capsules; roadmap RPU for signatures/ABAC. See: [Security Hardening](guide/security_hardening.md), [Policy & Permissions](guide/policy_permissions.md).
+- Modular cognitive stack: orchestrated agents manage dialogue, memory recall/compression, interpretation, validation, and tool brokerage with typed contracts. See: [Modular Cognitive Stack](architecture/modular_cognitive_stack.md).
 - Visual capture: Agents and UIs call `ui.screenshot.capture` for screen/window/region snapshots with Activity lane previews, gallery management, annotation tooling, optional OCR, and the `project.notes.append` macro that links captures into project notes. See: [Screenshots](guide/screenshots.md).
 - Managed runtimes (in progress): scaffolding seeds the runtime registry and health stream; today you can connect to external llama.cpp hosts, while automated downloads and ONNX Runtime/vLLM adapters remain under active development. See: [Managed Runtime Supervisor](architecture/managed_runtime_supervisor.md) and [Managed llama.cpp Runtime](architecture/managed_llamacpp_runtime.md).
 - Multi-modal adapters (roadmap): planned voice (Whisper.cpp, local TTS) and vision (llava.cpp, Moondream) lifecycles will reuse the runtime supervisor with consent-first leases and provenance. See: Architecture → Managed llama.cpp Runtime → Multi-Modal Hooks and [Multi-Modal Runtime Plan](architecture/multimodal_runtime_plan.md).

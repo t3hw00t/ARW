@@ -1565,7 +1565,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   baseMeta = updateBaseMeta();
   telemetryBase = baseMeta.base || getCurrentBase();
   const base = telemetryBase;
-  trainingSidecar = ARW.sidecar.mount('sidecar', ['timeline','approvals','context','policy','metrics','models'], { base });
+  trainingSidecar = ARW.sidecar.mount('sidecar', ['timeline','approvals','context','provenance','policy','metrics','models'], { base });
   const applyBaseChange = async () => {
     baseMeta = updateBaseMeta();
     const p = ARW.getPortFromInput('port') || baseMeta.port || 8091;
@@ -1578,7 +1578,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     } catch {}
     telemetryBase = ARW.base(p);
     try { trainingSidecar?.dispose?.(); } catch {}
-    trainingSidecar = ARW.sidecar.mount('sidecar', ['timeline','approvals','context','policy','metrics','models'], { base: telemetryBase });
+    trainingSidecar = ARW.sidecar.mount('sidecar', ['timeline','approvals','context','provenance','policy','metrics','models'], { base: telemetryBase });
     ARW.sse.connect(telemetryBase, { replay: 5 });
     await Promise.allSettled([
       refreshTelemetry(),

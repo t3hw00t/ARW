@@ -5,7 +5,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   let meta = updateBaseMeta();
   let port = ARW.getPortFromInput('port') || meta.port || 8091;
   let base = ARW.base(port);
-  let sc = ARW.sidecar.mount('sidecar', ['timeline','approvals','context','policy','metrics','models'], { base });
+  let sc = ARW.sidecar.mount('sidecar', ['timeline','approvals','context','provenance','policy','metrics','models'], { base });
   const applyBaseChange = async () => {
     meta = updateBaseMeta();
     port = ARW.getPortFromInput('port') || meta.port || 8091;
@@ -18,7 +18,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       }
     } catch {}
     try { sc?.dispose?.(); } catch {}
-    sc = ARW.sidecar.mount('sidecar', ['timeline','approvals','context','policy','metrics','models'], { base });
+    sc = ARW.sidecar.mount('sidecar', ['timeline','approvals','context','provenance','policy','metrics','models'], { base });
     ARW.sse.connect(base, { replay: 10 });
   };
   // Load auto OCR pref

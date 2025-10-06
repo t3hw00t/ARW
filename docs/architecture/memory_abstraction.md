@@ -83,6 +83,7 @@ See [memory_overlay_service.md#retrieval-pipeline](memory_overlay_service.md#ret
 - **Self-model & Belief graph**: semantic memories referencing entities feed the world model; `links.parents` connect to beliefs and artifacts.
 - **Logic Units**: strategies can register custom packers or scoring tweaks by implementing the `ContextPacker` trait and providing pack presets.
 - **Policy & Gating**: privacy scope and TTL drive policy checks before data leaves the node or remote collaborators request context.
+- **Modular Cognitive Stack**: recall/compression/validation agents use MAL lanes as their single source of truth; orchestration contracts and provenance expectations are detailed in [Modular Cognitive Stack](modular_cognitive_stack.md).
 
 ## Migration status
 | Phase | Status | Highlights |

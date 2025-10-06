@@ -36,6 +36,7 @@ mod memory_hygiene;
 mod memory_service;
 mod metrics;
 mod models;
+mod modular;
 mod openapi;
 mod patch_guard;
 mod policy;

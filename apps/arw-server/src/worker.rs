@@ -3,11 +3,12 @@ use serde_json::{json, Map, Value};
 use std::sync::Arc;
 use std::time::Duration;
 
+use crate::modular::ModularValidationError;
 use crate::{
     autonomy,
     egress_log::{self, EgressRecord},
     guard_metadata::apply_posture_and_guard,
-    memory_service,
+    memory_service, metrics, modular,
     policy::PolicyHandle,
     queue,
     tasks::TaskHandle,
@@ -102,6 +103,7 @@ struct WorkerContext {
     host: Arc<dyn arw_wasi::ToolHost>,
     autonomy: Arc<autonomy::AutonomyRegistry>,
     queue_signals: Arc<queue::QueueSignals>,
+    metrics: Arc<metrics::Metrics>,
 }
 
 enum ActionDispatchResult {
@@ -124,6 +126,7 @@ impl WorkerContext {
             host: state.host(),
             autonomy: state.autonomy(),
             queue_signals: state.queue_signals(),
+            metrics: state.metrics(),
         }
     }
 
@@ -178,6 +181,8 @@ impl WorkerContext {
             "memory.upsert" => self.handle_memory_upsert(state, input).await,
             "memory.search" => self.handle_memory_search(state, input).await,
             "memory.pack" => self.handle_memory_pack(state, input).await,
+            "modular.agent_message" => self.handle_modular_agent_message(state, input).await,
+            "modular.tool_invocation" => self.handle_modular_tool_invocation(input).await,
             _ => match execute_dynamic_action(state, kind, input).await {
                 Ok(value) => Ok(ActionOutcome::new(value)),
                 Err(err) => Err(ActionFailure::new(err)),
@@ -258,6 +263,51 @@ impl WorkerContext {
         }
 
         Ok(ActionOutcome::new(Value::Object(payload)))
+    }
+
+    async fn handle_modular_agent_message(
+        &self,
+        state: &AppState,
+        input: &Value,
+    ) -> Result<ActionOutcome, ActionFailure> {
+        let validated = match modular::validate_agent_message(state, input).await {
+            Ok(value) => value,
+            Err(ModularValidationError::Internal(err)) => {
+                return Err(ActionFailure::new(ToolError::Runtime(err)));
+            }
+            Err(err) => {
+                return Err(ActionFailure::new(ToolError::Invalid(err.to_string())));
+            }
+        };
+        let summary = modular::agent_message_summary(&validated);
+        self.bus
+            .publish(topics::TOPIC_MODULAR_AGENT_ACCEPTED, &summary);
+        if let Some(agent_id) = summary.get("agent_id").and_then(|v| v.as_str()) {
+            self.metrics.record_modular_agent(agent_id);
+        }
+        Ok(ActionOutcome::new(summary))
+    }
+
+    async fn handle_modular_tool_invocation(
+        &self,
+        input: &Value,
+    ) -> Result<ActionOutcome, ActionFailure> {
+        let validated = match modular::validate_tool_invocation(input).await {
+            Ok(value) => value,
+            Err(ModularValidationError::Internal(err)) => {
+                return Err(ActionFailure::new(ToolError::Runtime(err)));
+            }
+            Err(err) => {
+                return Err(ActionFailure::new(ToolError::Invalid(err.to_string())));
+            }
+        };
+        let summary = modular::tool_invocation_summary(&validated);
+        self.bus
+            .publish(topics::TOPIC_MODULAR_TOOL_ACCEPTED, &summary);
+        if let Some(tool_id) = summary.get("tool_id").and_then(|v| v.as_str()) {
+            self.metrics.record_modular_tool(tool_id);
+        }
+        Ok(ActionOutcome::new(summary))
     }
 
     async fn complete_action(&self, id: &str, outcome: ActionOutcome) {
@@ -1083,7 +1133,7 @@ mod tests {
     use arw_policy::PolicyEngine;
     use arw_topics as topics;
     use async_trait::async_trait;
-    use chrono::{Duration as ChronoDuration, Utc};
+    use chrono::{Duration as ChronoDuration, SecondsFormat, Utc};
     use serde_json::json;
     use std::sync::Arc;
     use tokio::sync::Notify;
@@ -1138,6 +1188,26 @@ mod tests {
                 _ => Err(arw_wasi::WasiError::Unsupported(id.to_string())),
             }
         }
+    }
+
+    async fn insert_active_lease(state: &AppState, capability: &str) -> String {
+        let lease_id = Uuid::new_v4().to_string();
+        let ttl_until =
+            (Utc::now() + ChronoDuration::minutes(10)).to_rfc3339_opts(SecondsFormat::Millis, true);
+        state
+            .kernel()
+            .insert_lease_async(
+                lease_id.clone(),
+                "worker.tests".into(),
+                capability.to_string(),
+                Some("modular".into()),
+                ttl_until,
+                None,
+                None,
+            )
+            .await
+            .expect("insert lease");
+        lease_id
     }
 
     #[derive(Clone)]
@@ -1352,7 +1422,7 @@ mod tests {
             .expect("enqueue memory.pack action");
         state.signal_action_queue();
 
-        let completed_env = timeout(Duration::from_secs(3), rx.recv())
+        let completed_env = timeout(Duration::from_secs(5), rx.recv())
             .await
             .expect("memory pack event timeout")
             .expect("memory pack completion");
@@ -1378,6 +1448,248 @@ mod tests {
         assert!(items
             .iter()
             .any(|item| { item["value"]["text"].as_str() == Some("worker pack note 0") }));
+    }
+
+    #[tokio::test]
+    async fn modular_agent_message_requires_active_lease() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let mut ctx = crate::test_support::begin_state_env(temp.path());
+        let state = build_state(temp.path(), &mut ctx.env).await;
+        let _worker = start_local_worker(state.clone());
+
+        let bus = state.bus();
+        let mut rx =
+            bus.subscribe_filtered(vec![topics::TOPIC_ACTIONS_FAILED.to_string()], Some(8));
+
+        let action_id = Uuid::new_v4().to_string();
+        let payload = json!({
+            "agent_id": "assistant.chat",
+            "turn_id": "test-turn",
+            "intent": "draft_response",
+            "payload": { "text": "hello" },
+            "confidence": 0.5,
+            "latency_budget_ms": 500,
+            "policy_scope": { "leases": ["missing-lease"] }
+        });
+        state
+            .kernel()
+            .insert_action_async(
+                &action_id,
+                "modular.agent_message",
+                &payload,
+                None,
+                None,
+                "queued",
+            )
+            .await
+            .expect("enqueue modular.agent_message");
+        state.signal_action_queue();
+
+        let failed_env = timeout(Duration::from_secs(2), rx.recv())
+            .await
+            .expect("modular agent failure event timeout")
+            .expect("modular agent failure event");
+        assert_eq!(failed_env.payload["id"], json!(action_id));
+        assert_eq!(failed_env.payload["error"]["type"], json!("invalid"));
+
+        let action = state
+            .kernel()
+            .get_action_async(&action_id)
+            .await
+            .expect("load modular agent action")
+            .expect("action present");
+        assert_eq!(action.state, "failed");
+        let output = action.output.expect("action output");
+        assert_eq!(output["error"]["type"], json!("invalid"));
+        assert!(output["error"]["detail"].is_string());
+    }
+
+    #[tokio::test]
+    async fn modular_agent_message_with_active_lease_succeeds() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let mut ctx = crate::test_support::begin_state_env(temp.path());
+        let state = build_state(temp.path(), &mut ctx.env).await;
+        let lease_id = insert_active_lease(&state, "context:read").await;
+        let _worker = start_local_worker(state.clone());
+
+        let bus = state.bus();
+        let mut completed_rx =
+            bus.subscribe_filtered(vec![topics::TOPIC_ACTIONS_COMPLETED.to_string()], Some(8));
+        let mut failed_rx =
+            bus.subscribe_filtered(vec![topics::TOPIC_ACTIONS_FAILED.to_string()], Some(8));
+        let mut modular_rx = bus.subscribe_filtered(
+            vec![topics::TOPIC_MODULAR_AGENT_ACCEPTED.to_string()],
+            Some(8),
+        );
+
+        let action_id = Uuid::new_v4().to_string();
+        let payload = json!({
+            "agent_id": "assistant.chat",
+            "turn_id": "test-turn",
+            "intent": "draft_response",
+            "payload": { "text": "ready" },
+            "context_refs": [],
+            "evidence_ids": [],
+            "confidence": 0.9,
+            "latency_budget_ms": 1200,
+            "policy_scope": {
+                "leases": [lease_id.clone()],
+                "capabilities": ["context:read"]
+            }
+        });
+        state
+            .kernel()
+            .insert_action_async(
+                &action_id,
+                "modular.agent_message",
+                &payload,
+                None,
+                None,
+                "queued",
+            )
+            .await
+            .expect("enqueue modular.agent_message");
+        state.signal_action_queue();
+
+        let (channel, completed_env) = timeout(Duration::from_secs(5), async {
+            tokio::select! {
+                msg = completed_rx.recv() => msg.map(|env| ("completed".to_string(), env)),
+                msg = failed_rx.recv() => msg.map(|env| ("failed".to_string(), env)),
+            }
+        })
+        .await
+        .expect("modular agent completion timeout")
+        .expect("modular agent completion event");
+        assert_eq!(
+            channel, "completed",
+            "expected completion event, got {channel}"
+        );
+        assert_eq!(completed_env.payload["id"], json!(action_id));
+        assert_eq!(completed_env.payload["output"]["status"], json!("accepted"));
+
+        let leases = completed_env.payload["output"]["policy_scope"]["leases"]
+            .as_array()
+            .expect("leases array");
+        assert_eq!(leases.len(), 1);
+        assert_eq!(leases[0]["id"], json!(lease_id));
+
+        let modular_env = timeout(Duration::from_secs(2), modular_rx.recv())
+            .await
+            .expect("modular agent accepted event timeout")
+            .expect("modular agent accepted event");
+        assert_eq!(modular_env.payload["agent_id"], json!("assistant.chat"));
+
+        let action = state
+            .kernel()
+            .get_action_async(&action_id)
+            .await
+            .expect("load modular agent action")
+            .expect("action present");
+        assert_eq!(action.state, "completed");
+
+        let metrics_snapshot = state.metrics().snapshot();
+        assert_eq!(
+            metrics_snapshot
+                .modular
+                .agent_totals
+                .get("assistant.chat")
+                .copied()
+                .unwrap_or_default(),
+            1
+        );
+    }
+
+    #[tokio::test]
+    async fn modular_tool_invocation_validates_payload() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let mut ctx = crate::test_support::begin_state_env(temp.path());
+        let state = build_state(temp.path(), &mut ctx.env).await;
+        let _worker = start_local_worker(state.clone());
+
+        let bus = state.bus();
+        let mut completed_rx =
+            bus.subscribe_filtered(vec![topics::TOPIC_ACTIONS_COMPLETED.to_string()], Some(8));
+        let mut failed_rx =
+            bus.subscribe_filtered(vec![topics::TOPIC_ACTIONS_FAILED.to_string()], Some(8));
+        let mut modular_rx = bus.subscribe_filtered(
+            vec![topics::TOPIC_MODULAR_TOOL_ACCEPTED.to_string()],
+            Some(8),
+        );
+
+        let action_id = Uuid::new_v4().to_string();
+        let payload = json!({
+            "invocation_id": "invoke-1",
+            "requested_by": "agent.recall",
+            "tool_id": "memory.search",
+            "operation_id": "memory.search@1.0.0",
+            "input_payload": {
+                "query": "hello",
+                "limit": 3
+            },
+            "sandbox_requirements": {
+                "needs_network": false,
+                "filesystem_scopes": []
+            },
+            "evidence_id": "evidence-1"
+        });
+        state
+            .kernel()
+            .insert_action_async(
+                &action_id,
+                "modular.tool_invocation",
+                &payload,
+                None,
+                None,
+                "queued",
+            )
+            .await
+            .expect("enqueue modular.tool_invocation");
+        state.signal_action_queue();
+
+        let (channel, completed_env) = timeout(Duration::from_secs(5), async {
+            tokio::select! {
+                msg = completed_rx.recv() => msg.map(|env| ("completed".to_string(), env)),
+                msg = failed_rx.recv() => msg.map(|env| ("failed".to_string(), env)),
+            }
+        })
+        .await
+        .expect("tool invocation completion timeout")
+        .expect("tool invocation event");
+        assert_eq!(
+            channel, "completed",
+            "expected completion event, got {channel}"
+        );
+        assert_eq!(completed_env.payload["id"], json!(action_id));
+        assert_eq!(completed_env.payload["output"]["status"], json!("accepted"));
+        assert_eq!(
+            completed_env.payload["output"]["tool_id"],
+            json!("memory.search")
+        );
+
+        let modular_env = timeout(Duration::from_secs(2), modular_rx.recv())
+            .await
+            .expect("modular tool accepted event timeout")
+            .expect("modular tool accepted event");
+        assert_eq!(modular_env.payload["tool_id"], json!("memory.search"));
+
+        let action = state
+            .kernel()
+            .get_action_async(&action_id)
+            .await
+            .expect("load modular tool action")
+            .expect("action present");
+        assert_eq!(action.state, "completed");
+
+        let metrics_snapshot = state.metrics().snapshot();
+        assert_eq!(
+            metrics_snapshot
+                .modular
+                .tool_totals
+                .get("memory.search")
+                .copied()
+                .unwrap_or_default(),
+            1
+        );
     }
 
     #[tokio::test]

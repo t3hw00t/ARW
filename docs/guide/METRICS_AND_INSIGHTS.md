@@ -40,6 +40,7 @@ Type: How‑to
   - `arw_memory_gc_expired_total` / `arw_memory_gc_evicted_total` — TTL expirations and lane-cap evictions reclaimed by the memory hygiene loop
   - `arw_task_*` — background task starts/completions/aborts (`*_total`) and inflight gauges
   - `arw_legacy_capsule_headers_total` — legacy `X-ARW-Gate` headers rejected (should trend to zero before retiring compatibility shims)
+  - `arw_modular_agent_total` / `arw_modular_tool_total` — accepted modular agent responses and tool invocations (labelled by `agent`/`tool`)
   - `arw_build_info{service,version,sha}` — build metadata
 - Trust (RPU):
     - `arw_rpu_trust_last_reload_ms` — epoch ms of last trust store reload

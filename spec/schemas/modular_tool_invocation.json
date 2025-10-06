@@ -1,0 +1,100 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/t3hw00t/ARW/spec/schemas/modular_tool_invocation.json",
+  "title": "ModularToolInvocation",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "invocation_id",
+    "requested_by",
+    "tool_id",
+    "operation_id",
+    "input_payload",
+    "sandbox_requirements",
+    "evidence_id"
+  ],
+  "properties": {
+    "invocation_id": {
+      "type": "string",
+      "description": "Stable identifier for the tool call."
+    },
+    "requested_by": {
+      "type": "string",
+      "description": "Agent ID that requested the tool execution."
+    },
+    "tool_id": {
+      "type": "string",
+      "description": "Registered tool identifier (matches `/actions` kind)."
+    },
+    "operation_id": {
+      "type": "string",
+      "description": "Specific operation/version combination (e.g., tool@semver)."
+    },
+    "input_payload": {
+      "type": "object",
+      "description": "Input body supplied to the tool."
+    },
+    "sandbox_requirements": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "needs_network": {"type": "boolean"},
+        "filesystem_scopes": {
+          "type": "array",
+          "items": {"type": "string"}
+        },
+        "environment": {
+          "type": "object",
+          "additionalProperties": {"type": "string"},
+          "description": "Environment variables required by the tool."
+        }
+      },
+      "description": "Guardrails the orchestrator must enforce before execution."
+    },
+    "evidence_id": {
+      "type": "string",
+      "description": "Identifier used to link outputs back into provenance trails."
+    },
+    "result": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status"],
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": ["pending", "ok", "error"]
+        },
+        "output": {
+          "type": "object",
+          "description": "Successful tool response."
+        },
+        "error": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "kind": {"type": "string"},
+            "message": {"type": "string"},
+            "retryable": {"type": "boolean"}
+          },
+          "description": "Failure details when status is error."
+        },
+        "latency_ms": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Runtime latency from start to finish."
+        }
+      },
+      "description": "Execution output captured after the tool finishes."
+    },
+    "started_ms": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Unix epoch milliseconds when execution began."
+    },
+    "completed_ms": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Unix epoch milliseconds when execution finished."
+    }
+  }
+}

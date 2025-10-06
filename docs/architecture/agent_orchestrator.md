@@ -8,6 +8,7 @@ Type: Explanation
 
 Purpose
 - Train and manage “mini‑agents” that coordinate other autonomous agents under policy and budgets. The orchestrator plans training episodes, runs them through the Evaluation Harness, and promotes configurations to Logic Units.
+- Supply specialist roles for the modular cognitive stack (chat, recall, compression, validation, tooling) while keeping schema compatibility and safety posture aligned with production gateways.
 
 Principles
 - Safe by design: all training/offload is lease‑gated; no unbounded egress or code installs.
@@ -28,5 +29,6 @@ Roadmap
 - Phase 1: integrate with Evaluation Harness; record results; output Logic Unit patches.
 - Phase 2: curriculum & self‑play; memory‑guided sampling and active learning.
 - Phase 3: promotion policy and confidence‑aware routing across agent teams.
+- Phase 4: align modular cognitive stack agents with planner/tool brokerage contracts and provenance guarantees surfaced to Operators and UI.
 
-See also: Logic Units, Evaluation Harness, Memory Abstraction Layer, Policy & Leases.
+See also: Logic Units, Evaluation Harness, Memory Abstraction Layer, Modular Cognitive Stack, Policy & Leases.

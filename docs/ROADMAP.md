@@ -20,6 +20,16 @@ Promote the managed runtime supervisor from blueprint to the primary kernel init
 - **Phase 4: Federation Hooks** — expose runtime claims through orchestrator lanes and worker manifests so remote nodes advertise accelerator profiles safely. Include ledger coverage to track shared GPU usage.
 - **Documentation & UX** — replace the llama.cpp blueprint with the finalized supervisor design, add operator runbooks, and surface profiles plus consent cues in Launcher. Keep docs, feature matrix, and roadmap checkpoints in sync as phases land.
 
+## Priority Two – Modular Cognitive Stack & Memory Orchestration
+
+Establish the multi-agent cognitive scaffold that keeps user-facing chat, memory, validation, and tooling specialists aligned under a single orchestrator.
+
+- **Phase 0: Foundations** — [Kernel][Pack: Research] finalize the modular cognitive stack architecture, typed message schemas, and gating policy updates (expected completion: 2 sprints). Deliver contracts for agent registration, memory lane access, and tool brokerage with docs in place.
+- **Phase 1: Memory Fabric Integration** — [Kernel][Pack: Research] connect recall/compression agents to the Memory Abstraction Layer with short-term buffers, episodic logs, and compression tiers instrumented for loss metrics. Ship hygiene jobs, retention policies, and provenance metadata surfaced in `/state/memory`.
+- **Phase 2: Validation & Governance** — [Kernel][Pack: Collaboration] wire the Validation Agent into the orchestrator loop, enforce privacy/PII scrubbing before durable storage, and expose provenance trails in UI and `/state/episodes`. Expand guardrail policies to cover tool outputs and prompt-injection detection.
+- **Phase 3: Tooling & Planner** — [Kernel][Pack: Research] broker tool execution with sandbox requirements, retries, and audit trails; introduce an optional planner that can fan out to specialists while respecting lease scopes. Integrate telemetry with the Evaluation Harness for AB testing.
+- **Documentation & Telemetry** — Publish operator guides, UI affordances, and dashboard widgets for memory hit rate, validation catch rate, and compression health. Keep [Backlog](BACKLOG.md) and [Developer Tasks](developer/tasks.md) aligned as phases land.
+
 ## Scope Badges
 
 The roadmap and its planning mirrors use badges to flag which slice of the stack an initiative touches and how that work supports the Complexity Collapse program of record:
@@ -43,6 +53,7 @@ To keep the larger intent visible while we iterate, we track four active executi
 
 ### Never-Out-Of-Context
 - Immediate moves: land slot budgets and stable IDs in the Context API, ship the MMR selector pass, and draft the compression cascade executor so the Training Park metrics have a feed.
+- Immediate moves: kick off the Modular Cognitive Stack MVP (agent contracts, recall/compression wiring, validation loop) and stage tool brokerage schemas for review.
 - Checks & optimizations: add telemetry assertions for `context.recall.risk` and `context.coverage`; enforce hygiene caps/TTL janitor runs in integration tests.
 - Documentation: expand guide coverage for the new API surfaces and annotate Backlog entries as instrumentation ships.
 

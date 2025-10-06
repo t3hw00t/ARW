@@ -25,6 +25,9 @@ Type: Explanation
 Unified model
 - Treat ARW as a shared object graph (entities + relations) plus the `/events` stream and `/state/*` read models. UIs (Project Hub, Chat, Training Park, Managers) are lenses on the same truth.
 
+Modular cognitive stack
+- The orchestrator coordinates specialist agents (chat, recall, compression, validation, tooling) that all read/write through the Memory Fabric. See [Modular Cognitive Stack](../architecture/modular_cognitive_stack.md) for contracts, accessibility guarantees, and rollout roadmap.
+
 ## Connectors, Connections, Links
 - Connectors are providers (HTTP/WS/MCP/local). Connections are configured instances. Links bind connections to services/routes.
 
