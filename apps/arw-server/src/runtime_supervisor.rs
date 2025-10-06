@@ -1045,7 +1045,7 @@ mod tests {
     #[tokio::test]
     async fn supervisor_reports_health() {
         let bus = Bus::new(128);
-        let registry = RuntimeRegistry::new(bus.clone());
+        let registry = Arc::new(RuntimeRegistry::new(bus.clone()));
         let supervisor = RuntimeSupervisor::new_with_options(
             registry.clone(),
             bus.clone(),
@@ -1094,7 +1094,7 @@ mod tests {
     #[tokio::test]
     async fn disabling_auto_start_stops_runtime() {
         let bus = Bus::new(128);
-        let registry = RuntimeRegistry::new(bus.clone());
+        let registry = Arc::new(RuntimeRegistry::new(bus.clone()));
         let supervisor = RuntimeSupervisor::new_with_options(
             registry.clone(),
             bus.clone(),
@@ -1155,7 +1155,7 @@ mod tests {
     #[tokio::test]
     async fn removing_manifest_entry_removes_runtime() {
         let bus = Bus::new(128);
-        let registry = RuntimeRegistry::new(bus.clone());
+        let registry = Arc::new(RuntimeRegistry::new(bus.clone()));
         let supervisor = RuntimeSupervisor::new_with_options(
             registry.clone(),
             bus.clone(),
