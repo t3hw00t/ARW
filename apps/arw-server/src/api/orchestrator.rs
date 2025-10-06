@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 use utoipa::ToSchema;
 
-use crate::AppState;
+use crate::{runtime::RuntimeRestoreError, AppState};
 use arw_topics as topics;
 
 use arw_runtime::RuntimeRestartBudget;
@@ -353,6 +353,14 @@ pub struct RuntimeRestoreResponse {
 }
 
 #[derive(Serialize, ToSchema)]
+pub struct RuntimeRestoreFailureResponse {
+    pub ok: bool,
+    pub runtime_id: String,
+    pub pending: bool,
+    pub reason: String,
+}
+
+#[derive(Serialize, ToSchema)]
 pub struct RuntimeRestoreDeniedResponse {
     pub ok: bool,
     pub runtime_id: String,
@@ -395,6 +403,7 @@ impl From<RuntimeRestartBudget> for RuntimeRestartBudgetView {
     request_body = RuntimeRestoreRequest,
     responses(
         (status = 202, description = "Restore requested", body = RuntimeRestoreResponse),
+        (status = 500, description = "Restore failed", body = RuntimeRestoreFailureResponse),
         (status = 429, description = "Restart budget exhausted", body = RuntimeRestoreDeniedResponse),
         (status = 401, description = "Unauthorized", body = arw_protocol::ProblemDetails)
     )
@@ -424,14 +433,24 @@ pub async fn orchestrator_runtime_restore(
             }),
         )
             .into_response(),
-        Err(denied) => (
+        Err(RuntimeRestoreError::RestartDenied { budget }) => (
             axum::http::StatusCode::TOO_MANY_REQUESTS,
             Json(RuntimeRestoreDeniedResponse {
                 ok: false,
                 runtime_id,
                 pending: false,
                 reason: "Restart budget exhausted".to_string(),
-                restart_budget: denied.budget.into(),
+                restart_budget: budget.into(),
+            }),
+        )
+            .into_response(),
+        Err(RuntimeRestoreError::RestoreFailed { reason }) => (
+            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+            Json(RuntimeRestoreFailureResponse {
+                ok: false,
+                runtime_id,
+                pending: false,
+                reason,
             }),
         )
             .into_response(),

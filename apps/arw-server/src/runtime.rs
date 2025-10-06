@@ -1,6 +1,6 @@
 use std::collections::{HashMap, VecDeque};
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
+use std::sync::{Arc, Weak};
 use std::time::Duration;
 
 use arw_events::Bus;
@@ -18,6 +18,7 @@ use tokio::sync::{Mutex as TokioMutex, RwLock};
 use tracing::{info, warn};
 
 use crate::read_models;
+use crate::runtime_supervisor::RuntimeSupervisor;
 use crate::tasks::TaskHandle;
 use crate::AppState;
 
@@ -119,9 +120,12 @@ impl RestartBudgetConfig {
     }
 }
 
-#[derive(Clone, Debug)]
-pub struct RestartDenied {
-    pub budget: RuntimeRestartBudget,
+#[derive(Debug, thiserror::Error)]
+pub enum RuntimeRestoreError {
+    #[error("restart budget exhausted")]
+    RestartDenied { budget: RuntimeRestartBudget },
+    #[error("restore failed: {reason}")]
+    RestoreFailed { reason: String },
 }
 
 #[derive(Clone)]
@@ -130,6 +134,7 @@ pub(crate) struct RuntimeRegistry {
     bus: Bus,
     storage: Option<Arc<RuntimeStorage>>,
     restart_config: Arc<RestartBudgetConfig>,
+    supervisor: Arc<RwLock<Option<Weak<RuntimeSupervisor>>>>,
 }
 
 impl RuntimeRegistry {
@@ -143,6 +148,7 @@ impl RuntimeRegistry {
             bus,
             storage,
             restart_config: Arc::new(config),
+            supervisor: Arc::new(RwLock::new(None)),
         }
     }
 
@@ -190,6 +196,11 @@ impl RuntimeRegistry {
         self.publish_snapshot().await;
     }
 
+    pub async fn descriptor(&self, id: &str) -> Option<RuntimeDescriptor> {
+        let guard = self.state.read().await;
+        guard.desired.get(id).cloned()
+    }
+
     pub async fn apply_status(&self, mut status: RuntimeStatus) {
         if status.summary.is_empty() {
             status.summary = format!("state set to {:?}", status.state);
@@ -234,6 +245,16 @@ impl RuntimeRegistry {
         }
         self.bus.publish(TOPIC_RUNTIME_STATE_CHANGED, &payload);
         self.publish_snapshot().await;
+    }
+
+    pub async fn attach_supervisor(&self, supervisor: &Arc<RuntimeSupervisor>) {
+        let mut guard = self.supervisor.write().await;
+        *guard = Some(Arc::downgrade(supervisor));
+    }
+
+    async fn supervisor(&self) -> Option<Arc<RuntimeSupervisor>> {
+        let guard = self.supervisor.read().await;
+        guard.as_ref().and_then(|weak| weak.upgrade())
     }
 
     #[allow(dead_code)]
@@ -363,7 +384,7 @@ impl RuntimeRegistry {
         id: &str,
         restart: bool,
         preset: Option<String>,
-    ) -> Result<RuntimeRestartBudget, RestartDenied> {
+    ) -> Result<RuntimeRestartBudget, RuntimeRestoreError> {
         self.ensure_descriptor(id).await;
         info!(
             target = "arw::runtime",
@@ -410,7 +431,7 @@ impl RuntimeRegistry {
                 denied.set_severity(RuntimeSeverity::Error);
                 denied.detail = denied_details;
                 self.apply_status(denied).await;
-                return Err(RestartDenied { budget });
+                return Err(RuntimeRestoreError::RestartDenied { budget });
             }
             budget
         } else {
@@ -444,6 +465,33 @@ impl RuntimeRegistry {
                 "preset": preset,
             }),
         );
+
+        if let Some(supervisor) = self.supervisor().await {
+            if let Err(err) = supervisor
+                .restore_runtime(id, restart, Some(budget_snapshot.clone()))
+                .await
+            {
+                let mut failed = RuntimeStatus::new(id.to_string(), RuntimeState::Error)
+                    .with_summary("Restore failed")
+                    .touch();
+                failed.set_severity(RuntimeSeverity::Error);
+                failed.detail.push(err.to_string());
+                failed.detail.push(format_budget_hint(&budget_snapshot));
+                self.apply_status(failed).await;
+                warn!(
+                    target = "arw::runtime",
+                    runtime = %id,
+                    restart = restart,
+                    preset = preset.as_deref().unwrap_or(""),
+                    error = %err,
+                    "runtime restore failed via supervisor"
+                );
+                return Err(RuntimeRestoreError::RestoreFailed {
+                    reason: err.to_string(),
+                });
+            }
+            return Ok(budget_snapshot);
+        }
 
         let registry = self.clone();
         let bus = self.bus.clone();
@@ -786,11 +834,11 @@ mod tests {
         tokio::time::sleep(Duration::from_millis(1_100)).await;
 
         let mut rx = bus.subscribe();
-        let denied = registry
-            .request_restore("runtime-budget", true, None)
-            .await
-            .expect_err("restart budget should be exhausted");
-        assert_eq!(denied.budget.remaining, 0);
+        let denied_budget = match registry.request_restore("runtime-budget", true, None).await {
+            Err(RuntimeRestoreError::RestartDenied { budget }) => budget,
+            other => panic!("expected restart denial, got {:?}", other),
+        };
+        assert_eq!(denied_budget.remaining, 0);
 
         let mut saw_restore_request = false;
         while let Ok(Ok(env)) = tokio::time::timeout(Duration::from_millis(200), rx.recv()).await {

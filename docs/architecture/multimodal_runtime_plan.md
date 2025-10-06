@@ -44,7 +44,7 @@ The managed runtime supervisor must cover text, audio, vision, and pointer/keybo
   - `/tools/vision.capture` → still frame capture (camera) under lease.
   - `/tools/vision.describe` → image-to-text description with references.
   - `/tools/vision.generate` → text-to-image (if adapter supports).
-- **Bundles**: `configs/runtime/vision_bundles.json` lists GPU/CPU requirements, VRAM minima.
+- **Bundles**: `configs/runtime/vision_bundles.json` lists GPU/CPU requirements, VRAM minima; managed manifests live in `configs/runtime/runtimes.toml` during preview (`auto_start` toggles, adapter overrides).
 - **Fallback**: when generation runtime absent, degrade gracefully to description or annotated placeholders.
 
 ### 4. Pointer & Keyboard
@@ -72,7 +72,7 @@ The managed runtime supervisor must cover text, audio, vision, and pointer/keybo
 1. Package llava.cpp (vision) builds; optionally include Stable Diffusion runtime for generation (license permitting).
 2. Implement vision adapter with capture/describe/generate tools; integrate camera consent overlays.
 3. Launcher Vision tab: camera preview (only when lease granted), per-project storage controls, quick describe button.
-4. Policy gates `vision:capture`, `vision:describe`, `vision:generate`.
+4. Policy gates `vision:capture`, `vision:describe`, `vision:generate`; document manifest examples in `configs/runtime/runtimes.toml` with `auto_start` guidance and adapter-specific overrides (health probes, env vars).
 
 ### Phase D – Pointer Automation
 1. Build pointer/keyboard adapter using sandboxed automation process with explicit allowlists.
@@ -90,6 +90,7 @@ The managed runtime supervisor must cover text, audio, vision, and pointer/keybo
 - `docs/architecture/managed_llamacpp_runtime.md`: reference this blueprint; expand multi-modal tooling sections.
 - New tutorials: `guide/runtime_manager.md`, `guide/voice_vision.md`, `guide/pointer_automation.md`.
 - Update CLI docs with new `arw-cli` commands once adapters expose them.
+- Add manifest appendix covering `auto_start` and adapter override fields.
 
 ## Initial Tasks
 1. `t-multimodal-0001`: Extend runtime adapter trait + `/state/runtimes` schema for modality metadata.

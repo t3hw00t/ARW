@@ -8,7 +8,7 @@ use tokio::sync::Mutex;
 
 use crate::{
     autonomy, capsule_guard, chat, cluster, experiments, feedback, governor, metrics, models,
-    policy, queue, runtime, tool_cache, training,
+    policy, queue, runtime, runtime_supervisor, tool_cache, training,
 };
 
 type SharedConfigState = Arc<Mutex<serde_json::Value>>;
@@ -38,6 +38,7 @@ pub(crate) struct AppState {
     capsules: Arc<capsule_guard::CapsuleStore>,
     chat: Arc<chat::ChatState>,
     runtime: Arc<runtime::RuntimeRegistry>,
+    runtime_supervisor: Arc<runtime_supervisor::RuntimeSupervisor>,
     logic_history: Arc<training::LogicUnitHistoryStore>,
 }
 
@@ -66,6 +67,7 @@ impl AppState {
         capsules: Arc<capsule_guard::CapsuleStore>,
         chat: Arc<chat::ChatState>,
         runtime: Arc<runtime::RuntimeRegistry>,
+        runtime_supervisor: Arc<runtime_supervisor::RuntimeSupervisor>,
         logic_history: Arc<training::LogicUnitHistoryStore>,
     ) -> Self {
         Self {
@@ -91,6 +93,7 @@ impl AppState {
             capsules,
             chat,
             runtime,
+            runtime_supervisor,
             logic_history,
         }
     }
@@ -184,6 +187,10 @@ impl AppState {
         self.runtime.clone()
     }
 
+    pub fn runtime_supervisor(&self) -> Arc<runtime_supervisor::RuntimeSupervisor> {
+        self.runtime_supervisor.clone()
+    }
+
     pub fn logic_history(&self) -> Arc<training::LogicUnitHistoryStore> {
         self.logic_history.clone()
     }
@@ -229,6 +236,7 @@ pub(crate) struct AppStateBuilder {
     capsules: Option<Arc<capsule_guard::CapsuleStore>>,
     chat: Option<Arc<chat::ChatState>>,
     runtime: Option<Arc<runtime::RuntimeRegistry>>,
+    runtime_supervisor: Option<Arc<runtime_supervisor::RuntimeSupervisor>>,
     logic_history: Option<Arc<training::LogicUnitHistoryStore>>,
 }
 
@@ -264,6 +272,7 @@ impl AppState {
             capsules: None,
             chat: None,
             runtime: None,
+            runtime_supervisor: None,
             logic_history: None,
         }
     }
@@ -367,6 +376,14 @@ impl AppStateBuilder {
         self
     }
 
+    pub(crate) fn with_runtime_supervisor(
+        mut self,
+        supervisor: Arc<runtime_supervisor::RuntimeSupervisor>,
+    ) -> Self {
+        self.runtime_supervisor = Some(supervisor);
+        self
+    }
+
     pub(crate) fn with_logic_history(
         mut self,
         store: Arc<training::LogicUnitHistoryStore>,
@@ -458,6 +475,16 @@ impl AppStateBuilder {
                 Arc::new(runtime::RuntimeRegistry::with_storage(bus, path).await)
             }
         };
+        let runtime_supervisor = match self.runtime_supervisor {
+            Some(state) => state,
+            None => {
+                runtime_supervisor::RuntimeSupervisor::new(
+                    runtime_registry.clone(),
+                    self.bus.clone(),
+                )
+                .await
+            }
+        };
         let logic_history_store = self.logic_history.unwrap_or_else(|| {
             let path = crate::util::state_dir()
                 .join("training")
@@ -488,6 +515,7 @@ impl AppStateBuilder {
             capsules_store,
             chat_state,
             runtime_registry,
+            runtime_supervisor,
             logic_history_store,
         )
     }

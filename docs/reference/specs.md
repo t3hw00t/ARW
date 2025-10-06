@@ -38,3 +38,4 @@ Notes
 Related
 - [CLI Guide](../guide/cli.md)
 - API Reference (API_AND_SCHEMA.md)
+- [Runtime manifest schema](../architecture/managed_runtime_supervisor.md#current-implementation-snapshot) (served as `spec/schemas/runtime_manifest.json`)

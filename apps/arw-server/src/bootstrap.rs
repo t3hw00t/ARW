@@ -6,7 +6,7 @@ use arw_policy::PolicyEngine;
 use arw_wasi::ToolHost;
 use serde_json::json;
 use tokio::sync::Mutex;
-use tracing::{error, info};
+use tracing::{error, info, warn};
 #[cfg(not(test))]
 use utoipa::OpenApi;
 
@@ -103,6 +103,21 @@ pub(crate) async fn build() -> BootstrapOutput {
         .with_endpoints_meta(Arc::new(endpoints_meta))
         .build()
         .await;
+
+    if let Err(err) = state.runtime_supervisor().install_builtin_adapters().await {
+        warn!(
+            target: "arw::runtime",
+            error = %err,
+            "failed to register built-in runtime adapters"
+        );
+    }
+    if let Err(err) = state.runtime_supervisor().load_manifests_from_disk().await {
+        warn!(
+            target: "arw::runtime",
+            error = %err,
+            "failed to load managed runtime manifests"
+        );
+    }
 
     let initial_env_cfg = state.config_state().lock().await.clone();
     config::apply_env_overrides_from(&initial_env_cfg);

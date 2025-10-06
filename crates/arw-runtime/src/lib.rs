@@ -362,6 +362,7 @@ pub struct PrepareContext<'a> {
 pub struct PreparedRuntime {
     pub command: String,
     pub args: Vec<String>,
+    pub runtime_id: Option<RuntimeId>,
 }
 
 #[derive(Clone, Debug)]

@@ -1,0 +1,142 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Runtime Manifest",
+  "type": "object",
+  "properties": {
+    "version": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Manifest format version."
+    },
+    "runtimes": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/RuntimeEntry"
+      },
+      "description": "List of managed runtimes."
+    }
+  },
+  "required": ["runtimes"],
+  "additionalProperties": false,
+  "definitions": {
+    "RuntimeEntry": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Unique runtime identifier."
+        },
+        "adapter": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Adapter slug (e.g., process, llama, whisper)."
+        },
+        "name": {
+          "type": "string",
+          "description": "Optional display name."
+        },
+        "profile": {
+          "type": "string",
+          "description": "Preferred runtime profile."
+        },
+        "modalities": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["text", "audio", "vision", "pointer"]
+          },
+          "description": "Modalities served by this runtime."
+        },
+        "accelerator": {
+          "type": "string",
+          "description": "Target accelerator (cpu, gpu_cuda, gpu_rocm, gpu_metal, gpu_vulkan, npu_*)."
+        },
+        "auto_start": {
+          "type": "boolean",
+          "description": "Start this runtime automatically on boot."
+        },
+        "preset": {
+          "type": "string",
+          "description": "Optional preset hint for the adapter."
+        },
+        "tags": {
+          "type": "object",
+          "description": "Adapter-specific tags forwarded to the supervisor.",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "process": {
+          "$ref": "#/definitions/ProcessConfig"
+        }
+      },
+      "required": ["id", "adapter"],
+      "additionalProperties": false
+    },
+    "ProcessConfig": {
+      "type": "object",
+      "properties": {
+        "command": {
+          "type": "string",
+          "description": "Executable path."
+        },
+        "args": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Command line arguments."
+        },
+        "env": {
+          "type": "object",
+          "description": "Environment variable overrides.",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "workdir": {
+          "type": "string",
+          "description": "Working directory."
+        },
+        "health": {
+          "$ref": "#/definitions/ProcessHealth"
+        }
+      },
+      "required": ["command"],
+      "additionalProperties": false
+    },
+    "ProcessHealth": {
+      "type": "object",
+      "properties": {
+        "url": {
+          "type": "string",
+          "format": "uri",
+          "description": "HTTP endpoint used to verify health."
+        },
+        "method": {
+          "type": "string",
+          "default": "GET",
+          "description": "HTTP method."
+        },
+        "expect_status": {
+          "type": "integer",
+          "minimum": 100,
+          "maximum": 599,
+          "description": "Expected HTTP status code."
+        },
+        "expect_body": {
+          "type": "string",
+          "description": "Substring that must appear in the response body."
+        },
+        "timeout_ms": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Request timeout in milliseconds."
+        }
+      },
+      "required": ["url"],
+      "additionalProperties": false
+    }
+  }
+}

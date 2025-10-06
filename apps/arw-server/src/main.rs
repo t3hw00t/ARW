@@ -46,6 +46,7 @@ mod responses;
 mod review;
 mod runtime;
 mod runtime_matrix;
+mod runtime_supervisor;
 mod security;
 mod self_model;
 mod singleflight;

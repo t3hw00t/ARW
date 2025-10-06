@@ -12,6 +12,15 @@ Status: Priority One
 
 Promote the runtime manager from proposal to a first-class kernel capability. The supervisor will discover, launch, and monitor local inference engines (text, audio, vision) while respecting ARW’s privacy posture, accessibility targets, and unified object graph. This document coexists with the focused [Managed llama.cpp Runtime](managed_llamacpp_runtime.md) blueprint; it adds cross-runtime orchestration requirements, maturity gates, and verification checkpoints.
 
+## Current Implementation Snapshot
+
+- View manifest schema: `spec/schemas/runtime_manifest.json`.
+
+- `RuntimeSupervisor` (server) now ships with a built-in `process` adapter that can launch and monitor local binaries described in `configs/runtime/runtimes.toml`. See `spec/schemas/runtime_manifest.json` for the manifest schema.
+- Restore attempts flow through the supervisor: restart budgets apply, health loops publish status back into `/state/runtime_matrix`, and the public API surfaces concrete errors when launches fail.
+- Manifests can mark runtimes with `auto_start = true`; the server now schedules those restores automatically on boot without waiting for manual intervention. Removing the flag (or setting it to `false`) stops the runtime gracefully on the next reload.
+- Manifests are optional; when none are present the registry still behaves as before, letting operators opt in incrementally while we continue wiring additional adapters (ONNX Runtime, vLLM, multimodal).
+
 ## Guiding Principles
 
 - **Stability first** – treat the supervisor as kernel infrastructure. Every adapter must warm-start predictably, surface health telemetry, and degrade gracefully without blocking `/actions`.

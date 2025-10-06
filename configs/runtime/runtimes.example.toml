@@ -1,0 +1,35 @@
+# Example managed runtime manifest
+# Copy to configs/runtime/runtimes.toml and adjust paths for your environment.
+# Toggle auto_start to control whether ARW launches (true) or keeps the runtime stopped (false).
+# Adapter-specific overrides (env vars, health probes) live under the `process` table.
+
+version = 1
+
+[[runtimes]]
+id = "llama.local"
+adapter = "process"
+name = "Local LLaMA server"
+profile = "default"
+modalities = ["text"]
+accelerator = "gpu_cuda"
+auto_start = true
+
+[runtimes.process]
+command = "/opt/llama/llama-server"
+args = [
+  "--model",
+  "/opt/llama/models/llama-3.1-8b-q4.gguf",
+  "--port",
+  "11800",
+]
+workdir = "/opt/llama"
+
+[runtimes.process.env]
+LLAMA_LOG_LEVEL = "info"
+
+[runtimes.process.health]
+url = "http://127.0.0.1:11800/health"
+method = "GET"
+expect_status = 200
+expect_body = "ready"
+timeout_ms = 3000
