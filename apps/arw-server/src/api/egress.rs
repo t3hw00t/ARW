@@ -304,3 +304,153 @@ async fn maybe_log_egress(
     );
     Ok(row_id)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use axum::body::to_bytes;
+    use axum::http::StatusCode;
+    use serde_json::{json, Value};
+    use tempfile::tempdir;
+
+    #[tokio::test]
+    async fn scope_with_matching_lease_allows_preview() {
+        let temp = tempdir().expect("tempdir");
+        let mut ctx = crate::test_support::begin_state_env(temp.path());
+        crate::test_support::init_tracing();
+        ctx.env.remove("ARW_NET_POSTURE");
+        ctx.env.remove("ARW_SECURITY_POSTURE");
+
+        let state = crate::test_support::build_state(temp.path(), &mut ctx.env).await;
+        {
+            let config = state.config_state();
+            let mut cfg = config.lock().await;
+            *cfg = json!({
+                "egress": {
+                    "posture": "allowlist",
+                    "scopes": [{
+                        "id": "trusted",
+                        "hosts": ["trusted.example.com"],
+                        "lease_capabilities": ["net:https", "net:http"],
+                    }]
+                }
+            });
+        }
+
+        let ttl = (chrono::Utc::now() + chrono::Duration::minutes(5))
+            .to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+        let kernel = state.kernel();
+        kernel
+            .insert_lease_async(
+                "lease-trusted".into(),
+                "local".into(),
+                "net:https".into(),
+                Some("trusted".into()),
+                ttl.clone(),
+                None,
+                None,
+            )
+            .await
+            .expect("insert https lease");
+        kernel
+            .insert_lease_async(
+                "lease-trusted-http".into(),
+                "local".into(),
+                "net:http".into(),
+                Some("trusted".into()),
+                ttl,
+                None,
+                None,
+            )
+            .await
+            .expect("insert http lease");
+
+        let req = EgressPreviewReq {
+            url: "https://trusted.example.com/resource".into(),
+            method: Some("GET".into()),
+        };
+        let response = egress_preview(State(state.clone()), Json(req))
+            .await
+            .into_response();
+        let (parts, body) = response.into_parts();
+        assert_eq!(parts.status, StatusCode::OK);
+        let bytes = to_bytes(body, usize::MAX).await.expect("body bytes");
+        let value: Value = serde_json::from_slice(&bytes).expect("json");
+        assert_eq!(value["allow"].as_bool(), Some(true));
+
+        let meta = value["meta"].as_object().expect("meta object");
+        assert_eq!(
+            meta.get("allowed_via").and_then(|v| v.as_str()),
+            Some("lease")
+        );
+        let scope = meta
+            .get("policy_scope")
+            .and_then(|v| v.as_object())
+            .expect("policy scope");
+        assert_eq!(scope.get("id").and_then(|v| v.as_str()), Some("trusted"));
+        let lease_caps = meta
+            .get("scope_lease_caps")
+            .and_then(|v| v.as_array())
+            .expect("scope lease caps");
+        let caps: Vec<String> = lease_caps
+            .iter()
+            .filter_map(|v| v.as_str().map(|s| s.to_string()))
+            .collect();
+        assert_eq!(caps.len(), 2);
+        assert!(caps.iter().any(|c| c == "net:https"));
+        assert!(caps.iter().any(|c| c == "net:http"));
+        let lease = meta
+            .get("lease")
+            .and_then(|v| v.as_object())
+            .expect("lease object");
+        let matched = lease
+            .get("matched_capability")
+            .and_then(|v| v.as_str())
+            .expect("matched capability");
+        assert!(caps.iter().any(|c| c == matched));
+    }
+
+    #[tokio::test]
+    async fn posture_denies_without_scope_or_lease() {
+        let temp = tempdir().expect("tempdir");
+        let mut ctx = crate::test_support::begin_state_env(temp.path());
+        crate::test_support::init_tracing();
+        ctx.env.remove("ARW_NET_POSTURE");
+        ctx.env.remove("ARW_SECURITY_POSTURE");
+
+        let state = crate::test_support::build_state(temp.path(), &mut ctx.env).await;
+        {
+            let config = state.config_state();
+            let mut cfg = config.lock().await;
+            *cfg = json!({
+                "egress": {
+                    "posture": "allowlist"
+                }
+            });
+        }
+
+        let req = EgressPreviewReq {
+            url: "https://denied.example.com".into(),
+            method: Some("POST".into()),
+        };
+        let response = egress_preview(State(state.clone()), Json(req))
+            .await
+            .into_response();
+        let (parts, body) = response.into_parts();
+        assert_eq!(parts.status, StatusCode::OK);
+        let bytes = to_bytes(body, usize::MAX).await.expect("body bytes");
+        let value: Value = serde_json::from_slice(&bytes).expect("json");
+        assert_eq!(value["allow"].as_bool(), Some(false));
+        assert_eq!(value["reason"].as_str(), Some("allowlist"));
+        let meta = value["meta"].as_object().expect("meta object");
+        assert_eq!(
+            meta.get("deny_stage").and_then(|v| v.as_str()),
+            Some("posture")
+        );
+        assert_eq!(
+            meta.get("deny_reason").and_then(|v| v.as_str()),
+            Some("allowlist")
+        );
+        assert!(meta.get("lease").is_none());
+    }
+}

@@ -1082,6 +1082,7 @@ mod tests {
     use arw_wasi::NoopHost;
     use chrono::{Duration, Utc};
     use serde_json::json;
+    use std::collections::HashSet;
     use std::path::Path;
     use std::sync::Arc;
     use std::time::{SystemTime, UNIX_EPOCH};
@@ -1291,6 +1292,20 @@ mod tests {
         assert!(decision.scope.is_none());
     }
 
+    #[test]
+    fn capability_candidates_dedupe_and_include_domain() {
+        let caps = capability_candidates(Some("trusted.example.com"), Some(443), "https");
+        let set: HashSet<_> = caps.iter().collect();
+        assert_eq!(caps.len(), set.len());
+        assert!(caps.contains(&"net:host:trusted.example.com".into()));
+        assert!(caps.contains(&"net:domain:example.com".into()));
+        assert!(caps.contains(&"net:port:443".into()));
+        assert!(caps.contains(&"net:https".into()));
+        assert!(caps.contains(&"net:http".into()));
+        assert!(caps.contains(&"net:tcp".into()));
+        assert!(caps.contains(&"net".into()));
+    }
+
     async fn build_state(dir: &Path, env_guard: &mut test_env::EnvGuard) -> AppState {
         env_guard.set("ARW_DEBUG", "1");
         crate::util::reset_state_dir_for_tests();
@@ -1351,5 +1366,45 @@ mod tests {
         let items = after["items"].as_array().expect("items array");
         assert_eq!(items.len(), 1);
         assert_eq!(items[0]["remaining_hops"].as_u64(), Some(1));
+    }
+
+    #[tokio::test]
+    async fn lease_grant_marks_matched_capability() {
+        let temp = tempdir().expect("tempdir");
+        let mut ctx = test_support::begin_state_env(temp.path());
+        let state = build_state(temp.path(), &mut ctx.env).await;
+
+        let caps = capability_candidates(Some("trusted.example.com"), Some(443), "https");
+        assert!(caps.contains(&"net:domain:example.com".into()));
+
+        let ttl =
+            (Utc::now() + Duration::minutes(5)).to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
+        state
+            .kernel()
+            .insert_lease_async(
+                "lease-domain".into(),
+                "local".into(),
+                "net:domain:example.com".into(),
+                Some("trusted-domain".into()),
+                ttl,
+                None,
+                None,
+            )
+            .await
+            .expect("insert lease");
+
+        let lease = lease_grant(&state, &caps).await.expect("granted lease");
+        assert_eq!(
+            lease.get("matched_capability").and_then(|v| v.as_str()),
+            Some("net:domain:example.com")
+        );
+        assert_eq!(
+            lease.get("capability").and_then(|v| v.as_str()),
+            Some("net:domain:example.com")
+        );
+        assert_eq!(
+            lease.get("scope").and_then(|v| v.as_str()),
+            Some("trusted-domain")
+        );
     }
 }

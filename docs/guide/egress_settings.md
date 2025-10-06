@@ -38,7 +38,7 @@ curl -s http://127.0.0.1:8091/state/egress/settings | jq
 #         "hosts": ["api.github.com","*.githubusercontent.com"],
 #         "ports": [443],
 #         "protocols": ["https"],
-#         "lease_capabilities": ["net:https"],
+#         "lease_capabilities": ["net:https","net:http"],
 #         "expires_at": "2025-12-01T00:00:00Z"
 #       }
 #     ]
@@ -80,7 +80,7 @@ curl -s -X POST http://127.0.0.1:8091/egress/settings \
             "hosts": ["api.github.com","*.githubusercontent.com"],
             "ports": [443],
             "protocols": ["https"],
-            "lease_capabilities": ["net:https"],
+            "lease_capabilities": ["net:https","net:http"],
             "expires_at": "2025-12-01T00:00:00Z"
           }
         ]

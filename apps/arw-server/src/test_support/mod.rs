@@ -97,6 +97,25 @@ pub(crate) fn begin_state_env(path: &std::path::Path) -> TestCtx {
     TestCtx { env, _state: state }
 }
 
+#[cfg(test)]
+pub(crate) async fn build_state(
+    path: &std::path::Path,
+    env_guard: &mut env::EnvGuard,
+) -> crate::AppState {
+    env_guard.set("ARW_DEBUG", "1");
+    crate::util::reset_state_dir_for_tests();
+    env_guard.set("ARW_STATE_DIR", path.display().to_string());
+    let bus = arw_events::Bus::new_with_replay(64, 64);
+    let kernel = arw_kernel::Kernel::open(path).expect("init kernel for tests");
+    let policy = arw_policy::PolicyEngine::load_from_env();
+    let policy_handle = crate::policy::PolicyHandle::new(policy, bus.clone());
+    let host: std::sync::Arc<dyn arw_wasi::ToolHost> = std::sync::Arc::new(arw_wasi::NoopHost);
+    crate::AppState::builder(bus, kernel, policy_handle, host, true)
+        .with_sse_capacity(64)
+        .build()
+        .await
+}
+
 // One-time tracing init for tests, honoring RUST_LOG if set.
 pub(crate) fn init_tracing() {
     static START: OnceCell<()> = OnceCell::new();

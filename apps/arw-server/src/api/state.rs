@@ -1783,6 +1783,59 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn state_egress_merges_scope_metadata() {
+        let temp = tempdir().expect("tempdir");
+        let mut ctx = crate::test_support::begin_state_env(temp.path());
+        crate::test_support::init_tracing();
+        let state = crate::test_support::build_state(temp.path(), &mut ctx.env).await;
+
+        state
+            .kernel()
+            .append_egress_async(
+                "allow".to_string(),
+                Some("scope".to_string()),
+                Some("trusted.example.com".to_string()),
+                Some(443),
+                Some("https".to_string()),
+                None,
+                None,
+                Some("corr-123".to_string()),
+                Some("proj-xyz".to_string()),
+                Some("public".to_string()),
+                Some(json!({
+                    "allowed_via": "scope",
+                    "policy_scope": {
+                        "id": "trusted",
+                        "description": "Trusted scope",
+                    },
+                    "extra": "meta",
+                })),
+            )
+            .await
+            .expect("append egress");
+
+        let params: HashMap<String, String> = HashMap::new();
+        let response = state_egress(HeaderMap::new(), State(state), Query(params))
+            .await
+            .into_response();
+        assert_eq!(response.status(), StatusCode::OK);
+        let (_, body) = response.into_parts();
+        let bytes = to_bytes(body, usize::MAX).await.expect("body bytes");
+        let payload: Value = serde_json::from_slice(&bytes).expect("json body");
+        let items = payload["items"].as_array().expect("items array");
+        assert_eq!(items.len(), 1);
+        let item = &items[0];
+        assert_eq!(item["decision"].as_str(), Some("allow"));
+        assert_eq!(item["allowed_via"].as_str(), Some("scope"));
+        let scope = item["policy_scope"].as_object().expect("scope object");
+        assert_eq!(scope.get("id").and_then(|v| v.as_str()), Some("trusted"));
+        assert_eq!(
+            scope.get("description").and_then(|v| v.as_str()),
+            Some("Trusted scope")
+        );
+    }
+
+    #[tokio::test]
     async fn state_tasks_honors_if_none_match() {
         let temp = tempdir().expect("tempdir");
         let mut ctx = crate::test_support::begin_state_env(temp.path());
