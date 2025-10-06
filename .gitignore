@@ -30,3 +30,4 @@ __pycache__/
 *.pyc
 apps/arw-server/state/
 apps/arw-server/%LOCALAPPDATA%/
+configs/runtime/runtimes.toml

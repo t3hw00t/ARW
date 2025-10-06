@@ -4,11 +4,16 @@
 #   "events:*"            deny all events
 #   "task:math.add"       deny specific task kind
 #   "queue:*"             deny all queue operations
+#   "runtime:*"           deny managed runtime mutations
 
 deny_user = []
 
 # Production hardening tip:
-# To disable local introspection endpoints by default, uncomment the next line
+# Enable this when you want the supervisor APIs available to automation
+# but kept off in local builds:
+# deny_user = ["runtime:restore", "runtime:stop"]
+
+# Toggle the comment below to disable local introspection endpoints by default.
 # deny_user = ["introspect:*"]
 
 # Optional complex contracts (deny with conditions; immutable within window; can auto-renew)
