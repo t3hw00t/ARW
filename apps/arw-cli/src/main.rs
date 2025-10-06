@@ -5,6 +5,7 @@ use base64::Engine;
 use chrono::{DateTime, Local, TimeZone, Utc};
 use clap::CommandFactory;
 use clap::{Args, Parser, Subcommand, ValueEnum};
+use csv::WriterBuilder;
 use json_patch::{patch as apply_json_patch, Patch as JsonPatch};
 use rand::RngCore;
 use reqwest::{blocking::Client, header::ACCEPT, StatusCode};
@@ -228,6 +229,11 @@ enum AdminCmd {
         #[command(subcommand)]
         cmd: AdminEgressCmd,
     },
+    /// Memory review helpers
+    Review {
+        #[command(subcommand)]
+        cmd: AdminReviewCmd,
+    },
 }
 
 #[derive(Subcommand)]
@@ -377,6 +383,12 @@ struct AdminEgressScopeBaseArgs {
     timeout: u64,
 }
 
+impl AdminEgressScopeBaseArgs {
+    fn base_url(&self) -> &str {
+        self.base.trim_end_matches('/')
+    }
+}
+
 #[derive(Args, Clone)]
 struct AdminEgressScopeAddArgs {
     #[command(flatten)]
@@ -461,6 +473,158 @@ struct AdminEgressScopeRemoveArgs {
     base: AdminEgressScopeBaseArgs,
     /// Scope identifier to remove
     id: String,
+}
+
+#[derive(Subcommand)]
+enum AdminReviewCmd {
+    /// Memory quarantine helpers
+    Quarantine {
+        #[command(subcommand)]
+        cmd: AdminReviewQuarantineCmd,
+    },
+}
+
+#[derive(Subcommand)]
+enum AdminReviewQuarantineCmd {
+    /// List memory quarantine entries
+    List(AdminReviewQuarantineListArgs),
+    /// Admit, reject, or requeue a quarantine entry
+    Admit(AdminReviewQuarantineAdmitArgs),
+    /// Show a specific quarantine entry
+    Show(AdminReviewQuarantineShowArgs),
+}
+
+#[derive(Args, Clone)]
+struct AdminReviewBaseArgs {
+    /// Base URL of the service (e.g., http://127.0.0.1:8091)
+    #[arg(long, default_value = "http://127.0.0.1:8091")]
+    base: String,
+    /// Admin token; falls back to ARW_ADMIN_TOKEN env
+    #[arg(long)]
+    admin_token: Option<String>,
+    /// Timeout seconds when calling the API
+    #[arg(long, default_value_t = 5)]
+    timeout: u64,
+}
+
+impl AdminReviewBaseArgs {
+    fn base_url(&self) -> &str {
+        self.base.trim_end_matches('/')
+    }
+}
+
+#[derive(Args, Clone)]
+struct AdminReviewQuarantineListArgs {
+    #[command(flatten)]
+    base: AdminReviewBaseArgs,
+    /// Emit raw JSON
+    #[arg(long)]
+    json: bool,
+    /// Pretty-print JSON output (requires --json)
+    #[arg(long, requires = "json")]
+    pretty: bool,
+    /// Emit newline-delimited JSON (conflicts with --json/--csv)
+    #[arg(long, conflicts_with_all = ["json", "pretty", "csv"])]
+    ndjson: bool,
+    /// Emit CSV (conflicts with --json/--ndjson)
+    #[arg(long, conflicts_with_all = ["json", "pretty", "ndjson"])]
+    csv: bool,
+    /// Filter by state (repeatable)
+    #[arg(long = "state", value_enum, num_args = 1..)]
+    states: Vec<AdminReviewStateFilter>,
+    /// Filter by project identifier
+    #[arg(long)]
+    project: Option<String>,
+    /// Filter by source (tool|ingest|world_diff|manual)
+    #[arg(long)]
+    source: Option<String>,
+    /// Limit the number of entries returned
+    #[arg(long)]
+    limit: Option<usize>,
+    /// Include (truncated) content preview in output
+    #[arg(long = "show-preview")]
+    show_preview: bool,
+}
+
+#[derive(Args, Clone)]
+struct AdminReviewQuarantineAdmitArgs {
+    #[command(flatten)]
+    base: AdminReviewBaseArgs,
+    /// Quarantine entry identifier(s)
+    #[arg(long = "id", value_name = "ID", num_args = 1..)]
+    ids: Vec<String>,
+    /// Decision to apply
+    #[arg(long, value_enum, default_value_t = AdminReviewDecision::Admit)]
+    decision: AdminReviewDecision,
+    /// Optional reviewer note
+    #[arg(long)]
+    note: Option<String>,
+    /// Reviewer identifier (email or handle)
+    #[arg(long = "by")]
+    reviewed_by: Option<String>,
+    /// Emit raw JSON
+    #[arg(long)]
+    json: bool,
+    /// Pretty-print JSON output (requires --json)
+    #[arg(long, requires = "json")]
+    pretty: bool,
+    /// Include (truncated) content preview when rendering the updated entry
+    #[arg(long = "show-preview")]
+    show_preview: bool,
+}
+
+#[derive(Args, Clone)]
+struct AdminReviewQuarantineShowArgs {
+    #[command(flatten)]
+    base: AdminReviewBaseArgs,
+    /// Quarantine entry identifier to display
+    #[arg(long)]
+    id: String,
+    /// Emit raw JSON
+    #[arg(long)]
+    json: bool,
+    /// Pretty-print JSON output (requires --json)
+    #[arg(long, requires = "json")]
+    pretty: bool,
+    /// Include (truncated) content preview and review metadata
+    #[arg(long = "show-preview")]
+    show_preview: bool,
+}
+
+#[derive(Copy, Clone, Debug, ValueEnum)]
+enum AdminReviewStateFilter {
+    Queued,
+    NeedsExtractor,
+    Admitted,
+    Rejected,
+}
+
+impl AdminReviewStateFilter {
+    fn as_str(&self) -> &'static str {
+        match self {
+            AdminReviewStateFilter::Queued => "queued",
+            AdminReviewStateFilter::NeedsExtractor => "needs_extractor",
+            AdminReviewStateFilter::Admitted => "admitted",
+            AdminReviewStateFilter::Rejected => "rejected",
+        }
+    }
+}
+
+#[derive(Copy, Clone, Debug, ValueEnum)]
+enum AdminReviewDecision {
+    Admit,
+    Reject,
+    ExtractAgain,
+}
+
+impl AdminReviewDecision {
+    fn as_str(&self) -> &'static str {
+        match self {
+            AdminReviewDecision::Admit => "admit",
+            AdminReviewDecision::Reject => "reject",
+            AdminReviewDecision::ExtractAgain => "extract_again",
+        }
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -723,6 +887,12 @@ struct RuntimeBaseArgs {
     timeout: u64,
 }
 
+impl RuntimeBaseArgs {
+    fn base_url(&self) -> &str {
+        self.base.trim_end_matches('/')
+    }
+}
+
 #[derive(Args)]
 struct RuntimeStatusArgs {
     #[command(flatten)]
@@ -733,6 +903,24 @@ struct RuntimeStatusArgs {
     /// Pretty-print JSON output
     #[arg(long, requires = "json")]
     pretty: bool,
+    /// Poll continuously and print summaries on interval
+    #[arg(long, conflicts_with = "json")]
+    watch: bool,
+    /// Seconds between polls when --watch is enabled
+    #[arg(long, default_value_t = 15, requires = "watch")]
+    interval: u64,
+    /// Append output to this file (creates directories as needed)
+    #[arg(long, value_name = "PATH")]
+    output: Option<PathBuf>,
+    /// Rotate output file when it reaches this many bytes (requires --output)
+    #[arg(
+        long,
+        value_name = "BYTES",
+        requires = "output",
+        value_parser = parse_byte_limit_arg,
+        help = "Rotate after BYTES (supports K/M/G/T suffixes; min 64KB unless 0)"
+    )]
+    output_rotate: Option<u64>,
 }
 
 #[derive(Args)]
@@ -775,6 +963,15 @@ struct ContextTelemetryArgs {
     /// Append output to this file (creates directories as needed)
     #[arg(long, value_name = "PATH")]
     output: Option<PathBuf>,
+    /// Rotate output file when it reaches this many bytes (requires --output)
+    #[arg(
+        long,
+        value_name = "BYTES",
+        requires = "output",
+        value_parser = parse_byte_limit_arg,
+        help = "Rotate after BYTES (supports K/M/G/T suffixes; min 64KB unless 0)"
+    )]
+    output_rotate: Option<u64>,
 }
 
 #[derive(Args)]
@@ -1035,6 +1232,28 @@ fn main() {
                     }
                     AdminEgressScopeCmd::Remove(args) => {
                         if let Err(e) = cmd_admin_egress_scope_remove(&args) {
+                            eprintln!("{}", e);
+                            std::process::exit(1);
+                        }
+                    }
+                },
+            },
+            AdminCmd::Review { cmd } => match cmd {
+                AdminReviewCmd::Quarantine { cmd } => match cmd {
+                    AdminReviewQuarantineCmd::List(args) => {
+                        if let Err(e) = cmd_admin_review_quarantine_list(&args) {
+                            eprintln!("{}", e);
+                            std::process::exit(1);
+                        }
+                    }
+                    AdminReviewQuarantineCmd::Admit(args) => {
+                        if let Err(e) = cmd_admin_review_quarantine_admit(&args) {
+                            eprintln!("{}", e);
+                            std::process::exit(1);
+                        }
+                    }
+                    AdminReviewQuarantineCmd::Show(args) => {
+                        if let Err(e) = cmd_admin_review_quarantine_show(&args) {
                             eprintln!("{}", e);
                             std::process::exit(1);
                         }
@@ -1473,7 +1692,7 @@ fn cmd_admin_egress_scope_add(args: &AdminEgressScopeAddArgs) -> Result<()> {
         .timeout(Duration::from_secs(args.base.timeout))
         .build()
         .context("building HTTP client")?;
-    let base = args.base.base.trim_end_matches('/');
+    let base = args.base.base_url();
 
     let snapshot = fetch_egress_settings(&client, base, token.as_deref())?;
     let mut scopes = extract_scopes(&snapshot)?;
@@ -1539,7 +1758,7 @@ fn cmd_admin_egress_scope_update(args: &AdminEgressScopeUpdateArgs) -> Result<()
         .timeout(Duration::from_secs(args.base.timeout))
         .build()
         .context("building HTTP client")?;
-    let base = args.base.base.trim_end_matches('/');
+    let base = args.base.base_url();
 
     let snapshot = fetch_egress_settings(&client, base, token.as_deref())?;
     let mut scopes = extract_scopes(&snapshot)?;
@@ -1638,7 +1857,7 @@ fn cmd_admin_egress_scope_remove(args: &AdminEgressScopeRemoveArgs) -> Result<()
         .timeout(Duration::from_secs(args.base.timeout))
         .build()
         .context("building HTTP client")?;
-    let base = args.base.base.trim_end_matches('/');
+    let base = args.base.base_url();
 
     let snapshot = fetch_egress_settings(&client, base, token.as_deref())?;
     let mut scopes = extract_scopes(&snapshot)?;
@@ -1653,6 +1872,246 @@ fn cmd_admin_egress_scope_remove(args: &AdminEgressScopeRemoveArgs) -> Result<()
     let updated = post_egress_settings(&client, base, token.as_deref(), &payload)?;
     println!("Scope '{}' removed.", scope_id);
     render_egress_scopes_text(&updated)?;
+    Ok(())
+}
+
+fn cmd_admin_review_quarantine_list(args: &AdminReviewQuarantineListArgs) -> Result<()> {
+    if let Some(limit) = args.limit {
+        ensure!(limit > 0, "--limit must be greater than zero");
+    }
+
+    let token = resolve_admin_token(&args.base.admin_token);
+    let client = Client::builder()
+        .timeout(Duration::from_secs(args.base.timeout))
+        .build()
+        .context("building HTTP client")?;
+    let base = args.base.base_url();
+
+    let entries = fetch_memory_quarantine_entries(&client, base, token.as_deref())?;
+
+    let state_filter: Option<HashSet<&'static str>> = if args.states.is_empty() {
+        None
+    } else {
+        Some(args.states.iter().map(|s| s.as_str()).collect())
+    };
+    let project_filter = args
+        .project
+        .as_ref()
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty())
+        .map(|s| s.to_string());
+    let source_filter = args
+        .source
+        .as_ref()
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty())
+        .map(|s| s.to_string());
+
+    let mut filtered: Vec<JsonValue> = entries
+        .into_iter()
+        .filter(|entry| {
+            if let Some(states) = &state_filter {
+                let state = entry.get("state").and_then(|v| v.as_str()).unwrap_or("");
+                if !states.contains(state) {
+                    return false;
+                }
+            }
+            if let Some(project) = &project_filter {
+                let project_id = entry
+                    .get("project_id")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("");
+                if project_id != project {
+                    return false;
+                }
+            }
+            if let Some(source) = &source_filter {
+                let entry_source = entry.get("source").and_then(|v| v.as_str()).unwrap_or("");
+                if entry_source.is_empty() || !entry_source.eq_ignore_ascii_case(source) {
+                    return false;
+                }
+            }
+            true
+        })
+        .collect();
+
+    filtered.sort_by(|a, b| parse_quarantine_time(b).cmp(&parse_quarantine_time(a)));
+    if let Some(limit) = args.limit {
+        if filtered.len() > limit {
+            filtered.truncate(limit);
+        }
+    }
+
+    if args.ndjson {
+        render_quarantine_entries_ndjson(&filtered)?;
+        return Ok(());
+    }
+
+    if args.csv {
+        render_quarantine_entries_csv(&filtered)?;
+        return Ok(());
+    }
+
+    if args.json {
+        let payload = JsonValue::Array(filtered.clone());
+        if args.pretty {
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&payload).unwrap_or_else(|_| payload.to_string())
+            );
+        } else {
+            println!(
+                "{}",
+                serde_json::to_string(&payload).unwrap_or_else(|_| payload.to_string())
+            );
+        }
+        return Ok(());
+    }
+
+    render_quarantine_entries_text(&filtered, args.show_preview)?;
+    Ok(())
+}
+
+fn cmd_admin_review_quarantine_admit(args: &AdminReviewQuarantineAdmitArgs) -> Result<()> {
+    let token = resolve_admin_token(&args.base.admin_token);
+    let client = Client::builder()
+        .timeout(Duration::from_secs(args.base.timeout))
+        .build()
+        .context("building HTTP client")?;
+    let base = args.base.base_url();
+
+    ensure!(!args.ids.is_empty(), "provide at least one --id");
+
+    let mut id_list: Vec<String> = Vec::new();
+    for raw in &args.ids {
+        let trimmed = raw.trim();
+        ensure!(!trimmed.is_empty(), "--id cannot be empty");
+        id_list.push(trimmed.to_string());
+    }
+
+    let mut json_responses: Vec<JsonValue> = Vec::new();
+
+    for id in id_list {
+        let mut body = serde_json::Map::new();
+        body.insert("id".into(), JsonValue::String(id.clone()));
+        body.insert(
+            "decision".into(),
+            JsonValue::String(args.decision.as_str().to_string()),
+        );
+        if let Some(note) = args
+            .note
+            .as_ref()
+            .map(|s| s.trim())
+            .filter(|s| !s.is_empty())
+        {
+            body.insert("note".into(), JsonValue::String(note.to_string()));
+        }
+        if let Some(by) = args
+            .reviewed_by
+            .as_ref()
+            .map(|s| s.trim())
+            .filter(|s| !s.is_empty())
+        {
+            body.insert("reviewed_by".into(), JsonValue::String(by.to_string()));
+        }
+        let payload = JsonValue::Object(body);
+
+        let response = post_memory_quarantine_admit(&client, base, token.as_deref(), &payload)?;
+
+        if args.json {
+            json_responses.push(response);
+            continue;
+        }
+
+        let removed = response
+            .get("removed")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(0);
+        if removed == 0 {
+            println!("No quarantine entry with id '{}' was found.", id);
+            continue;
+        }
+
+        println!(
+            "Entry '{}' processed with decision '{}'.",
+            id,
+            args.decision.as_str()
+        );
+
+        if let Some(entry) = response.get("entry") {
+            if !entry.is_null() {
+                render_quarantine_entries_text(&[entry.clone()], args.show_preview)?;
+            }
+        }
+    }
+
+    if args.json {
+        let payload = if json_responses.len() == 1 {
+            json_responses.into_iter().next().unwrap()
+        } else {
+            JsonValue::Array(json_responses)
+        };
+        if args.pretty {
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&payload).unwrap_or_else(|_| payload.to_string())
+            );
+        } else {
+            println!(
+                "{}",
+                serde_json::to_string(&payload).unwrap_or_else(|_| payload.to_string())
+            );
+        }
+    }
+
+    Ok(())
+}
+
+fn cmd_admin_review_quarantine_show(args: &AdminReviewQuarantineShowArgs) -> Result<()> {
+    let id = args.id.trim();
+    ensure!(!id.is_empty(), "--id cannot be empty");
+
+    let token = resolve_admin_token(&args.base.admin_token);
+    let client = Client::builder()
+        .timeout(Duration::from_secs(args.base.timeout))
+        .build()
+        .context("building HTTP client")?;
+    let base = args.base.base_url();
+
+    let entries = fetch_memory_quarantine_entries(&client, base, token.as_deref())?;
+    let matching: Vec<JsonValue> = entries
+        .into_iter()
+        .filter(|entry| {
+            entry
+                .get("id")
+                .and_then(|v| v.as_str())
+                .map(|value| value == id)
+                .unwrap_or(false)
+        })
+        .collect();
+
+    if matching.is_empty() {
+        println!("No quarantine entry with id '{}' found.", id);
+        return Ok(());
+    }
+
+    if args.json {
+        let payload = JsonValue::Array(matching.clone());
+        if args.pretty {
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&payload).unwrap_or_else(|_| payload.to_string())
+            );
+        } else {
+            println!(
+                "{}",
+                serde_json::to_string(&payload).unwrap_or_else(|_| payload.to_string())
+            );
+        }
+        return Ok(());
+    }
+
+    render_quarantine_entries_text(&matching, args.show_preview)?;
     Ok(())
 }
 
@@ -1913,20 +2372,17 @@ fn cmd_backfill_ocr(args: &BackfillOcrArgs) -> Result<()> {
 }
 
 fn cmd_runtime_status(args: &RuntimeStatusArgs) -> Result<()> {
+    if args.watch {
+        eprintln!("watching runtime supervisor; press Ctrl-C to exit");
+        return watch_runtime_status(args);
+    }
     let token = resolve_admin_token(&args.base.admin_token);
     let client = Client::builder()
         .timeout(Duration::from_secs(args.base.timeout))
         .build()
         .context("building HTTP client")?;
-    let base = args.base.base.trim_end_matches('/');
-    let url = format!("{}/state/runtime_supervisor", base);
-    let mut req = client.get(&url);
-    req = with_admin_headers(req, token.as_deref());
-    let resp = req
-        .send()
-        .context("requesting runtime supervisor snapshot")?;
-    let status = resp.status();
-    let body: JsonValue = resp.json().context("parsing runtime supervisor response")?;
+    let base = args.base.base_url();
+    let (status, body) = request_runtime_supervisor(&client, base, token.as_deref())?;
     if status == reqwest::StatusCode::UNAUTHORIZED {
         return Err(anyhow::anyhow!(
             "unauthorized: provide --admin-token or set ARW_ADMIN_TOKEN"
@@ -1952,7 +2408,7 @@ fn cmd_runtime_status(args: &RuntimeStatusArgs) -> Result<()> {
     };
 
     if args.json {
-        let json = combine_runtime_snapshots(&body, matrix_snapshot);
+        let json = combine_runtime_snapshots(&body, matrix_snapshot.clone());
         if args.pretty {
             println!(
                 "{}",
@@ -1961,15 +2417,119 @@ fn cmd_runtime_status(args: &RuntimeStatusArgs) -> Result<()> {
         } else {
             println!("{}", json);
         }
+        if let Some(path) = args.output.as_ref() {
+            append_json_output(path.as_path(), &json, args.pretty, args.output_rotate)?;
+        }
         return Ok(());
     }
 
-    println!("{}", render_runtime_summary(&body));
+    let summary = render_runtime_summary(&body);
+    println!("{}", summary);
+    let mut combined = summary.clone();
     if let Some(matrix) = matrix_snapshot {
+        let matrix_text = render_runtime_matrix_summary(&matrix);
         println!();
-        println!("{}", render_runtime_matrix_summary(&matrix));
+        println!("{}", matrix_text);
+        combined.push_str("\n\n");
+        combined.push_str(&matrix_text);
+    }
+    if let Some(path) = args.output.as_ref() {
+        let stamp = Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
+        append_text_output(
+            path.as_path(),
+            Some(stamp.as_str()),
+            &combined,
+            args.output_rotate,
+        )?;
     }
     Ok(())
+}
+
+fn watch_runtime_status(args: &RuntimeStatusArgs) -> Result<()> {
+    let token = resolve_admin_token(&args.base.admin_token);
+    let client = Client::builder()
+        .timeout(Duration::from_secs(args.base.timeout))
+        .build()
+        .context("building HTTP client")?;
+    let base = args.base.base_url();
+    let base_interval = args.interval.max(1);
+    let max_backoff = base_interval.max(60);
+    let mut sleep_secs = base_interval;
+
+    loop {
+        match request_runtime_supervisor(&client, base, token.as_deref()) {
+            Ok((status, supervisor)) => {
+                if status == StatusCode::UNAUTHORIZED {
+                    anyhow::bail!("unauthorized: provide --admin-token or set ARW_ADMIN_TOKEN");
+                }
+                if !status.is_success() {
+                    eprintln!(
+                        "[runtime watch] supervisor request failed: {} {}",
+                        status, supervisor
+                    );
+                    sleep_secs = sleep_secs.saturating_mul(2).min(max_backoff);
+                } else {
+                    let matrix_snapshot = match request_runtime_matrix(
+                        &client,
+                        base,
+                        token.as_deref(),
+                    ) {
+                        Ok((matrix_status, matrix_body)) => {
+                            if matrix_status == StatusCode::UNAUTHORIZED {
+                                anyhow::bail!(
+                                    "runtime matrix request unauthorized: provide --admin-token or set ARW_ADMIN_TOKEN"
+                                );
+                            }
+                            if matrix_status == StatusCode::NOT_FOUND {
+                                None
+                            } else if !matrix_status.is_success() {
+                                eprintln!(
+                                    "[runtime watch] matrix request failed: {} {}",
+                                    matrix_status, matrix_body
+                                );
+                                None
+                            } else {
+                                Some(matrix_body)
+                            }
+                        }
+                        Err(err) => {
+                            eprintln!("[runtime watch] error fetching matrix: {err:?}");
+                            None
+                        }
+                    };
+                    let stamp = Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
+                    let summary = render_runtime_summary(&supervisor);
+                    println!("=== {} ===", stamp);
+                    println!("{}", summary);
+                    let mut combined = summary.clone();
+                    if let Some(matrix) = matrix_snapshot {
+                        let matrix_text = render_runtime_matrix_summary(&matrix);
+                        println!();
+                        println!("{}", matrix_text);
+                        combined.push_str("\n\n");
+                        combined.push_str(&matrix_text);
+                    }
+                    println!();
+                    io::stdout().flush().ok();
+                    if let Some(path) = args.output.as_ref() {
+                        append_text_output(
+                            path.as_path(),
+                            Some(stamp.as_str()),
+                            &combined,
+                            args.output_rotate,
+                        )?;
+                    }
+                    sleep_secs = base_interval;
+                }
+            }
+            Err(err) => {
+                eprintln!("[runtime watch] error: {err:?}");
+                sleep_secs = sleep_secs.saturating_mul(2).min(max_backoff);
+            }
+        }
+
+        thread::sleep(Duration::from_secs(sleep_secs));
+    }
 }
 
 fn cmd_runtime_restore(args: &RuntimeRestoreArgs) -> Result<()> {
@@ -1978,7 +2538,7 @@ fn cmd_runtime_restore(args: &RuntimeRestoreArgs) -> Result<()> {
         .timeout(Duration::from_secs(args.base.timeout))
         .build()
         .context("building HTTP client")?;
-    let base = args.base.base.trim_end_matches('/');
+    let base = args.base.base_url();
     let url = format!("{}/orchestrator/runtimes/{}/restore", base, args.id);
 
     let mut payload = serde_json::Map::new();
@@ -2067,7 +2627,7 @@ fn cmd_context_telemetry(args: &ContextTelemetryArgs) -> Result<()> {
 
     if args.json {
         if let Some(path) = args.output.as_ref() {
-            append_context_json(path, &body, args.pretty)?;
+            append_json_output(path.as_path(), &body, args.pretty, args.output_rotate)?;
         }
         if args.pretty {
             println!(
@@ -2086,7 +2646,11 @@ fn cmd_context_telemetry(args: &ContextTelemetryArgs) -> Result<()> {
     println!("{}", summary.trim_end());
     if let Some(path) = args.output.as_ref() {
         let stamp = Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
-        append_context_summary(path, Some(stamp.as_str()), &summary)?;
+        if let Some(limit) = args.output_rotate {
+            append_text_output(path.as_path(), Some(stamp.as_str()), &summary, Some(limit))?;
+        } else {
+            append_context_summary(path, Some(stamp.as_str()), &summary)?;
+        }
     }
     Ok(())
 }
@@ -2139,7 +2703,16 @@ fn watch_context_telemetry(args: &ContextTelemetryArgs) -> Result<()> {
                     println!();
                     io::stdout().flush().ok();
                     if let Some(path) = args.output.as_ref() {
-                        append_context_summary(path, Some(stamp.as_str()), &summary)?;
+                        if let Some(limit) = args.output_rotate {
+                            append_text_output(
+                                path.as_path(),
+                                Some(stamp.as_str()),
+                                &summary,
+                                Some(limit),
+                            )?;
+                        } else {
+                            append_context_summary(path, Some(stamp.as_str()), &summary)?;
+                        }
                     }
                     sleep_secs = base_interval;
                 }
@@ -2154,12 +2727,20 @@ fn watch_context_telemetry(args: &ContextTelemetryArgs) -> Result<()> {
     }
 }
 
-fn append_context_summary(path: &Path, stamp: Option<&str>, summary: &str) -> Result<()> {
+fn append_text_output(
+    path: &Path,
+    stamp: Option<&str>,
+    text: &str,
+    rotate_limit: Option<u64>,
+) -> Result<()> {
     if let Some(parent) = path.parent() {
         if !parent.as_os_str().is_empty() {
             create_dir_all(parent)
                 .with_context(|| format!("creating output directory {}", parent.display()))?;
         }
+    }
+    if let Some(limit) = rotate_limit {
+        maybe_rotate_output(path, limit)?;
     }
     let mut file = OpenOptions::new()
         .create(true)
@@ -2169,17 +2750,25 @@ fn append_context_summary(path: &Path, stamp: Option<&str>, summary: &str) -> Re
     if let Some(stamp_value) = stamp {
         writeln!(file, "=== {} ===", stamp_value)?;
     }
-    writeln!(file, "{}", summary.trim_end())?;
+    writeln!(file, "{}", text.trim_end())?;
     writeln!(file)?;
     Ok(())
 }
 
-fn append_context_json(path: &Path, body: &JsonValue, pretty: bool) -> Result<()> {
+fn append_json_output(
+    path: &Path,
+    body: &JsonValue,
+    pretty: bool,
+    rotate_limit: Option<u64>,
+) -> Result<()> {
     if let Some(parent) = path.parent() {
         if !parent.as_os_str().is_empty() {
             create_dir_all(parent)
                 .with_context(|| format!("creating output directory {}", parent.display()))?;
         }
+    }
+    if let Some(limit) = rotate_limit {
+        maybe_rotate_output(path, limit)?;
     }
     let mut file = OpenOptions::new()
         .create(true)
@@ -2195,19 +2784,84 @@ fn append_context_json(path: &Path, body: &JsonValue, pretty: bool) -> Result<()
     Ok(())
 }
 
+fn append_context_summary(path: &Path, stamp: Option<&str>, summary: &str) -> Result<()> {
+    append_text_output(path, stamp, summary, None)
+}
+
+fn append_context_json(path: &Path, body: &JsonValue, pretty: bool) -> Result<()> {
+    append_json_output(path, body, pretty, None)
+}
+
+fn maybe_rotate_output(path: &Path, max_bytes: u64) -> Result<()> {
+    if max_bytes == 0 {
+        return Ok(());
+    }
+    let Ok(metadata) = std::fs::metadata(path) else {
+        return Ok(());
+    };
+    if metadata.len() < max_bytes {
+        return Ok(());
+    }
+    let file_name = path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or("output");
+    let mut rotated = path.to_path_buf();
+    rotated.set_file_name(format!("{}.prev", file_name));
+    if rotated.exists() {
+        std::fs::remove_file(&rotated).ok();
+    }
+    std::fs::rename(path, &rotated)
+        .with_context(|| format!("rotating output file {}", path.display()))?;
+    Ok(())
+}
+
+fn parse_byte_limit_arg(raw: &str) -> Result<u64, String> {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return Err("rotate limit must not be empty".into());
+    }
+    if trimmed.eq_ignore_ascii_case("0") {
+        return Ok(0);
+    }
+    let digit_count = trimmed
+        .chars()
+        .position(|c| !c.is_ascii_digit())
+        .unwrap_or(trimmed.len());
+    let (num_part, suffix_part) = trimmed.split_at(digit_count);
+    if num_part.is_empty() {
+        return Err("rotate limit must start with digits".into());
+    }
+    let base = num_part
+        .parse::<u64>()
+        .map_err(|_| "rotate limit digits out of range".to_string())?;
+    let suffix = suffix_part.trim().to_ascii_lowercase();
+    let multiplier = match suffix.as_str() {
+        "" => 1u64,
+        "k" | "kb" => 1024,
+        "m" | "mb" => 1024 * 1024,
+        "g" | "gb" => 1024 * 1024 * 1024,
+        "t" | "tb" => 1024u64.pow(4),
+        _ => {
+            return Err("unsupported rotate suffix (use K, M, G, or T with optional B)".to_string())
+        }
+    };
+    let value = base
+        .checked_mul(multiplier)
+        .ok_or_else(|| "rotate limit overflow".to_string())?;
+    if value != 0 && value < 64 * 1024 {
+        Err("rotate limit must be at least 64KB; see CLI docs for details".to_string())
+    } else {
+        Ok(value)
+    }
+}
+
 fn fetch_runtime_matrix(
     client: &Client,
     base: &str,
     token: Option<&str>,
 ) -> Result<Option<JsonValue>> {
-    let url = format!("{}/state/runtime_matrix", base);
-    let mut req = client.get(&url);
-    req = with_admin_headers(req, token);
-    let resp = req
-        .send()
-        .with_context(|| format!("requesting runtime matrix snapshot from {}", url))?;
-    let status = resp.status();
-    let body: JsonValue = resp.json().context("parsing runtime matrix response")?;
+    let (status, body) = request_runtime_matrix(client, base, token)?;
     if status == reqwest::StatusCode::NOT_FOUND {
         return Ok(None);
     }
@@ -2220,6 +2874,38 @@ fn fetch_runtime_matrix(
         anyhow::bail!("runtime matrix request failed: {} {}", status, body);
     }
     Ok(Some(body))
+}
+
+fn request_runtime_supervisor(
+    client: &Client,
+    base: &str,
+    token: Option<&str>,
+) -> Result<(StatusCode, JsonValue)> {
+    let url = format!("{}/state/runtime_supervisor", base);
+    let mut req = client.get(&url);
+    req = with_admin_headers(req, token);
+    let resp = req
+        .send()
+        .with_context(|| format!("requesting runtime supervisor snapshot from {}", url))?;
+    let status = resp.status();
+    let body: JsonValue = resp.json().context("parsing runtime supervisor response")?;
+    Ok((status, body))
+}
+
+fn request_runtime_matrix(
+    client: &Client,
+    base: &str,
+    token: Option<&str>,
+) -> Result<(StatusCode, JsonValue)> {
+    let url = format!("{}/state/runtime_matrix", base);
+    let mut req = client.get(&url);
+    req = with_admin_headers(req, token);
+    let resp = req
+        .send()
+        .with_context(|| format!("requesting runtime matrix snapshot from {}", url))?;
+    let status = resp.status();
+    let body: JsonValue = resp.json().context("parsing runtime matrix response")?;
+    Ok((status, body))
 }
 
 fn combine_runtime_snapshots(supervisor: &JsonValue, matrix: Option<JsonValue>) -> JsonValue {
@@ -2917,6 +3603,323 @@ fn render_egress_scopes_text(snapshot: &JsonValue) -> Result<()> {
         }
     }
 
+    Ok(())
+}
+
+fn fetch_memory_quarantine_entries(
+    client: &Client,
+    base: &str,
+    token: Option<&str>,
+) -> Result<Vec<JsonValue>> {
+    let url = format!("{}/admin/memory/quarantine", base);
+    let resp = with_admin_headers(client.get(&url), token)
+        .send()
+        .with_context(|| format!("requesting {}", url))?;
+    let status = resp.status();
+    let body: JsonValue = resp.json().context("parsing memory quarantine response")?;
+    if status == StatusCode::UNAUTHORIZED {
+        anyhow::bail!("unauthorized: provide --admin-token or set ARW_ADMIN_TOKEN");
+    }
+    if !status.is_success() {
+        anyhow::bail!("server returned {}: {}", status, body);
+    }
+    match body {
+        JsonValue::Array(entries) => Ok(entries),
+        other => anyhow::bail!(
+            "expected array from /admin/memory/quarantine, received {}",
+            other
+        ),
+    }
+}
+
+fn post_memory_quarantine_admit(
+    client: &Client,
+    base: &str,
+    token: Option<&str>,
+    payload: &JsonValue,
+) -> Result<JsonValue> {
+    let url = format!("{}/admin/memory/quarantine/admit", base);
+    let resp = with_admin_headers(client.post(&url).json(payload), token)
+        .send()
+        .with_context(|| format!("requesting {}", url))?;
+    let status = resp.status();
+    let body: JsonValue = resp
+        .json()
+        .context("parsing memory quarantine admit response")?;
+    if status == StatusCode::UNAUTHORIZED {
+        anyhow::bail!("unauthorized: provide --admin-token or set ARW_ADMIN_TOKEN");
+    }
+    if !status.is_success() {
+        anyhow::bail!("server returned {}: {}", status, body);
+    }
+    Ok(body)
+}
+
+fn parse_quarantine_time(entry: &JsonValue) -> Option<chrono::DateTime<chrono::Utc>> {
+    let time_str = entry.get("time")?.as_str()?;
+    chrono::DateTime::parse_from_rfc3339(time_str)
+        .map(|dt| dt.with_timezone(&chrono::Utc))
+        .ok()
+}
+
+fn format_timestamp_local(raw: &str) -> String {
+    chrono::DateTime::parse_from_rfc3339(raw)
+        .map(|dt| {
+            dt.with_timezone(&Local)
+                .format("%Y-%m-%d %H:%M:%S")
+                .to_string()
+        })
+        .unwrap_or_else(|_| raw.to_string())
+}
+
+fn render_quarantine_entries_text(entries: &[JsonValue], show_preview: bool) -> Result<()> {
+    if entries.is_empty() {
+        println!("No quarantine entries.");
+        return Ok(());
+    }
+
+    let mut state_counts: std::collections::BTreeMap<String, usize> =
+        std::collections::BTreeMap::new();
+    for entry in entries {
+        let state = entry
+            .get("state")
+            .and_then(|v| v.as_str())
+            .filter(|s| !s.is_empty())
+            .unwrap_or("unknown");
+        *state_counts.entry(state.to_string()).or_insert(0) += 1;
+    }
+    let mut state_summary: Vec<String> = state_counts
+        .into_iter()
+        .map(|(state, count)| format!("{} {}", state, count))
+        .collect();
+    state_summary.sort();
+    println!(
+        "Summary: total {} | {}",
+        entries.len(),
+        state_summary.join(" | ")
+    );
+
+    println!(
+        "{:<32} {:<14} {:<12} {:>6} {:<19} {:<12} {}",
+        "ID", "State", "Source", "Score", "When", "Project", "Markers"
+    );
+
+    for entry in entries {
+        let id = entry.get("id").and_then(|v| v.as_str()).unwrap_or("-");
+        let state = entry.get("state").and_then(|v| v.as_str()).unwrap_or("-");
+        let source = entry.get("source").and_then(|v| v.as_str()).unwrap_or("-");
+        let score = entry
+            .get("evidence_score")
+            .and_then(|v| v.as_f64())
+            .filter(|v| v.is_finite())
+            .map(|v| format!("{:.2}", v))
+            .unwrap_or_else(|| "-".into());
+        let time_display = entry
+            .get("time")
+            .and_then(|v| v.as_str())
+            .map(format_timestamp_local)
+            .unwrap_or_else(|| "-".into());
+        let project = entry
+            .get("project_id")
+            .and_then(|v| v.as_str())
+            .unwrap_or("-");
+        let markers = entry
+            .get("risk_markers")
+            .and_then(|v| v.as_array())
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|item| item.as_str())
+                    .collect::<Vec<_>>()
+                    .join(",")
+            })
+            .unwrap_or_else(|| "-".into());
+
+        println!(
+            "{:<32} {:<14} {:<12} {:>6} {:<19} {:<12} {}",
+            truncate_payload(id, 31),
+            truncate_payload(state, 13),
+            truncate_payload(source, 11),
+            score,
+            time_display,
+            truncate_payload(project, 11),
+            truncate_payload(&markers, 40)
+        );
+
+        let mut meta = Vec::new();
+        if let Some(ep) = entry
+            .get("episode_id")
+            .and_then(|v| v.as_str())
+            .filter(|s| !s.is_empty())
+        {
+            meta.push(format!("episode {}", ep));
+        }
+        if let Some(corr) = entry
+            .get("corr_id")
+            .and_then(|v| v.as_str())
+            .filter(|s| !s.is_empty())
+        {
+            meta.push(format!("corr {}", corr));
+        }
+        if !meta.is_empty() {
+            println!("    {}", meta.join(" | "));
+        }
+        if let Some(prov) = entry
+            .get("provenance")
+            .and_then(|v| v.as_str())
+            .filter(|s| !s.is_empty())
+        {
+            println!("    provenance: {}", truncate_payload(prov, 120));
+        }
+        if show_preview {
+            if let Some(preview) = entry
+                .get("content_preview")
+                .and_then(|v| v.as_str())
+                .filter(|s| !s.is_empty())
+            {
+                println!("    preview: {}", truncate_payload(preview, 200));
+            }
+        }
+        if let Some(review) = entry.get("review").and_then(|v| v.as_object()) {
+            let mut review_parts = Vec::new();
+            if let Some(decision) = review
+                .get("decision")
+                .and_then(|v| v.as_str())
+                .filter(|s| !s.is_empty())
+            {
+                review_parts.push(decision.to_string());
+            }
+            if let Some(by) = review
+                .get("by")
+                .and_then(|v| v.as_str())
+                .filter(|s| !s.is_empty())
+            {
+                review_parts.push(format!("by {}", by));
+            }
+            if let Some(time) = review
+                .get("time")
+                .and_then(|v| v.as_str())
+                .filter(|s| !s.is_empty())
+            {
+                review_parts.push(format!("at {}", format_timestamp_local(time)));
+            }
+            if let Some(note) = review
+                .get("note")
+                .and_then(|v| v.as_str())
+                .filter(|s| !s.is_empty())
+            {
+                review_parts.push(format!("note: {}", note));
+            }
+            if !review_parts.is_empty() {
+                println!("    review: {}", review_parts.join(", "));
+            }
+        }
+    }
+
+    Ok(())
+}
+
+fn render_quarantine_entries_ndjson(entries: &[JsonValue]) -> Result<()> {
+    for entry in entries {
+        println!("{}", serde_json::to_string(entry)?);
+    }
+    Ok(())
+}
+
+fn render_quarantine_entries_csv(entries: &[JsonValue]) -> Result<()> {
+    let mut writer = WriterBuilder::new().from_writer(io::stdout());
+    writer.write_record([
+        "id",
+        "state",
+        "source",
+        "evidence_score",
+        "time",
+        "project_id",
+        "episode_id",
+        "corr_id",
+        "risk_markers",
+        "provenance",
+        "review_decision",
+        "review_by",
+        "review_time",
+        "review_note",
+    ])?;
+
+    for entry in entries {
+        let id = entry.get("id").and_then(|v| v.as_str()).unwrap_or("");
+        let state = entry.get("state").and_then(|v| v.as_str()).unwrap_or("");
+        let source = entry.get("source").and_then(|v| v.as_str()).unwrap_or("");
+        let score = entry
+            .get("evidence_score")
+            .and_then(|v| v.as_f64())
+            .map(|v| format!("{:.4}", v))
+            .unwrap_or_default();
+        let time = entry.get("time").and_then(|v| v.as_str()).unwrap_or("");
+        let project = entry
+            .get("project_id")
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+        let episode = entry
+            .get("episode_id")
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+        let corr = entry.get("corr_id").and_then(|v| v.as_str()).unwrap_or("");
+        let markers = entry
+            .get("risk_markers")
+            .and_then(|v| v.as_array())
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|item| item.as_str())
+                    .collect::<Vec<_>>()
+                    .join(";")
+            })
+            .unwrap_or_default();
+        let provenance = entry
+            .get("provenance")
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+        let review = entry.get("review").and_then(|v| v.as_object());
+        let (review_decision, review_by, review_time, review_note) = review
+            .map(|obj| {
+                (
+                    obj.get("decision")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("")
+                        .to_string(),
+                    obj.get("by")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("")
+                        .to_string(),
+                    obj.get("time")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("")
+                        .to_string(),
+                    obj.get("note")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("")
+                        .to_string(),
+                )
+            })
+            .unwrap_or_else(|| (String::new(), String::new(), String::new(), String::new()));
+
+        writer.write_record([
+            id,
+            state,
+            source,
+            &score,
+            time,
+            project,
+            episode,
+            corr,
+            &markers,
+            provenance,
+            &review_decision,
+            &review_by,
+            &review_time,
+            &review_note,
+        ])?;
+    }
+
+    writer.flush()?;
     Ok(())
 }
 
@@ -6198,6 +7201,58 @@ mod tests {
         assert_eq!(lines.next().unwrap().trim(), "{\"hello\":\"world\"}");
         let pretty_block = lines.collect::<Vec<_>>().join("\n");
         assert!(pretty_block.contains("\"hello\": \"world\""));
+    }
+
+    #[test]
+    fn append_text_output_rotates_when_limit_reached() -> Result<()> {
+        let dir = TempDir::new()?;
+        let log_path = dir.path().join("context.log");
+        fs::write(&log_path, vec![b'x'; 16])?;
+
+        append_text_output(&log_path, Some("2025-10-02 12:00:00"), "New entry", Some(8))?;
+
+        let rotated = dir.path().join("context.log.prev");
+        assert!(rotated.is_file());
+        assert_eq!(fs::read(rotated)?, vec![b'x'; 16]);
+
+        let fresh = fs::read_to_string(&log_path)?;
+        assert!(fresh.contains("2025-10-02 12:00:00"));
+        assert!(fresh.contains("New entry"));
+        Ok(())
+    }
+
+    #[test]
+    fn append_text_output_respects_no_rotation() -> Result<()> {
+        let dir = TempDir::new()?;
+        let log_path = dir.path().join("context.log");
+
+        append_text_output(&log_path, Some("stamp"), "entry", None)?;
+        append_text_output(&log_path, Some("stamp-2"), "entry-2", None)?;
+
+        let updated = fs::read_to_string(&log_path)?;
+        assert!(updated.contains("entry"));
+        assert!(updated.contains("entry-2"));
+        assert!(!dir.path().join("context.log.prev").exists());
+        Ok(())
+    }
+
+    #[test]
+    fn parse_byte_limit_arg_supports_suffixes() {
+        assert_eq!(parse_byte_limit_arg("64KB").unwrap(), 64 * 1024);
+        assert_eq!(parse_byte_limit_arg("3m").unwrap(), 3 * 1024 * 1024);
+        assert_eq!(parse_byte_limit_arg("4MB").unwrap(), 4 * 1024 * 1024);
+        assert_eq!(parse_byte_limit_arg("5G").unwrap(), 5 * 1024 * 1024 * 1024);
+        assert_eq!(parse_byte_limit_arg("0").unwrap(), 0);
+    }
+
+    #[test]
+    fn parse_byte_limit_arg_rejects_invalid() {
+        assert!(parse_byte_limit_arg("").is_err());
+        assert!(parse_byte_limit_arg("kb").is_err());
+        assert!(parse_byte_limit_arg("2KB").is_err());
+        assert!(parse_byte_limit_arg("63KB").is_err());
+        assert!(parse_byte_limit_arg("10x").is_err());
+        assert!(parse_byte_limit_arg("1000000000000000000000000000000").is_err());
     }
 
     #[test]

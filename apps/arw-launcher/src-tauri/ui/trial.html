@@ -195,6 +195,23 @@
           </div>
         </section>
 
+        <section class="card quarantine-lane" aria-label="Memory quarantine queue">
+          <header class="quarantine-header">
+            <div class="quarantine-title">
+              <h2>Memory quarantine</h2>
+              <p class="dim quarantine-summary" id="quarantineSummary" role="status" aria-live="polite"></p>
+            </div>
+            <div class="quarantine-actions">
+              <button id="btn-quarantine-refresh" class="ghost" type="button">Refresh</button>
+              <button id="btn-quarantine-open-docs" class="ghost" type="button">Open docs</button>
+              <button id="btn-quarantine-open-debug" class="ghost" type="button">Open debug</button>
+            </div>
+          </header>
+          <div id="quarantineNotice" class="quarantine-notice hidden" role="alert"></div>
+          <ul id="quarantineList" class="quarantine-list" role="list"></ul>
+          <div id="quarantineEmpty" class="dim quarantine-empty hidden"></div>
+        </section>
+
         <section class="card feedback-delta" aria-label="Feedback delta log">
           <header class="feedback-header">
             <div class="feedback-title">

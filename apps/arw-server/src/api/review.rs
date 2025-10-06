@@ -1,6 +1,8 @@
 use axum::http::{HeaderMap, StatusCode};
 use axum::{extract::State, response::IntoResponse, Json};
+use serde::Serialize;
 use serde_json::json;
+use utoipa::ToSchema;
 
 use crate::{review, AppState};
 
@@ -40,6 +42,14 @@ fn not_found(detail: impl Into<String>) -> axum::response::Response {
         })),
     )
         .into_response()
+}
+
+#[derive(Serialize, ToSchema)]
+struct MemoryQuarantineAdmitResponse {
+    pub removed: usize,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schema(value_type = Object)]
+    pub entry: Option<serde_json::Value>,
 }
 
 #[utoipa::path(
@@ -90,7 +100,11 @@ pub async fn memory_quarantine_queue(
     tag = "Review",
     request_body = review::MemoryQuarantineAdmit,
     responses(
-        (status = 200, description = "Entry removed", body = serde_json::Value),
+        (
+            status = 200,
+            description = "Entry removed",
+            body = MemoryQuarantineAdmitResponse
+        ),
         (status = 401, description = "Unauthorized"),
         (status = 500, description = "Storage error")
     )
@@ -104,7 +118,9 @@ pub async fn memory_quarantine_admit(
         return unauthorized();
     }
     match review::memory_quarantine_admit(&state.bus(), req).await {
-        Ok((removed, _)) => Json(json!({"removed": removed})).into_response(),
+        Ok((removed, entry)) => {
+            Json(MemoryQuarantineAdmitResponse { removed, entry }).into_response()
+        }
         Err(err) => storage_error(err.to_string()),
     }
 }

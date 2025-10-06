@@ -3,7 +3,7 @@
   const STATUS_LABELS = { ok: 'All good', warn: 'Check soon', bad: 'Action needed', unknown: 'Unknown' };
   const AUTONOMY_OPERATOR_KEY = 'arw:trial:autonomy-operator';
   const APPROVAL_REVIEWER_KEY = 'arw:trial:approvals-reviewer';
-  const AUTO_REFRESH_INTERVALS = Object.freeze({ approvals: 25000, feedback: 30000, connections: 35000, autonomy: 45000 });
+  const AUTO_REFRESH_INTERVALS = Object.freeze({ approvals: 25000, feedback: 30000, connections: 35000, autonomy: 45000, quarantine: 45000 });
   const AUTONOMY_INTERRUPT_KEYS = Object.freeze(['pause', 'stop_flush_all', 'stop_flush_inflight', 'stop_flush_queued']);
   const AUTONOMY_INTERRUPT_LABELS = Object.freeze({
     pause: 'Pause',
@@ -16,10 +16,12 @@
   let feedbackTimer = null;
   let connectionsTimer = null;
   let autonomyTimer = null;
+  let quarantineTimer = null;
   let approvalsInflight = false;
   let feedbackInflight = false;
   let connectionsInflight = false;
   let autonomyInflight = false;
+  let quarantineInflight = false;
   let visibilityHandlerAttached = false;
   let baseMeta = null;
   const updateBaseMeta = () => ARW.applyBaseMeta({ portInputId: 'port', badgeId: 'baseBadge', label: 'Base' });
@@ -37,6 +39,15 @@
       reviewer: null,
       loading: true,
       error: null,
+    },
+    quarantine: {
+      entries: [],
+      summary: 'Loading…',
+      counts: {},
+      generatedMs: null,
+      loading: true,
+      error: null,
+      total: 0,
     },
     feedback: {
       loading: true,
@@ -87,6 +98,7 @@
     } catch {}
     loadStoredPreflight();
     bindEvents();
+    renderQuarantineLane();
     STATE.approvals.reviewer = getStoredApprovalReviewer();
     setTab('overview');
     try {
@@ -146,6 +158,20 @@
 
     const approvalsOpenDebug = document.getElementById('btn-approvals-open-debug');
     if (approvalsOpenDebug) approvalsOpenDebug.addEventListener('click', openApprovalsInDebug);
+
+    const quarantineRefresh = document.getElementById('btn-quarantine-refresh');
+    if (quarantineRefresh) quarantineRefresh.addEventListener('click', () => {
+      if (STATE.quarantine.loading) return;
+      STATE.quarantine.loading = true;
+      renderQuarantineLane();
+      refreshQuarantineLane(false);
+    });
+
+    const quarantineDocs = document.getElementById('btn-quarantine-open-docs');
+    if (quarantineDocs) quarantineDocs.addEventListener('click', openQuarantineDocs);
+
+    const quarantineDebug = document.getElementById('btn-quarantine-open-debug');
+    if (quarantineDebug) quarantineDebug.addEventListener('click', openFocusSources);
 
     const feedbackRefresh = document.getElementById('btn-feedback-refresh');
     if (feedbackRefresh) feedbackRefresh.addEventListener('click', () => refreshFeedbackDelta(false));
@@ -290,6 +316,7 @@
       updateSystems(payload.serviceStatus, payload.routeStats);
       updateMemory(payload.telemetry, payload.memoryRecent);
       updateApprovals(payload.stagingPending, payload.stagingRecent);
+      updateQuarantine(payload.memoryQuarantine);
       updateSafety(payload.serviceStatus, payload.guardrails);
       updateAutonomy(payload.autonomy);
       updateFeedback(payload.feedbackState);
@@ -337,6 +364,7 @@
       autonomy,
       cluster,
       feedbackState,
+      memoryQuarantine,
     ] = await Promise.all([
       safeJson('/state/service_status'),
       safeJson('/state/route_stats'),
@@ -348,6 +376,7 @@
       safeJson('/state/autonomy/lanes'),
       safeJson('/state/cluster'),
       safeJson('/admin/feedback/state'),
+      safeJson('/admin/memory/quarantine'),
     ]);
 
     return {
@@ -361,6 +390,7 @@
       autonomy,
       cluster,
       feedbackState,
+      memoryQuarantine,
       errors,
       unauthorized,
     };
@@ -380,6 +410,9 @@
     const autonomyLoop = () => {
       if (!document.hidden) refreshAutonomySnapshot(true);
     };
+    const quarantineLoop = () => {
+      if (!document.hidden) refreshQuarantineLane(true);
+    };
     if (AUTO_REFRESH_INTERVALS.approvals > 0) {
       approvalsTimer = setInterval(approvalsLoop, AUTO_REFRESH_INTERVALS.approvals);
     }
@@ -392,6 +425,9 @@
     if (AUTO_REFRESH_INTERVALS.autonomy > 0) {
       autonomyTimer = setInterval(autonomyLoop, AUTO_REFRESH_INTERVALS.autonomy);
     }
+    if (AUTO_REFRESH_INTERVALS.quarantine > 0) {
+      quarantineTimer = setInterval(quarantineLoop, AUTO_REFRESH_INTERVALS.quarantine);
+    }
     if (!visibilityHandlerAttached) {
       document.addEventListener('visibilitychange', () => {
         if (!document.hidden) {
@@ -399,6 +435,7 @@
           feedbackLoop();
           connectionsLoop();
           autonomyLoop();
+          quarantineLoop();
         }
       });
       visibilityHandlerAttached = true;
@@ -421,6 +458,10 @@
     if (autonomyTimer) {
       clearInterval(autonomyTimer);
       autonomyTimer = null;
+    }
+    if (quarantineTimer) {
+      clearInterval(quarantineTimer);
+      quarantineTimer = null;
     }
   }
 
@@ -504,6 +545,48 @@ async function refreshApprovalsLane(auto = false){
       renderFeedbackDelta();
     } finally {
       feedbackInflight = false;
+    }
+  }
+
+  async function refreshQuarantineLane(auto = false){
+    if (quarantineInflight || (auto && STATE.quarantine.loading)) return;
+    if (!STATE.base) {
+      try {
+        const port = ARW.getPortFromInput('port');
+        STATE.base = ARW.base(port);
+      } catch {}
+    }
+    if (!STATE.base) {
+      if (!auto) ARW.toast('Start the server first');
+      return;
+    }
+
+    if (!auto) {
+      STATE.quarantine.loading = true;
+      renderQuarantineLane();
+    }
+
+    quarantineInflight = true;
+    try {
+      const snapshot = await fetchQuarantineSnapshot(STATE.base);
+      if (snapshot.unauthorized) STATE.unauthorized = true;
+      updateQuarantine(snapshot.entries, {
+        error: snapshot.errors[0] || null,
+        errors: snapshot.errors,
+        loading: false,
+      });
+      if (auto && snapshot.errors.length) {
+        console.debug('Quarantine auto-refresh warnings', snapshot.errors);
+      }
+    } catch (err) {
+      console.error('Quarantine refresh failed', err);
+      updateQuarantine([], {
+        error: err?.message || 'Failed to refresh memory quarantine',
+        errors: [],
+        loading: false,
+      });
+    } finally {
+      quarantineInflight = false;
     }
   }
 
@@ -608,6 +691,17 @@ async function refreshApprovalsLane(auto = false){
       payload,
       errors,
       unauthorized: lanesRes.unauthorized || statsRes.unauthorized,
+    };
+  }
+
+  async function fetchQuarantineSnapshot(base){
+    const result = await safeJsonWithErrors(base, '/admin/memory/quarantine');
+    const entries = Array.isArray(result.data) ? result.data : [];
+    const errors = result.error ? [result.error] : [];
+    return {
+      entries,
+      errors,
+      unauthorized: result.unauthorized,
     };
   }
 
@@ -1550,6 +1644,7 @@ async function refreshApprovalsLane(auto = false){
     const memoryStamp = STATE.focusUpdatedMs ? ` (updated ${formatRelativeWithAbs(STATE.focusUpdatedMs)})` : '';
     const memoryLine = `${STATE.memory.summary}${memoryStamp}`;
     const approvalLine = STATE.approvals.summary;
+    const quarantineLine = STATE.quarantine.summary;
     const safetyLine = STATE.safety.summary;
     const autonomyLine = STATE.autonomy?.line || (STATE.unauthorized ? 'Authorize to view autonomy lane.' : 'Autonomy lane idle.');
     let connectionsLine = STATE.connections.summary || (STATE.unauthorized ? 'Authorize to view connections' : 'Connections idle.');
@@ -1584,7 +1679,7 @@ async function refreshApprovalsLane(auto = false){
           .map(r => `${r.path} | p95 ${(Number(r.p95_ms) || 0).toFixed(0)} ms (hits ${(Number(r.hits) || 0).toLocaleString()})`)
       : [];
 
-    STATE.overview = [systemLine, memoryLine, approvalLine, guardrailLine, autonomyLine, connectionsLine];
+    STATE.overview = [systemLine, memoryLine, approvalLine, quarantineLine, guardrailLine, autonomyLine, connectionsLine];
     STATE.workflows = [
       MEMORY_WORKFLOW_TEXT(STATE.memory, STATE.focus),
       approvalLine,
@@ -2021,6 +2116,241 @@ function renderLists(){
         });
       }
     }
+  }
+
+  function updateQuarantine(payload, opts = {}){
+    const errorsSource = Array.isArray(opts?.errors) ? opts.errors : undefined;
+    const pathErrors = errorsForPath('/admin/memory/quarantine', { errors: errorsSource });
+    const explicitError = opts.error || (pathErrors.length ? pathErrors[0] : null);
+    const sanitizedError = explicitError
+      ? String(explicitError).replace('/admin/memory/quarantine: ', '')
+      : null;
+    const loading = opts.loading === true;
+
+    let entries = [];
+    if (Array.isArray(payload)) {
+      entries = payload.filter(Boolean);
+    } else if (Array.isArray(payload?.items)) {
+      entries = payload.items.filter(Boolean);
+    }
+
+    entries = entries
+      .map(item => (item && typeof item === 'object' ? item : null))
+      .filter(Boolean)
+      .sort((a, b) => {
+        const ta = parseTimestamp(a?.time || a?.created || a?.generated_at || a?.generated);
+        const tb = parseTimestamp(b?.time || b?.created || b?.generated_at || b?.generated);
+        const da = Number.isFinite(ta) ? ta : 0;
+        const db = Number.isFinite(tb) ? tb : 0;
+        return db - da;
+      });
+
+    const counts = entries.reduce((map, entry) => {
+      const state = String(entry.state || 'unknown').toLowerCase();
+      map[state] = (map[state] || 0) + 1;
+      return map;
+    }, {});
+
+    const total = entries.length;
+    const newestMs = entries.reduce((latest, entry) => {
+      const ts = parseTimestamp(entry.time || entry.created || entry.generated_at || entry.generated);
+      if (!Number.isFinite(ts)) return latest;
+      if (!Number.isFinite(latest) || ts > latest) return ts;
+      return latest;
+    }, null);
+
+    const trackedStates = ['queued', 'needs_extractor', 'admitted', 'rejected'];
+    const summaryParts = [];
+    if (total) summaryParts.push(`Total ${total}`);
+    trackedStates.forEach((state) => {
+      if (counts[state]) summaryParts.push(`${humanizeQuarantineState(state)} ${counts[state]}`);
+    });
+
+    let summary;
+    if (total) {
+      summary = summaryParts.join(' • ') || `Total ${total}`;
+      if (Number.isFinite(newestMs)) summary += ` • updated ${formatRelativeWithAbs(newestMs)}`;
+    } else if (STATE.unauthorized) {
+      summary = 'Authorize to view memory quarantine queue';
+    } else if (explicitError) {
+      summary = 'Memory quarantine unavailable';
+    } else {
+      summary = 'No items in memory quarantine';
+    }
+
+    STATE.quarantine.entries = entries.slice(0, 12);
+    STATE.quarantine.total = total;
+    STATE.quarantine.counts = counts;
+    STATE.quarantine.summary = summary;
+    STATE.quarantine.generatedMs = Number.isFinite(newestMs) ? newestMs : null;
+    STATE.quarantine.loading = loading;
+    STATE.quarantine.error = STATE.unauthorized ? null : sanitizedError;
+
+    renderQuarantineLane();
+  }
+
+  function renderQuarantineLane(){
+    const summaryEl = document.getElementById('quarantineSummary');
+    const listEl = document.getElementById('quarantineList');
+    const emptyEl = document.getElementById('quarantineEmpty');
+    const noticeEl = document.getElementById('quarantineNotice');
+
+    if (summaryEl) {
+      summaryEl.textContent = STATE.quarantine.summary || '';
+      summaryEl.title = STATE.quarantine.generatedMs
+        ? formatRelativeAbs(STATE.quarantine.generatedMs)
+        : '';
+    }
+
+    if (noticeEl) {
+      const error = STATE.quarantine.error;
+      if (error && !STATE.unauthorized) {
+        noticeEl.textContent = error;
+        noticeEl.classList.remove('hidden');
+      } else {
+        noticeEl.textContent = '';
+        noticeEl.classList.add('hidden');
+      }
+    }
+
+    if (!listEl || !emptyEl) return;
+
+    listEl.innerHTML = '';
+    if (STATE.quarantine.loading) {
+      emptyEl.textContent = 'Loading memory quarantine…';
+      emptyEl.classList.remove('hidden');
+      return;
+    }
+
+    if (!STATE.quarantine.entries.length) {
+      emptyEl.textContent = STATE.quarantine.summary || 'No items in memory quarantine';
+      emptyEl.classList.remove('hidden');
+      return;
+    }
+
+    emptyEl.classList.add('hidden');
+    STATE.quarantine.entries.forEach(entry => {
+      const card = buildQuarantineCard(entry);
+      if (card) listEl.appendChild(card);
+    });
+  }
+
+  function buildQuarantineCard(entry){
+    if (!entry || typeof entry !== 'object') return null;
+    const li = document.createElement('li');
+    li.className = 'quarantine-card';
+    if (entry.id) li.dataset.quarantineId = String(entry.id);
+
+    const headline = document.createElement('div');
+    headline.className = 'quarantine-headline';
+
+    const statePill = document.createElement('span');
+    const stateSlug = String(entry.state || 'unknown').toLowerCase();
+    statePill.className = `pill pill-small state-${stateSlug}`;
+    statePill.textContent = humanizeQuarantineState(stateSlug);
+    headline.appendChild(statePill);
+
+    const scoreSpan = document.createElement('span');
+    scoreSpan.className = 'quarantine-score';
+    scoreSpan.textContent = `Score ${formatEvidenceScore(entry.evidence_score)}`;
+    headline.appendChild(scoreSpan);
+
+    const ts = parseTimestamp(entry.time || entry.created || entry.generated_at || entry.generated);
+    if (Number.isFinite(ts)) {
+      const timeSpan = document.createElement('span');
+      timeSpan.className = 'quarantine-time';
+      timeSpan.textContent = formatRelativeWithAbs(ts);
+      timeSpan.title = formatRelativeAbs(ts);
+      headline.appendChild(timeSpan);
+    }
+
+    li.appendChild(headline);
+
+    const metaRow = document.createElement('div');
+    metaRow.className = 'quarantine-meta';
+    const source = formatQuarantineSource(entry.source);
+    if (source) metaRow.appendChild(createMetaChip(`Source ${source}`));
+    const project = entry.project_id || entry.project;
+    if (project) metaRow.appendChild(createMetaChip(`Project ${project}`));
+    if (Array.isArray(entry.risk_markers) && entry.risk_markers.length) {
+      metaRow.appendChild(createMetaChip(`Markers ${entry.risk_markers.join(', ')}`));
+    }
+    if (entry.provenance) {
+      metaRow.appendChild(createMetaChip(truncatePayload(entry.provenance, 80)));
+    }
+    li.appendChild(metaRow);
+
+    const previewText = typeof entry.content_preview === 'string' ? entry.content_preview.trim() : '';
+    if (previewText) {
+      const preview = document.createElement('p');
+      preview.className = 'quarantine-preview';
+      preview.textContent = truncatePayload(previewText, 220);
+      li.appendChild(preview);
+    }
+
+    if (entry.review && typeof entry.review === 'object') {
+      const review = entry.review;
+      const reviewLineParts = [];
+      if (review.decision) {
+        reviewLineParts.push(`Decision ${humanizeQuarantineState(review.decision)}`);
+      }
+      if (review.by) reviewLineParts.push(`By ${review.by}`);
+      if (review.time) {
+        const reviewMs = parseTimestamp(review.time);
+        reviewLineParts.push(`At ${reviewMs ? formatRelativeWithAbs(reviewMs) : review.time}`);
+      }
+      if (review.note) reviewLineParts.push(`Note: ${review.note}`);
+      if (reviewLineParts.length) {
+        const reviewLine = document.createElement('div');
+        reviewLine.className = 'quarantine-review';
+        reviewLine.textContent = reviewLineParts.join(' • ');
+        li.appendChild(reviewLine);
+      }
+    }
+
+    return li;
+  }
+
+  function humanizeQuarantineState(value){
+    if (!value) return 'Unknown';
+    const normalized = String(value).toLowerCase();
+    switch (normalized) {
+      case 'queued':
+        return 'Queued';
+      case 'needs_extractor':
+        return 'Needs extractor';
+      case 'admitted':
+        return 'Admitted';
+      case 'reject':
+      case 'rejected':
+        return 'Rejected';
+      case 'extract_again':
+        return 'Extract again';
+      default:
+        return normalized.replace(/_/g, ' ').replace(/\b\w/g, ch => ch.toUpperCase());
+    }
+  }
+
+  function formatQuarantineSource(value){
+    if (!value) return '';
+    const normalized = String(value).toLowerCase();
+    switch (normalized) {
+      case 'tool':
+        return 'Tool';
+      case 'ingest':
+        return 'Ingest';
+      case 'world_diff':
+        return 'World diff';
+      case 'manual':
+        return 'Manual';
+      default:
+        return normalized.replace(/_/g, ' ').replace(/\b\w/g, ch => ch.toUpperCase());
+    }
+  }
+
+  function formatEvidenceScore(value){
+    if (typeof value !== 'number' || !Number.isFinite(value)) return '—';
+    return value.toFixed(2);
   }
 
   function buildApprovalCard(item){
@@ -2586,6 +2916,25 @@ function renderLists(){
     } catch (err) {
       console.error('Open runbook failed', err);
       ARW.toast('Unable to open runbook');
+    }
+  }
+
+  async function openQuarantineDocs(){
+    if (!STATE.base) {
+      try {
+        const port = ARW.getPortFromInput('port');
+        STATE.base = ARW.base(port);
+      } catch {}
+    }
+    if (!STATE.base) {
+      ARW.toast('Start the server first');
+      return;
+    }
+    try {
+      await ARW.invoke('open_url', { url: `${STATE.base}/docs/api/memory_world_schemas/#memory-quarantine-payload` });
+    } catch (err) {
+      console.error('Open quarantine docs failed', err);
+      ARW.toast('Unable to open memory quarantine docs');
     }
   }
 

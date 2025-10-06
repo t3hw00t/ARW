@@ -1409,7 +1409,9 @@
             "description": "Entry removed",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/MemoryQuarantineAdmitResponse"
+                }
               }
             }
           },
@@ -5380,8 +5382,41 @@
           "id"
         ],
         "properties": {
+          "decision": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "id": {
             "type": "string"
+          },
+          "note": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "reviewed_by": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "MemoryQuarantineAdmitResponse": {
+        "type": "object",
+        "required": [
+          "removed"
+        ],
+        "properties": {
+          "entry": {
+            "type": "object"
+          },
+          "removed": {
+            "type": "integer",
+            "minimum": 0
           }
         }
       },
@@ -5395,6 +5430,18 @@
             ]
           },
           "content_type": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "corr_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "episode_id": {
             "type": [
               "string",
               "null"
@@ -5439,6 +5486,12 @@
             "items": {
               "type": "string"
             }
+          },
+          "source": {
+            "type": [
+              "string",
+              "null"
+            ]
           }
         }
       },

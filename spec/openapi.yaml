@@ -887,7 +887,8 @@ paths:
           description: Entry removed
           content:
             application/json:
-              schema: {}
+              schema:
+                $ref: '#/components/schemas/MemoryQuarantineAdmitResponse'
         '401':
           description: Unauthorized
         '500':
@@ -3516,8 +3517,30 @@ components:
       required:
       - id
       properties:
+        decision:
+          type:
+          - string
+          - 'null'
         id:
           type: string
+        note:
+          type:
+          - string
+          - 'null'
+        reviewed_by:
+          type:
+          - string
+          - 'null'
+    MemoryQuarantineAdmitResponse:
+      type: object
+      required:
+      - removed
+      properties:
+        entry:
+          type: object
+        removed:
+          type: integer
+          minimum: 0
     MemoryQuarantineRequest:
       type: object
       properties:
@@ -3526,6 +3549,14 @@ components:
           - string
           - 'null'
         content_type:
+          type:
+          - string
+          - 'null'
+        corr_id:
+          type:
+          - string
+          - 'null'
+        episode_id:
           type:
           - string
           - 'null'
@@ -3556,6 +3587,10 @@ components:
           - 'null'
           items:
             type: string
+        source:
+          type:
+          - string
+          - 'null'
     ModelEntry:
       type: object
       required:

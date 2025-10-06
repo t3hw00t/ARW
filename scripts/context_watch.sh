@@ -9,8 +9,51 @@ fi
 OUTPUT_ROOT="${ARW_CONTEXT_WATCH_OUTPUT_ROOT:-docs/ops/trials/logs}"
 BASE="${ARW_CONTEXT_WATCH_BASE:-http://127.0.0.1:8091}"
 SESSION="${ARW_CONTEXT_WATCH_SESSION:-}"
+ROTATE_LIMIT="${ARW_CONTEXT_WATCH_OUTPUT_ROTATE:-2097152}"
 EXTRA_ARGS=()
 DATE_OVERRIDE=""
+
+normalize_rotate_limit() {
+  local value="$1"
+  if [[ -z "$value" ]]; then
+    echo ""
+    return
+  fi
+  local trimmed="${value//[[:space:]]/}"
+  if [[ -z "$trimmed" ]]; then
+    echo ""
+    return
+  fi
+  local lower="${trimmed,,}"
+  if [[ "$lower" == "0" ]]; then
+    echo ""
+    return
+  fi
+  if [[ "$lower" =~ ^([0-9]+)([kmgt]?b?)$ ]]; then
+    local number="${BASH_REMATCH[1]}"
+    local unit="${BASH_REMATCH[2]}"
+    local multiplier=1
+    case "$unit" in
+      "") multiplier=1 ;;
+      k|kb) multiplier=1024 ;;
+      m|mb) multiplier=$((1024 * 1024)) ;;
+      g|gb) multiplier=$((1024 * 1024 * 1024)) ;;
+      t|tb) multiplier=$((1024 * 1024 * 1024 * 1024)) ;;
+      *) echo "context-watch: rotate suffix must be K, M, G, or T" >&2; exit 1 ;;
+    esac
+    local limit=$((number * multiplier))
+    if [[ "$limit" -ne 0 && "$limit" -lt 65536 ]]; then
+      echo "context-watch: rotate limit must be at least 64KB (see docs/guide/training_park.md)" >&2
+      exit 1
+    fi
+    echo "$limit"
+  else
+    echo "context-watch: rotate limit must be digits optionally followed by K/M/G/T (with optional B)" >&2
+    exit 1
+  fi
+}
+
+ROTATE_LIMIT=$(normalize_rotate_limit "$ROTATE_LIMIT")
 
 if [[ -n "$SESSION" && ! "$SESSION" =~ ^[A-Za-z0-9._-]+$ ]]; then
   echo "context-watch: ARW_CONTEXT_WATCH_SESSION must be alphanumeric (plus - _ .)" >&2
@@ -46,6 +89,18 @@ while [[ $# -gt 0 ]]; do
       fi
       SESSION="$2"
       shift 2
+      ;;
+    --rotate)
+      if [[ $# -lt 2 ]]; then
+        echo "--rotate requires a value" >&2
+        exit 1
+      fi
+      ROTATE_LIMIT=$(normalize_rotate_limit "$2")
+      shift 2
+      ;;
+    --no-rotate)
+      ROTATE_LIMIT=""
+      shift
       ;;
     --date)
       if [[ $# -lt 2 ]]; then
@@ -90,6 +145,18 @@ while [[ $# -gt 0 ]]; do
             fi
             SESSION="$2"
             shift 2
+            ;;
+          --rotate)
+            if [[ $# -lt 2 ]]; then
+              echo "--rotate requires a value" >&2
+              exit 1
+            fi
+            ROTATE_LIMIT=$(normalize_rotate_limit "$2")
+            shift 2
+            ;;
+          --no-rotate)
+            ROTATE_LIMIT=""
+            shift
             ;;
           --date)
             if [[ $# -lt 2 ]]; then
@@ -136,4 +203,9 @@ fi
 mkdir -p "$LOG_DIR"
 
 printf '[context-watch] writing to %s\n' "$LOG_PATH"
-exec arw-cli context telemetry --watch --base "$BASE" --output "$LOG_PATH" "${EXTRA_ARGS[@]}"
+CLI_ARGS=(context telemetry --watch --base "$BASE" --output "$LOG_PATH")
+if [[ -n "$ROTATE_LIMIT" ]]; then
+  CLI_ARGS+=(--output-rotate "$ROTATE_LIMIT")
+fi
+CLI_ARGS+=("${EXTRA_ARGS[@]}")
+exec arw-cli "${CLI_ARGS[@]}"
