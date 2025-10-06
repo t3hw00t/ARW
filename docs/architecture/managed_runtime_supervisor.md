@@ -4,7 +4,7 @@ title: Managed Runtime Supervisor
 
 # Managed Runtime Supervisor
 
-Updated: 2025-09-28
+Updated: 2025-10-06
 Type: Blueprint
 Status: Priority One
 
@@ -20,6 +20,8 @@ Promote the runtime manager from proposal to a first-class kernel capability. Th
 - Restore attempts flow through the supervisor: restart budgets apply, health loops publish status back into `/state/runtime_matrix`, and the public API surfaces concrete errors when launches fail.
 - Manifests can mark runtimes with `auto_start = true`; the server now schedules those restores automatically on boot without waiting for manual intervention. Removing the flag (or setting it to `false`) stops the runtime gracefully on the next reload.
 - Manifests are optional; when none are present the registry still behaves as before, letting operators opt in incrementally while we continue wiring additional adapters (ONNX Runtime, vLLM, multimodal).
+- `/state/runtime/bundles` now surfaces discovered bundle catalogs (including the preview `bundles.llama.json` and `bundles.audio.json` entries); operators can also inspect the same data via `arw-cli runtime bundles list` or force a rescan with `arw-cli runtime bundles reload`.
+- Preview bundle catalogs live in `configs/runtime/bundles.llama.json` and `configs/runtime/bundles.audio.json`; inspect available entries with `arw-cli runtime bundles list` (add `--remote` to query a running server, `--json/--pretty` for scripting). Artifact URLs remain placeholders until the signing pipeline lands.
 
 ## Guiding Principles
 

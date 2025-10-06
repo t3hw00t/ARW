@@ -1,5 +1,5 @@
 # CLI Reference
-Updated: 2025-09-30
+Updated: 2025-10-06
 Type: Reference
 
 Microsummary: Commands, subcommands, and flags for `arw-cli` with pointers to tutorials. Beta.
@@ -21,6 +21,8 @@ Commands (summary)
 - `arw-cli capsule status [--json] [--limit N]` — inspect active capsules
 - `arw-cli capsule teardown [--id ID] [--all] [--reason TEXT] [--dry-run]` — revoke capsules via the emergency teardown API
 - `arw-cli screenshots backfill-ocr [--lang <code>] [--force] [--dry-run]` — regenerate OCR sidecars via `/admin/tools/run`
+- `arw-cli runtime bundles list [--dir PATH] [--remote] [--json {--pretty}]` — inspect managed runtime bundle catalogs locally or via `/state/runtime/bundles`
+- `arw-cli runtime bundles reload [--json {--pretty}]` — trigger `/admin/runtime/bundles/reload` to rescan bundle catalogs on the server
 
 See the [CLI Guide](../guide/cli.md) for examples. Use `--help` on any command for details.
 

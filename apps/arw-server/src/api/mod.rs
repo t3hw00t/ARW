@@ -1,4 +1,4 @@
-﻿pub mod actions;
+pub mod actions;
 pub mod autonomy;
 pub mod chat;
 pub mod config;
@@ -27,6 +27,7 @@ pub mod projects;
 pub mod research_watcher;
 pub mod review;
 pub mod rpu;
+pub mod runtime;
 pub mod self_model;
 pub mod spec;
 pub mod staging;

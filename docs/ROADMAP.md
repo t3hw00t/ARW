@@ -4,10 +4,10 @@ title: Roadmap
 
 # Roadmap
 
-Updated: 2025-09-28
+Updated: 2025-10-06
 Type: Reference
 
-See also: [Backlog](BACKLOG.md) and [Interface Roadmap](INTERFACE_ROADMAP.md).
+See also: [Backlog](BACKLOG.md), [Interface Roadmap](INTERFACE_ROADMAP.md), and the [Expert Alignment Plan](architecture/expert_alignment_plan.md) for phased delivery details and success metrics.
 Roadmap highlights themes and timelines; Backlog tracks actionable items.
 
 ## Priority One – Managed Runtime Supervisor

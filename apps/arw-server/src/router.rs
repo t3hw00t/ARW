@@ -156,7 +156,9 @@ pub(crate) mod paths {
     pub const STATE_TRAINING_TELEMETRY: &str = "/state/training/telemetry";
     pub const STATE_TRAINING_ACTIONS: &str = "/state/training/actions";
     pub const STATE_RUNTIME_MATRIX: &str = "/state/runtime_matrix";
+    pub const STATE_RUNTIME_BUNDLES: &str = "/state/runtime/bundles";
     pub const STATE_RUNTIME_SUPERVISOR: &str = "/state/runtime_supervisor";
+    pub const ADMIN_RUNTIME_BUNDLES_RELOAD: &str = "/admin/runtime/bundles/reload";
     pub const STATE_CONTEXT_CASCADE: &str = "/state/context/cascade";
     pub const STATE_TASKS: &str = "/state/tasks";
     pub const STATE_SELF: &str = "/state/self";
@@ -680,6 +682,16 @@ pub(crate) fn build_router() -> (Router<AppState>, Vec<String>, Vec<Value>) {
         paths::STATE_RUNTIME_MATRIX,
         api::state::state_runtime_matrix,
         Some(Stability::Beta),
+    );
+    builder.route_get(
+        paths::STATE_RUNTIME_BUNDLES,
+        api::state::state_runtime_bundles,
+        Some(Stability::Experimental),
+    );
+    builder.route_post(
+        paths::ADMIN_RUNTIME_BUNDLES_RELOAD,
+        api::runtime::runtime_bundles_reload,
+        Some(Stability::Experimental),
     );
     builder.route_get(
         paths::STATE_RUNTIME_SUPERVISOR,

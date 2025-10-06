@@ -123,6 +123,13 @@ pub(crate) async fn build() -> BootstrapOutput {
             "failed to load managed runtime manifests"
         );
     }
+    if let Err(err) = state.runtime_bundles().reload().await {
+        warn!(
+            target = "arw::runtime",
+            error = %err,
+            "failed to refresh runtime bundle catalogs"
+        );
+    }
 
     let initial_env_cfg = state.config_state().lock().await.clone();
     config::apply_env_overrides_from(&initial_env_cfg);

@@ -2535,6 +2535,30 @@ pub async fn state_runtime_matrix(
     .into_response()
 }
 
+/// Runtime bundle catalogs discovered on disk.
+#[utoipa::path(
+    get,
+    path = "/state/runtime/bundles",
+    tag = "State",
+    responses(
+        (status = 200, description = "Runtime bundle catalogs", body = serde_json::Value),
+        (status = 401, description = "Unauthorized", body = serde_json::Value)
+    )
+)]
+pub async fn state_runtime_bundles(
+    headers: HeaderMap,
+    State(state): State<AppState>,
+) -> impl IntoResponse {
+    if !crate::admin_ok(&headers).await {
+        return (
+            axum::http::StatusCode::UNAUTHORIZED,
+            Json(json!({"type":"about:blank","title":"Unauthorized","status":401})),
+        )
+            .into_response();
+    }
+    Json(state.runtime_bundles().snapshot().await).into_response()
+}
+
 /// Runtime supervisor snapshot.
 #[utoipa::path(
     get,

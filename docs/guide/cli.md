@@ -25,6 +25,11 @@ Basics
 - Tools
   - `arw-cli tools` — list registered tools (id/version/caps)
   - `arw-cli tools --pretty` — pretty JSON
+- Managed runtime bundles
+  - Local catalogs: `arw-cli runtime bundles list --dir ./configs/runtime --pretty`
+  - Remote snapshot: `arw-cli runtime bundles list --remote --base http://127.0.0.1:8091 --admin-token $ARW_ADMIN_TOKEN`
+  - Trigger rescan: `arw-cli runtime bundles reload --base http://127.0.0.1:8091 --admin-token $ARW_ADMIN_TOKEN`
+  - Scripting: add `--json`/`--pretty` to either command; remote mode fetches `/state/runtime/bundles` from the running server.
 
 Admin Tokens
 - Generate, hash, and persist `ARW_ADMIN_TOKEN` values without committing secrets:

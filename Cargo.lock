@@ -402,6 +402,7 @@ dependencies = [
  "arrow",
  "arw-events",
  "arw-protocol",
+ "arw-runtime",
  "async-nats",
  "async-trait",
  "base64 0.22.1",

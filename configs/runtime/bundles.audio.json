@@ -1,0 +1,46 @@
+{
+  "version": 1,
+  "channel": "preview",
+  "notes": "Placeholder catalog for Whisper.cpp/Piper managed audio bundles. Populate artifact fields once signing pipeline is in place.",
+  "bundles": [
+    {
+      "id": "whisper.cpp-preview/linux-x86_64-cpu",
+      "name": "Whisper.cpp Preview (Linux x86_64)",
+      "description": "CPU-focused Whisper.cpp build for transcription workloads managed by the runtime supervisor.",
+      "adapter": "process",
+      "modalities": ["audio"],
+      "accelerator": "cpu",
+      "profiles": ["balanced", "transcription"],
+      "platforms": [
+        {
+          "os": "linux",
+          "arch": "x86_64",
+          "min_version": "kernel 5.15",
+          "notes": "Requires glibc ≥ 2.35."
+        }
+      ],
+      "artifacts": [
+        {
+          "kind": "archive",
+          "format": "tar.zst",
+          "notes": "URL and checksum will be injected by the bundle release pipeline."
+        }
+      ],
+      "notes": [
+        "Ships whisper.cpp with local inference support for tiny/base models.",
+        "Piper/Coqui TTS companion bundle will reference this catalog once voice generation lands."
+      ],
+      "license": "MIT",
+      "support": {
+        "min_glibc": "2.35",
+        "driver_notes": "Audio preview targets CPU hosts first; GPU acceleration to follow."
+      },
+      "metadata": {
+        "process": {
+          "command": "whisper.cpp",
+          "health_probe": "/health"
+        }
+      }
+    }
+  ]
+}

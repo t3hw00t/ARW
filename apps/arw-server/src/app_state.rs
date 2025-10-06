@@ -8,7 +8,7 @@ use tokio::sync::Mutex;
 
 use crate::{
     autonomy, capsule_guard, chat, cluster, experiments, feedback, governor, identity, metrics,
-    models, policy, queue, runtime, runtime_supervisor, tool_cache, training,
+    models, policy, queue, runtime, runtime_bundles, runtime_supervisor, tool_cache, training,
 };
 
 type SharedConfigState = Arc<Mutex<serde_json::Value>>;
@@ -39,6 +39,7 @@ pub(crate) struct AppState {
     chat: Arc<chat::ChatState>,
     runtime: Arc<runtime::RuntimeRegistry>,
     runtime_supervisor: Arc<runtime_supervisor::RuntimeSupervisor>,
+    runtime_bundles: Arc<runtime_bundles::RuntimeBundleStore>,
     logic_history: Arc<training::LogicUnitHistoryStore>,
     identity: Arc<identity::IdentityRegistry>,
 }
@@ -69,6 +70,7 @@ impl AppState {
         chat: Arc<chat::ChatState>,
         runtime: Arc<runtime::RuntimeRegistry>,
         runtime_supervisor: Arc<runtime_supervisor::RuntimeSupervisor>,
+        runtime_bundles: Arc<runtime_bundles::RuntimeBundleStore>,
         logic_history: Arc<training::LogicUnitHistoryStore>,
         identity: Arc<identity::IdentityRegistry>,
     ) -> Self {
@@ -96,6 +98,7 @@ impl AppState {
             chat,
             runtime,
             runtime_supervisor,
+            runtime_bundles,
             logic_history,
             identity,
         }
@@ -194,6 +197,10 @@ impl AppState {
         self.runtime_supervisor.clone()
     }
 
+    pub fn runtime_bundles(&self) -> Arc<runtime_bundles::RuntimeBundleStore> {
+        self.runtime_bundles.clone()
+    }
+
     pub fn logic_history(&self) -> Arc<training::LogicUnitHistoryStore> {
         self.logic_history.clone()
     }
@@ -244,6 +251,7 @@ pub(crate) struct AppStateBuilder {
     chat: Option<Arc<chat::ChatState>>,
     runtime: Option<Arc<runtime::RuntimeRegistry>>,
     runtime_supervisor: Option<Arc<runtime_supervisor::RuntimeSupervisor>>,
+    runtime_bundles: Option<Arc<runtime_bundles::RuntimeBundleStore>>,
     logic_history: Option<Arc<training::LogicUnitHistoryStore>>,
     identity: Option<Arc<identity::IdentityRegistry>>,
 }
@@ -281,6 +289,7 @@ impl AppState {
             chat: None,
             runtime: None,
             runtime_supervisor: None,
+            runtime_bundles: None,
             logic_history: None,
             identity: None,
         }
@@ -393,6 +402,14 @@ impl AppStateBuilder {
         self
     }
 
+    pub(crate) fn with_runtime_bundles(
+        mut self,
+        bundles: Arc<runtime_bundles::RuntimeBundleStore>,
+    ) -> Self {
+        self.runtime_bundles = Some(bundles);
+        self
+    }
+
     pub(crate) fn with_logic_history(
         mut self,
         store: Arc<training::LogicUnitHistoryStore>,
@@ -499,6 +516,10 @@ impl AppStateBuilder {
                 .await
             }
         };
+        let runtime_bundles_store = match self.runtime_bundles {
+            Some(store) => store,
+            None => runtime_bundles::RuntimeBundleStore::load_default().await,
+        };
         let logic_history_store = self.logic_history.unwrap_or_else(|| {
             let path = crate::util::state_dir()
                 .join("training")
@@ -534,6 +555,7 @@ impl AppStateBuilder {
             chat_state,
             runtime_registry,
             runtime_supervisor,
+            runtime_bundles_store,
             logic_history_store,
             identity_registry,
         )

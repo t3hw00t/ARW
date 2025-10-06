@@ -1,0 +1,46 @@
+{
+  "version": 1,
+  "channel": "preview",
+  "notes": "Placeholder catalog for upcoming managed llama.cpp bundles. Artifact URLs and hashes will be populated by the release pipeline.",
+  "bundles": [
+    {
+      "id": "llama.cpp-preview/linux-x86_64-cpu",
+      "name": "llama.cpp Preview (Linux x86_64 CPU)",
+      "description": "Reference CPU-only llama.cpp build packaged for the managed runtime supervisor.",
+      "adapter": "process",
+      "modalities": ["text"],
+      "accelerator": "cpu",
+      "profiles": ["performance", "balanced", "silent"],
+      "platforms": [
+        {
+          "os": "linux",
+          "arch": "x86_64",
+          "min_version": "kernel 5.15",
+          "notes": "Requires glibc ≥ 2.35."
+        }
+      ],
+      "artifacts": [
+        {
+          "kind": "archive",
+          "format": "tar.zst",
+          "notes": "Publishing pipeline will attach the download URL and checksum. Keep this entry to reserve the artifact slot."
+        }
+      ],
+      "notes": [
+        "Ships a CPU-only build compiled with OpenBLAS support.",
+        "Warm prompt cache directory is exposed via the runtime manifest."
+      ],
+      "license": "MIT",
+      "support": {
+        "min_glibc": "2.35",
+        "driver_notes": "Preview bundle targets CPU hosts. GPU variants (CUDA/ROCm/Metal) will ship in follow-up catalogs."
+      },
+      "metadata": {
+        "process": {
+          "command": "llama.cpp",
+          "health_probe": "/health"
+        }
+      }
+    }
+  ]
+}

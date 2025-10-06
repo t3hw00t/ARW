@@ -1,11 +1,11 @@
 use anyhow::{anyhow, bail, ensure, Context, Result};
 use arw_core::{
     effective_paths, gating, gating_keys, hello_core, introspect_tools, load_effective_paths,
-    resolve_config_path,
+    resolve_config_path, runtime_bundles,
 };
-use arw_runtime::{RuntimeSeverity, RuntimeState};
+use arw_runtime::{RuntimeAccelerator, RuntimeModality, RuntimeSeverity, RuntimeState};
 use base64::Engine;
-use chrono::{DateTime, Local, TimeZone, Utc};
+use chrono::{DateTime, Local, SecondsFormat, TimeZone, Utc};
 use clap::CommandFactory;
 use clap::{Args, Parser, Subcommand, ValueEnum};
 use csv::WriterBuilder;
@@ -991,6 +991,214 @@ enum RuntimeCmd {
     Status(RuntimeStatusArgs),
     /// Request a managed runtime restore
     Restore(RuntimeRestoreArgs),
+    /// Inspect managed runtime bundle catalogs
+    Bundles {
+        #[command(subcommand)]
+        cmd: RuntimeBundlesCmd,
+    },
+}
+
+#[derive(Subcommand)]
+enum RuntimeBundlesCmd {
+    /// List bundle catalogs discovered under configs/runtime
+    List(RuntimeBundlesListArgs),
+    /// Request the server to rescan bundle catalogs
+    Reload(RuntimeBundlesReloadArgs),
+}
+
+fn runtime_bundles_list_remote(args: &RuntimeBundlesListArgs) -> Result<()> {
+    if args.dir.is_some() {
+        eprintln!("note: --dir is ignored when --remote is set");
+    }
+    let token = resolve_admin_token(&args.base.admin_token);
+    let client = Client::builder()
+        .timeout(Duration::from_secs(args.base.timeout))
+        .build()
+        .context("building HTTP client")?;
+    let base = args.base.base_url();
+    let url = format!("{}/state/runtime/bundles", base);
+    let mut req = client.get(&url);
+    req = with_admin_headers(req, token.as_deref());
+    let resp = req
+        .send()
+        .with_context(|| format!("requesting runtime bundle snapshot from {}", url))?;
+    let status = resp.status();
+    let text = resp.text().context("reading runtime bundle snapshot")?;
+
+    if status == reqwest::StatusCode::UNAUTHORIZED {
+        anyhow::bail!(
+            "unauthorized: provide --admin-token or set ARW_ADMIN_TOKEN to access runtime bundles"
+        );
+    }
+    if !status.is_success() {
+        anyhow::bail!("runtime bundle request failed: {} {}", status, text.trim());
+    }
+
+    let snapshot: CliRuntimeBundleSnapshot =
+        serde_json::from_str(&text).context("parsing runtime bundle snapshot JSON")?;
+
+    if args.json {
+        if args.pretty {
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&snapshot).unwrap_or_else(|_| text.clone())
+            );
+        } else {
+            println!("{}", serde_json::to_string(&snapshot).unwrap_or(text));
+        }
+        return Ok(());
+    }
+
+    println!("Remote runtime bundle inventory (base: {})", base);
+    print_bundle_summary(
+        &snapshot.catalogs,
+        &snapshot.roots,
+        snapshot.generated.as_deref(),
+    );
+    Ok(())
+}
+
+fn catalog_view_from_source(
+    src: runtime_bundles::RuntimeBundleCatalogSource,
+) -> CliRuntimeBundleCatalog {
+    let runtime_bundles::RuntimeBundleCatalogSource { path, catalog } = src;
+    CliRuntimeBundleCatalog {
+        path: path.to_string_lossy().into_owned(),
+        version: catalog.version,
+        channel: catalog.channel,
+        notes: catalog.notes,
+        bundles: catalog.bundles,
+    }
+}
+
+fn print_bundle_summary(
+    catalogs: &[CliRuntimeBundleCatalog],
+    roots: &[String],
+    generated: Option<&str>,
+) {
+    if !roots.is_empty() {
+        println!("Roots: {}", roots.join(", "));
+    }
+    if let Some(ts) = generated {
+        println!("Generated: {}", ts);
+    }
+    println!(
+        "Found {} bundle catalog{}.",
+        catalogs.len(),
+        if catalogs.len() == 1 { "" } else { "s" }
+    );
+    if catalogs.is_empty() {
+        println!("(no bundles declared)");
+        return;
+    }
+
+    for catalog in catalogs {
+        println!(
+            "\n{} — version {}{}",
+            catalog.path,
+            catalog.version,
+            catalog
+                .channel
+                .as_deref()
+                .map(|c| format!(" (channel: {})", c))
+                .unwrap_or_default()
+        );
+        if let Some(notes) = catalog.notes.as_deref() {
+            println!("  {}", notes);
+        }
+        if catalog.bundles.is_empty() {
+            println!("  (no bundles declared)");
+            continue;
+        }
+        for bundle in &catalog.bundles {
+            let modalities = if bundle.modalities.is_empty() {
+                "—".to_string()
+            } else {
+                bundle
+                    .modalities
+                    .iter()
+                    .map(modality_slug)
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            };
+            let accelerator = bundle
+                .accelerator
+                .as_ref()
+                .map(accelerator_slug)
+                .unwrap_or("—");
+            let platforms = if bundle.platforms.is_empty() {
+                "—".to_string()
+            } else {
+                bundle
+                    .platforms
+                    .iter()
+                    .map(|p| match p.min_version.as_deref() {
+                        Some(min) if !min.is_empty() => {
+                            format!("{}-{} (>= {})", p.os, p.arch, min)
+                        }
+                        _ => format!("{}-{}", p.os, p.arch),
+                    })
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            };
+            println!("  - {} [{}]", bundle.name, bundle.id);
+            println!(
+                "    adapter: {} | modalities: {} | accelerator: {}",
+                bundle.adapter, modalities, accelerator
+            );
+            println!("    platforms: {}", platforms);
+            if !bundle.profiles.is_empty() {
+                println!("    profiles: {}", bundle.profiles.join(", "));
+            }
+            if !bundle.artifacts.is_empty() {
+                let mut artifacts = Vec::new();
+                for artifact in &bundle.artifacts {
+                    let mut label = artifact.kind.clone();
+                    if let Some(fmt) = artifact.format.as_deref() {
+                        label.push_str(&format!(" ({})", fmt));
+                    }
+                    if let Some(url) = artifact.url.as_deref() {
+                        label.push_str(&format!(" -> {}", url));
+                    } else if let Some(notes) = artifact.notes.as_deref() {
+                        label.push_str(&format!(" — {}", notes));
+                    }
+                    artifacts.push(label);
+                }
+                println!("    artifacts: {}", artifacts.join("; "));
+            }
+            if let Some(license) = bundle.license.as_deref() {
+                println!("    license: {}", license);
+            }
+            if let Some(support) = bundle.support.as_ref() {
+                let mut support_notes = Vec::new();
+                if let Some(glibc) = support.min_glibc.as_deref() {
+                    support_notes.push(format!("glibc >= {}", glibc));
+                }
+                if let Some(macos) = support.min_macos.as_deref() {
+                    support_notes.push(format!("macOS >= {}", macos));
+                }
+                if let Some(windows) = support.min_windows.as_deref() {
+                    support_notes.push(format!("Windows >= {}", windows));
+                }
+                if let Some(driver) = support.driver_notes.as_deref() {
+                    support_notes.push(driver.to_string());
+                }
+                if !support_notes.is_empty() {
+                    println!("    support: {}", support_notes.join("; "));
+                }
+            }
+            if !bundle.notes.is_empty() {
+                println!("    notes: {}", bundle.notes[0]);
+                if bundle.notes.len() > 1 {
+                    println!(
+                        "    (+{} additional note{})",
+                        bundle.notes.len() - 1,
+                        if bundle.notes.len() > 2 { "s" } else { "" }
+                    );
+                }
+            }
+        }
+    }
 }
 
 #[derive(Subcommand)]
@@ -1078,6 +1286,67 @@ struct RuntimeRestoreArgs {
     /// Optional preset name to pass through to the supervisor
     #[arg(long)]
     preset: Option<String>,
+}
+
+#[derive(Args)]
+struct RuntimeBundlesListArgs {
+    #[command(flatten)]
+    base: RuntimeBaseArgs,
+    /// Directory containing bundle catalogs (defaults to configs/runtime/)
+    #[arg(long, value_name = "DIR")]
+    dir: Option<PathBuf>,
+    /// Fetch bundle catalogs from a running server instead of local files
+    #[arg(long)]
+    remote: bool,
+    /// Emit JSON instead of human-readable output
+    #[arg(long)]
+    json: bool,
+    /// Pretty-print JSON output (requires --json)
+    #[arg(long, requires = "json")]
+    pretty: bool,
+}
+
+#[derive(Args)]
+struct RuntimeBundlesReloadArgs {
+    #[command(flatten)]
+    base: RuntimeBaseArgs,
+    /// Emit JSON response
+    #[arg(long)]
+    json: bool,
+    /// Pretty-print JSON output (requires --json)
+    #[arg(long, requires = "json")]
+    pretty: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct CliRuntimeBundleSnapshot {
+    #[serde(default)]
+    generated: Option<String>,
+    #[serde(default)]
+    generated_ms: Option<u64>,
+    #[serde(default)]
+    roots: Vec<String>,
+    #[serde(default)]
+    catalogs: Vec<CliRuntimeBundleCatalog>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct CliRuntimeBundleCatalog {
+    path: String,
+    version: u32,
+    #[serde(default)]
+    channel: Option<String>,
+    #[serde(default)]
+    notes: Option<String>,
+    #[serde(default)]
+    bundles: Vec<runtime_bundles::RuntimeBundle>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct CliRuntimeBundlesReloadResponse {
+    ok: bool,
+    #[serde(default)]
+    error: Option<String>,
 }
 
 #[derive(Args)]
@@ -1713,6 +1982,20 @@ fn main() {
                     std::process::exit(1);
                 }
             }
+            RuntimeCmd::Bundles { cmd } => match cmd {
+                RuntimeBundlesCmd::List(args) => {
+                    if let Err(e) = cmd_runtime_bundles_list(&args) {
+                        eprintln!("{}", e);
+                        std::process::exit(1);
+                    }
+                }
+                RuntimeBundlesCmd::Reload(args) => {
+                    if let Err(e) = cmd_runtime_bundles_reload(&args) {
+                        eprintln!("{}", e);
+                        std::process::exit(1);
+                    }
+                }
+            },
         },
         Some(Commands::State { cmd }) => match cmd {
             StateCmd::Actions(args) => {
@@ -3143,6 +3426,137 @@ fn cmd_runtime_restore(args: &RuntimeRestoreArgs) -> Result<()> {
             status,
             body
         )),
+    }
+}
+
+fn cmd_runtime_bundles_list(args: &RuntimeBundlesListArgs) -> Result<()> {
+    if args.remote {
+        return runtime_bundles_list_remote(args);
+    }
+
+    let base_dir = if let Some(dir) = &args.dir {
+        dir.clone()
+    } else {
+        resolve_config_path("configs/runtime").ok_or_else(|| {
+            anyhow::anyhow!(
+                "unable to locate configs/runtime/; pass --dir to point at bundle catalogs"
+            )
+        })?
+    };
+
+    if !base_dir.exists() {
+        anyhow::bail!("bundle directory {} does not exist", base_dir.display());
+    }
+
+    let sources = runtime_bundles::load_catalogs_from_dir(&base_dir)?;
+    let catalogs: Vec<CliRuntimeBundleCatalog> =
+        sources.into_iter().map(catalog_view_from_source).collect();
+    let roots = vec![base_dir.display().to_string()];
+    let now = Utc::now();
+    let snapshot = CliRuntimeBundleSnapshot {
+        generated: Some(now.to_rfc3339_opts(SecondsFormat::Millis, true)),
+        generated_ms: Some(now.timestamp_millis().max(0) as u64),
+        roots: roots.clone(),
+        catalogs: catalogs.clone(),
+    };
+
+    if args.json {
+        let payload = serde_json::to_value(&snapshot).unwrap_or_else(|_| json!({}));
+        if args.pretty {
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&payload).unwrap_or_else(|_| payload.to_string())
+            );
+        } else {
+            println!("{}", payload);
+        }
+        return Ok(());
+    }
+
+    println!(
+        "Local runtime bundle inventory (root: {})",
+        base_dir.display()
+    );
+    print_bundle_summary(&catalogs, &roots, snapshot.generated.as_deref());
+    Ok(())
+}
+
+fn cmd_runtime_bundles_reload(args: &RuntimeBundlesReloadArgs) -> Result<()> {
+    let token = resolve_admin_token(&args.base.admin_token);
+    let client = Client::builder()
+        .timeout(Duration::from_secs(args.base.timeout))
+        .build()
+        .context("building HTTP client")?;
+    let base = args.base.base_url();
+    let url = format!("{}/admin/runtime/bundles/reload", base);
+    let mut req = client.post(&url);
+    req = with_admin_headers(req, token.as_deref());
+    let resp = req
+        .send()
+        .with_context(|| format!("requesting runtime bundle reload via {}", url))?;
+    let status = resp.status();
+    let text = resp
+        .text()
+        .context("reading runtime bundle reload response")?;
+
+    if status == reqwest::StatusCode::UNAUTHORIZED {
+        anyhow::bail!(
+            "unauthorized: provide --admin-token or set ARW_ADMIN_TOKEN to reload runtime bundles"
+        );
+    }
+    if !status.is_success() {
+        let detail = if text.trim().is_empty() {
+            "".to_string()
+        } else {
+            format!(" {}", text.trim())
+        };
+        anyhow::bail!("runtime bundle reload failed: {}{}", status, detail);
+    }
+
+    let payload: CliRuntimeBundlesReloadResponse =
+        serde_json::from_str(&text).context("parsing runtime bundle reload JSON")?;
+
+    if args.json {
+        if args.pretty {
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&payload).unwrap_or_else(|_| text.clone())
+            );
+        } else {
+            println!("{}", serde_json::to_string(&payload).unwrap_or(text));
+        }
+        return Ok(());
+    }
+
+    if payload.ok {
+        println!("Runtime bundle catalogs reloaded.");
+    } else if let Some(err) = payload.error {
+        anyhow::bail!("runtime bundle reload failed: {}", err);
+    } else {
+        anyhow::bail!("runtime bundle reload failed");
+    }
+    Ok(())
+}
+
+fn modality_slug(modality: &RuntimeModality) -> &'static str {
+    match modality {
+        RuntimeModality::Text => "text",
+        RuntimeModality::Audio => "audio",
+        RuntimeModality::Vision => "vision",
+    }
+}
+
+fn accelerator_slug(accel: &RuntimeAccelerator) -> &'static str {
+    match accel {
+        RuntimeAccelerator::Cpu => "cpu",
+        RuntimeAccelerator::GpuCuda => "gpu_cuda",
+        RuntimeAccelerator::GpuRocm => "gpu_rocm",
+        RuntimeAccelerator::GpuMetal => "gpu_metal",
+        RuntimeAccelerator::GpuVulkan => "gpu_vulkan",
+        RuntimeAccelerator::NpuDirectml => "npu_directml",
+        RuntimeAccelerator::NpuCoreml => "npu_coreml",
+        RuntimeAccelerator::NpuOther => "npu_other",
+        RuntimeAccelerator::Other => "other",
     }
 }
 

@@ -157,6 +157,13 @@ pub(crate) fn start_read_models(state: AppState) -> Vec<TaskHandle> {
 
     handles.push(spawn_read_model(
         &state,
+        "runtime_bundles",
+        Duration::from_millis(5000),
+        |st| async move { Some(st.runtime_bundles().snapshot().await) },
+    ));
+
+    handles.push(spawn_read_model(
+        &state,
         "research_watcher",
         Duration::from_millis(5000),
         |st| async move {

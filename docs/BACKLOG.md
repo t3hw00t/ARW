@@ -4,10 +4,11 @@ title: Backlog
 
 # Backlog
 
-Updated: 2025-09-29
+Updated: 2025-10-06
 Type: Reference
 
 This backlog captures concrete work items and near-term priorities. The Roadmap focuses on higher‑level themes and time horizons; see About → Roadmap for strategic context.
+For phased milestones and success metrics, reference the [Expert Alignment Plan](architecture/expert_alignment_plan.md); items below link the plan to day-to-day execution.
 
 Status: unless noted, items are todo. Items that have task IDs link to the tracker under Developer → Tasks.
 
@@ -42,6 +43,11 @@ Managed Runtime Supervisor (Priority One)
 - [Kernel] Supervisor Core Phase 2: finalize `RuntimeRegistry` adapter trait, lease-gated start/stop APIs, structured logs, and policy simulator coverage — plan (structured log stream with heartbeat dedupe, plus `state_label`/`severity_label` exposed to clients, landed).
 - [Pack: Collaboration][Kernel] Launcher runtime panels: expose profiles, consent cues, and start/stop controls with keyboard parity; publish operator runbook excerpt in Launcher help cards — plan.
 - [Kernel] Supply-chain readiness for bundled runtimes: sign binary manifests, document update cadence, and ship rollback checklist — plan.
+- [Kernel] Bundle catalog & signatures: publish `configs/runtime/bundles.llama.json` + `bundles.audio.json` with signed hashes; pipeline to resolve bundle channel metadata — in_progress (preview catalogs + `/state/runtime/bundles` read-model shipping; signing workflow pending) (Expert Alignment Plan §1A).
+- [Kernel] Runtime bundle CLI: ship `arw-cli runtime bundles list/install/import` to manage downloads, offline imports, and rollbacks — in_progress (list/inspect shipped; install/import workflows pending) (Expert Alignment Plan §1A/§1D).
+- [Kernel] Supervisor bundle resolver: integrate bundle registry with `RuntimeSupervisor`, enforce preset mapping + accelerator detection, and expose bundle info via `/state/runtimes` — in_progress (bundle inventory exposed; supervisor auto-pinning still pending) (Expert Alignment Plan §1B).
+- [Pack: Collaboration][Kernel] Launcher runtime wizard: guided install + consent flow with keyboard parity, hardware probe recommendations, and health toasts — plan (Expert Alignment Plan §1C).
+- [Kernel] Accessibility smoke harness for managed runtimes: automate NVDA/VoiceOver + high-contrast checks across Launcher runtime tabs — plan (Expert Alignment Plan §1C/§4).
 
 Never‑Out‑Of‑Context (High Priority)
 - [Pack: Research] [t-250912143009-0003] Retrieval: add MMR-style selector across vector/graph mounts and world beliefs — done (world belief snapshots now flow through the mmrd selector alongside hybrid memory lanes)
@@ -148,6 +154,28 @@ Security & Admin
 - [Kernel] Admin auth hardening — hashed tokens + per‑token/IP sliding rate‑limit [t-250911230312-0863]
 - [Kernel] Per‑route gating layers; slim global admin middleware [t-250911230252-9858] — done (all admin routes enforce `#[arw_gate]`; global middleware trimmed after hashed-token + per-token/IP throttling rollout)
 - [Kernel] Supply‑chain: upgrade GTK/GLib stack to >=0.20 (via wry/gtk/tao/tauri) to resolve RUSTSEC-2024-0429; remove temporary ignore in `deny.toml` and audit script guard once lockfile carries `glib >= 0.20.0`.
+
+Federation MVP & Cluster Matrix (Preview)
+- [Kernel][Pack: Federation] Remote worker shim: standalone worker binary with lease/capsule propagation; gRPC/WebSocket transport — plan (Expert Alignment Plan §2A).
+- [Kernel][Pack: Federation] Scheduler routing: policy-aware queue selection for remote workloads with per-node budgets and fallbacks — plan (Expert Alignment Plan §2B).
+- [Pack: Federation] Cluster matrix read-model/UI: `/state/cluster` data plane + Launcher/CLI dashboards with live SSE updates — plan (Expert Alignment Plan §2C).
+- [Kernel][Pack: Federation] Contribution ledger & export: capture GPU-seconds, tokens, egress bytes; CSV export tooling — plan (Expert Alignment Plan §2D).
+
+Mini-Agent Catalog & Training Park (High Priority)
+- [Pack: Research][Kernel] Mini-agent schema + catalog generator (`spec/schemas/mini_agent.json`, `scripts/gen_mini_catalog.py`) — plan (Expert Alignment Plan §3A).
+- [Pack: Research][Kernel] Orchestrator catalog integration: populate `/orchestrator/mini_agents` with catalog entries + health metadata — plan (Expert Alignment Plan §3B).
+- [Pack: Collaboration] Launcher Training Park upgrades: catalog list, filters, run actions, telemetry overlays with keyboard support — plan (Expert Alignment Plan §3C).
+- [Pack: Research] Mini-agent telemetry & goldens: nightly smoke tests + evaluation harness integration (`just mini-agents-smoke`) — plan (Expert Alignment Plan §3D).
+
+Accessibility & Consent Foundations (Continuous)
+- [Pack: Collaboration] Consent overlay component reused across audio/vision/pointer flows; integrate with policy leases — plan (Expert Alignment Plan §4).
+- [Kernel] Policy scopes `audio:*`, `vision:*`, `input:*` with default lease expiries and CLI/Admin guardrails — plan (Expert Alignment Plan §4).
+- [Quality] Accessibility CI gate: automate axe-core scans + keyboard traversal tests via `just accessibility-ci` — plan (Expert Alignment Plan §4).
+
+Operational Excellence & Release Engineering
+- [Kernel] Bundle signing pipeline: GitHub Actions job producing `ghcr.io/.../arw-bundles:<version>` with provenance attestation — plan (Expert Alignment Plan §5).
+- [Kernel] Cross-platform managed-runtime smoke: nightly Windows/Linux/macOS runs with installed bundles — plan (Expert Alignment Plan §5).
+- [Docs] Update `docs/guide/release.md` and publish `docs/ops/cluster_runbook.md` for bundle/federation operations — plan (Expert Alignment Plan §5).
 
 - [Kernel] Asimov Capsule Guard (alpha)
   - [Kernel] [t-250916130001-asg01] RPU telemetry + `/state/policy/capsules` read-model surfacing adoption and TTL — done (capsule leases, expired events)

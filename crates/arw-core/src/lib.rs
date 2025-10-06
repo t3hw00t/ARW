@@ -15,6 +15,7 @@ pub mod orchestrator;
 pub mod orchestrator_nats;
 pub mod perf;
 pub mod rpu;
+pub mod runtime_bundles;
 pub mod util;
 
 #[cfg(feature = "wasm")]
