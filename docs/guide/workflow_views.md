@@ -38,6 +38,9 @@ SSE & Read‑models
 - Logic Units and Orchestrator Jobs also publish `state.read.model.patch` with ids `logic_units` and `orchestrator_jobs` (snapshots are available at `GET /logic-units` and `GET /state/orchestrator/jobs`).
 - Memory recent snapshot publishes `state.read.model.patch` with id `memory_recent` (snapshot available at `GET /state/memory/recent`).
   - Snapshots include both `generated` and `generated_ms`—use the numeric timestamp for relative freshness and show the ISO value (or localised absolute time) alongside it in UI copy.
+  - The `summary` node now carries `lanes` counts plus a `modular` object (`recent`, `pending_human_review`, `blocked`), making it easy to surface modular stack review queues without reprocessing the raw list.
+- Modular review summary publishes `state.read.model.patch` with id `memory_modular_review` (snapshot available at `GET /state/memory/modular`) so lightweight dashboards can subscribe without replaying the full memory feed.
+- Lane-specific snapshots publish as `state.read.model.patch` with ids like `memory_lane_short_term` (snapshot available at `GET /state/memory/lane/{lane}`) when you only need a single lane in the UI.
 
 Policy & Context
 - Policy lane reads `GET /state/policy` (active leases). Approvals surface here when enabled.

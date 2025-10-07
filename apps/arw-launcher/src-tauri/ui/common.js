@@ -1038,13 +1038,43 @@ window.ARW = {
         const h = document.createElement('h3');
         h.textContent = name;
         h.addEventListener('click', ()=> sec.classList.toggle('collapsed'));
+        const summary = document.createElement('div');
+        summary.className = 'lane-summary';
+        summary.hidden = true;
         const body = document.createElement('div');
         body.className = 'lane-body';
-        sec.append(h, body);
+        sec.append(h, summary, body);
         node.appendChild(sec);
-        sections.push([name, body]);
+        sections.push([name, body, summary]);
       }
       const bodyFor = (lane) => sections.find(([n]) => n === lane)?.[1] || null;
+      const summaryFor = (lane) => sections.find(([n]) => n === lane)?.[2] || null;
+      const relativeTime = (value) => {
+        if (value === null || value === undefined) return '';
+        const dt = value instanceof Date
+          ? value
+          : typeof value === 'number'
+          ? new Date(value)
+          : new Date(String(value));
+        if (Number.isNaN(dt.getTime())) return '';
+        const diffMs = Date.now() - dt.getTime();
+        const absSec = Math.round(Math.abs(diffMs) / 1000);
+        const units = [
+          { limit: 60, div: 1, label: 's' },
+          { limit: 3600, div: 60, label: 'm' },
+          { limit: 86400, div: 3600, label: 'h' },
+          { limit: 2592000, div: 86400, label: 'd' },
+          { limit: 31536000, div: 2592000, label: 'mo' },
+        ];
+        for (const unit of units) {
+          if (absSec < unit.limit) {
+            const value = Math.max(1, Math.floor(absSec / unit.div));
+            return diffMs >= 0 ? `${value}${unit.label} ago` : `in ${value}${unit.label}`;
+          }
+        }
+        const years = Math.max(1, Math.floor(absSec / 31536000));
+        return diffMs >= 0 ? `${years}y ago` : `in ${years}y`;
+      };
       const renderLaneMessage = (lane, text, tone = 'info') => {
         const el = bodyFor(lane);
         if (!el) return;
@@ -1055,6 +1085,160 @@ window.ARW = {
         span.textContent = text;
         el.innerHTML = '';
         el.appendChild(span);
+      };
+      let provenanceSummaryData = null;
+      let provSummarySub = null;
+      let provenanceSummaryFetched = false;
+      const normalizeModularSummary = (raw) => {
+        if (!raw || typeof raw !== 'object') return null;
+        const pending = Number(raw.pending_human_review ?? raw.pending ?? 0) || 0;
+        const blocked = Number(raw.blocked ?? 0) || 0;
+        let generated = raw.generated;
+        let generatedMs = Number(raw.generated_ms);
+        if (!generated) generated = new Date().toISOString();
+        if (!Number.isFinite(generatedMs)) {
+          const parsed = Date.parse(generated);
+          generatedMs = Number.isFinite(parsed) ? parsed : Date.now();
+        }
+        const recentRaw = Array.isArray(raw.recent) ? raw.recent : [];
+        const recent = recentRaw
+          .filter((entry) => entry && typeof entry === 'object')
+          .map((entry) => ({ ...entry }));
+        return {
+          pending_human_review: pending,
+          blocked,
+          recent,
+          generated,
+          generated_ms: generatedMs,
+        };
+      };
+      const renderProvenanceSummary = () => {
+        const summaryEl = summaryFor('provenance');
+        if (!summaryEl) return;
+        const data = provenanceSummaryData;
+        if (!data) {
+          summaryEl.hidden = true;
+          summaryEl.classList.remove('provenance-summary');
+          summaryEl.innerHTML = '';
+          return;
+        }
+        summaryEl.hidden = false;
+        summaryEl.classList.add('provenance-summary');
+        summaryEl.innerHTML = '';
+        const counts = document.createElement('div');
+        counts.className = 'provenance-summary-counts';
+        const makePill = (label, value, tone) => {
+          const pill = document.createElement('span');
+          pill.className = 'pill';
+          if (tone) pill.classList.add(tone);
+          pill.textContent = `${label}: ${value}`;
+          return pill;
+        };
+        counts.appendChild(makePill('Pending review', data.pending_human_review, data.pending_human_review ? 'warn' : 'good'));
+        counts.appendChild(makePill('Blocked', data.blocked, data.blocked ? 'bad' : 'good'));
+        const updated = document.createElement('span');
+        updated.className = 'provenance-summary-updated dim';
+        const updatedDate = Number.isFinite(data.generated_ms) ? new Date(data.generated_ms) : new Date();
+        const updatedRel = relativeTime(updatedDate);
+        updated.textContent = updatedRel ? `Updated ${updatedRel}` : 'Updated just now';
+        updated.title = updatedDate.toLocaleString();
+        counts.appendChild(updated);
+        summaryEl.appendChild(counts);
+        const recent = Array.isArray(data.recent) ? data.recent : [];
+        if (recent.length) {
+          const list = document.createElement('ul');
+          list.className = 'provenance-summary-list';
+          recent.slice(0, 5).forEach((item) => {
+            const li = document.createElement('li');
+            li.className = 'provenance-summary-item';
+            const title = document.createElement('span');
+            title.className = 'provenance-summary-title';
+            const agent = typeof item.agent_id === 'string' && item.agent_id.trim() ? item.agent_id.trim() : 'agent';
+            const intent = typeof item.intent === 'string' && item.intent.trim() ? item.intent.trim() : '';
+            const kind = typeof item.payload_kind === 'string' && item.payload_kind.trim() ? item.payload_kind.trim() : '';
+            const turn = typeof item.turn_id === 'string' && item.turn_id.trim() ? item.turn_id.trim() : '';
+            const labelParts = [agent];
+            if (intent) labelParts.push(intent);
+            else if (kind) labelParts.push(kind);
+            const fallback = turn || 'modular turn';
+            title.textContent = labelParts.filter(Boolean).join(' · ') || fallback;
+            li.appendChild(title);
+            const stage = typeof item.lifecycle_stage === 'string' ? item.lifecycle_stage.replace(/_/g, ' ') : '';
+            if (stage) {
+              const stagePill = document.createElement('span');
+              stagePill.className = 'pill';
+              stagePill.textContent = stage;
+              li.appendChild(stagePill);
+            }
+            const gate = typeof item.validation_gate === 'string' ? item.validation_gate.replace(/_/g, ' ') : '';
+            if (gate) {
+              const gatePill = document.createElement('span');
+              gatePill.className = 'pill';
+              gatePill.textContent = `gate ${gate}`;
+              li.appendChild(gatePill);
+            }
+            const confVal = Number(item.confidence);
+            if (Number.isFinite(confVal)) {
+              const confPill = document.createElement('span');
+              confPill.className = 'pill';
+              confPill.textContent = `confidence ${(confVal * 100).toFixed(0)}%`;
+              li.appendChild(confPill);
+            }
+            const createdRaw = item.created_ms ?? item.created;
+            let createdDate = null;
+            if (typeof createdRaw === 'number') {
+              createdDate = new Date(createdRaw);
+            } else if (typeof createdRaw === 'string' && createdRaw.trim()) {
+              const num = Number(createdRaw);
+              if (Number.isFinite(num)) createdDate = new Date(num);
+              else {
+                const parsed = Date.parse(createdRaw);
+                if (Number.isFinite(parsed)) createdDate = new Date(parsed);
+              }
+            }
+            if (createdDate && !Number.isNaN(createdDate.getTime())) {
+              const timeEl = document.createElement('time');
+              timeEl.dateTime = createdDate.toISOString();
+              timeEl.textContent = relativeTime(createdDate) || createdDate.toLocaleTimeString();
+              li.appendChild(timeEl);
+            }
+            const excerpt = typeof item.summary_excerpt === 'string' && item.summary_excerpt.trim()
+              ? item.summary_excerpt.trim()
+              : (item.payload_summary && typeof item.payload_summary === 'object' && typeof item.payload_summary.text_preview === 'string'
+                  ? item.payload_summary.text_preview.trim()
+                  : '');
+            if (excerpt) {
+              const preview = document.createElement('div');
+              preview.className = 'provenance-summary-preview';
+              preview.textContent = excerpt.length > 140 ? `${excerpt.slice(0, 137)}…` : excerpt;
+              li.appendChild(preview);
+            }
+            list.appendChild(li);
+          });
+          summaryEl.appendChild(list);
+        } else {
+          const empty = document.createElement('div');
+          empty.className = 'provenance-summary-empty';
+          empty.textContent = 'No recent modular turns';
+          summaryEl.appendChild(empty);
+        }
+      };
+      const primeProvenanceSummary = async () => {
+        if (!opts.base || provenanceSummaryFetched) return;
+        provenanceSummaryFetched = true;
+        try {
+          const data = await ARW.http.json(opts.base, '/state/memory/modular?limit=200');
+          const normalized = normalizeModularSummary(data);
+          if (normalized) {
+            provenanceSummaryData = normalized;
+            ARW.read._store.set('memory_modular_review', normalized);
+            ARW.read._emit('memory_modular_review');
+            renderProvenanceSummary();
+          }
+        } catch (err) {
+          console.warn('provenance summary fetch failed', err);
+          provenanceSummaryFetched = false;
+        }
       };
       let approvalsSub = null;
       if (lanes.includes('approvals')) {
@@ -1971,6 +2155,22 @@ window.ARW = {
           primeApprovals();
         }
       }
+      if (lanes.includes('provenance')) {
+        const existingSummary = normalizeModularSummary(ARW.read.get('memory_modular_review'));
+        if (existingSummary) {
+          provenanceSummaryData = existingSummary;
+        }
+        renderProvenanceSummary();
+        provSummarySub = ARW.read.subscribe('memory_modular_review', (model) => {
+          const normalized = normalizeModularSummary(model || ARW.read.get('memory_modular_review'));
+          if (!normalized) return;
+          provenanceSummaryData = normalized;
+          renderProvenanceSummary();
+        });
+        if (opts.base) {
+          primeProvenanceSummary();
+        }
+      }
       // Micro-batched updaters to reduce DOM thrash
       let tlQ = []; let tlTimer = null;
       const rTimeline = (env) => { if (!env) return; tlQ.push(env); if (tlTimer) return; tlTimer = setTimeout(()=>{
@@ -2684,6 +2884,7 @@ window.ARW = {
           ARW.read.unsubscribe(idMetrics);
           ARW.read.unsubscribe(idSnappy);
           if (approvalsSub) ARW.read.unsubscribe(approvalsSub);
+          if (provSummarySub) ARW.read.unsubscribe(provSummarySub);
           ARW.sse.unsubscribe(idActivity);
           if (policyTimer) clearInterval(policyTimer);
           if (contextTimer) {
@@ -2700,6 +2901,9 @@ window.ARW = {
             approvalsState.shortcutHandler = null;
           }
           approvalsState.shortcutMap = {};
+          provenanceSummaryData = null;
+          provSummarySub = null;
+          provenanceSummaryFetched = false;
           node.innerHTML = '';
         },
         refresh(optsRefresh = {}) {

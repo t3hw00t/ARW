@@ -280,6 +280,7 @@ impl WorkerContext {
             }
         };
         let summary = modular::agent_message_summary(&validated);
+        modular::persist_agent_memory(state, &validated, &summary).await;
         self.bus
             .publish(topics::TOPIC_MODULAR_AGENT_ACCEPTED, &summary);
         if let Some(agent_id) = summary.get("agent_id").and_then(|v| v.as_str()) {
@@ -1597,6 +1598,79 @@ mod tests {
                 .unwrap_or_default(),
             1
         );
+
+        let short_entries = state
+            .kernel()
+            .list_recent_memory_async(Some("short_term".into()), 8)
+            .await
+            .expect("list short-term memory");
+        let short_entry = short_entries
+            .into_iter()
+            .find_map(|item| {
+                let obj = item.as_object()?;
+                let lane = obj.get("lane")?.as_str()?;
+                if lane != "short_term" {
+                    return None;
+                }
+                let value = obj.get("value")?.as_object()?;
+                if value.get("agent_id").and_then(|v| v.as_str()) == Some("assistant.chat") {
+                    Some(item)
+                } else {
+                    None
+                }
+            })
+            .expect("short-term modular memory entry");
+        let short_obj = short_entry.as_object().expect("short-term is object");
+        assert_eq!(
+            short_obj.get("lane").and_then(|v| v.as_str()),
+            Some("short_term")
+        );
+        assert!(
+            short_obj
+                .get("ttl_s")
+                .and_then(|v| v.as_i64())
+                .unwrap_or_default()
+                > 0
+        );
+        let short_value = short_obj
+            .get("value")
+            .and_then(|v| v.as_object())
+            .expect("short-term value object");
+        assert_eq!(
+            short_value.get("payload_kind").and_then(|v| v.as_str()),
+            Some("chat")
+        );
+        assert_eq!(
+            short_value.get("turn_id").and_then(|v| v.as_str()),
+            Some("test-turn")
+        );
+
+        let episodic_entries = state
+            .kernel()
+            .list_recent_memory_async(Some("episodic".into()), 8)
+            .await
+            .expect("list episodic memory");
+        let episodic_entry = episodic_entries
+            .into_iter()
+            .find_map(|item| {
+                let obj = item.as_object()?;
+                if obj.get("lane")?.as_str()? != "episodic" {
+                    return None;
+                }
+                let value = obj.get("value")?.as_object()?;
+                if value.get("agent_id").and_then(|v| v.as_str()) == Some("assistant.chat") {
+                    Some(item)
+                } else {
+                    None
+                }
+            })
+            .expect("episodic modular memory entry");
+        let episodic_obj = episodic_entry.as_object().expect("episodic is object");
+        let episodic_extra = episodic_obj
+            .get("extra")
+            .and_then(|v| v.as_object())
+            .expect("episodic extra object");
+        assert!(episodic_extra.get("short_term_id").is_some());
     }
 
     #[tokio::test]

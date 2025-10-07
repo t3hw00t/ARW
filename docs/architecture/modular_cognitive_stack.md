@@ -25,7 +25,7 @@ Agents
 - Orchestrator Planner — (optional) evaluates outstanding goals, spins up specialist agents, and coordinates multi-turn plans when work spans several exchanges.
 
 Orchestration Flow
-1. Orchestrator receives a user event and emits a typed `conversation.turn` record into the Memory Fabric’s short-term buffer.
+1. Orchestrator receives a user event and emits a typed `conversation.turn` record into the Memory Fabric’s short-term buffer (`short_term` lane, ~15‑minute TTL) while mirroring the turn into episodic history for durable replay.
 2. Recall Agent pulls relevant artifacts (episodic, compressed, knowledge) via the Memory Abstraction Layer and returns references + confidence scores.
 3. Interpretation Agent fuses the recall set with request metadata, highlights conflicts, and generates a structured brief (`intent`, `context_refs`, `risks`, `open_questions`).
 4. Chat Agent drafts a response using the brief and may request additional recall/interpretation passes if gaps remain.
@@ -36,6 +36,8 @@ Orchestration Flow
 
 Message Contracts
 - Agent messages use typed JSON envelopes with required fields: `intent`, `context_refs`, `evidence_ids`, `confidence`, `latency_budget_ms`, `policy_scope` (see `spec/schemas/modular_agent_message.json`).
+- Payloads are agent-specific: chat responses require `text` + provenance citations, recall/compression agents declare structured item lists with scoring, validation agents emit `status` + findings, and orchestrator trainers surface goals and bundle hints. Unknown agents fall back to generic payloads but still carry lease envelopes.
+- The server validation path enriches accepted envelopes with `payload_kind` and a `lifecycle` summary (lease scopes + validation gate) so Launcher's provenance lane can show whether human review or validation is still pending.
 - Tool calls include `tool_id`, `operation_id`, `input_payload`, `sandbox_requirements`, `result`, and `evidence_id` for provenance linking (see `spec/schemas/modular_tool_invocation.json`).
 - Schemas live in the shared registry (see [API and Schema](../API_AND_SCHEMA.md)) and are versioned; orchestrator rejects payloads that fail validation.
 - Server actions `modular.agent_message` and `modular.tool_invocation` already perform schema validation plus active-lease checks so specialists can be exercised safely during development.

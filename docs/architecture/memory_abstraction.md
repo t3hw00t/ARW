@@ -44,6 +44,7 @@ See [memory_overlay_service.md](memory_overlay_service.md#data-model) for full s
 | Lane | Default durability | Notes |
 | --- | --- | --- |
 | `ephemeral` | `ephemeral` | Scratchpad for the current turn; never packs into long-term context unless explicitly promoted. |
+| `short_term` | `short` | Modular stack conversation buffer with 15-minute TTL (tunable via `ARW_MEMORY_SHORT_TTL_SECS`); mirrors episodic turns while loss metrics feed compression jobs. |
 | `episodic` | `short` | Summaries of recent turns, tool outputs, and micro plans. |
 | `semantic` | `long` | Durable facts, docs, source snippets; chunked + indexed. |
 | `profile` | `long` | Preferences, API scopes, user/agent traits. |

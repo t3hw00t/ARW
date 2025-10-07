@@ -34,9 +34,225 @@ struct NotesSnapshot {
 }
 
 use crate::singleflight::Singleflight;
-use crate::{metrics, project_snapshots, state_observer, tasks::TaskHandle, training, AppState};
+use crate::{
+    memory_service, metrics, project_snapshots, state_observer, tasks::TaskHandle, training,
+    AppState,
+};
 use arw_kernel::ActionListOptions;
 use arw_topics as topics;
+
+#[derive(Clone)]
+pub struct MemoryRecentBundle {
+    pub snapshot: Value,
+    pub modular: Value,
+    pub generated: String,
+    pub generated_ms: u64,
+    pub lane_snapshots: BTreeMap<String, Value>,
+}
+
+pub(crate) const MEMORY_LANE_IDS: [(&str, &str); 6] = [
+    ("memory_lane_short_term", "short_term"),
+    ("memory_lane_ephemeral", "ephemeral"),
+    ("memory_lane_episodic", "episodic"),
+    ("memory_lane_episodic_summary", "episodic_summary"),
+    ("memory_lane_semantic", "semantic"),
+    ("memory_lane_profile", "profile"),
+];
+
+pub(crate) fn summarize_memory_recent_items(items: &[Value]) -> Value {
+    let mut lane_counts: BTreeMap<String, usize> = BTreeMap::new();
+    let mut modular_recent: Vec<Value> = Vec::new();
+    let mut modular_pending = 0usize;
+    let mut modular_blocked = 0usize;
+
+    for item in items {
+        if let Some(lane) = item.get("lane").and_then(|v| v.as_str()) {
+            *lane_counts.entry(lane.to_string()).or_insert(0) += 1;
+        }
+
+        let Some(value_obj) = item.get("value").and_then(|v| v.as_object()) else {
+            continue;
+        };
+        let Some(payload_kind) = value_obj.get("payload_kind").and_then(|v| v.as_str()) else {
+            continue;
+        };
+
+        let lifecycle_stage = value_obj
+            .get("lifecycle")
+            .and_then(|v| v.get("stage"))
+            .and_then(|v| v.as_str())
+            .unwrap_or("accepted");
+        let validation_gate = value_obj
+            .get("lifecycle")
+            .and_then(|v| v.get("validation_gate"))
+            .and_then(|v| v.as_str())
+            .unwrap_or("skipped");
+
+        match lifecycle_stage {
+            "pending_human_review" => modular_pending += 1,
+            "blocked" => modular_blocked += 1,
+            _ => {}
+        }
+
+        let mut recent_entry = serde_json::Map::new();
+        recent_entry.insert("id".into(), item.get("id").cloned().unwrap_or(Value::Null));
+        recent_entry.insert(
+            "lane".into(),
+            item.get("lane").cloned().unwrap_or(Value::Null),
+        );
+        recent_entry.insert(
+            "turn_id".into(),
+            value_obj.get("turn_id").cloned().unwrap_or(Value::Null),
+        );
+        recent_entry.insert(
+            "agent_id".into(),
+            value_obj.get("agent_id").cloned().unwrap_or(Value::Null),
+        );
+        recent_entry.insert(
+            "intent".into(),
+            value_obj.get("intent").cloned().unwrap_or(Value::Null),
+        );
+        recent_entry.insert(
+            "payload_kind".into(),
+            Value::String(payload_kind.to_string()),
+        );
+        recent_entry.insert(
+            "lifecycle_stage".into(),
+            Value::String(lifecycle_stage.to_string()),
+        );
+        recent_entry.insert(
+            "validation_gate".into(),
+            Value::String(validation_gate.to_string()),
+        );
+        recent_entry.insert(
+            "confidence".into(),
+            value_obj.get("confidence").cloned().unwrap_or(Value::Null),
+        );
+        recent_entry.insert(
+            "created_ms".into(),
+            value_obj.get("created_ms").cloned().unwrap_or(Value::Null),
+        );
+        recent_entry.insert(
+            "payload_summary".into(),
+            value_obj
+                .get("payload_summary")
+                .cloned()
+                .unwrap_or(Value::Null),
+        );
+        if let Some(summary_excerpt) = item
+            .get("extra")
+            .and_then(|v| v.get("summary_excerpt"))
+            .cloned()
+        {
+            recent_entry.insert("summary_excerpt".into(), summary_excerpt);
+        }
+
+        modular_recent.push(Value::Object(recent_entry));
+    }
+
+    if modular_recent.len() > 50 {
+        modular_recent.truncate(50);
+    }
+
+    json!({
+        "lanes": lane_counts,
+        "modular": {
+            "recent": modular_recent,
+            "pending_human_review": modular_pending,
+            "blocked": modular_blocked,
+        }
+    })
+}
+
+pub(crate) fn build_memory_recent_bundle(mut items: Vec<Value>) -> MemoryRecentBundle {
+    memory_service::attach_memory_ptrs(&mut items);
+    let summary = summarize_memory_recent_items(&items);
+    let now = Utc::now();
+    let generated = now.to_rfc3339_opts(SecondsFormat::Millis, true);
+    let generated_ms = now.timestamp_millis().max(0) as u64;
+    let snapshot = json!({
+        "items": items,
+        "summary": summary,
+        "generated": generated.clone(),
+        "generated_ms": generated_ms,
+    });
+    let modular = snapshot
+        .get("summary")
+        .and_then(|v| v.get("modular"))
+        .cloned()
+        .unwrap_or_else(|| {
+            json!({
+                "recent": [],
+                "pending_human_review": 0,
+                "blocked": 0,
+            })
+        });
+    let modular_snapshot = json!({
+        "generated": generated.clone(),
+        "generated_ms": generated_ms,
+        "pending_human_review": modular
+            .get("pending_human_review")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(0),
+        "blocked": modular
+            .get("blocked")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(0),
+        "recent": modular.get("recent").cloned().unwrap_or_else(|| json!([])),
+    });
+    let mut lane_snapshots = BTreeMap::new();
+    for (_, lane) in MEMORY_LANE_IDS.iter() {
+        let filtered: Vec<Value> = snapshot
+            .get("items")
+            .and_then(|v| v.as_array())
+            .map(|arr| {
+                arr.iter()
+                    .filter(|item| {
+                        item.get("lane")
+                            .and_then(|v| v.as_str())
+                            .map(|l| l == *lane)
+                            .unwrap_or(false)
+                    })
+                    .cloned()
+                    .collect()
+            })
+            .unwrap_or_default();
+        lane_snapshots.insert(
+            (*lane).to_string(),
+            json!({
+                "lane": lane,
+                "items": filtered,
+                "generated": generated.clone(),
+                "generated_ms": generated_ms,
+            }),
+        );
+    }
+    MemoryRecentBundle {
+        snapshot,
+        modular: modular_snapshot,
+        generated,
+        generated_ms,
+        lane_snapshots,
+    }
+}
+
+pub(crate) fn publish_memory_bundle(bus: &arw_events::Bus, bundle: &MemoryRecentBundle) {
+    publish_read_model_patch(bus, "memory_recent", &bundle.snapshot);
+    publish_read_model_patch(bus, "memory_modular_review", &bundle.modular);
+    for (id, lane) in MEMORY_LANE_IDS.iter() {
+        if let Some(snapshot) = bundle.lane_snapshots.get(*lane) {
+            publish_read_model_patch(bus, id, snapshot);
+        } else {
+            let empty = json!({
+                "lane": lane,
+                "items": [],
+                "generated": bundle.generated,
+                "generated_ms": bundle.generated_ms,
+            });
+            publish_read_model_patch(bus, id, &empty);
+        }
+    }
+}
 
 pub(crate) fn start_read_models(state: AppState) -> Vec<TaskHandle> {
     let mut handles = Vec::new();
@@ -84,7 +300,59 @@ pub(crate) fn start_read_models(state: AppState) -> Vec<TaskHandle> {
                 .list_recent_memory_async(None, 200)
                 .await
                 .ok()
-                .map(|items| json!({ "items": items }))
+                .map(|items| build_memory_recent_bundle(items).snapshot)
+        },
+    ));
+
+    for (id, lane) in MEMORY_LANE_IDS.iter() {
+        let lane_name = (*lane).to_string();
+        handles.push(spawn_read_model(
+            &state,
+            *id,
+            Duration::from_millis(2500),
+            move |st| {
+                let lane_clone = lane_name.clone();
+                async move {
+                    if !st.kernel_enabled() {
+                        return None;
+                    }
+                    st.kernel()
+                        .list_recent_memory_async(Some(lane_clone.clone()), 200)
+                        .await
+                        .ok()
+                        .map(|items| {
+                            let bundle = build_memory_recent_bundle(items);
+                            bundle
+                                .lane_snapshots
+                                .get(&lane_clone)
+                                .cloned()
+                                .unwrap_or_else(|| {
+                                    json!({
+                                        "lane": lane_clone,
+                                        "items": [],
+                                        "generated": bundle.generated,
+                                        "generated_ms": bundle.generated_ms,
+                                    })
+                                })
+                        })
+                }
+            },
+        ));
+    }
+
+    handles.push(spawn_read_model(
+        &state,
+        "memory_modular_review",
+        Duration::from_millis(2500),
+        |st| async move {
+            if !st.kernel_enabled() {
+                return None;
+            }
+            st.kernel()
+                .list_recent_memory_async(None, 200)
+                .await
+                .ok()
+                .map(|items| build_memory_recent_bundle(items).modular)
         },
     ));
 

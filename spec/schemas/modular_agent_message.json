@@ -34,12 +34,16 @@
     },
     "context_refs": {
       "type": "array",
-      "items": {"type": "string"},
+      "items": {
+        "type": "string"
+      },
       "description": "Pointers to memory or evidence items relied upon."
     },
     "evidence_ids": {
       "type": "array",
-      "items": {"type": "string"},
+      "items": {
+        "type": "string"
+      },
       "description": "Identifiers for tool outputs or provenance artifacts referenced in the payload."
     },
     "confidence": {
@@ -56,16 +60,22 @@
     "policy_scope": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["leases"],
+      "required": [
+        "leases"
+      ],
       "properties": {
         "leases": {
           "type": "array",
-          "items": {"type": "string"},
+          "items": {
+            "type": "string"
+          },
           "description": "Active permission leases the agent relied on."
         },
         "capabilities": {
           "type": "array",
-          "items": {"type": "string"},
+          "items": {
+            "type": "string"
+          },
           "description": "Capabilities requested for subsequent steps."
         },
         "requires_human_review": {
@@ -81,9 +91,16 @@
       "properties": {
         "status": {
           "type": "string",
-          "enum": ["pending", "complete", "blocked", "degraded"]
+          "enum": [
+            "pending",
+            "complete",
+            "blocked",
+            "degraded"
+          ]
         },
-        "notes": {"type": "string"}
+        "notes": {
+          "type": "string"
+        }
       },
       "description": "Optional hand-off metadata for orchestrator bookkeeping."
     },
@@ -92,5 +109,489 @@
       "minimum": 0,
       "description": "Unix epoch milliseconds when the message was generated."
     }
-  }
+  },
+  "$defs": {
+    "followup_suggestion": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "prompt"
+      ],
+      "properties": {
+        "prompt": {
+          "type": "string",
+          "minLength": 1
+        },
+        "category": {
+          "type": "string"
+        }
+      },
+      "description": "Suggested follow-up prompts or actions the chat agent can offer."
+    },
+    "agent_citation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "evidence_id"
+      ],
+      "properties": {
+        "evidence_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "snippet": {
+          "type": "string"
+        },
+        "confidence": {
+          "type": "number",
+          "minimum": 0.0,
+          "maximum": 1.0
+        },
+        "source": {
+          "type": "string"
+        }
+      },
+      "description": "Reference to provenance artifacts that support the response."
+    },
+    "chat_payload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "text"
+      ],
+      "properties": {
+        "text": {
+          "type": "string",
+          "minLength": 1
+        },
+        "summary": {
+          "type": "string"
+        },
+        "followups": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/followup_suggestion"
+          }
+        },
+        "citations": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/agent_citation"
+          }
+        }
+      },
+      "description": "Structured chat agent response body."
+    },
+    "recall_item": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "lane"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "lane": {
+          "type": "string"
+        },
+        "score": {
+          "type": "number"
+        },
+        "snippet": {
+          "type": "string"
+        },
+        "summary": {
+          "type": "string"
+        },
+        "source": {
+          "type": "string"
+        },
+        "evidence_ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "description": "Memory artifact returned by the recall agent."
+    },
+    "recall_payload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "items"
+      ],
+      "properties": {
+        "items": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/recall_item"
+          }
+        },
+        "exhausted": {
+          "type": "boolean"
+        },
+        "cursor": {
+          "type": "string"
+        }
+      },
+      "description": "Recall agent results with provenance and scoring metadata."
+    },
+    "compression_candidate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "lane": {
+          "type": "string"
+        },
+        "summary": {
+          "type": "string"
+        },
+        "loss_score": {
+          "type": "number"
+        },
+        "decision": {
+          "type": "string"
+        }
+      },
+      "description": "Candidate memory item proposed for compression."
+    },
+    "compression_payload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "candidates"
+      ],
+      "properties": {
+        "candidates": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/compression_candidate"
+          }
+        },
+        "retained": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "dropped": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "description": "Compression agent recommendations and bookkeeping."
+    },
+    "interpretation_risk": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind"
+      ],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "minLength": 1
+        },
+        "severity": {
+          "type": "string"
+        },
+        "detail": {
+          "type": "string"
+        }
+      },
+      "description": "Risk item captured by the interpretation agent."
+    },
+    "interpretation_payload": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "brief": {
+          "type": "string"
+        },
+        "plan_steps": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "risks": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/interpretation_risk"
+          }
+        },
+        "open_questions": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "description": "Interpretation agent brief with derived plan and risk notes."
+    },
+    "validation_finding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind"
+      ],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "minLength": 1
+        },
+        "severity": {
+          "type": "string"
+        },
+        "detail": {
+          "type": "string"
+        },
+        "evidence_ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "description": "Validation finding describing an issue or observation."
+    },
+    "validation_payload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status"
+      ],
+      "properties": {
+        "status": {
+          "type": "string",
+          "minLength": 1
+        },
+        "findings": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/validation_finding"
+          }
+        },
+        "summary": {
+          "type": "string"
+        }
+      },
+      "description": "Validation agent verdict with supporting findings."
+    },
+    "tool_broker_payload": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "scheduled": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "completed": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "failed": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "description": "Tool broker activity overview for orchestration."
+    },
+    "orchestrator_summary_payload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "goal"
+      ],
+      "properties": {
+        "goal": {
+          "type": "string",
+          "minLength": 1
+        },
+        "logic_unit_id": {
+          "type": "string"
+        },
+        "hints": {
+          "type": "object"
+        },
+        "training_meta": {
+          "type": "object"
+        }
+      },
+      "description": "Orchestrator trainer summary for downstream consumers."
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "agent_id": {
+            "const": "assistant.chat"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "intent": {
+            "enum": [
+              "draft_response",
+              "follow_up_request"
+            ]
+          },
+          "payload": {
+            "$ref": "#/$defs/chat_payload"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "agent_id": {
+            "const": "memory.recall"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "intent": {
+            "enum": [
+              "recall_summary"
+            ]
+          },
+          "payload": {
+            "$ref": "#/$defs/recall_payload"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "agent_id": {
+            "const": "memory.compression"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "intent": {
+            "enum": [
+              "compression_summary"
+            ]
+          },
+          "payload": {
+            "$ref": "#/$defs/compression_payload"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "agent_id": {
+            "enum": [
+              "analysis.interpretation",
+              "interpretation.brief"
+            ]
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "intent": {
+            "enum": [
+              "interpretation_brief"
+            ]
+          },
+          "payload": {
+            "$ref": "#/$defs/interpretation_payload"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "agent_id": {
+            "const": "validation.guard"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "intent": {
+            "enum": [
+              "validation_report"
+            ]
+          },
+          "payload": {
+            "$ref": "#/$defs/validation_payload"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "agent_id": {
+            "const": "tool.broker"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "intent": {
+            "enum": [
+              "tool_update"
+            ]
+          },
+          "payload": {
+            "$ref": "#/$defs/tool_broker_payload"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "agent_id": {
+            "const": "orchestrator.trainer"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "intent": {
+            "enum": [
+              "orchestrator.summary"
+            ]
+          },
+          "payload": {
+            "$ref": "#/$defs/orchestrator_summary_payload"
+          }
+        }
+      }
+    }
+  ]
 }

@@ -8,11 +8,14 @@ Updated: 2025-10-05 23:12 UTC
 
 
 ## To Do
-- [t-202510060901-msc01] Modular cognitive stack: define agent contracts, typed envelopes, and orchestrator lifecycle (lease scopes, validation hooks).
-- [t-202510060903-msc02] Memory fabric wiring: attach short-term buffers, episodic log hooks, and compression loops with loss metrics + hygiene jobs.
 - [t-202510060906-msc03] Validation & tool guardrails: integrate validation agent decisions, sandboxed tool brokerage, and provenance surfaces.
 
 ## In Progress
+- [t-202510060901-msc01] Modular cognitive stack: define agent contracts, typed envelopes, and orchestrator lifecycle (lease scopes, validation hooks).
+    - 2025-10-07 11:10:00 UTC: Landed typed payload schemas for chat/recall/compression/interpretation/validation/tool/orchestrator agents, server validation now emits `payload_kind` and lifecycle summaries with lease scopes + validation gate in `modular.agent.accepted`.
+- [t-202510060903-msc02] Memory fabric wiring: attach short-term buffers, episodic log hooks, and compression loops with loss metrics + hygiene jobs.
+    - 2025-10-07 14:45:00 UTC: Modular turns now persist to the `short_term` lane (15-minute TTL) and mirrored episodic entries with loss metrics + tags; hygiene sweep caps updated and `/state/memory` gains richer provenance for modular runs.
+    - 2025-10-07 15:30:00 UTC: Added `memory_modular_review` read-model + `/state/memory/modular` endpoint so Hub/Launcher can subscribe to lightweight modular review queues without replaying the full memory feed.
 
 ## Paused
 

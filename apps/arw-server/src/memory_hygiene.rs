@@ -2,12 +2,12 @@ use std::collections::HashSet;
 use std::time::Duration;
 
 use anyhow::{Context, Result};
-use chrono::{SecondsFormat, Utc};
+use chrono::Utc;
 use metrics::counter;
 use serde_json::json;
 use tokio::time::{interval, MissedTickBehavior};
 
-use crate::{memory_service, read_models, tasks::TaskHandle, tools, AppState};
+use crate::{read_models, tasks::TaskHandle, tools, AppState};
 use arw_kernel::{MemoryGcCandidate, MemoryGcReason};
 use arw_topics as topics;
 
@@ -19,6 +19,7 @@ const METRIC_EVICTED: &str = "arw_memory_gc_evicted_total";
 
 static DEFAULT_LANE_CAPS: &[(&str, usize)] = &[
     ("ephemeral", 256),
+    ("short_term", 512),
     ("episodic", 1024),
     ("episodic_summary", 1024),
     ("semantic", 4096),
@@ -169,17 +170,13 @@ fn publish_events(state: &AppState, candidates: &[MemoryGcCandidate]) {
 }
 
 async fn update_read_model(state: &AppState) -> Result<()> {
-    let mut items = state
+    let items = state
         .kernel()
         .list_recent_memory_async(None, 200)
         .await
         .context("refresh memory recent read-model")?;
-    memory_service::attach_memory_ptrs(&mut items);
-    let snapshot = json!({
-        "items": items,
-        "generated": Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true),
-    });
-    read_models::publish_read_model_patch(&state.bus(), "memory_recent", &snapshot);
+    let bundle = read_models::build_memory_recent_bundle(items);
+    read_models::publish_memory_bundle(&state.bus(), &bundle);
     Ok(())
 }
 

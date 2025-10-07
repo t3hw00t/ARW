@@ -198,6 +198,8 @@ pub(crate) mod paths {
     pub const STATE_PROJECTS_FILE: &str = "/state/projects/{proj}/file";
     pub const STATE_MODELS_HASHES: &str = "/state/models_hashes";
     pub const STATE_MEMORY: &str = "/state/memory";
+    pub const STATE_MEMORY_LANE: &str = "/state/memory/lane/{lane}";
+    pub const STATE_MEMORY_MODULAR: &str = "/state/memory/modular";
     pub const PROJECTS: &str = "/projects";
     pub const PROJECTS_NOTES: &str = "/projects/{proj}/notes";
     pub const PROJECTS_FILE: &str = "/projects/{proj}/file";
@@ -738,8 +740,18 @@ pub(crate) fn build_router() -> (Router<AppState>, Vec<String>, Vec<Value>) {
         Some(Stability::Beta),
     );
     builder.route_get(
+        paths::STATE_MEMORY_LANE,
+        api::memory::state_memory_lane,
+        Some(Stability::Beta),
+    );
+    builder.route_get(
         "/state/memory/recent",
         api::memory::state_memory_recent,
+        None,
+    );
+    builder.route_get(
+        paths::STATE_MEMORY_MODULAR,
+        api::memory::state_memory_modular,
         None,
     );
     register_admin_memory_routes(&mut builder);

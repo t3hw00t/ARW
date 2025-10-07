@@ -2,7 +2,7 @@ use axum::http::HeaderMap;
 use axum::response::sse::{Event, KeepAlive, Sse};
 use axum::response::IntoResponse;
 use axum::{
-    extract::{Query, State},
+    extract::{Path, Query, State},
     Json,
 };
 use chrono::{DateTime, SecondsFormat, Utc};
@@ -15,7 +15,7 @@ use tokio_stream::wrappers::ReceiverStream;
 use tracing::{error, warn};
 use utoipa::ToSchema;
 
-use crate::{memory_service, AppState};
+use crate::{memory_service, read_models, AppState};
 use arw_topics as topics;
 
 fn now_timestamp_pair() -> (String, i64) {
@@ -53,6 +53,20 @@ fn ensure_memory_recent_snapshot(snapshot: &mut Value, refresh_generated: bool) 
     };
     if let Some(items) = obj.get_mut("items").and_then(|value| value.as_array_mut()) {
         memory_service::attach_memory_ptrs(items);
+        let summary = crate::read_models::summarize_memory_recent_items(items);
+        obj.insert("summary".into(), summary);
+    } else {
+        obj.insert(
+            "summary".into(),
+            json!({
+                "lanes": {},
+                "modular": {
+                    "recent": [],
+                    "pending_human_review": 0,
+                    "blocked": 0,
+                }
+            }),
+        );
     }
 
     let mut generated_iso = obj
@@ -90,30 +104,58 @@ fn ensure_memory_recent_snapshot(snapshot: &mut Value, refresh_generated: bool) 
     get,
     path = "/state/memory",
     tag = "Memory",
+    params(("lane" = Option<String>, Query)),
     responses(
         (status = 200, description = "Memory stream", content_type = "text/event-stream"),
         (status = 501, description = "Kernel disabled", body = arw_protocol::ProblemDetails),
         (status = 500, description = "Kernel error", body = serde_json::Value)
     )
 )]
-pub async fn state_memory_stream(State(state): State<AppState>) -> axum::response::Response {
+pub async fn state_memory_stream(
+    State(state): State<AppState>,
+    Query(q): Query<std::collections::HashMap<String, String>>,
+) -> axum::response::Response {
     if !state.kernel_enabled() {
         return crate::responses::kernel_disabled();
     }
 
+    let lane = q
+        .get("lane")
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty());
+    let read_model_id = lane
+        .as_ref()
+        .map(|lane| format!("memory_lane_{}", lane))
+        .unwrap_or_else(|| "memory_recent".to_string());
+    let lane_name = lane.clone();
+
     let mut current_snapshot =
-        if let Some(value) = crate::read_models::cached_read_model("memory_recent") {
+        if let Some(value) = crate::read_models::cached_read_model(&read_model_id) {
             value
         } else {
-            match state.kernel().list_recent_memory_async(None, 200).await {
-                Ok(mut items) => {
-                    memory_service::attach_memory_ptrs(&mut items);
-                    let (generated, generated_ms) = now_timestamp_pair();
-                    json!({
-                        "items": items,
-                        "generated": generated,
-                        "generated_ms": generated_ms,
-                    })
+            match state
+                .kernel()
+                .list_recent_memory_async(lane_name.clone(), 200)
+                .await
+            {
+                Ok(items) => {
+                    let bundle = read_models::build_memory_recent_bundle(items);
+                    if let Some(lane_key) = lane_name {
+                        bundle
+                            .lane_snapshots
+                            .get(&lane_key)
+                            .cloned()
+                            .unwrap_or_else(|| {
+                                json!({
+                                    "lane": lane_key,
+                                    "items": [],
+                                    "generated": bundle.generated,
+                                    "generated_ms": bundle.generated_ms,
+                                })
+                            })
+                    } else {
+                        bundle.snapshot
+                    }
                 }
                 Err(err) => {
                     return (
@@ -130,7 +172,9 @@ pub async fn state_memory_stream(State(state): State<AppState>) -> axum::respons
             }
         };
 
-    ensure_memory_recent_snapshot(&mut current_snapshot, false);
+    if lane.is_none() {
+        ensure_memory_recent_snapshot(&mut current_snapshot, false);
+    }
 
     let (tx, rx) = mpsc::channel::<Result<Event, Infallible>>(64);
     let state_clone = state.clone();
@@ -154,7 +198,7 @@ pub async fn state_memory_stream(State(state): State<AppState>) -> axum::respons
                 continue;
             }
             let id = env.payload.get("id").and_then(|v| v.as_str()).unwrap_or("");
-            if id != "memory_recent" {
+            if id != read_model_id {
                 continue;
             }
             let Some(patch_val) = env.payload.get("patch") else {
@@ -174,7 +218,9 @@ pub async fn state_memory_stream(State(state): State<AppState>) -> axum::respons
                 continue;
             }
             current_snapshot = next_snapshot;
-            ensure_memory_recent_snapshot(&mut current_snapshot, true);
+            if lane.is_none() {
+                ensure_memory_recent_snapshot(&mut current_snapshot, true);
+            }
             let payload = json!({
                 "patch": patch_val.clone(),
                 "snapshot": current_snapshot.clone(),
@@ -208,6 +254,26 @@ pub async fn state_memory_stream(State(state): State<AppState>) -> axum::respons
 
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
 pub struct MemoryRecentResponse {
+    pub items: Vec<Value>,
+    pub summary: Value,
+    pub generated: String,
+    #[serde(rename = "generated_ms")]
+    pub generated_ms: i64,
+}
+
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+pub struct MemoryModularReviewResponse {
+    pub pending_human_review: u64,
+    pub blocked: u64,
+    pub recent: Vec<Value>,
+    pub generated: String,
+    #[serde(rename = "generated_ms")]
+    pub generated_ms: i64,
+}
+
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+pub struct MemoryLaneResponse {
+    pub lane: String,
     pub items: Vec<Value>,
     pub generated: String,
     #[serde(rename = "generated_ms")]
@@ -246,13 +312,26 @@ pub async fn state_memory_recent(
         .list_recent_memory_async(lane_owned, limit)
         .await
     {
-        Ok(mut items) => {
-            memory_service::attach_memory_ptrs(&mut items);
-            let (generated, generated_ms) = now_timestamp_pair();
+        Ok(items) => {
+            let bundle = read_models::build_memory_recent_bundle(items);
+            let items = bundle
+                .snapshot
+                .get("items")
+                .and_then(|v| v.as_array())
+                .cloned()
+                .unwrap_or_default();
+            let summary = bundle
+                .snapshot
+                .get("summary")
+                .cloned()
+                .unwrap_or_else(|| json!({}));
+            let generated = bundle.generated.clone();
+            let generated_ms = bundle.generated_ms as i64;
             (
                 axum::http::StatusCode::OK,
                 Json(MemoryRecentResponse {
                     items,
+                    summary,
                     generated,
                     generated_ms,
                 }),
@@ -264,6 +343,155 @@ pub async fn state_memory_recent(
             Json(
                 json!({"type":"about:blank","title":"Error","status":500, "detail": e.to_string()}),
             ),
+        )
+            .into_response(),
+    }
+}
+
+/// Modular memory review summary.
+#[cfg_attr(
+    not(test),
+    utoipa::path(
+        get,
+        path = "/state/memory/modular",
+        tag = "Memory",
+        params(("limit" = Option<i64>, Query)),
+        responses(
+            (status = 200, body = MemoryModularReviewResponse),
+            (status = 501, description = "Kernel disabled", body = arw_protocol::ProblemDetails)
+        )
+    )
+)]
+pub async fn state_memory_modular(
+    State(state): State<AppState>,
+    Query(q): Query<std::collections::HashMap<String, String>>,
+) -> impl IntoResponse {
+    if !state.kernel_enabled() {
+        return crate::responses::kernel_disabled();
+    }
+    let limit = q
+        .get("limit")
+        .and_then(|s| s.parse::<i64>().ok())
+        .unwrap_or(200);
+    match state.kernel().list_recent_memory_async(None, limit).await {
+        Ok(items) => {
+            let bundle = read_models::build_memory_recent_bundle(items);
+            let modular = bundle.modular;
+            let pending = modular
+                .get("pending_human_review")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(0);
+            let blocked = modular.get("blocked").and_then(|v| v.as_u64()).unwrap_or(0);
+            let recent = modular
+                .get("recent")
+                .and_then(|v| v.as_array())
+                .cloned()
+                .unwrap_or_default();
+            (
+                axum::http::StatusCode::OK,
+                Json(MemoryModularReviewResponse {
+                    pending_human_review: pending,
+                    blocked,
+                    recent,
+                    generated: bundle.generated,
+                    generated_ms: bundle.generated_ms as i64,
+                }),
+            )
+                .into_response()
+        }
+        Err(e) => (
+            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+            Json(
+                json!({"type":"about:blank","title":"Error","status":500, "detail": e.to_string()}),
+            ),
+        )
+            .into_response(),
+    }
+}
+
+/// Lane-specific memory snapshot (REST snapshot, not SSE).
+#[cfg_attr(
+    not(test),
+    utoipa::path(
+        get,
+        path = "/state/memory/lane/{lane}",
+        tag = "Memory",
+        params(("lane" = String, Path), ("limit" = Option<i64>, Query)),
+        responses(
+            (status = 200, body = MemoryLaneResponse),
+            (status = 404, description = "Unknown lane"),
+            (status = 501, description = "Kernel disabled", body = arw_protocol::ProblemDetails)
+        )
+    )
+)]
+pub async fn state_memory_lane(
+    State(state): State<AppState>,
+    Path(lane): Path<String>,
+    Query(q): Query<std::collections::HashMap<String, String>>,
+) -> impl IntoResponse {
+    if !state.kernel_enabled() {
+        return crate::responses::kernel_disabled();
+    }
+    let lane = lane.trim().to_string();
+    if lane.is_empty() {
+        return (
+            axum::http::StatusCode::BAD_REQUEST,
+            Json(json!({
+                "type": "about:blank",
+                "title": "Invalid lane",
+                "status": 400,
+                "detail": "Lane must not be empty",
+            })),
+        )
+            .into_response();
+    }
+    let limit = q
+        .get("limit")
+        .and_then(|v| v.parse::<i64>().ok())
+        .unwrap_or(200);
+    match state
+        .kernel()
+        .list_recent_memory_async(Some(lane.clone()), limit)
+        .await
+    {
+        Ok(items) => {
+            let bundle = read_models::build_memory_recent_bundle(items);
+            let snapshot = bundle
+                .lane_snapshots
+                .get(&lane)
+                .cloned()
+                .unwrap_or_else(|| {
+                    json!({
+                        "lane": lane,
+                        "items": [],
+                        "generated": bundle.generated,
+                        "generated_ms": bundle.generated_ms,
+                    })
+                });
+            let items = snapshot
+                .get("items")
+                .and_then(|v| v.as_array())
+                .cloned()
+                .unwrap_or_default();
+            (
+                axum::http::StatusCode::OK,
+                Json(MemoryLaneResponse {
+                    lane: lane.clone(),
+                    items,
+                    generated: bundle.generated,
+                    generated_ms: bundle.generated_ms as i64,
+                }),
+            )
+                .into_response()
+        }
+        Err(err) => (
+            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({
+                "type": "about:blank",
+                "title": "Error",
+                "status": 500,
+                "detail": err.to_string()
+            })),
         )
             .into_response(),
     }
@@ -559,6 +787,15 @@ mod tests {
             parsed.items.iter().all(|item| item.get("ptr").is_some()),
             "memory items should include ptr metadata"
         );
+        assert!(
+            parsed
+                .summary
+                .get("modular")
+                .and_then(|v| v.get("recent"))
+                .map(|v| v.is_array())
+                .unwrap_or(true),
+            "summary.modular.recent should be an array when present"
+        );
         let parsed_dt = DateTime::parse_from_rfc3339(&parsed.generated).expect("parse generated");
         assert_eq!(
             parsed_dt.timestamp_millis(),
@@ -566,6 +803,119 @@ mod tests {
             "generated_ms should align with generated timestamp",
         );
         assert!(parsed.generated_ms > 0, "generated_ms should be positive");
+    }
+
+    #[tokio::test]
+    async fn memory_modular_summary_endpoint_returns_counts() {
+        let temp = tempdir().expect("tmp");
+        let mut ctx = crate::test_support::begin_state_env(temp.path());
+        let state = build_state(temp.path(), &mut ctx.env).await;
+
+        let insert_owned = memory_service::MemoryUpsertInput {
+            lane: "short_term".to_string(),
+            kind: Some("conversation.turn".to_string()),
+            value: json!({
+                "agent_id": "assistant.chat",
+                "turn_id": "turn-1",
+                "payload_kind": "chat",
+                "lifecycle": {
+                    "stage": "pending_human_review",
+                    "validation_gate": "required"
+                },
+                "payload_summary": {
+                    "text_preview": "hello"
+                }
+            }),
+            ..Default::default()
+        }
+        .into_insert_owned();
+        state
+            .kernel()
+            .insert_memory_async(insert_owned)
+            .await
+            .expect("insert memory");
+
+        let app = Router::new()
+            .route("/state/memory/modular", get(state_memory_modular))
+            .with_state(state.clone());
+
+        let response = app
+            .oneshot(
+                axum::http::Request::builder()
+                    .uri("/state/memory/modular")
+                    .body(axum::body::Body::empty())
+                    .expect("request"),
+            )
+            .await
+            .expect("response");
+        assert_eq!(response.status(), axum::http::StatusCode::OK);
+
+        let body_bytes = to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("body bytes");
+        let parsed: MemoryModularReviewResponse =
+            serde_json::from_slice(&body_bytes).expect("memory modular json");
+        assert!(parsed.pending_human_review >= 1);
+        assert!(parsed.generated_ms > 0);
+        assert!(!parsed.recent.is_empty());
+    }
+
+    #[tokio::test]
+    async fn memory_lane_endpoint_returns_filtered_items() {
+        let temp = tempdir().expect("tmp");
+        let mut ctx = crate::test_support::begin_state_env(temp.path());
+        let state = build_state(temp.path(), &mut ctx.env).await;
+
+        let insert_short = memory_service::MemoryUpsertInput {
+            lane: "short_term".to_string(),
+            kind: Some("conversation.turn".to_string()),
+            value: json!({ "payload_kind": "chat", "intent": "draft_response" }),
+            ..Default::default()
+        }
+        .into_insert_owned();
+        state
+            .kernel()
+            .insert_memory_async(insert_short)
+            .await
+            .expect("insert short-term memory");
+
+        let insert_semantic = memory_service::MemoryUpsertInput {
+            lane: "semantic".to_string(),
+            kind: Some("note".to_string()),
+            value: json!({"text": "doc"}),
+            ..Default::default()
+        }
+        .into_insert_owned();
+        state
+            .kernel()
+            .insert_memory_async(insert_semantic)
+            .await
+            .expect("insert semantic memory");
+
+        let app = Router::new()
+            .route("/state/memory/lane/:lane", get(state_memory_lane))
+            .with_state(state.clone());
+
+        let response = app
+            .oneshot(
+                axum::http::Request::builder()
+                    .uri("/state/memory/lane/short_term")
+                    .body(axum::body::Body::empty())
+                    .expect("request"),
+            )
+            .await
+            .expect("response");
+        assert_eq!(response.status(), axum::http::StatusCode::OK);
+
+        let body_bytes = to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("body bytes");
+        let parsed: MemoryLaneResponse = serde_json::from_slice(&body_bytes).expect("lane json");
+        assert_eq!(parsed.lane, "short_term");
+        assert!(parsed.items.iter().all(|item| {
+            item.get("lane").and_then(|v| v.as_str()).unwrap_or("") == "short_term"
+        }));
+        assert!(parsed.items.len() >= 1);
     }
 
     #[tokio::test]

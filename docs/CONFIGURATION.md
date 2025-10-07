@@ -65,6 +65,7 @@ Presets seed defaults for hot-path tunables if you haven’t set them explicitly
 - `ARW_MEMORY_GC_INTERVAL_SECS`: cadence (seconds) for the background memory hygiene sweep (default `60`).
 - `ARW_MEMORY_GC_BATCH`: maximum number of records reclaimed per sweep across TTL expiry and lane overflow (default `128`).
 - `ARW_MEMORY_LANE_CAPS`: comma-separated `lane=cap` overrides for per-lane retention. Example: `ephemeral=200,episodic=1500,semantic=6000`. Setting a cap to `0` removes the limit for that lane. Defaults are `ephemeral=256`, `episodic=1024`, `semantic=4096`, `profile=512`.
+- `ARW_MEMORY_SHORT_TTL_SECS`: TTL (seconds) applied to modular stack short-term turn buffers (defaults to `900`, i.e., 15 minutes). Increase for longer replay windows; decrease for extra-private deployments.
 
 Preset heuristics today:
 

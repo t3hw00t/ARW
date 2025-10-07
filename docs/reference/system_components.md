@@ -523,6 +523,8 @@ Memory overlay service on top of the MAL schema that exposes `memory.*` actions,
   - `POST /actions (memory.pack)`
   - `GET /state/memory`
   - `GET /state/memory/recent`
+  - `GET /state/memory/modular`
+  - `GET /state/memory/lane/{lane}`
 - Topics:
   - `memory.item.upserted`
   - `memory.item.expired`

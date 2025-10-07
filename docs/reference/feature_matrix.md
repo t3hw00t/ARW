@@ -675,8 +675,10 @@ Memory overlay service backed by the canonical MAL store with hybrid retrieval, 
   - `POST /actions (memory.upsert)`
   - `POST /actions (memory.search)`
   - `POST /actions (memory.pack)`
-  - `GET /state/memory`
-  - `GET /state/memory/recent`
+- `GET /state/memory`
+- `GET /state/memory/recent`
+- `GET /state/memory/modular`
+- `GET /state/memory/lane/{lane}`
 - Read‑models:
   - `memory`
 - Events:
