@@ -896,6 +896,7 @@ pub async fn state_cluster(headers: HeaderMap, State(state): State<AppState>) ->
         "nodes": nodes,
         "generated": generated,
         "generated_ms": generated_ms,
+        "ttl_seconds": crate::cluster::SNAPSHOT_TTL_SECONDS,
     }))
     .into_response()
 }

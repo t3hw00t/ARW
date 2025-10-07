@@ -303,7 +303,7 @@ Layered principals align policies, storage, and audit scopes to User, Project, a
   - [architecture/identity_tenancy.md](../architecture/identity_tenancy.md)
   - [guide/policy_permissions.md](../guide/policy_permissions.md)
   - [architecture/capability_consent_ledger.md](../architecture/capability_consent_ledger.md)
-  - [configs/security/tenants.toml](../../configs/security/tenants.toml)
+  - Path reference: `configs/security/tenants.toml`
 
 ## Federated Clustering
 

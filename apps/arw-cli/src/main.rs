@@ -1208,6 +1208,8 @@ enum StateCmd {
     Actions(StateActionsArgs),
     /// Inspect identity registry via /state/identity
     Identity(StateIdentityArgs),
+    /// Inspect cluster registry via /state/cluster
+    Cluster(StateClusterArgs),
 }
 
 #[derive(Subcommand)]
@@ -1450,6 +1452,25 @@ struct StateIdentityArgs {
     pretty: bool,
 }
 
+#[derive(Args)]
+struct StateClusterArgs {
+    /// Base URL of the service (e.g., http://127.0.0.1:8091)
+    #[arg(long, default_value = "http://127.0.0.1:8091")]
+    base: String,
+    /// Admin token; falls back to ARW_ADMIN_TOKEN env
+    #[arg(long)]
+    admin_token: Option<String>,
+    /// Timeout seconds
+    #[arg(long, default_value_t = 5)]
+    timeout: u64,
+    /// Emit raw JSON instead of formatted text
+    #[arg(long)]
+    json: bool,
+    /// Pretty-print JSON output (requires --json)
+    #[arg(long, requires = "json")]
+    pretty: bool,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct CliIdentitySnapshot {
     #[serde(default)]
@@ -1464,6 +1485,36 @@ struct CliIdentitySnapshot {
     env: Vec<CliIdentityPrincipal>,
     #[serde(default)]
     diagnostics: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct CliClusterSnapshot {
+    #[serde(default)]
+    nodes: Vec<CliClusterNode>,
+    #[serde(default)]
+    generated: Option<String>,
+    #[serde(default)]
+    generated_ms: Option<u64>,
+    #[serde(default)]
+    ttl_seconds: Option<u64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct CliClusterNode {
+    id: String,
+    role: String,
+    #[serde(default)]
+    name: Option<String>,
+    #[serde(default)]
+    health: Option<String>,
+    #[serde(default)]
+    capabilities: Option<JsonValue>,
+    #[serde(default)]
+    models: Option<JsonValue>,
+    #[serde(default)]
+    last_seen: Option<String>,
+    #[serde(default)]
+    last_seen_ms: Option<u64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -2007,6 +2058,12 @@ fn main() {
             }
             StateCmd::Identity(args) => {
                 if let Err(e) = cmd_state_identity(&args) {
+                    eprintln!("{}", e);
+                    std::process::exit(1);
+                }
+            }
+            StateCmd::Cluster(args) => {
+                if let Err(e) = cmd_state_cluster(&args) {
                     eprintln!("{}", e);
                     std::process::exit(1);
                 }
@@ -5473,6 +5530,266 @@ fn stream_observations_once(
             event_id_line = Some(rest.trim().to_string());
             continue;
         }
+    }
+}
+
+fn cmd_state_cluster(args: &StateClusterArgs) -> Result<()> {
+    let token = resolve_admin_token(&args.admin_token);
+    let client = Client::builder()
+        .timeout(Duration::from_secs(args.timeout))
+        .build()
+        .context("building HTTP client")?;
+    let base = args.base.trim_end_matches('/');
+    let url = format!("{}/state/cluster", base);
+    let response = with_admin_headers(
+        client.get(&url).header(ACCEPT, "application/json"),
+        token.as_deref(),
+    )
+    .send()
+    .with_context(|| format!("requesting cluster snapshot from {}", url))?;
+
+    let status = response.status();
+    if status == StatusCode::UNAUTHORIZED {
+        bail!(
+            "request to {} returned 401 Unauthorized; supply an admin token via --admin-token or ARW_ADMIN_TOKEN",
+            url
+        );
+    }
+    if !status.is_success() {
+        let body = response
+            .text()
+            .unwrap_or_else(|_| "<unable to read body>".into());
+        bail!("request to {} failed ({}): {}", url, status, body);
+    }
+
+    let raw: serde_json::Value = response
+        .json()
+        .context("parsing cluster snapshot JSON payload")?;
+
+    if args.json {
+        if args.pretty {
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&raw).unwrap_or_else(|_| raw.to_string())
+            );
+        } else {
+            println!("{}", raw);
+        }
+        return Ok(());
+    }
+
+    let snapshot: CliClusterSnapshot =
+        serde_json::from_value(raw).context("materialising cluster snapshot structure")?;
+    render_cluster_snapshot(&snapshot);
+    Ok(())
+}
+
+fn render_cluster_snapshot(snapshot: &CliClusterSnapshot) {
+    println!("Cluster snapshot");
+    let generated = snapshot
+        .generated_ms
+        .map(format_local_timestamp)
+        .or_else(|| snapshot.generated.clone())
+        .unwrap_or_else(|| "—".to_string());
+    let ttl = snapshot.ttl_seconds.unwrap_or(0);
+    println!("  Generated : {}", generated);
+    if ttl > 0 {
+        println!("  TTL       : {}s", ttl);
+    } else {
+        println!("  TTL       : —");
+    }
+    println!("  Nodes     : {}", snapshot.nodes.len());
+
+    if snapshot.nodes.is_empty() {
+        println!("\n  (no nodes advertised)");
+        return;
+    }
+
+    println!();
+    println!(
+        "{:<20} {:<10} {:<10} {:<32} {:<6} {:<8} {}",
+        "ID", "Role", "Health", "Last Seen", "Stale", "Models", "Capabilities"
+    );
+
+    let now_raw = Utc::now().timestamp_millis();
+    let now_ms = if now_raw < 0 { 0 } else { now_raw as u64 };
+    let ttl_ms = snapshot.ttl_seconds.unwrap_or(0).saturating_mul(1_000);
+
+    for node in &snapshot.nodes {
+        let id_display = if let Some(name) = node.name.as_deref() {
+            if !name.is_empty() {
+                format!("{} ({})", node.id, name)
+            } else {
+                node.id.clone()
+            }
+        } else {
+            node.id.clone()
+        };
+        let role = node.role.to_lowercase();
+        let health = node.health.clone().unwrap_or_else(|| "—".into());
+        let last_seen_ms = node.last_seen_ms.unwrap_or(0);
+        let base_last = node
+            .last_seen_ms
+            .map(format_local_timestamp)
+            .or_else(|| node.last_seen.clone())
+            .unwrap_or_else(|| "—".to_string());
+        let last_seen = if last_seen_ms > 0 && now_ms > 0 {
+            format!(
+                "{} ({})",
+                base_last,
+                format_relative_from_now(last_seen_ms, now_ms)
+            )
+        } else {
+            base_last
+        };
+        let stale = if ttl_ms == 0 || last_seen_ms == 0 {
+            "no"
+        } else if now_ms > last_seen_ms {
+            if now_ms - last_seen_ms > ttl_ms {
+                "yes"
+            } else {
+                "no"
+            }
+        } else {
+            "no"
+        };
+        let models = summarize_models_field(&node.models);
+        let capabilities = summarize_capabilities_field(&node.capabilities);
+
+        println!(
+            "{:<20} {:<10} {:<10} {:<32} {:<6} {:<8} {}",
+            truncate_pad(&id_display, 20),
+            truncate_pad(&role, 10),
+            truncate_pad(&health, 10),
+            truncate_pad(&last_seen, 32),
+            stale,
+            truncate_pad(&models, 8),
+            truncate_pad(&capabilities, 40)
+        );
+    }
+}
+
+fn summarize_capabilities_field(raw: &Option<JsonValue>) -> String {
+    let Some(value) = raw else {
+        return "—".into();
+    };
+    match value {
+        JsonValue::Object(map) => {
+            if map.is_empty() {
+                return "—".into();
+            }
+            let mut keys: Vec<&str> = map.keys().map(String::as_str).collect();
+            keys.sort_unstable();
+            let rendered: Vec<&str> = keys.into_iter().take(3).collect();
+            let mut out = rendered.join(",");
+            if map.len() > rendered.len() {
+                if !out.is_empty() {
+                    out.push_str(",…");
+                } else {
+                    out.push('…');
+                }
+            }
+            if out.is_empty() {
+                "—".into()
+            } else {
+                out
+            }
+        }
+        JsonValue::Array(items) => {
+            if items.is_empty() {
+                return "—".into();
+            }
+            let mut chunks = Vec::new();
+            for v in items.iter().take(3) {
+                match v {
+                    JsonValue::String(s) => chunks.push(s.as_str()),
+                    _ => continue,
+                }
+            }
+            if chunks.is_empty() {
+                "—".into()
+            } else {
+                let mut out = chunks.join(",");
+                if items.len() > chunks.len() {
+                    out.push_str(",…");
+                }
+                out
+            }
+        }
+        JsonValue::String(s) => {
+            if s.is_empty() {
+                "—".into()
+            } else {
+                s.clone()
+            }
+        }
+        other => other.to_string(),
+    }
+}
+
+fn summarize_models_field(raw: &Option<JsonValue>) -> String {
+    let Some(value) = raw else {
+        return "—".into();
+    };
+    match value {
+        JsonValue::Object(map) => {
+            if let Some(count) = map.get("count").and_then(JsonValue::as_u64) {
+                let mut out = count.to_string();
+                if let Some(preview) = map.get("preview").and_then(JsonValue::as_array) {
+                    if !preview.is_empty() {
+                        let mut tags = Vec::new();
+                        for entry in preview.iter().take(2) {
+                            if let Some(s) = entry.as_str() {
+                                tags.push(shorten_hash(s));
+                            }
+                        }
+                        if !tags.is_empty() {
+                            out.push(' ');
+                            out.push('(');
+                            out.push_str(&tags.join(","));
+                            if preview.len() > tags.len() {
+                                out.push_str(",…");
+                            }
+                            out.push(')');
+                        }
+                    }
+                }
+                out
+            } else {
+                "—".into()
+            }
+        }
+        JsonValue::Number(num) => num.to_string(),
+        JsonValue::String(s) => {
+            if s.is_empty() {
+                "—".into()
+            } else {
+                s.clone()
+            }
+        }
+        _ => "—".into(),
+    }
+}
+
+fn shorten_hash(input: &str) -> String {
+    if input.len() <= 8 {
+        input.to_string()
+    } else {
+        input[..8].to_string()
+    }
+}
+
+fn truncate_pad(input: &str, width: usize) -> String {
+    if input.len() <= width {
+        let mut s = input.to_string();
+        if s.len() < width {
+            s.push_str(&" ".repeat(width - s.len()));
+        }
+        s
+    } else {
+        let mut out = input[..width.saturating_sub(1)].to_string();
+        out.push('…');
+        out
     }
 }
 

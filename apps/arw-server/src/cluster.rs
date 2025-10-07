@@ -3,6 +3,7 @@ use std::sync::Arc;
 
 use arw_events::Bus;
 use arw_topics as topics;
+use chrono::{SecondsFormat, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Map, Value};
 use tokio::sync::RwLock;
@@ -10,6 +11,8 @@ use tokio::time::{interval, Duration};
 use utoipa::ToSchema;
 
 use crate::{responses, tasks::TaskHandle, AppState};
+
+pub const SNAPSHOT_TTL_SECONDS: u64 = 360;
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, ToSchema)]
 pub struct ClusterNode {
@@ -21,6 +24,12 @@ pub struct ClusterNode {
     pub health: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub capabilities: Option<Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub models: Option<Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub last_seen: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub last_seen_ms: Option<u64>,
 }
 
 #[derive(Default)]
@@ -42,7 +51,35 @@ impl ClusterRegistry {
     }
 
     pub async fn snapshot(&self) -> Vec<ClusterNode> {
-        let guard = self.store.read().await;
+        let now_ms = Utc::now().timestamp_millis();
+        let ttl_ms: i64 = match SNAPSHOT_TTL_SECONDS.checked_mul(1_000) {
+            Some(0) | None => 0,
+            Some(ms) => {
+                if ms > i64::MAX as u64 {
+                    i64::MAX
+                } else {
+                    ms as i64
+                }
+            }
+        };
+
+        let mut guard = self.store.write().await;
+        if ttl_ms > 0 {
+            for node in guard.nodes.values_mut() {
+                if let Some(last_seen_ms) = node.last_seen_ms {
+                    if last_seen_ms > 0 {
+                        let last_i64 = last_seen_ms as i64;
+                        let diff = now_ms.saturating_sub(last_i64);
+                        if diff > ttl_ms {
+                            node.health = Some("stale".into());
+                        } else if matches!(node.health.as_deref(), Some("stale")) {
+                            node.health = Some("ok".into());
+                        }
+                    }
+                }
+            }
+        }
+
         let mut nodes: Vec<ClusterNode> = guard.nodes.values().cloned().collect();
         nodes.sort_by(|a, b| a.id.cmp(&b.id));
         nodes
@@ -71,6 +108,14 @@ impl ClusterRegistry {
         let id = node_id();
         let role = format!("{:?}", arw_core::hierarchy::get_state().self_node.role);
         let mut caps = Map::new();
+        let now = Utc::now();
+        let advertised = now.to_rfc3339_opts(SecondsFormat::Millis, true);
+        let advertised_ms = now.timestamp_millis();
+        let advertised_ms = if advertised_ms < 0 {
+            0
+        } else {
+            advertised_ms as u64
+        };
         caps.insert("os".into(), Value::String(std::env::consts::OS.into()));
         caps.insert("arch".into(), Value::String(std::env::consts::ARCH.into()));
         caps.insert(
@@ -78,21 +123,26 @@ impl ClusterRegistry {
             Value::String(env!("CARGO_PKG_VERSION").into()),
         );
 
+        let models_summary = summarize_models(state.models().list().await);
         let node = ClusterNode {
             id: id.clone(),
             role: role.clone(),
             name: None,
             health: Some("ok".into()),
             capabilities: Some(Value::Object(caps.clone())),
+            models: Some(models_summary.clone()),
+            last_seen: Some(advertised.clone()),
+            last_seen_ms: Some(advertised_ms),
         };
 
         let _ = self.upsert(node, true).await;
-        let models_summary = summarize_models(state.models().list().await);
         let mut payload = json!({
             "id": id,
             "role": role,
             "capabilities": Value::Object(caps),
             "models": models_summary,
+            "advertised": advertised,
+            "advertised_ms": advertised_ms,
         });
         responses::attach_corr(&mut payload);
         self.bus
@@ -195,11 +245,34 @@ fn payload_to_node(payload: &Value) -> Option<ClusterNode> {
         .and_then(|v| v.as_str())
         .map(|s| s.to_string());
     let capabilities = payload.get("capabilities").cloned();
+    let models = payload.get("models").cloned();
+    let advertised_str = payload
+        .get("advertised")
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string());
+    let advertised_ms = payload
+        .get("advertised_ms")
+        .and_then(|v| v.as_i64())
+        .map(|raw| if raw < 0 { 0 } else { raw as u64 });
+    let now = Utc::now();
+    let last_seen =
+        advertised_str.unwrap_or_else(|| now.to_rfc3339_opts(SecondsFormat::Millis, true));
+    let last_seen_ms = advertised_ms.unwrap_or_else(|| {
+        let ts = now.timestamp_millis();
+        if ts < 0 {
+            0
+        } else {
+            ts as u64
+        }
+    });
     Some(ClusterNode {
         id,
         role,
         name,
         health,
         capabilities,
+        models,
+        last_seen: Some(last_seen),
+        last_seen_ms: Some(last_seen_ms),
     })
 }

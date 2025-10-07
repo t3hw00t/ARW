@@ -151,6 +151,7 @@ pub(crate) fn start_read_models(state: AppState) -> Vec<TaskHandle> {
                 "nodes": nodes,
                 "generated": generated,
                 "generated_ms": generated_ms,
+                "ttl_seconds": crate::cluster::SNAPSHOT_TTL_SECONDS,
             }))
         },
     ));

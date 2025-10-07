@@ -50,6 +50,10 @@ Specs
 - AsyncAPI: `curl http://127.0.0.1:8091/spec/asyncapi.yaml` — event stream schema aligned with the SSE bus
 - Index: `curl http://127.0.0.1:8091/spec/index.json | jq` — lists available spec artifacts and JSON schemas
 
+State Snapshots
+- Cluster registry: `arw-cli state cluster --base http://127.0.0.1:8091 --admin-token $ARW_ADMIN_TOKEN` prints a table of nodes, their last advertisement, and whether they are stale compared to the server’s TTL (360 s). Add `--json --pretty` for raw inspection.
+- Identity registry: `arw-cli state identity --base http://127.0.0.1:8091 --admin-token $ARW_ADMIN_TOKEN` summarizes principals sourced from config files and environment. Include `--json` for machine-friendly output.
+
 Events (SSE)
 - Tail live events with `curl -N -H "Authorization: Bearer $ARW_ADMIN_TOKEN" "http://127.0.0.1:8091/events?replay=10&prefix=models."`
 - When `ARW_ADMIN_TOKEN` is set, include `-H "Authorization: Bearer $ARW_ADMIN_TOKEN"`.

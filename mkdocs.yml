@@ -55,6 +55,8 @@ nav:
   - How‑to:
       - Docker: guide/docker.md
       - Deployment & Isolation: guide/deployment.md
+      - Dev TLS: guide/dev_tls.md
+      - Release Guide: guide/release.md
       - Kubernetes (Helm): guide/kubernetes.md
       - Reverse Proxy: guide/reverse_proxy.md
       - Models Download: guide/models_download.md
@@ -95,6 +97,7 @@ nav:
       - Context Recipes: guide/context_recipes.md
       - Metrics & Insights: guide/METRICS_AND_INSIGHTS.md
       - Monitoring & Alerts: ops/monitoring.md
+      - Cluster Runbook: ops/cluster_runbook.md
       - Alerting (Prometheus): ALERTING.md
       - Trial Planning: ops/trial_readiness.md
       - Trial Runbook: ops/trial_runbook.md
@@ -158,6 +161,7 @@ nav:
       - Telemetry & Privacy: reference/telemetry_privacy.md
       - Trust Boundaries: reference/trust_boundaries.md
       - Glossary: GLOSSARY.md
+      - Expert Alignment Plan: architecture/expert_alignment_plan.md
   - Design:
       - Overview: design/index.md
       - Autonomy Recovery Follow-ups: design/autonomy_recovery_followups.md

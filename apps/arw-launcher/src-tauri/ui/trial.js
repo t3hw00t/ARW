@@ -74,7 +74,15 @@
       lastEvent: null,
       lastReason: null,
     },
-    connections: { nodes: [], summary: 'Loading connections…', error: null, loading: true, updatedMs: null },
+    connections: {
+      nodes: [],
+      summary: 'Loading connections…',
+      error: null,
+      loading: true,
+      updatedMs: null,
+      ttlSeconds: null,
+      counts: { ok: 0, stale: 0, warn: 0, bad: 0 },
+    },
     overview: [],
     workflows: [],
     safeguards: [],
@@ -1095,12 +1103,17 @@ async function refreshApprovalsLane(auto = false){
     const preservePrevious = opts && typeof opts.preservePrevious === 'boolean' ? opts.preservePrevious : false;
     const errorList = errorsForPath('/state/cluster', opts);
     const errorMsg = errorList.length ? errorList.join('; ') : null;
+    const ttlSecondsRaw = cluster ? (cluster.ttl_seconds ?? cluster.ttlSeconds) : null;
+    const ttlSecondsValue = toNumber(ttlSecondsRaw);
+    const ttlSeconds = Number.isFinite(ttlSecondsValue) && ttlSecondsValue > 0 ? ttlSecondsValue : null;
 
     if (!cluster || !Array.isArray(cluster.nodes)) {
       if (!preservePrevious) {
         STATE.connections.nodes = [];
         STATE.connections.updatedMs = null;
       }
+      STATE.connections.ttlSeconds = ttlSeconds;
+      STATE.connections.counts = { ok: 0, stale: 0, warn: 0, bad: 0 };
       const summary = STATE.unauthorized
         ? 'Authorize to view connections'
         : errorMsg || 'Connections data unavailable';
@@ -1111,40 +1124,90 @@ async function refreshApprovalsLane(auto = false){
       return;
     }
 
-    if (Array.isArray(cluster.nodes)) {
-      const nodes = cluster.nodes
-        .filter(Boolean)
-        .map(raw => {
-          const caps = raw && typeof raw.capabilities === 'object' && raw.capabilities !== null ? raw.capabilities : {};
-          const os = typeof caps.os === 'string' ? caps.os : null;
-          const arch = typeof caps.arch === 'string' ? caps.arch : null;
-          const version = typeof caps.arw_version === 'string' ? caps.arw_version : null;
-          const healthRaw = raw && raw.health ? String(raw.health).toLowerCase() : 'unknown';
-          return {
-            id: raw && raw.id ? String(raw.id) : (raw && raw.name ? String(raw.name) : 'node'),
-            name: raw && raw.name ? String(raw.name) : null,
-            role: raw && raw.role ? String(raw.role) : 'member',
-            health: healthRaw || 'unknown',
-            capabilities: { os, arch, version },
-          };
-        });
-      nodes.sort((a, b) => (a.name || a.id).localeCompare(b.name || b.id));
-      STATE.connections.nodes = nodes;
+    STATE.connections.ttlSeconds = ttlSeconds;
+    const ttlMs = ttlSeconds ? ttlSeconds * 1000 : null;
+    const now = Date.now();
 
-      let generatedMs = readGeneratedMs(cluster);
-      if (!Number.isFinite(generatedMs)) {
-        generatedMs = Date.now();
-      }
-      if (Number.isFinite(generatedMs)) {
-        STATE.connections.updatedMs = generatedMs;
-      }
+    const nodes = cluster.nodes
+      .filter(Boolean)
+      .map(raw => {
+        const caps = raw && typeof raw.capabilities === 'object' && raw.capabilities !== null ? raw.capabilities : {};
+        const os = typeof caps.os === 'string' ? caps.os : null;
+        const arch = typeof caps.arch === 'string' ? caps.arch : null;
+        const version = typeof caps.arw_version === 'string' ? caps.arw_version : null;
+
+        const lastSeenMs = parseTimestamp(raw?.last_seen_ms ?? raw?.last_seen);
+        const staleByClock =
+          Number.isFinite(lastSeenMs) && ttlMs && ttlMs > 0 ? now - lastSeenMs > ttlMs : false;
+        const normalizedHealth = normalizeConnectionHealth(raw?.health, staleByClock);
+        const statusClass =
+          normalizedHealth === 'ok'
+            ? 'ok'
+            : normalizedHealth === 'bad'
+              ? 'bad'
+              : normalizedHealth === 'stale'
+                ? 'stale'
+                : normalizedHealth === 'warn'
+                  ? 'warn'
+                  : 'unknown';
+        const { count: modelsCount, preview: modelsPreview } = summarizeModelMeta(raw?.models);
+
+        const nodeId =
+          raw && raw.id ? String(raw.id) : raw && raw.name ? String(raw.name) : 'node';
+        return {
+          id: nodeId,
+          name: raw && raw.name ? String(raw.name) : null,
+          role: raw && raw.role ? String(raw.role) : 'member',
+          health: normalizedHealth,
+          statusClass,
+          capabilities: { os, arch, version },
+          lastSeenMs: Number.isFinite(lastSeenMs) ? lastSeenMs : null,
+          modelsCount,
+          modelsPreview,
+        };
+      });
+    nodes.sort((a, b) => (a.name || a.id).localeCompare(b.name || b.id));
+    STATE.connections.nodes = nodes;
+
+    let generatedMs = readGeneratedMs(cluster);
+    if (!Number.isFinite(generatedMs)) {
+      generatedMs = Date.now();
+    }
+    if (Number.isFinite(generatedMs)) {
+      STATE.connections.updatedMs = generatedMs;
     }
 
-    const nodes = Array.isArray(STATE.connections.nodes) ? STATE.connections.nodes : [];
-    const onlineCount = nodes.filter(node => node.health === 'ok').length;
-    let summaryBase = nodes.length
-      ? `${onlineCount}/${nodes.length} connection${nodes.length === 1 ? '' : 's'} online`
-      : (STATE.unauthorized ? 'Authorize to view connections' : 'No remote connections');
+    const counts = { ok: 0, stale: 0, warn: 0, bad: 0 };
+    const stateNodes = Array.isArray(STATE.connections.nodes) ? STATE.connections.nodes : [];
+    stateNodes.forEach(node => {
+      if (counts[node.health] != null) {
+        counts[node.health] += 1;
+      } else if (node.health === 'warn') {
+        counts.warn += 1;
+      } else if (node.health === 'bad') {
+        counts.bad += 1;
+      }
+    });
+    STATE.connections.counts = counts;
+    let summaryBase;
+    if (stateNodes.length) {
+      summaryBase = `${counts.ok}/${stateNodes.length} node${stateNodes.length === 1 ? '' : 's'} healthy`;
+      const detailParts = [];
+      if (counts.stale) detailParts.push(`${counts.stale} stale`);
+      if (counts.warn) detailParts.push(`${counts.warn} warning`);
+      if (counts.bad) detailParts.push(`${counts.bad} offline`);
+      if (!errorMsg && detailParts.length) {
+        summaryBase = `${summaryBase} • ${detailParts.join(' • ')}`;
+      }
+      if (!errorMsg && STATE.connections.ttlSeconds) {
+        summaryBase = `${summaryBase} • TTL ${STATE.connections.ttlSeconds}s`;
+      }
+    } else {
+      summaryBase = STATE.unauthorized ? 'Authorize to view connections' : 'No remote connections';
+      if (!errorMsg && STATE.connections.ttlSeconds) {
+        summaryBase = `${summaryBase} • TTL ${STATE.connections.ttlSeconds}s`;
+      }
+    }
 
     if (errorMsg) {
       summaryBase = errorMsg;
@@ -2415,6 +2478,52 @@ function renderLists(){
     return span;
   }
 
+  function normalizeConnectionHealth(raw, staleByClock){
+    const base = typeof raw === 'string' ? raw.trim().toLowerCase() : '';
+    if (staleByClock && base !== 'bad') return 'stale';
+    switch (base) {
+      case 'ok':
+      case 'healthy':
+        return staleByClock ? 'stale' : 'ok';
+      case 'stale':
+        return 'stale';
+      case 'warn':
+      case 'warning':
+      case 'degraded':
+        return staleByClock ? 'stale' : 'warn';
+      case 'bad':
+      case 'error':
+      case 'failed':
+      case 'down':
+      case 'offline':
+        return 'bad';
+      default:
+        return staleByClock ? 'stale' : 'unknown';
+    }
+  }
+
+  function summarizeModelMeta(raw){
+    if (!raw || typeof raw !== 'object') {
+      return { count: null, preview: null };
+    }
+    const count = toNumber(raw.count);
+    const previewArray = Array.isArray(raw.preview)
+      ? raw.preview
+          .filter(item => typeof item === 'string' && item.trim())
+          .map(item => item.trim())
+      : [];
+    const short = previewArray.slice(0, 2).map(hash => (hash.length > 8 ? hash.slice(0, 8) : hash));
+    let preview = null;
+    if (short.length) {
+      preview = short.join(', ');
+      if (previewArray.length > short.length) preview = `${preview}…`;
+    }
+    return {
+      count: Number.isFinite(count) && count >= 0 ? count : null,
+      preview,
+    };
+  }
+
   function humanizeActionKind(kind){
     if (!kind) return 'Action';
     const cleaned = String(kind).replace(/[._]/g, ' ').replace(/\s+/g, ' ').trim();
@@ -2598,20 +2707,38 @@ function renderLists(){
     emptyEl.classList.add('hidden');
     nodes.forEach(node => {
       const li = document.createElement('li');
-      li.className = `connection-card ${node.health || 'unknown'}`;
+      li.className = `connection-card ${node.statusClass || node.health || 'unknown'}`;
       const title = document.createElement('h3');
       title.textContent = node.name || node.id;
       li.appendChild(title);
       const metaRow = document.createElement('div');
       metaRow.className = 'connection-meta';
       metaRow.appendChild(createMetaChip(`Role ${node.role || 'member'}`));
-      metaRow.appendChild(createMetaChip(`Health ${humanizeStatus(node.health)}`));
+      const healthChip = createMetaChip(`Health ${humanizeStatus(node.health)}`);
+      if (node.health === 'stale') {
+        healthChip.title = 'Last advertisement exceeded TTL';
+      }
+      metaRow.appendChild(healthChip);
       if (node.capabilities?.os || node.capabilities?.arch) {
         const parts = [node.capabilities.os, node.capabilities.arch].filter(Boolean).join('/');
         metaRow.appendChild(createMetaChip(parts));
       }
       if (node.capabilities?.version) {
         metaRow.appendChild(createMetaChip(`v${node.capabilities.version}`));
+      }
+      if (Number.isFinite(node.lastSeenMs)) {
+        const seenChip = createMetaChip(`Seen ${formatRelative(node.lastSeenMs)}`);
+        seenChip.title = formatRelativeAbs(node.lastSeenMs);
+        metaRow.appendChild(seenChip);
+      }
+      if (Number.isFinite(node.modelsCount)) {
+        const modelsLabel =
+          node.modelsCount === 0
+            ? '0 models'
+            : `${node.modelsCount} model${node.modelsCount === 1 ? '' : 's'}`;
+        const modelsChip = createMetaChip(modelsLabel);
+        if (node.modelsPreview) modelsChip.title = node.modelsPreview;
+        metaRow.appendChild(modelsChip);
       }
       metaRow.appendChild(createMetaChip(`ID ${node.id}`));
       li.appendChild(metaRow);

@@ -77,6 +77,7 @@ Contribution meters track accepted work per node (token usage, GPU-seconds, tool
 - Cluster Matrix dashboard (landing soon) shows nodes, health, queues, throughput, cost.
 - Experiments annotate results by execution target (local vs specific remote).
 - Model ads include `{count, preview_hashes[]}` so peers can request CAS blobs via gated admin routes.
+- `/state/cluster` responses include `ttl_seconds` (currently 360 s) so UIs can flag stale nodes and avoid rendering long-dead workers as healthy.
 
 ## Unified Coverage
 | Capability | Unified `arw-server` status |

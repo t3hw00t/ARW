@@ -20,6 +20,7 @@ Promote the managed runtime supervisor from blueprint to the primary kernel init
 - **Phase 4: Federation Hooks** — expose runtime claims through orchestrator lanes and worker manifests so remote nodes advertise accelerator profiles safely. Include ledger coverage to track shared GPU usage.
 - **Documentation & UX** — replace the llama.cpp blueprint with the finalized supervisor design, add operator runbooks, and surface profiles plus consent cues in Launcher. Keep docs, feature matrix, and roadmap checkpoints in sync as phases land.
 
+<a id="priority-two--modular-cognitive-stack--memory-orchestration"></a>
 ## Priority Two – Modular Cognitive Stack & Memory Orchestration
 
 Establish the multi-agent cognitive scaffold that keeps user-facing chat, memory, validation, and tooling specialists aligned under a single orchestrator.
