@@ -29,6 +29,11 @@ Basics
   - Local catalogs: `arw-cli runtime bundles list --dir ./configs/runtime --pretty`
   - Remote snapshot: `arw-cli runtime bundles list --remote --base http://127.0.0.1:8091 --admin-token $ARW_ADMIN_TOKEN`
   - Trigger rescan: `arw-cli runtime bundles reload --base http://127.0.0.1:8091 --admin-token $ARW_ADMIN_TOKEN`
+  - Download artifacts: `arw-cli runtime bundles install llama.cpp-preview/linux-x86_64-cpu`
+  - Offline import: `arw-cli runtime bundles import --bundle llama.cpp-preview/linux-x86_64-cpu ./llama-build`
+  - Roll back to a previous snapshot: `arw-cli runtime bundles rollback --bundle llama.cpp-preview/linux-x86_64-cpu --list`
+  - Add `--json`/`--pretty` to the rollback command for machine-readable history listings or outcome summaries
+  - Preview installs: add `--dry-run` to either command; use `--dest /custom/path` when staging bundles outside the default `<state_dir>/runtime/bundles`
   - Scripting: add `--json`/`--pretty` to either command; remote mode fetches `/state/runtime/bundles` from the running server.
 
 Admin Tokens

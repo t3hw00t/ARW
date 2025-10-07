@@ -1,5 +1,5 @@
 # CLI Reference
-Updated: 2025-10-06
+Updated: 2025-10-07
 Type: Reference
 
 Microsummary: Commands, subcommands, and flags for `arw-cli` with pointers to tutorials. Beta.
@@ -23,6 +23,9 @@ Commands (summary)
 - `arw-cli screenshots backfill-ocr [--lang <code>] [--force] [--dry-run]` — regenerate OCR sidecars via `/admin/tools/run`
 - `arw-cli runtime bundles list [--dir PATH] [--remote] [--json {--pretty}]` — inspect managed runtime bundle catalogs locally or via `/state/runtime/bundles`
 - `arw-cli runtime bundles reload [--json {--pretty}]` — trigger `/admin/runtime/bundles/reload` to rescan bundle catalogs on the server
+- `arw-cli runtime bundles install [--dir PATH] [--remote] [--dest DIR] [--artifact-kind KIND] [--artifact-format FORMAT] [--force] [--dry-run] <bundle-id>...` — download bundle artifacts into the managed runtime directory (defaults to `<state_dir>/runtime/bundles`)
+- `arw-cli runtime bundles import --bundle <id> [--dest DIR] [--metadata FILE] [--force] [--dry-run] <path>...` — copy local archives or directories into the managed runtime directory for offline installs
+- `arw-cli runtime bundles rollback --bundle <id> [--dest DIR] [--revision REV] [--list] [--dry-run] [--json {--pretty}]` — list available revisions and restore a bundle from the local history snapshot (JSON mode works for both `--list` and rollback actions)
 
 See the [CLI Guide](../guide/cli.md) for examples. Use `--help` on any command for details.
 

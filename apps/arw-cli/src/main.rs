@@ -13,8 +13,8 @@ use json_patch::{patch as apply_json_patch, Patch as JsonPatch};
 use rand::RngCore;
 use reqwest::{blocking::Client, header::ACCEPT, StatusCode};
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value as JsonValue};
-use sha2::Digest;
+use serde_json::{json, Map as JsonMap, Value as JsonValue};
+use sha2::{Digest, Sha256};
 use std::cmp::Reverse;
 use std::collections::{BTreeMap, HashSet, VecDeque};
 use std::env;
@@ -1005,52 +1005,37 @@ enum RuntimeBundlesCmd {
     List(RuntimeBundlesListArgs),
     /// Request the server to rescan bundle catalogs
     Reload(RuntimeBundlesReloadArgs),
+    /// Download bundle artifacts into the managed runtime directory
+    Install(RuntimeBundlesInstallArgs),
+    /// Import local artifacts into the managed runtime directory
+    Import(RuntimeBundlesImportArgs),
+    /// Roll back a managed runtime bundle to a previous revision
+    Rollback(RuntimeBundlesRollbackArgs),
 }
 
 fn runtime_bundles_list_remote(args: &RuntimeBundlesListArgs) -> Result<()> {
     if args.dir.is_some() {
         eprintln!("note: --dir is ignored when --remote is set");
     }
-    let token = resolve_admin_token(&args.base.admin_token);
-    let client = Client::builder()
-        .timeout(Duration::from_secs(args.base.timeout))
-        .build()
-        .context("building HTTP client")?;
-    let base = args.base.base_url();
-    let url = format!("{}/state/runtime/bundles", base);
-    let mut req = client.get(&url);
-    req = with_admin_headers(req, token.as_deref());
-    let resp = req
-        .send()
-        .with_context(|| format!("requesting runtime bundle snapshot from {}", url))?;
-    let status = resp.status();
-    let text = resp.text().context("reading runtime bundle snapshot")?;
-
-    if status == reqwest::StatusCode::UNAUTHORIZED {
-        anyhow::bail!(
-            "unauthorized: provide --admin-token or set ARW_ADMIN_TOKEN to access runtime bundles"
-        );
-    }
-    if !status.is_success() {
-        anyhow::bail!("runtime bundle request failed: {} {}", status, text.trim());
-    }
-
-    let snapshot: CliRuntimeBundleSnapshot =
-        serde_json::from_str(&text).context("parsing runtime bundle snapshot JSON")?;
+    let snapshot = fetch_runtime_bundle_snapshot_remote(&args.base)?;
 
     if args.json {
+        let payload = serde_json::to_value(&snapshot).unwrap_or_else(|_| json!({}));
         if args.pretty {
             println!(
                 "{}",
-                serde_json::to_string_pretty(&snapshot).unwrap_or_else(|_| text.clone())
+                serde_json::to_string_pretty(&payload).unwrap_or_else(|_| payload.to_string())
             );
         } else {
-            println!("{}", serde_json::to_string(&snapshot).unwrap_or(text));
+            println!("{}", payload);
         }
         return Ok(());
     }
 
-    println!("Remote runtime bundle inventory (base: {})", base);
+    println!(
+        "Remote runtime bundle inventory (base: {})",
+        args.base.base_url()
+    );
     print_bundle_summary(
         &snapshot.catalogs,
         &snapshot.roots,
@@ -1321,6 +1306,83 @@ struct RuntimeBundlesReloadArgs {
     pretty: bool,
 }
 
+#[derive(Args)]
+struct RuntimeBundlesInstallArgs {
+    /// Directory containing bundle catalogs (defaults to configs/runtime/)
+    #[arg(long, value_name = "DIR")]
+    dir: Option<PathBuf>,
+    /// Fetch bundle catalogs from a running server instead of local files
+    #[arg(long)]
+    remote: bool,
+    #[command(flatten)]
+    base: RuntimeBaseArgs,
+    /// Destination root for installed bundles (defaults to <state_dir>/runtime/bundles)
+    #[arg(long, value_name = "DIR")]
+    dest: Option<PathBuf>,
+    /// Preview actions without downloading artifacts
+    #[arg(long)]
+    dry_run: bool,
+    /// Overwrite existing files and metadata
+    #[arg(long)]
+    force: bool,
+    /// Only download artifacts whose kind matches one of the provided values
+    #[arg(long = "artifact-kind", value_name = "KIND")]
+    artifact_kinds: Vec<String>,
+    /// Only download artifacts whose format matches one of the provided values
+    #[arg(long = "artifact-format", value_name = "FORMAT")]
+    artifact_formats: Vec<String>,
+    /// Bundle identifiers to install
+    #[arg(value_name = "BUNDLE_ID", required = true)]
+    bundles: Vec<String>,
+}
+
+#[derive(Args)]
+struct RuntimeBundlesImportArgs {
+    /// Bundle identifier that the imported payload should live under
+    #[arg(long = "bundle", value_name = "BUNDLE_ID")]
+    bundle: String,
+    /// Destination root for imported bundles (defaults to <state_dir>/runtime/bundles)
+    #[arg(long, value_name = "DIR")]
+    dest: Option<PathBuf>,
+    /// Preview actions without touching the filesystem
+    #[arg(long)]
+    dry_run: bool,
+    /// Overwrite existing files and directories
+    #[arg(long)]
+    force: bool,
+    /// Optional metadata JSON to copy into bundle.json
+    #[arg(long, value_name = "FILE")]
+    metadata: Option<PathBuf>,
+    /// Files or directories to import
+    #[arg(value_name = "PATH", required = true)]
+    paths: Vec<PathBuf>,
+}
+
+#[derive(Args)]
+struct RuntimeBundlesRollbackArgs {
+    /// Destination root containing managed runtime bundles (defaults to <state_dir>/runtime/bundles)
+    #[arg(long, value_name = "DIR")]
+    dest: Option<PathBuf>,
+    /// Bundle identifier to roll back
+    #[arg(long = "bundle", value_name = "BUNDLE_ID")]
+    bundle: String,
+    /// Revision to restore (defaults to the most recent revision)
+    #[arg(long = "revision", value_name = "REVISION")]
+    revision: Option<String>,
+    /// List available revisions instead of applying a rollback
+    #[arg(long)]
+    list: bool,
+    /// Preview actions without modifying anything
+    #[arg(long)]
+    dry_run: bool,
+    /// Emit JSON instead of human-readable output
+    #[arg(long)]
+    json: bool,
+    /// Pretty-print JSON output (requires --json)
+    #[arg(long, requires = "json")]
+    pretty: bool,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct CliRuntimeBundleSnapshot {
     #[serde(default)]
@@ -1350,6 +1412,70 @@ struct CliRuntimeBundlesReloadResponse {
     ok: bool,
     #[serde(default)]
     error: Option<String>,
+}
+
+fn load_runtime_bundle_snapshot_local(dir: Option<PathBuf>) -> Result<CliRuntimeBundleSnapshot> {
+    let base_dir = if let Some(dir) = dir {
+        dir
+    } else {
+        resolve_config_path("configs/runtime").ok_or_else(|| {
+            anyhow!("unable to locate configs/runtime/; pass --dir to point at bundle catalogs")
+        })?
+    };
+
+    if !base_dir.exists() {
+        bail!("bundle directory {} does not exist", base_dir.display());
+    }
+
+    let sources = runtime_bundles::load_catalogs_from_dir(&base_dir)?;
+    let catalogs: Vec<CliRuntimeBundleCatalog> =
+        sources.into_iter().map(catalog_view_from_source).collect();
+    let roots = vec![base_dir.display().to_string()];
+    let now = Utc::now();
+    Ok(CliRuntimeBundleSnapshot {
+        generated: Some(now.to_rfc3339_opts(SecondsFormat::Millis, true)),
+        generated_ms: Some(now.timestamp_millis().max(0) as u64),
+        roots,
+        catalogs,
+    })
+}
+
+fn fetch_runtime_bundle_snapshot_remote(
+    base: &RuntimeBaseArgs,
+) -> Result<CliRuntimeBundleSnapshot> {
+    let token = resolve_admin_token(&base.admin_token);
+    let client = Client::builder()
+        .timeout(Duration::from_secs(base.timeout))
+        .build()
+        .context("building HTTP client")?;
+    let base_url = base.base_url();
+    let url = format!("{}/state/runtime/bundles", base_url);
+    let mut req = client.get(&url);
+    req = with_admin_headers(req, token.as_deref());
+    let resp = req
+        .send()
+        .with_context(|| format!("requesting runtime bundle snapshot from {}", url))?;
+    let status = resp.status();
+    let text = resp.text().context("reading runtime bundle snapshot")?;
+
+    if status == reqwest::StatusCode::UNAUTHORIZED {
+        bail!(
+            "unauthorized: provide --admin-token or set ARW_ADMIN_TOKEN to access runtime bundles"
+        );
+    }
+    if !status.is_success() {
+        bail!("runtime bundle request failed: {} {}", status, text.trim());
+    }
+
+    let mut snapshot: CliRuntimeBundleSnapshot =
+        serde_json::from_str(&text).context("parsing runtime bundle snapshot JSON")?;
+    if snapshot.generated.is_none() {
+        snapshot.generated = Some(Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true));
+    }
+    if snapshot.generated_ms.is_none() {
+        snapshot.generated_ms = Some(Utc::now().timestamp_millis().max(0) as u64);
+    }
+    Ok(snapshot)
 }
 
 #[derive(Args)]
@@ -2043,6 +2169,24 @@ fn main() {
                 }
                 RuntimeBundlesCmd::Reload(args) => {
                     if let Err(e) = cmd_runtime_bundles_reload(&args) {
+                        eprintln!("{}", e);
+                        std::process::exit(1);
+                    }
+                }
+                RuntimeBundlesCmd::Install(args) => {
+                    if let Err(e) = cmd_runtime_bundles_install(&args) {
+                        eprintln!("{}", e);
+                        std::process::exit(1);
+                    }
+                }
+                RuntimeBundlesCmd::Import(args) => {
+                    if let Err(e) = cmd_runtime_bundles_import(&args) {
+                        eprintln!("{}", e);
+                        std::process::exit(1);
+                    }
+                }
+                RuntimeBundlesCmd::Rollback(args) => {
+                    if let Err(e) = cmd_runtime_bundles_rollback(&args) {
                         eprintln!("{}", e);
                         std::process::exit(1);
                     }
@@ -3492,31 +3636,7 @@ fn cmd_runtime_bundles_list(args: &RuntimeBundlesListArgs) -> Result<()> {
         return runtime_bundles_list_remote(args);
     }
 
-    let base_dir = if let Some(dir) = &args.dir {
-        dir.clone()
-    } else {
-        resolve_config_path("configs/runtime").ok_or_else(|| {
-            anyhow::anyhow!(
-                "unable to locate configs/runtime/; pass --dir to point at bundle catalogs"
-            )
-        })?
-    };
-
-    if !base_dir.exists() {
-        anyhow::bail!("bundle directory {} does not exist", base_dir.display());
-    }
-
-    let sources = runtime_bundles::load_catalogs_from_dir(&base_dir)?;
-    let catalogs: Vec<CliRuntimeBundleCatalog> =
-        sources.into_iter().map(catalog_view_from_source).collect();
-    let roots = vec![base_dir.display().to_string()];
-    let now = Utc::now();
-    let snapshot = CliRuntimeBundleSnapshot {
-        generated: Some(now.to_rfc3339_opts(SecondsFormat::Millis, true)),
-        generated_ms: Some(now.timestamp_millis().max(0) as u64),
-        roots: roots.clone(),
-        catalogs: catalogs.clone(),
-    };
+    let snapshot = load_runtime_bundle_snapshot_local(args.dir.clone())?;
 
     if args.json {
         let payload = serde_json::to_value(&snapshot).unwrap_or_else(|_| json!({}));
@@ -3533,9 +3653,17 @@ fn cmd_runtime_bundles_list(args: &RuntimeBundlesListArgs) -> Result<()> {
 
     println!(
         "Local runtime bundle inventory (root: {})",
-        base_dir.display()
+        snapshot
+            .roots
+            .first()
+            .map(|s| s.as_str())
+            .unwrap_or("<unknown>")
     );
-    print_bundle_summary(&catalogs, &roots, snapshot.generated.as_deref());
+    print_bundle_summary(
+        &snapshot.catalogs,
+        &snapshot.roots,
+        snapshot.generated.as_deref(),
+    );
     Ok(())
 }
 
@@ -3593,6 +3721,1248 @@ fn cmd_runtime_bundles_reload(args: &RuntimeBundlesReloadArgs) -> Result<()> {
     } else {
         anyhow::bail!("runtime bundle reload failed");
     }
+    Ok(())
+}
+
+#[derive(Debug, Clone, Copy)]
+enum SnapshotKind {
+    Install,
+    Import,
+    Rollback,
+}
+
+impl SnapshotKind {
+    fn as_str(&self) -> &'static str {
+        match self {
+            SnapshotKind::Install => "install",
+            SnapshotKind::Import => "import",
+            SnapshotKind::Rollback => "rollback",
+        }
+    }
+}
+
+fn history_timestamp() -> String {
+    Utc::now().format("%Y%m%dT%H%M%S%3fZ").to_string()
+}
+
+#[derive(Debug, Clone)]
+struct BundleHistoryEntry {
+    revision: String,
+    path: PathBuf,
+    saved_at: Option<String>,
+    kind: Option<String>,
+    summary: Option<JsonValue>,
+}
+
+fn snapshot_existing_bundle(
+    bundle_dir: &Path,
+    bundle_id: &str,
+    kind: SnapshotKind,
+    dry_run: bool,
+) -> Result<Option<BundleHistoryEntry>> {
+    let bundle_json = bundle_dir.join("bundle.json");
+    let artifacts_dir = bundle_dir.join("artifacts");
+    let payload_dir = bundle_dir.join("payload");
+    let mut has_state = false;
+    has_state |= bundle_json.exists();
+    has_state |= artifacts_dir.exists();
+    has_state |= payload_dir.exists();
+    if !has_state {
+        return Ok(None);
+    }
+
+    let summary = if bundle_json.is_file() {
+        match std::fs::read(&bundle_json) {
+            Ok(bytes) => serde_json::from_slice::<JsonValue>(&bytes)
+                .ok()
+                .and_then(|value| bundle_history_summary(&value, bundle_id)),
+            Err(_) => None,
+        }
+    } else {
+        None
+    };
+
+    let timestamp = history_timestamp();
+    let revision = format!("rev-{}", timestamp);
+    if dry_run {
+        println!(
+            "[dry-run] would snapshot existing bundle {} into history/{} ({})",
+            bundle_id,
+            revision,
+            kind.as_str()
+        );
+        return Ok(Some(BundleHistoryEntry {
+            revision,
+            path: bundle_dir
+                .join("history")
+                .join(format!("rev-{}", timestamp)),
+            saved_at: Some(timestamp),
+            kind: Some(kind.as_str().to_string()),
+            summary,
+        }));
+    }
+
+    let history_root = bundle_dir.join("history");
+    create_dir_all(&history_root)
+        .with_context(|| format!("creating {}", history_root.display()))?;
+    let entry_dir = history_root.join(&revision);
+    create_dir_all(&entry_dir).with_context(|| format!("creating {}", entry_dir.display()))?;
+
+    if bundle_json.exists() {
+        let target = entry_dir.join("bundle.json");
+        std::fs::rename(&bundle_json, &target).with_context(|| {
+            format!(
+                "moving bundle.json to history revision {}",
+                entry_dir.display()
+            )
+        })?;
+    }
+    if artifacts_dir.exists() {
+        let target = entry_dir.join("artifacts");
+        std::fs::rename(&artifacts_dir, &target).with_context(|| {
+            format!(
+                "moving artifacts directory to history revision {}",
+                entry_dir.display()
+            )
+        })?;
+    }
+    if payload_dir.exists() {
+        let target = entry_dir.join("payload");
+        std::fs::rename(&payload_dir, &target).with_context(|| {
+            format!(
+                "moving payload directory to history revision {}",
+                entry_dir.display()
+            )
+        })?;
+    }
+
+    let mut info_map = JsonMap::new();
+    info_map.insert("bundle".into(), JsonValue::String(bundle_id.to_string()));
+    info_map.insert("saved_at".into(), JsonValue::String(timestamp.clone()));
+    info_map.insert("kind".into(), JsonValue::String(kind.as_str().to_string()));
+    if let Some(summary_value) = summary.clone() {
+        info_map.insert("summary".into(), summary_value);
+    }
+    let info = JsonValue::Object(info_map);
+    let info_path = entry_dir.join("info.json");
+    std::fs::write(&info_path, serde_json::to_vec_pretty(&info)?)
+        .with_context(|| format!("writing history metadata {}", info_path.display()))?;
+
+    Ok(Some(BundleHistoryEntry {
+        revision,
+        path: entry_dir,
+        saved_at: Some(timestamp),
+        kind: Some(kind.as_str().to_string()),
+        summary,
+    }))
+}
+
+fn list_bundle_history(bundle_dir: &Path) -> Result<Vec<BundleHistoryEntry>> {
+    let history_root = bundle_dir.join("history");
+    if !history_root.exists() {
+        return Ok(Vec::new());
+    }
+    let mut entries = Vec::new();
+    for entry in std::fs::read_dir(&history_root)
+        .with_context(|| format!("reading history directory {}", history_root.display()))?
+    {
+        let entry = entry?;
+        if !entry.file_type()?.is_dir() {
+            continue;
+        }
+        let name = entry.file_name();
+        let Some(name_str) = name.to_str() else {
+            continue;
+        };
+        if !name_str.starts_with("rev-") {
+            continue;
+        }
+        let info_path = entry.path().join("info.json");
+        let (saved_at, kind, summary) = if info_path.exists() {
+            match std::fs::read_to_string(&info_path)
+                .ok()
+                .and_then(|s| serde_json::from_str::<JsonValue>(&s).ok())
+            {
+                Some(value) => {
+                    let saved_at = value
+                        .get("saved_at")
+                        .and_then(|v| v.as_str())
+                        .map(|s| s.to_string());
+                    let kind = value
+                        .get("kind")
+                        .and_then(|v| v.as_str())
+                        .map(|s| s.to_string());
+                    let summary = value.get("summary").cloned();
+                    (saved_at, kind, summary)
+                }
+                None => (None, None, None),
+            }
+        } else {
+            (None, None, None)
+        };
+        entries.push(BundleHistoryEntry {
+            revision: name_str.to_string(),
+            path: entry.path(),
+            saved_at,
+            kind,
+            summary,
+        });
+    }
+    entries.sort_by(|a, b| b.revision.cmp(&a.revision));
+    Ok(entries)
+}
+
+#[derive(Debug)]
+enum DownloadStatus {
+    Downloaded { path: PathBuf, bytes: u64 },
+    SkippedExisting { path: PathBuf },
+    DryRun { path: PathBuf },
+}
+
+fn default_runtime_bundle_root(explicit: &Option<PathBuf>) -> Result<PathBuf> {
+    if let Some(dir) = explicit {
+        return Ok(dir.clone());
+    }
+    let paths = load_effective_paths();
+    let state_dir = paths
+        .get("state_dir")
+        .and_then(JsonValue::as_str)
+        .map(PathBuf::from)
+        .context("state_dir missing from effective paths")?;
+    Ok(state_dir.join("runtime").join("bundles"))
+}
+
+fn sanitize_bundle_dir(id: &str) -> String {
+    let mut base = String::with_capacity(id.len());
+    for ch in id.chars() {
+        match ch {
+            'A'..='Z' | 'a'..='z' | '0'..='9' => base.push(ch),
+            '-' | '_' | '.' => base.push(ch),
+            '/' | '\\' => base.push_str("__"),
+            _ => base.push('_'),
+        }
+    }
+    if base.is_empty() {
+        base.push_str("bundle");
+    }
+    let mut hasher = Sha256::new();
+    hasher.update(id.as_bytes());
+    let digest = hasher.finalize();
+    let mut suffix = String::new();
+    for byte in digest.iter().take(4) {
+        write!(&mut suffix, "{:02x}", byte).expect("hex write");
+    }
+    format!("{}__{}", base, suffix)
+}
+
+fn sanitize_filename(segment: &str) -> String {
+    let mut out = String::with_capacity(segment.len().max(1));
+    for ch in segment.chars() {
+        match ch {
+            'A'..='Z' | 'a'..='z' | '0'..='9' => out.push(ch),
+            '-' | '_' | '.' => out.push(ch),
+            _ => out.push('_'),
+        }
+    }
+    if out.is_empty() {
+        "_".into()
+    } else {
+        out
+    }
+}
+
+fn artifact_file_name(artifact: &runtime_bundles::RuntimeBundleArtifact, index: usize) -> String {
+    if let Some(url) = artifact.url.as_deref() {
+        let trimmed = url.split('?').next().unwrap_or(url).trim_end_matches('/');
+        if let Some(name) = trimmed.rsplit('/').next() {
+            let clean = sanitize_filename(name);
+            if clean != "_" {
+                return clean;
+            }
+        }
+    }
+    if let Some(fmt) = artifact.format.as_deref() {
+        sanitize_filename(&format!("{}-{:02}.{}", artifact.kind, index + 1, fmt))
+    } else {
+        sanitize_filename(&format!("{}-{:02}", artifact.kind, index + 1))
+    }
+}
+
+fn artifact_matches_filters(
+    artifact: &runtime_bundles::RuntimeBundleArtifact,
+    kind_filters: &HashSet<String>,
+    format_filters: &HashSet<String>,
+) -> bool {
+    if !kind_filters.is_empty() {
+        let kind = artifact.kind.to_ascii_lowercase();
+        if !kind_filters.contains(&kind) {
+            return false;
+        }
+    }
+    if !format_filters.is_empty() {
+        let fmt = artifact
+            .format
+            .as_deref()
+            .unwrap_or_default()
+            .to_ascii_lowercase();
+        if fmt.is_empty() {
+            return false;
+        }
+        if !format_filters.contains(&fmt) {
+            return false;
+        }
+    }
+    true
+}
+
+fn download_bundle_artifact(
+    client: &Client,
+    url: &str,
+    dest: &Path,
+    sha256: Option<&str>,
+    dry_run: bool,
+    force: bool,
+) -> Result<DownloadStatus> {
+    if dry_run {
+        return Ok(DownloadStatus::DryRun {
+            path: dest.to_path_buf(),
+        });
+    }
+
+    if let Some(parent) = dest.parent() {
+        create_dir_all(parent).with_context(|| format!("creating {}", parent.display()))?;
+    }
+
+    if dest.exists() {
+        if force {
+            std::fs::remove_file(dest)
+                .with_context(|| format!("removing existing artifact {}", dest.display()))?;
+        } else {
+            return Ok(DownloadStatus::SkippedExisting {
+                path: dest.to_path_buf(),
+            });
+        }
+    }
+
+    let mut resp = client
+        .get(url)
+        .send()
+        .with_context(|| format!("downloading artifact from {}", url))?;
+    let status = resp.status();
+    if !status.is_success() {
+        anyhow::bail!("download failed ({}) for {}", status, url);
+    }
+
+    let parent_dir = dest
+        .parent()
+        .map(|p| p.to_path_buf())
+        .unwrap_or_else(|| PathBuf::from("."));
+    let mut tmp = tempfile::Builder::new()
+        .prefix("arw-bundle-")
+        .tempfile_in(&parent_dir)
+        .context("allocating temporary download file")?;
+    let mut hasher = Sha256::new();
+    let mut total_bytes = 0u64;
+    {
+        let writer = tmp.as_file_mut();
+        let mut buf = [0u8; 8192];
+        loop {
+            let count = resp
+                .read(&mut buf)
+                .with_context(|| format!("reading bytes from {}", url))?;
+            if count == 0 {
+                break;
+            }
+            writer
+                .write_all(&buf[..count])
+                .with_context(|| format!("writing chunk to {}", dest.display()))?;
+            hasher.update(&buf[..count]);
+            total_bytes += count as u64;
+        }
+        writer
+            .flush()
+            .with_context(|| format!("flushing downloaded artifact to {}", dest.display()))?;
+    }
+    let digest = hasher.finalize();
+    if let Some(expected) = sha256 {
+        let expected_norm = expected.trim().to_ascii_lowercase();
+        let mut actual = String::new();
+        for byte in digest.iter() {
+            write!(&mut actual, "{:02x}", byte).expect("hex write");
+        }
+        if actual != expected_norm {
+            anyhow::bail!(
+                "artifact hash mismatch for {} (expected {}, got {})",
+                url,
+                expected,
+                actual
+            );
+        }
+    }
+
+    tmp.persist(dest)
+        .with_context(|| format!("persisting download to {}", dest.display()))?;
+    Ok(DownloadStatus::Downloaded {
+        path: dest.to_path_buf(),
+        bytes: total_bytes,
+    })
+}
+
+fn write_bundle_metadata_json(
+    bundle_dir: &Path,
+    metadata: &JsonValue,
+    dry_run: bool,
+    force: bool,
+) -> Result<()> {
+    let metadata_path = bundle_dir.join("bundle.json");
+    if dry_run {
+        println!(
+            "[dry-run] would write metadata to {}",
+            metadata_path.display()
+        );
+        return Ok(());
+    }
+    if metadata_path.exists() {
+        if force {
+            std::fs::remove_file(&metadata_path)
+                .with_context(|| format!("removing {}", metadata_path.display()))?;
+        } else {
+            println!(
+                "Metadata already exists at {} (use --force to overwrite)",
+                metadata_path.display()
+            );
+            return Ok(());
+        }
+    }
+    if let Some(parent) = metadata_path.parent() {
+        create_dir_all(parent).with_context(|| format!("creating {}", parent.display()))?;
+    }
+    let bytes =
+        serde_json::to_vec_pretty(metadata).context("serializing bundle metadata to JSON")?;
+    std::fs::write(&metadata_path, bytes)
+        .with_context(|| format!("writing {}", metadata_path.display()))?;
+    println!("Wrote metadata {}", metadata_path.display());
+    Ok(())
+}
+
+fn cmd_runtime_bundles_install(args: &RuntimeBundlesInstallArgs) -> Result<()> {
+    let snapshot = if args.remote {
+        fetch_runtime_bundle_snapshot_remote(&args.base)?
+    } else {
+        load_runtime_bundle_snapshot_local(args.dir.clone())?
+    };
+    if snapshot.catalogs.is_empty() {
+        anyhow::bail!("no runtime bundle catalogs discovered");
+    }
+
+    let install_root = default_runtime_bundle_root(&args.dest)?;
+    if args.dry_run {
+        println!("[dry-run] bundle install root: {}", install_root.display());
+    } else {
+        if install_root.exists() && !install_root.is_dir() {
+            anyhow::bail!(
+                "install root {} exists but is not a directory",
+                install_root.display()
+            );
+        }
+        create_dir_all(&install_root)
+            .with_context(|| format!("creating {}", install_root.display()))?;
+    }
+
+    let kind_filters: HashSet<String> = args
+        .artifact_kinds
+        .iter()
+        .map(|k| k.trim().to_ascii_lowercase())
+        .filter(|k| !k.is_empty())
+        .collect();
+    let format_filters: HashSet<String> = args
+        .artifact_formats
+        .iter()
+        .map(|k| k.trim().to_ascii_lowercase())
+        .filter(|k| !k.is_empty())
+        .collect();
+    let roots_snapshot = snapshot.roots.clone();
+    let source_info: JsonValue = if args.remote {
+        json!({ "kind": "remote", "base": args.base.base_url() })
+    } else {
+        json!({ "kind": "local", "roots": roots_snapshot })
+    };
+
+    let mut missing: Vec<String> = Vec::new();
+    let mut total_downloads = 0usize;
+    let mut total_bytes = 0u64;
+
+    let mut client_builder = Client::builder();
+    if args.base.timeout == 0 {
+        client_builder = client_builder.timeout(None);
+    } else {
+        client_builder = client_builder.timeout(Duration::from_secs(args.base.timeout.max(60)));
+    }
+    client_builder = client_builder.user_agent("arw-cli/managed-runtime");
+    let download_client = client_builder.build().context("building download client")?;
+
+    for bundle_id in &args.bundles {
+        let mut matched: Option<(CliRuntimeBundleCatalog, runtime_bundles::RuntimeBundle)> = None;
+        for catalog in &snapshot.catalogs {
+            if let Some(bundle) = catalog.bundles.iter().find(|b| &b.id == bundle_id) {
+                matched = Some((catalog.clone(), bundle.clone()));
+                break;
+            }
+        }
+        let Some((catalog, bundle)) = matched else {
+            missing.push(bundle_id.clone());
+            continue;
+        };
+
+        let dir_name = sanitize_bundle_dir(bundle_id);
+        let bundle_dir = install_root.join(&dir_name);
+        let artifacts_dir = bundle_dir.join("artifacts");
+
+        let existing_state = bundle_dir.exists()
+            && (bundle_dir.join("bundle.json").exists()
+                || artifacts_dir.exists()
+                || bundle_dir.join("payload").exists());
+        if existing_state && !args.force {
+            if args.dry_run {
+                println!(
+                    "[dry-run] bundle {} already staged at {} (would require --force)",
+                    bundle_id,
+                    bundle_dir.display()
+                );
+                continue;
+            } else {
+                anyhow::bail!(
+                    "bundle {} already staged at {} (use --force to overwrite)",
+                    bundle_id,
+                    bundle_dir.display()
+                );
+            }
+        }
+
+        if existing_state {
+            snapshot_existing_bundle(&bundle_dir, bundle_id, SnapshotKind::Install, args.dry_run)?;
+        }
+
+        if args.dry_run {
+            println!(
+                "[dry-run] install bundle {} -> {}",
+                bundle_id,
+                bundle_dir.display()
+            );
+        } else {
+            create_dir_all(&artifacts_dir).with_context(|| {
+                format!("creating artifacts directory {}", artifacts_dir.display())
+            })?;
+        }
+
+        let mut downloaded = 0usize;
+        let mut skipped_existing = 0usize;
+        let mut missing_urls = 0usize;
+
+        for (idx, artifact) in bundle.artifacts.iter().enumerate() {
+            if !artifact_matches_filters(artifact, &kind_filters, &format_filters) {
+                continue;
+            }
+            let Some(url) = artifact.url.as_deref() else {
+                missing_urls += 1;
+                println!(
+                    "Bundle {} artifact {} has no URL; use `arw-cli runtime bundles import` to stage it manually.",
+                    bundle_id,
+                    artifact.kind
+                );
+                continue;
+            };
+            let file_name = artifact_file_name(artifact, idx);
+            let dest_path = artifacts_dir.join(file_name);
+            match download_bundle_artifact(
+                &download_client,
+                url,
+                &dest_path,
+                artifact.sha256.as_deref(),
+                args.dry_run,
+                args.force,
+            )? {
+                DownloadStatus::Downloaded { path, bytes } => {
+                    downloaded += 1;
+                    total_downloads += 1;
+                    total_bytes += bytes;
+                    println!("Downloaded {} ({} bytes)", path.display(), bytes);
+                }
+                DownloadStatus::SkippedExisting { path } => {
+                    skipped_existing += 1;
+                    println!(
+                        "Skipping existing artifact {} (use --force to overwrite)",
+                        path.display()
+                    );
+                }
+                DownloadStatus::DryRun { path } => {
+                    println!("[dry-run] would download {} -> {}", url, path.display());
+                    downloaded += 1;
+                }
+            }
+        }
+
+        let metadata = json!({
+            "bundle": bundle,
+            "catalog": {
+                "path": catalog.path,
+                "channel": catalog.channel,
+                "notes": catalog.notes,
+            },
+            "source": source_info.clone(),
+            "installed_at": Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true),
+        });
+        write_bundle_metadata_json(&bundle_dir, &metadata, args.dry_run, args.force)?;
+
+        println!(
+            "Bundle {} summary: {} downloaded, {} skipped (existing), {} without URLs.",
+            bundle_id, downloaded, skipped_existing, missing_urls
+        );
+    }
+
+    if !missing.is_empty() {
+        anyhow::bail!("bundle id(s) not found in catalog: {}", missing.join(", "));
+    }
+
+    if args.dry_run {
+        println!(
+            "[dry-run] install complete ({} bundle{} requested).",
+            args.bundles.len(),
+            if args.bundles.len() == 1 { "" } else { "s" }
+        );
+    } else {
+        println!("Install root: {}", install_root.display());
+        if total_downloads > 0 {
+            println!(
+                "Downloaded {} artifact{} ({} bytes).",
+                total_downloads,
+                if total_downloads == 1 { "" } else { "s" },
+                total_bytes
+            );
+        }
+    }
+    Ok(())
+}
+
+fn copy_file_into(src: &Path, dest_dir: &Path, force: bool, dry_run: bool) -> Result<u64> {
+    let file_name = src
+        .file_name()
+        .ok_or_else(|| anyhow!("source file {} has no name", src.display()))?;
+    let dest_path = dest_dir.join(file_name);
+    if dry_run {
+        println!(
+            "[dry-run] copy {} -> {}",
+            src.display(),
+            dest_path.display()
+        );
+        return Ok(0);
+    }
+    if !src.is_file() {
+        anyhow::bail!("{} is not a file", src.display());
+    }
+    if let Some(parent) = dest_path.parent() {
+        create_dir_all(parent).with_context(|| format!("creating {}", parent.display()))?;
+    }
+    if dest_path.exists() {
+        if force {
+            std::fs::remove_file(&dest_path)
+                .with_context(|| format!("removing {}", dest_path.display()))?;
+        } else {
+            anyhow::bail!(
+                "destination file {} exists (use --force to overwrite)",
+                dest_path.display()
+            );
+        }
+    }
+    let bytes = std::fs::copy(src, &dest_path)
+        .with_context(|| format!("copying {} -> {}", src.display(), dest_path.display()))?;
+    println!("Copied file {} -> {}", src.display(), dest_path.display());
+    Ok(bytes)
+}
+
+fn copy_directory_into(
+    src: &Path,
+    dest_dir: &Path,
+    force: bool,
+    dry_run: bool,
+) -> Result<(usize, u64)> {
+    if !src.is_dir() {
+        anyhow::bail!("{} is not a directory", src.display());
+    }
+    let dir_name = src
+        .file_name()
+        .ok_or_else(|| anyhow!("source directory {} has no name", src.display()))?;
+    let target_root = dest_dir.join(dir_name);
+    if dry_run {
+        println!(
+            "[dry-run] copy directory {} -> {}",
+            src.display(),
+            target_root.display()
+        );
+        return Ok((0, 0));
+    }
+    if target_root.exists() {
+        if force {
+            if target_root.is_file() {
+                std::fs::remove_file(&target_root)
+                    .with_context(|| format!("removing {}", target_root.display()))?;
+            } else {
+                std::fs::remove_dir_all(&target_root)
+                    .with_context(|| format!("removing {}", target_root.display()))?;
+            }
+        } else {
+            anyhow::bail!(
+                "destination {} exists (use --force to overwrite)",
+                target_root.display()
+            );
+        }
+    }
+    create_dir_all(&target_root).with_context(|| format!("creating {}", target_root.display()))?;
+
+    let mut files = 0usize;
+    let mut bytes = 0u64;
+    for entry in WalkDir::new(src) {
+        let entry = entry.with_context(|| format!("walking {}", src.display()))?;
+        let path = entry.path();
+        let rel = match path.strip_prefix(src) {
+            Ok(r) if !r.as_os_str().is_empty() => r,
+            _ => continue,
+        };
+        let target = target_root.join(rel);
+        if entry.file_type().is_dir() {
+            create_dir_all(&target).with_context(|| format!("creating {}", target.display()))?;
+            continue;
+        }
+        if entry.file_type().is_symlink() {
+            anyhow::bail!(
+                "symlink {} not supported during import; flatten archives before importing",
+                path.display()
+            );
+        }
+        if let Some(parent) = target.parent() {
+            create_dir_all(parent).with_context(|| format!("creating {}", parent.display()))?;
+        }
+        let copied =
+            std::fs::copy(path, &target).with_context(|| format!("copying {}", path.display()))?;
+        files += 1;
+        bytes += copied;
+    }
+    println!(
+        "Copied directory {} -> {}",
+        src.display(),
+        target_root.display()
+    );
+    Ok((files, bytes))
+}
+
+fn cmd_runtime_bundles_import(args: &RuntimeBundlesImportArgs) -> Result<()> {
+    let bundle_root = default_runtime_bundle_root(&args.dest)?;
+    if args.dry_run {
+        println!("[dry-run] bundle import root: {}", bundle_root.display());
+    } else {
+        if bundle_root.exists() && !bundle_root.is_dir() {
+            anyhow::bail!(
+                "bundle root {} exists but is not a directory",
+                bundle_root.display()
+            );
+        }
+        create_dir_all(&bundle_root)
+            .with_context(|| format!("creating {}", bundle_root.display()))?;
+    }
+
+    let dir_name = sanitize_bundle_dir(&args.bundle);
+    let bundle_dir = bundle_root.join(&dir_name);
+    let payload_dir = bundle_dir.join("payload");
+    let artifacts_dir = bundle_dir.join("artifacts");
+    let existing_state = bundle_dir.exists()
+        && (bundle_dir.join("bundle.json").exists()
+            || artifacts_dir.exists()
+            || payload_dir.exists());
+    if existing_state && !args.force {
+        if args.dry_run {
+            println!(
+                "[dry-run] bundle {} already staged at {} (would require --force)",
+                args.bundle,
+                bundle_dir.display()
+            );
+            return Ok(());
+        } else {
+            anyhow::bail!(
+                "bundle {} already staged at {} (use --force to overwrite)",
+                args.bundle,
+                bundle_dir.display()
+            );
+        }
+    }
+
+    if existing_state {
+        snapshot_existing_bundle(
+            &bundle_dir,
+            &args.bundle,
+            SnapshotKind::Import,
+            args.dry_run,
+        )?;
+    }
+
+    if args.dry_run {
+        println!(
+            "[dry-run] bundle {} staged at {}",
+            args.bundle,
+            bundle_dir.display()
+        );
+    } else {
+        if bundle_dir.exists() && !bundle_dir.is_dir() {
+            anyhow::bail!(
+                "bundle path {} exists but is not a directory",
+                bundle_dir.display()
+            );
+        }
+        create_dir_all(&bundle_dir)
+            .with_context(|| format!("creating {}", bundle_dir.display()))?;
+        if payload_dir.exists() && !payload_dir.is_dir() {
+            anyhow::bail!(
+                "payload path {} exists but is not a directory",
+                payload_dir.display()
+            );
+        }
+        create_dir_all(&payload_dir)
+            .with_context(|| format!("creating {}", payload_dir.display()))?;
+    }
+
+    let mut total_files = 0usize;
+    let mut total_bytes = 0u64;
+    for path in &args.paths {
+        if !path.exists() {
+            anyhow::bail!("path {} does not exist", path.display());
+        }
+        if path.is_file() {
+            let bytes = copy_file_into(path, &payload_dir, args.force, args.dry_run)?;
+            if !args.dry_run {
+                total_files += 1;
+                total_bytes += bytes;
+            }
+        } else if path.is_dir() {
+            let (files, bytes) = copy_directory_into(path, &payload_dir, args.force, args.dry_run)?;
+            if !args.dry_run {
+                total_files += files;
+                total_bytes += bytes;
+            }
+        } else {
+            anyhow::bail!("{} is neither file nor directory", path.display());
+        }
+    }
+
+    if let Some(meta_src) = &args.metadata {
+        if !meta_src.exists() {
+            anyhow::bail!("metadata file {} does not exist", meta_src.display());
+        }
+        let metadata_path = bundle_dir.join("bundle.json");
+        if args.dry_run {
+            println!(
+                "[dry-run] would copy metadata {} -> {}",
+                meta_src.display(),
+                metadata_path.display()
+            );
+        } else {
+            if metadata_path.exists() {
+                if args.force {
+                    std::fs::remove_file(&metadata_path)
+                        .with_context(|| format!("removing {}", metadata_path.display()))?;
+                } else {
+                    anyhow::bail!(
+                        "metadata file {} exists (use --force to overwrite)",
+                        metadata_path.display()
+                    );
+                }
+            }
+            if let Some(parent) = metadata_path.parent() {
+                create_dir_all(parent).with_context(|| format!("creating {}", parent.display()))?;
+            }
+            std::fs::copy(meta_src, &metadata_path)
+                .with_context(|| format!("copying metadata {}", meta_src.display()))?;
+            println!("Imported metadata {}", metadata_path.display());
+        }
+    } else {
+        let metadata = json!({
+            "bundle": {
+                "id": args.bundle,
+            },
+            "source": {
+                "kind": "import",
+            },
+            "imported_at": Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true),
+        });
+        write_bundle_metadata_json(&bundle_dir, &metadata, args.dry_run, args.force)?;
+    }
+
+    if args.dry_run {
+        println!(
+            "[dry-run] import complete for bundle {} (payload at {})",
+            args.bundle,
+            payload_dir.display()
+        );
+    } else {
+        println!(
+            "Imported bundle {} into {} ({} file{}, {} bytes).",
+            args.bundle,
+            bundle_dir.display(),
+            total_files,
+            if total_files == 1 { "" } else { "s" },
+            total_bytes
+        );
+    }
+    Ok(())
+}
+
+fn copy_path_recursive(src: &Path, dest: &Path) -> Result<()> {
+    if src.is_file() {
+        if let Some(parent) = dest.parent() {
+            create_dir_all(parent).with_context(|| format!("creating {}", parent.display()))?;
+        }
+        std::fs::copy(src, dest)
+            .with_context(|| format!("copying file {} -> {}", src.display(), dest.display()))?;
+        return Ok(());
+    }
+
+    if src.is_dir() {
+        create_dir_all(dest).with_context(|| format!("creating {}", dest.display()))?;
+        for entry in WalkDir::new(src) {
+            let entry = entry.with_context(|| format!("walking {}", src.display()))?;
+            let path = entry.path();
+            let rel = match path.strip_prefix(src) {
+                Ok(rel) if !rel.as_os_str().is_empty() => rel,
+                _ => continue,
+            };
+            let target = dest.join(rel);
+            if entry.file_type().is_dir() {
+                create_dir_all(&target)
+                    .with_context(|| format!("creating {}", target.display()))?;
+                continue;
+            }
+            if entry.file_type().is_symlink() {
+                anyhow::bail!(
+                    "symlink {} not supported during rollback copy",
+                    path.display()
+                );
+            }
+            if let Some(parent) = target.parent() {
+                create_dir_all(parent).with_context(|| format!("creating {}", parent.display()))?;
+            }
+            std::fs::copy(path, &target)
+                .with_context(|| format!("copying {} -> {}", path.display(), target.display()))?;
+        }
+        return Ok(());
+    }
+
+    anyhow::bail!("unsupported path type {}", src.display());
+}
+
+fn bundle_history_summary(metadata: &JsonValue, fallback_id: &str) -> Option<JsonValue> {
+    let mut map = JsonMap::new();
+    let id = metadata
+        .pointer("/bundle/id")
+        .and_then(|v| v.as_str())
+        .unwrap_or(fallback_id);
+    map.insert("id".into(), JsonValue::String(id.to_string()));
+
+    if let Some(name) = metadata.pointer("/bundle/name").and_then(|v| v.as_str()) {
+        map.insert("name".into(), JsonValue::String(name.to_string()));
+    }
+    if let Some(adapter) = metadata.pointer("/bundle/adapter").and_then(|v| v.as_str()) {
+        map.insert("adapter".into(), JsonValue::String(adapter.to_string()));
+    }
+    if let Some(channel) = metadata
+        .pointer("/catalog/channel")
+        .and_then(|v| v.as_str())
+    {
+        map.insert("channel".into(), JsonValue::String(channel.to_string()));
+    }
+    if let Some(source_kind) = metadata.pointer("/source/kind").and_then(|v| v.as_str()) {
+        map.insert(
+            "source_kind".into(),
+            JsonValue::String(source_kind.to_string()),
+        );
+    }
+    if let Some(modalities) = metadata
+        .pointer("/bundle/modalities")
+        .and_then(|v| v.as_array())
+    {
+        let list: Vec<JsonValue> = modalities
+            .iter()
+            .filter_map(|v| v.as_str().map(|s| JsonValue::String(s.to_string())))
+            .collect();
+        if !list.is_empty() {
+            map.insert("modalities".into(), JsonValue::Array(list));
+        }
+    }
+    if let Some(profiles) = metadata
+        .pointer("/bundle/profiles")
+        .and_then(|v| v.as_array())
+    {
+        let list: Vec<JsonValue> = profiles
+            .iter()
+            .filter_map(|v| v.as_str().map(|s| JsonValue::String(s.to_string())))
+            .collect();
+        if !list.is_empty() {
+            map.insert("profiles".into(), JsonValue::Array(list));
+        }
+    }
+
+    if map.is_empty() {
+        None
+    } else {
+        Some(JsonValue::Object(map))
+    }
+}
+
+fn format_history_summary(summary: &JsonValue) -> Option<String> {
+    let mut parts: Vec<String> = Vec::new();
+    if let Some(name) = summary.get("name").and_then(|v| v.as_str()) {
+        parts.push(name.to_string());
+    }
+    if let Some(channel) = summary.get("channel").and_then(|v| v.as_str()) {
+        parts.push(format!("channel: {}", channel));
+    }
+    if let Some(adapter) = summary.get("adapter").and_then(|v| v.as_str()) {
+        parts.push(format!("adapter: {}", adapter));
+    }
+    if let Some(mods) = summary
+        .get("modalities")
+        .and_then(|v| v.as_array())
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|v| v.as_str())
+                .map(|s| s.to_string())
+                .collect::<Vec<_>>()
+        })
+    {
+        if !mods.is_empty() {
+            parts.push(format!("modalities: {}", mods.join("/")));
+        }
+    }
+    if let Some(profiles) = summary
+        .get("profiles")
+        .and_then(|v| v.as_array())
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|v| v.as_str())
+                .map(|s| s.to_string())
+                .collect::<Vec<_>>()
+        })
+    {
+        if !profiles.is_empty() {
+            parts.push(format!("profiles: {}", profiles.join("/")));
+        }
+    }
+    if parts.is_empty() {
+        None
+    } else {
+        Some(parts.join(", "))
+    }
+}
+
+fn cmd_runtime_bundles_rollback(args: &RuntimeBundlesRollbackArgs) -> Result<()> {
+    let bundle_root = default_runtime_bundle_root(&args.dest)?;
+    let dir_name = sanitize_bundle_dir(&args.bundle);
+    let bundle_dir = bundle_root.join(&dir_name);
+    if !bundle_dir.exists() {
+        anyhow::bail!(
+            "bundle {} not staged at {}",
+            args.bundle,
+            bundle_dir.display()
+        );
+    }
+
+    let history = list_bundle_history(&bundle_dir)?;
+    if history.is_empty() {
+        anyhow::bail!("no history revisions available for bundle {}", args.bundle);
+    }
+
+    if args.list {
+        if args.json {
+            let items: Vec<JsonValue> = history
+                .iter()
+                .map(|entry| {
+                    json!({
+                        "revision": &entry.revision,
+                        "saved_at": entry.saved_at,
+                        "kind": entry.kind,
+                        "path": entry.path.display().to_string(),
+                        "summary": entry.summary.clone(),
+                    })
+                })
+                .collect();
+            let payload = json!({
+                "bundle": args.bundle,
+                "history": items,
+            });
+            if args.pretty {
+                println!(
+                    "{}",
+                    serde_json::to_string_pretty(&payload).unwrap_or_else(|_| payload.to_string())
+                );
+            } else {
+                println!("{}", payload);
+            }
+        } else {
+            println!("Revisions for bundle {}:", args.bundle);
+            for entry in &history {
+                let saved_at = entry.saved_at.as_deref().unwrap_or("<unknown>");
+                let kind = entry.kind.as_deref().unwrap_or("<unknown>");
+                let mut line = format!(
+                    "  - {} (saved_at: {}, kind: {}",
+                    entry.revision, saved_at, kind
+                );
+                if let Some(summary_label) = entry
+                    .summary
+                    .as_ref()
+                    .and_then(|s| format_history_summary(s))
+                {
+                    line.push_str(&format!("; {}", summary_label));
+                }
+                line.push(')');
+                println!("{}", line);
+            }
+        }
+        return Ok(());
+    }
+
+    let desired_revision = if let Some(rev) = &args.revision {
+        if rev.starts_with("rev-") {
+            rev.clone()
+        } else {
+            format!("rev-{}", rev)
+        }
+    } else {
+        history
+            .first()
+            .map(|entry| entry.revision.clone())
+            .expect("history is non-empty")
+    };
+
+    let target = history
+        .into_iter()
+        .find(|entry| entry.revision == desired_revision)
+        .ok_or_else(|| {
+            anyhow::anyhow!(
+                "revision {} not found for bundle {}",
+                desired_revision,
+                args.bundle
+            )
+        })?;
+
+    if args.dry_run {
+        if args.json {
+            let payload = json!({
+                "bundle": args.bundle,
+                "revision": target.revision,
+                "dry_run": true,
+            });
+            if args.pretty {
+                println!(
+                    "{}",
+                    serde_json::to_string_pretty(&payload).unwrap_or_else(|_| payload.to_string())
+                );
+            } else {
+                println!("{}", payload);
+            }
+        } else {
+            println!(
+                "[dry-run] would restore bundle {} to revision {}",
+                args.bundle, target.revision
+            );
+        }
+        return Ok(());
+    }
+
+    let snapshot =
+        snapshot_existing_bundle(&bundle_dir, &args.bundle, SnapshotKind::Rollback, false)?;
+    if !args.json {
+        if let Some(snap) = &snapshot {
+            println!(
+                "Saved current state to history/{} before rollback",
+                snap.revision
+            );
+        }
+    }
+
+    let mut restored_components = Vec::new();
+    let mut missing_components = Vec::new();
+    for component in ["bundle.json", "artifacts", "payload"] {
+        let src = target.path.join(component);
+        if src.exists() {
+            let dest = bundle_dir.join(component);
+            if dest.exists() {
+                if dest.is_dir() {
+                    std::fs::remove_dir_all(&dest).with_context(|| {
+                        format!("removing existing directory {}", dest.display())
+                    })?;
+                } else {
+                    std::fs::remove_file(&dest)
+                        .with_context(|| format!("removing file {}", dest.display()))?;
+                }
+            }
+            copy_path_recursive(&src, &dest).with_context(|| {
+                format!("restoring {} from revision {}", component, target.revision)
+            })?;
+            restored_components.push(component.to_string());
+        } else {
+            missing_components.push(component.to_string());
+        }
+    }
+
+    let info_path = target.path.join("info.json");
+    if info_path.exists() {
+        if let Some(mut info) = std::fs::read_to_string(&info_path)
+            .ok()
+            .and_then(|s| serde_json::from_str::<JsonValue>(&s).ok())
+        {
+            info["restored_at"] =
+                JsonValue::String(Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true));
+            std::fs::write(&info_path, serde_json::to_vec_pretty(&info)?)
+                .with_context(|| format!("updating history metadata {}", info_path.display()))?;
+        }
+    }
+
+    if args.json {
+        let payload = json!({
+            "bundle": args.bundle,
+            "restored_revision": target.revision,
+            "restored_components": restored_components,
+            "missing_components": missing_components,
+            "snapshot_created": snapshot.as_ref().map(|s| s.revision.clone()),
+        });
+        if args.pretty {
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&payload).unwrap_or_else(|_| payload.to_string())
+            );
+        } else {
+            println!("{}", payload);
+        }
+    } else {
+        if !restored_components.is_empty() {
+            println!(
+                "Rolled bundle {} back to {} (restored: {}).",
+                args.bundle,
+                target.revision,
+                restored_components.join(", ")
+            );
+        } else {
+            println!(
+                "Rolled bundle {} back to {} (no components restored).",
+                args.bundle, target.revision
+            );
+        }
+        if !missing_components.is_empty() {
+            println!(
+                "Revision {} missing components: {}",
+                target.revision,
+                missing_components.join(", ")
+            );
+        }
+    }
+
     Ok(())
 }
 
