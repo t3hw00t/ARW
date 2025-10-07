@@ -37,6 +37,8 @@ Status
 - Tray tooltip shows “Agent Hub (ARW): online/offline”.
 - Start/Stop enable/disable reflects live health checks to `/healthz`.
 - Optional desktop notifications on state change; toggle in the Launcher UI.
+- Connection & alerts (advanced pane) lets you paste the admin token once; it is stored locally and reused for Projects, Training, Trial, and other admin-only windows.
+- Admin-only windows raise toast notifications when calls are unauthorized, pointing you back to Connection & alerts so you know where to fix access.
 - Home, Models, Chat, Hub, Training, and Events windows share an SSE status badge (`connecting → connected → retrying`) that announces retry windows, honours server `retry:` hints, auto-refreshes the “last event” timestamp, flags stale streams, and resumes with the last journal id after transient drops (accessible text, `role="status"`, and colour-contrast compliant styling).
 - The home card’s mini downloads row mirrors `models.download.progress` events, including live speed estimates and completion cleanup, without a separate polling loop.
 

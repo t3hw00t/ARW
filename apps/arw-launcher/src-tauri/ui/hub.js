@@ -2370,7 +2370,13 @@ document.addEventListener('DOMContentLoaded', async () => {
   async function refreshProjectsSnapshot(){
     try{
       await fetchReadModel('projects', '/state/projects');
-    }catch(e){ console.error(e); }
+    }catch(e){
+      if (e && e.status === 401) {
+        setStat('Set an admin token (Control Room → Connection & alerts) to load projects');
+      } else {
+        console.error(e);
+      }
+    }
   }
   async function createProj(){
     const n = (elProjName?.value||'').trim(); if (!n) return;

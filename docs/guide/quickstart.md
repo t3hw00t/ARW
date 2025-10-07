@@ -21,6 +21,9 @@ Run the unified ARW server locally in minutes. The architecture centres on the `
 
 > ARW tracks the latest stable Rust release; run `rustup update` regularly to avoid toolchain drift.
 
+!!! note
+    The first launch compiles `arw-server` (and the optional launcher). Expect a multi-minute build on initial setup; subsequent runs reuse the cached binaries.
+
 ## Build and Test
 
 === "Windows"
@@ -59,6 +62,8 @@ $env:ARW_ADMIN_TOKEN = [System.Guid]::NewGuid().ToString("N")
 ```
 
 Keeping the variable in your shell ensures subsequent `curl` calls send `Authorization: Bearer $ARW_ADMIN_TOKEN` without extra copy/paste.
+
+When you launch the desktop Control Room later, open **Connection & alerts** and paste the same token there so admin-only surfaces stay authorized.
 
 ## Run the Unified Server (Headless)
 

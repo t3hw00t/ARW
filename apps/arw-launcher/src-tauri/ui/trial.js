@@ -361,13 +361,13 @@
       updateLists(payload.routeStats);
       renderLists();
       if (STATE.unauthorized) {
-        showNotice('Add an admin token in Launcher -> Preferences to see live metrics.');
+        showNotice('Set an admin token in Control Room → Connection & alerts to see live metrics.');
       } else if (STATE.errors.length) {
         showNotice(`Partial data: ${STATE.errors.join('; ')}`);
       }
     } catch (err) {
       console.error('Refresh failed', err);
-      showNotice('Failed to refresh trial data. Ensure the server is running and the admin token is set.');
+      showNotice('Failed to refresh trial data. Ensure the server is running and the admin token is set (Control Room → Connection & alerts).');
       ARW.toast('Refresh failed');
     } finally {
       if (refreshBtn) refreshBtn.disabled = false;
@@ -1831,7 +1831,7 @@ async function refreshApprovalsLane(auto = false){
       focusBtn.disabled = disabled;
       focusBtn.setAttribute('aria-disabled', disabled ? 'true' : 'false');
       focusBtn.title = disabled
-        ? 'Connect with an admin token to open memory sources'
+        ? 'Set an admin token (Control Room → Connection & alerts) to open memory sources'
         : 'Open memory sources in debug view';
     }
     if (!ms || !Number.isFinite(ms)) {
@@ -1897,7 +1897,7 @@ function renderLists(){
       openBtn.disabled = disabled;
       openBtn.setAttribute('aria-disabled', disabled ? 'true' : 'false');
       openBtn.title = disabled
-        ? 'Authorize with an admin token to open the feedback panel'
+        ? 'Set an admin token (Control Room → Connection & alerts) to open the feedback panel'
         : 'Open feedback panel in debug view';
     }
 
@@ -1958,7 +1958,7 @@ function renderLists(){
 
     if (STATE.unauthorized) {
       listEl.innerHTML = '';
-      emptyEl.textContent = 'Authorize with an admin token to view feedback deltas.';
+      emptyEl.textContent = 'Set an admin token (Control Room → Connection & alerts) to view feedback deltas.';
       emptyEl.classList.remove('hidden');
       return;
     }
@@ -3050,7 +3050,7 @@ function renderLists(){
       return;
     }
     if (STATE.unauthorized) {
-      ARW.toast('Authorize with an admin token to open the feedback panel');
+      ARW.toast('Set an admin token (Control Room → Connection & alerts) to open the feedback panel');
       return;
     }
     try {

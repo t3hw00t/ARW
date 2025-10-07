@@ -6,7 +6,7 @@ const effectivePort = () => getPort() || (baseMeta && baseMeta.port) || 8091;
 
 let miniDownloadsSub = null;
 let prefsDirty = false;
-const prefBaseline = { port: '', autostart: false, notif: true, loginstart: false };
+const prefBaseline = { port: '', autostart: false, notif: true, loginstart: false, adminToken: '' };
 let lastHealthCheck = null;
 let healthMetaTimer = null;
 
@@ -20,7 +20,9 @@ function shouldOpenAdvancedPrefs() {
   const autostartOn = !!(auto && auto.checked);
   const notificationsOff = !!(notif && !notif.checked);
   const loginOn = !!(login && login.checked);
-  return portChanged || autostartOn || notificationsOff || loginOn;
+  const token = document.getElementById('admintok');
+  const tokenSet = !!(token && String(token.value || '').trim());
+  return portChanged || autostartOn || notificationsOff || loginOn || tokenSet;
 }
 
 function syncAdvancedPrefsDisclosure() {
@@ -50,6 +52,8 @@ function snapshotPrefsBaseline() {
   prefBaseline.autostart = getChecked('autostart');
   prefBaseline.notif = getChecked('notif');
   prefBaseline.loginstart = getChecked('loginstart');
+  const tokenEl = document.getElementById('admintok');
+  prefBaseline.adminToken = tokenEl ? String(tokenEl.value ?? '').trim() : '';
   applyPrefsDirty(false);
 }
 
@@ -65,6 +69,9 @@ function calculatePrefsDirty() {
   if (isDirty('autostart', 'autostart')) return true;
   if (isDirty('notif', 'notif')) return true;
   if (isDirty('loginstart', 'loginstart')) return true;
+  const tokenEl = document.getElementById('admintok');
+  const tokenValue = tokenEl ? String(tokenEl.value ?? '').trim() : '';
+  if (tokenValue !== prefBaseline.adminToken) return true;
   return false;
 }
 
@@ -80,6 +87,8 @@ function bindPrefWatchers() {
     const el = document.getElementById(id);
     if (el) el.addEventListener('change', refreshPrefsDirty);
   });
+  const tokenEl = document.getElementById('admintok');
+  if (tokenEl) tokenEl.addEventListener('input', refreshPrefsDirty);
 }
 
 function updateHealthMetaLabel() {
@@ -134,6 +143,7 @@ async function loadPrefs() {
       if (v.port) document.getElementById('port').value = v.port;
       if (typeof v.autostart === 'boolean') document.getElementById('autostart').checked = v.autostart;
       if (typeof v.notifyOnStatus === 'boolean') document.getElementById('notif').checked = v.notifyOnStatus;
+      if (typeof v.adminToken === 'string') document.getElementById('admintok').value = String(v.adminToken).trim();
     }
   } catch {}
   try {
@@ -153,6 +163,10 @@ async function savePrefs() {
   v.port = getPort();
   v.autostart = !!document.getElementById('autostart').checked;
   v.notifyOnStatus = !!document.getElementById('notif').checked;
+  const tokenEl = document.getElementById('admintok');
+  const tokenValue = String(tokenEl && tokenEl.value ? tokenEl.value : '').trim();
+  v.adminToken = tokenValue;
+  if (tokenEl) tokenEl.value = tokenValue;
   await ARW.setPrefs('launcher', v);
   connectSse({ replay: 5, resume: false });
   miniDownloads();
@@ -308,7 +322,18 @@ document.addEventListener('DOMContentLoaded', () => {
     try { await invoke('open_trial_window'); } catch (e) { console.error(e); }
   });
   document.getElementById('btn-start').addEventListener('click', async () => {
-    try { await invoke('start_service', { port: effectivePort() }); ARW.toast('Service starting'); } catch (e) { console.error(e); }
+    try {
+      await invoke('start_service', { port: effectivePort() });
+      ARW.toast('Service starting');
+    } catch (e) {
+      console.error(e);
+      const message = e && e.toString ? e.toString() : '';
+      if (message && message.includes('service binary not found')) {
+        ARW.toast('Build arw-server first (cargo build --release -p arw-server)');
+      } else {
+        ARW.toast('Unable to start service');
+      }
+    }
   });
   document.getElementById('btn-stop').addEventListener('click', async () => {
     try { await invoke('stop_service', { port: effectivePort() }); ARW.toast('Service stop requested'); } catch (e) { console.error(e); }

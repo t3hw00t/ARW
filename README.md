@@ -134,25 +134,45 @@ The details that make ARW practical in real workflows.
 - Observability: tracing/logging/metrics and journal. See [Observability architecture](docs/architecture/observability_otel.md). CI enforces interactive performance budgets; see [Interactive bench guide](docs/guide/interactive_bench.md).
 - Performance guardrails: dedupe work via the Action Cache + singleflight, serve digest‑addressed blobs with strong validators, stream read‑model deltas, and reuse llama.cpp prompts. See [Roadmap → Performance Guardrails](docs/ROADMAP.md#performance-guardrails), [Architecture → Performance Guardrails](docs/architecture/performance.md), and [Caching layers](docs/architecture/caching_layers.md).
 
-## Try ARW in 2 Minutes
+## Try ARW (Quick Path)
 
-Windows (headless unified server)
+> **Heads up:** The unified server and launcher are Rust/Tauri binaries. The first run compiles them, which can take several minutes and requires a full Rust toolchain. Subsequent starts are near-instant.
+
+### 1. Build the binaries
+
+Windows
 ```powershell
-powershell -ExecutionPolicy Bypass -File scripts/setup.ps1
+cargo build --release -p arw-server
+cargo build --release -p arw-launcher   # optional desktop surfaces
+```
+
+Linux / macOS
+```bash
+cargo build --release -p arw-server
+cargo build --release -p arw-launcher   # optional desktop surfaces
+```
+
+If you prefer the bundled helper (build + package, docs optional), run:
+
+- Windows: `powershell -ExecutionPolicy Bypass -File scripts/setup.ps1`
+- Linux / macOS: `bash scripts/setup.sh`
+
+### 2. Start the unified server
+
+Windows (headless)
+```powershell
 powershell -ExecutionPolicy Bypass -File scripts/start.ps1 -ServiceOnly -WaitHealth
 ```
 
-- Windows installer packages ship the launcher with `arw-server` + `arw-cli`. See the [Windows install guide](docs/guide/windows_install.md) for MSI links and tray behavior.
-
-Linux / macOS (headless unified server)
+Linux / macOS (headless)
 ```bash
-bash scripts/setup.sh
 bash scripts/start.sh --service-only --wait-health
 ```
 
-Screenshots and annotation tooling are optional and compiled when you enable the
-`tool_screenshots` feature flag (requires OS screenshot backends):
+- Windows installer packages (when available) ship the launcher with `arw-server` + `arw-cli`. See the [Windows install guide](docs/guide/windows_install.md) for MSI links and tray behavior.
+- When you run the launcher (Control Room), open **Connection & alerts** and paste your admin token once; Projects, Training, and Trial reuse it automatically.
 
+### 3. Optional: enable screenshots tooling
 ```bash
 cargo run -p arw-server --features tool_screenshots
 ```

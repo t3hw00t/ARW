@@ -212,6 +212,7 @@ async function pingRow(tr, entry) {
   st.textContent = '…';
   st.className = 'dim';
   st.dataset.status = 'checking';
+  st.removeAttribute('title');
   const baseUrl = entry.normalizedBase || normalizedBase(entry.base);
   if (!baseUrl) {
     st.innerHTML = '<span class="dot bad"></span> invalid base';
@@ -230,10 +231,12 @@ async function pingRow(tr, entry) {
         st.innerHTML = '<span class="dot bad"></span> token rejected';
         st.className = 'bad';
         st.dataset.status = 'token';
+        st.title = 'Token rejected by remote';
       } else {
         st.innerHTML = '<span class="dot warn"></span> auth required';
         st.className = 'warn';
         st.dataset.status = 'auth';
+        st.title = 'Set an admin token (Control Room → Connection & alerts)';
       }
     } else {
       st.innerHTML = `<span class="dot bad"></span> error (${resp.status})`;
@@ -282,6 +285,16 @@ document.addEventListener('DOMContentLoaded', () => {
       if (stat) stat.textContent = `Saved ${name}`;
       ARW.toast('Connection saved');
       await refresh();
+    });
+    ['cname', 'curl', 'ctok'].forEach((id) => {
+      const field = document.getElementById(id);
+      if (!field) return;
+      field.addEventListener('keydown', (ev) => {
+        if (ev.key === 'Enter') {
+          ev.preventDefault();
+          addBtn.click();
+        }
+      });
     });
   }
 

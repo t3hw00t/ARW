@@ -177,6 +177,22 @@ window.ARW = {
       }
     },
   },
+  auth: {
+    _recent: new Map(),
+    notify(base) {
+      try {
+        const key = base ? ARW.normalizeBase(base) : '';
+        const now = Date.now();
+        const last = this._recent.get(key);
+        if (last && (now - last) < 30000) return;
+        this._recent.set(key, now);
+        const target = key || 'http://127.0.0.1:8091';
+        ARW.toast(`Authorization required for ${target}. Set your admin token in Control Room → Connection & alerts.`);
+      } catch {
+        // best-effort notification
+      }
+    },
+  },
   validateProjectName(name) {
     const raw = String(name ?? '').trim();
     if (!raw) return { ok: false, error: 'Project name cannot be empty' };
@@ -277,7 +293,11 @@ window.ARW = {
       }
       const opts = Object.assign({}, init);
       opts.headers = await this._headers(tokenBase, init.headers);
-      return fetch(url, opts);
+      const resp = await fetch(url, opts);
+      if (resp && (resp.status === 401 || resp.status === 403)) {
+        ARW.auth.notify(tokenBase || url);
+      }
+      return resp;
     },
     async json(baseOrUrl, pathOrInit, maybeInit){
       const resp = await this.fetch(baseOrUrl, pathOrInit, maybeInit);
