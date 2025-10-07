@@ -62,9 +62,9 @@ Never‑Out‑Of‑Context (High Priority)
 - **Recently shipped:** Context Working Set doc; Context API budgets + stable IDs; Memory hygiene janitor; Context telemetry guardrails.
 
 Modular Cognitive Stack (Kickoff)
-- [Kernel][Pack: Research] [t-202510060901-msc01] Agent contracts & orchestrator schema — todo (author typed envelopes, lease scopes, and lifecycle state machine; land docs + tests before enabling the stack).
-- [Kernel][Pack: Research] [t-202510060903-msc02] Memory fabric wiring — todo (introduce short-term buffers, episodic log hooks, and compression loops with loss metrics and hygiene jobs).
-- [Kernel][Pack: Collaboration] [t-202510060906-msc03] Validation & tool guardrails — todo (route Validation Agent decisions through orchestrator, gate tool brokerage with sandbox requirements, and surface provenance in UI dashboards + Evaluation Harness).
+- [Kernel][Pack: Research] [t-202510060901-msc01] Agent contracts & orchestrator schema — done (typed envelopes validated, lifecycle state machine emits lease scopes + stages, docs/tests landed).
+- [Kernel][Pack: Research] [t-202510060903-msc02] Memory fabric wiring — done (short-term + episodic persistence with loss metrics and modular review queues shipped; hygiene + telemetry covered by tests).
+- [Kernel][Pack: Collaboration] [t-202510060906-msc03] Validation & tool guardrails — done (tool invocations enforce sandbox-derived capability leases, provenance lands in memory/read-models, and launcher/eval consumers receive enriched modular events).
 
 UI Coherence
 - [Pack: Collaboration] Universal right‑sidecar across Hub/Chat/Training; subscribe once to `/events` — done (initial lanes)

@@ -1101,9 +1101,53 @@ window.ARW = {
           generatedMs = Number.isFinite(parsed) ? parsed : Date.now();
         }
         const recentRaw = Array.isArray(raw.recent) ? raw.recent : [];
+        const sanitizeCaps = (caps) => {
+          if (!Array.isArray(caps)) return [];
+          return caps
+            .map((cap) => (typeof cap === 'string' ? cap.trim() : ''))
+            .filter((cap) => cap.length > 0);
+        };
         const recent = recentRaw
           .filter((entry) => entry && typeof entry === 'object')
-          .map((entry) => ({ ...entry }));
+          .map((entry) => {
+            const clone = { ...entry };
+            const kind = typeof clone.payload_kind === 'string' ? clone.payload_kind.trim() : '';
+            clone.payload_kind = kind;
+            if (clone.payload_summary && typeof clone.payload_summary === 'object') {
+              clone.payload_summary = { ...clone.payload_summary };
+            }
+            if (clone.policy_scope && typeof clone.policy_scope === 'object') {
+              const scope = clone.policy_scope;
+              const leases = Array.isArray(scope.leases) ? scope.leases : [];
+              clone.policy_scope = {
+                ...scope,
+                leases: leases.map((lease) => (lease && typeof lease === 'object' ? { ...lease } : lease)),
+              };
+            }
+            if (Array.isArray(clone.required_capabilities)) {
+              clone.required_capabilities = sanitizeCaps(clone.required_capabilities);
+            }
+            if (!clone.required_capabilities || !clone.required_capabilities.length) {
+              const summaryCaps = clone.payload_summary && clone.payload_summary.required_capabilities;
+              clone.required_capabilities = sanitizeCaps(summaryCaps || []);
+            }
+            if (kind === 'tool_invocation' && typeof clone.requested_by !== 'string' && typeof clone.agent_id === 'string') {
+              // keep existing agent_id if present
+            } else if (kind === 'tool_invocation' && typeof clone.agent_id !== 'string' && typeof clone.requested_by === 'string') {
+              clone.agent_id = clone.requested_by;
+            }
+            if (!clone.result_status) {
+              const summaryStatus = clone.payload_summary && clone.payload_summary.result_status;
+              if (typeof summaryStatus === 'string' && summaryStatus.trim()) {
+                clone.result_status = summaryStatus.trim();
+              } else if (typeof clone.result_status === 'string') {
+                clone.result_status = clone.result_status.trim();
+              }
+            } else if (typeof clone.result_status === 'string') {
+              clone.result_status = clone.result_status.trim();
+            }
+            return clone;
+          });
         return {
           pending_human_review: pending,
           blocked,
@@ -1153,14 +1197,27 @@ window.ARW = {
             li.className = 'provenance-summary-item';
             const title = document.createElement('span');
             title.className = 'provenance-summary-title';
-            const agent = typeof item.agent_id === 'string' && item.agent_id.trim() ? item.agent_id.trim() : 'agent';
-            const intent = typeof item.intent === 'string' && item.intent.trim() ? item.intent.trim() : '';
-            const kind = typeof item.payload_kind === 'string' && item.payload_kind.trim() ? item.payload_kind.trim() : '';
+            const kindRaw = typeof item.payload_kind === 'string' ? item.payload_kind.trim() : '';
+            const isTool = kindRaw === 'tool_invocation';
+            const labelParts = [];
+            if (isTool) {
+              const toolId = typeof item.tool_id === 'string' && item.tool_id.trim() ? item.tool_id.trim() : 'tool';
+              const statusLabel = typeof item.result_status === 'string' && item.result_status.trim() ? item.result_status.trim() : '';
+              labelParts.push(toolId);
+              if (statusLabel) labelParts.push(statusLabel);
+            } else {
+              const agent = typeof item.agent_id === 'string' && item.agent_id.trim() ? item.agent_id.trim() : 'agent';
+              const intent = typeof item.intent === 'string' && item.intent.trim() ? item.intent.trim() : '';
+              labelParts.push(agent);
+              if (intent) {
+                labelParts.push(intent);
+              } else if (kindRaw) {
+                labelParts.push(kindRaw);
+              }
+            }
             const turn = typeof item.turn_id === 'string' && item.turn_id.trim() ? item.turn_id.trim() : '';
-            const labelParts = [agent];
-            if (intent) labelParts.push(intent);
-            else if (kind) labelParts.push(kind);
-            const fallback = turn || 'modular turn';
+            const invocationId = typeof item.invocation_id === 'string' && item.invocation_id.trim() ? item.invocation_id.trim() : '';
+            const fallback = isTool ? invocationId || 'modular tool' : turn || 'modular turn';
             title.textContent = labelParts.filter(Boolean).join(' · ') || fallback;
             li.appendChild(title);
             const stage = typeof item.lifecycle_stage === 'string' ? item.lifecycle_stage.replace(/_/g, ' ') : '';
@@ -1177,8 +1234,53 @@ window.ARW = {
               gatePill.textContent = `gate ${gate}`;
               li.appendChild(gatePill);
             }
+            if (isTool) {
+              const statusLabel = typeof item.result_status === 'string' && item.result_status.trim() ? item.result_status.trim() : '';
+              if (statusLabel) {
+                const statusPill = document.createElement('span');
+                statusPill.className = 'pill';
+                const tone = statusLabel === 'ok' ? 'good' : statusLabel === 'error' ? 'bad' : 'warn';
+                statusPill.classList.add(tone);
+                statusPill.textContent = `status ${statusLabel}`;
+                li.appendChild(statusPill);
+              }
+              const reqCaps = Array.isArray(item.required_capabilities) ? item.required_capabilities.filter((cap) => typeof cap === 'string' && cap.trim()).map((cap) => cap.trim()) : [];
+              if (reqCaps.length) {
+                const capsPill = document.createElement('span');
+                capsPill.className = 'pill';
+                capsPill.textContent = `caps ${reqCaps.slice(0, 3).join(', ')}` + (reqCaps.length > 3 ? '…' : '');
+                li.appendChild(capsPill);
+              }
+              const summary = item.payload_summary && typeof item.payload_summary === 'object' ? item.payload_summary : null;
+              if (summary && summary.needs_network) {
+                const netPill = document.createElement('span');
+                netPill.className = 'pill warn';
+                netPill.textContent = 'needs network';
+                li.appendChild(netPill);
+              }
+              if (summary && Number(summary.filesystem_scopes) > 0) {
+                const fsPill = document.createElement('span');
+                fsPill.className = 'pill';
+                fsPill.textContent = `fs scopes ${summary.filesystem_scopes}`;
+                li.appendChild(fsPill);
+              }
+              const policy = item.policy_scope && typeof item.policy_scope === 'object' ? item.policy_scope : null;
+              if (policy && policy.requires_human_review) {
+                const reviewPill = document.createElement('span');
+                reviewPill.className = 'pill warn';
+                reviewPill.textContent = 'review required';
+                li.appendChild(reviewPill);
+              }
+              const leasesCount = Array.isArray(item.policy_scope?.leases) ? item.policy_scope.leases.length : 0;
+              if (leasesCount) {
+                const leasePill = document.createElement('span');
+                leasePill.className = 'pill';
+                leasePill.textContent = `leases ${leasesCount}`;
+                li.appendChild(leasePill);
+              }
+            }
             const confVal = Number(item.confidence);
-            if (Number.isFinite(confVal)) {
+            if (!isTool && Number.isFinite(confVal)) {
               const confPill = document.createElement('span');
               confPill.className = 'pill';
               confPill.textContent = `confidence ${(confVal * 100).toFixed(0)}%`;
@@ -2233,6 +2335,18 @@ window.ARW = {
                 row.append(tag, span);
                 body.appendChild(row);
               };
+              const addPolicyScope = (scope) => {
+                if (!scope || typeof scope !== 'object') return;
+                const caps = Array.isArray(scope.capabilities) ? scope.capabilities : [];
+                if (caps.length) addLine('Capabilities', caps);
+                const leases = Array.isArray(scope.leases)
+                  ? scope.leases
+                      .map((lease) => (lease && typeof lease === 'object' ? (lease.capability || lease.id || '') : String(lease || '')))
+                      .filter((item) => item && typeof item === 'string' && item.trim())
+                  : [];
+                if (leases.length) addLine('Leases', leases);
+                if (scope.requires_human_review) addLine('Requires review', 'yes');
+              };
               if (entry.kind === 'modular.agent.accepted') {
                 addLine('Agent', payload.agent_id || 'unknown');
                 addLine('Intent', payload.intent);
@@ -2243,22 +2357,20 @@ window.ARW = {
                 if (Array.isArray(payload.context_refs) && payload.context_refs.length) {
                   addLine('Context refs', payload.context_refs.slice(0, 4));
                 }
-                if (payload.policy_scope && typeof payload.policy_scope === 'object') {
-                  const scope = payload.policy_scope;
-                  const caps = Array.isArray(scope.capabilities) ? scope.capabilities : [];
-                  if (caps.length) addLine('Capabilities', caps);
-                  const leases = Array.isArray(scope.leases)
-                    ? scope.leases
-                        .map((lease) => lease.capability || lease.id || '')
-                        .filter(Boolean)
-                    : [];
-                  if (leases.length) addLine('Leases', leases);
-                  if (scope.requires_human_review) addLine('Requires review', 'yes');
-                }
+                addPolicyScope(payload.policy_scope);
               } else if (entry.kind === 'modular.tool.accepted') {
                 addLine('Tool', payload.tool_id || 'unknown');
                 addLine('Operation', payload.operation_id);
                 addLine('Requested by', payload.requested_by);
+                const statusLabel = typeof payload.result_status === 'string' && payload.result_status.trim() ? payload.result_status.trim() : null;
+                if (statusLabel) addLine('Result status', statusLabel);
+                if (Number.isFinite(payload.result_latency_ms)) {
+                  addLine('Latency', `${payload.result_latency_ms} ms`);
+                }
+                const reqCaps = Array.isArray(payload.required_capabilities)
+                  ? payload.required_capabilities.filter((cap) => typeof cap === 'string' && cap.trim())
+                  : [];
+                if (reqCaps.length) addLine('Required capabilities', reqCaps);
                 if (payload.sandbox_requirements && typeof payload.sandbox_requirements === 'object') {
                   const req = payload.sandbox_requirements;
                   const details = [];
@@ -2271,6 +2383,15 @@ window.ARW = {
                     if (keys.length) details.push(`env vars: ${keys.length}`);
                   }
                   if (details.length) addLine('Sandbox', details.join(' · '));
+                }
+                addPolicyScope(payload.policy_scope);
+                if (payload.payload_summary && typeof payload.payload_summary === 'object') {
+                  const summary = payload.payload_summary;
+                  if (summary.needs_network) addLine('Needs network', 'yes');
+                  if (Number(summary.filesystem_scopes) > 0) addLine('Filesystem scopes', summary.filesystem_scopes);
+                }
+                if (Array.isArray(payload.result_output_keys) && payload.result_output_keys.length) {
+                  addLine('Result keys', payload.result_output_keys.slice(0, 5));
                 }
                 addLine('Evidence', payload.evidence_id);
               }

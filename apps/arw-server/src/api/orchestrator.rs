@@ -368,6 +368,10 @@ pub async fn orchestrator_start_training(
                     "needs_network": false,
                     "filesystem_scopes": [],
                 },
+                "policy_scope": {
+                    "leases": [lease_id.clone()],
+                    "capabilities": []
+                },
                 "evidence_id": lu_id,
             });
             if let Err(err) = state2

@@ -906,12 +906,12 @@
     {
       "id": "t-250914223010-ui02",
       "title": "Hub Compare: Text/JSON, Image, CSV",
-      "desc": "Add diff with Only changes/Wrap/Copy; image slider; CSV/TSV key‑diff with summary and copy.",
+      "desc": "Add diff with Only changes/Wrap/Copy; image slider; CSV/TSV key\u2011diff with summary and copy.",
       "status": "done",
       "notes": [
         {
           "time": "2025-09-14 22:31:00 UTC",
-          "text": "hub.html/js + styles; drag‑drop inputs; compact tables; documented in Workflow Views."
+          "text": "hub.html/js + styles; drag\u2011drop inputs; compact tables; documented in Workflow Views."
         }
       ],
       "updated": "2025-09-14 22:31:00 UTC",
@@ -961,7 +961,7 @@
     },
     {
       "id": "t-250914223030-ui06",
-      "title": "Command palette (Ctrl/Cmd‑K)",
+      "title": "Command palette (Ctrl/Cmd\u2011K)",
       "desc": "Open windows (Hub/Chat/Training/Debug/Events), refresh models, SSE replay, toggle focus, copy last event.",
       "status": "done",
       "notes": [
@@ -976,12 +976,12 @@
     {
       "id": "t-250914223040-ui07",
       "title": "Metrics: P95 sparkline per route",
-      "desc": "Client‑side short history sparkline in Metrics lane; P95 SLO color.",
+      "desc": "Client\u2011side short history sparkline in Metrics lane; P95 SLO color.",
       "status": "done",
       "notes": [
         {
           "time": "2025-09-14 22:36:00 UTC",
-          "text": "Sparkline added; 32‑point ring buffer per route; SLO=150ms."
+          "text": "Sparkline added; 32\u2011point ring buffer per route; SLO=150ms."
         }
       ],
       "updated": "2025-09-14 22:36:00 UTC",
@@ -995,11 +995,11 @@
       "notes": [
         {
           "time": "2025-09-14 22:37:00 UTC",
-          "text": "Hub saves focused flag + lanes; next: per‑project file persistence."
+          "text": "Hub saves focused flag + lanes; next: per\u2011project file persistence."
         },
         {
           "time": "2025-09-17 20:19:01 UTC",
-          "text": "Launcher exposes ARW.templates.save/load bound to prefs (namespaced), with debounced writes; per‑project overrides via get/setPrefs(ns)."
+          "text": "Launcher exposes ARW.templates.save/load bound to prefs (namespaced), with debounced writes; per\u2011project overrides via get/setPrefs(ns)."
         }
       ],
       "updated": "2025-09-17 20:19:01 UTC",
@@ -1007,7 +1007,7 @@
     },
     {
       "id": "t-250914223200-cap01",
-      "title": "Screenshot tool (OS‑level capture)",
+      "title": "Screenshot tool (OS\u2011level capture)",
       "desc": "Rust tool to capture display/region; save to .arw/screenshots; emit screenshots.captured; gate by io:screenshot.",
       "status": "done",
       "notes": [
@@ -1086,7 +1086,7 @@
     {
       "id": "t-250914223230-ui09",
       "title": "Runs: pin artifacts to compare",
-      "desc": "Enable pin‑to‑compare from runs/artifacts list in Hub; deep‑link compare sets.",
+      "desc": "Enable pin\u2011to\u2011compare from runs/artifacts list in Hub; deep\u2011link compare sets.",
       "status": "done",
       "notes": [
         {
@@ -1274,7 +1274,7 @@
       "notes": [
         {
           "time": "2025-09-28 18:00:00 UTC",
-          "text": "Ran triad smoke + context checks via launcher preflight, confirmed Trial Control Center status tray strings (“All good / Check soon / Action needed”) and scripted log before rehearsal."
+          "text": "Ran triad smoke + context checks via launcher preflight, confirmed Trial Control Center status tray strings (\u201cAll good / Check soon / Action needed\u201d) and scripted log before rehearsal."
         }
       ],
       "updated": "2025-09-28 18:00:00 UTC",
@@ -1404,40 +1404,55 @@
       "id": "t-202510060901-msc01",
       "title": "Modular cognitive stack: agent contracts",
       "desc": "Author typed envelopes, lease scopes, and orchestrator lifecycle state machine before enabling multi-agent routing.",
-      "status": "todo",
+      "status": "done",
       "notes": [
         {
           "time": "2025-10-06 09:10:00 UTC",
           "text": "Seeded from modular cognitive stack spec; needs schema drafts, policy hooks, and docs alignment."
+        },
+        {
+          "time": "2025-10-07 18:30:00 UTC",
+          "text": "Lifecycle gating validated end-to-end: modular agent envelopes now persist lease scopes, lifecycle stage/gate, and tests cover human-review and validation block flows."
         }
       ],
-      "updated": "2025-10-06 09:10:00 UTC"
+      "updated": "2025-10-07 18:30:00 UTC",
+      "done_at": "2025-10-07 18:30:00 UTC"
     },
     {
       "id": "t-202510060903-msc02",
       "title": "Modular cognitive stack: memory fabric wiring",
       "desc": "Attach short-term buffers, episodic log hooks, and compression loops with loss metrics and hygiene jobs.",
-      "status": "todo",
+      "status": "done",
       "notes": [
         {
           "time": "2025-10-06 09:10:00 UTC",
           "text": "Track Memory Abstraction Layer integration plus provenance metadata for episodic/summary/distilled tiers."
+        },
+        {
+          "time": "2025-10-07 18:35:00 UTC",
+          "text": "Short-term and episodic modular persistence ships with loss metrics plus review queues; coverage tests confirm pending/blocked counters for modular memory feeds."
         }
       ],
-      "updated": "2025-10-06 09:10:00 UTC"
+      "updated": "2025-10-07 18:35:00 UTC",
+      "done_at": "2025-10-07 18:35:00 UTC"
     },
     {
       "id": "t-202510060906-msc03",
       "title": "Modular cognitive stack: validation & tool guardrails",
       "desc": "Integrate validation agent decisions, sandboxed tool brokerage, and provenance surfaces across UI and telemetry.",
-      "status": "todo",
+      "status": "done",
       "notes": [
         {
           "time": "2025-10-06 09:10:00 UTC",
           "text": "Coordinate guardrail rules, tool audit logging, and Evaluation Harness hooks for the new stack."
+        },
+        {
+          "time": "2025-10-07 19:05:00 UTC",
+          "text": "Broker now enforces sandbox-derived capabilities with active leases, persists modular tool runs to memory/read-models, and surfaces policy+provenance for launcher/evaluation consumption."
         }
       ],
-      "updated": "2025-10-06 09:10:00 UTC"
+      "updated": "2025-10-07 19:05:00 UTC",
+      "done_at": "2025-10-07 19:05:00 UTC"
     }
   ]
 }

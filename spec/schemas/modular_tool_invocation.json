@@ -11,6 +11,7 @@
     "operation_id",
     "input_payload",
     "sandbox_requirements",
+    "policy_scope",
     "evidence_id"
   ],
   "properties": {
@@ -50,6 +51,30 @@
         }
       },
       "description": "Guardrails the orchestrator must enforce before execution."
+    },
+    "policy_scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "leases"
+      ],
+      "properties": {
+        "leases": {
+          "type": "array",
+          "items": {"type": "string"},
+          "description": "Active permission leases that authorize this invocation."
+        },
+        "capabilities": {
+          "type": "array",
+          "items": {"type": "string"},
+          "description": "Capabilities declared for the invocation (e.g., net:http, fs)."
+        },
+        "requires_human_review": {
+          "type": "boolean",
+          "description": "Flag indicating the result must be reviewed before use."
+        }
+      },
+      "description": "Policy envelope granting this invocation access to required resources."
     },
     "evidence_id": {
       "type": "string",

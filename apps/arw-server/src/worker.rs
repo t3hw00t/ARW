@@ -182,7 +182,7 @@ impl WorkerContext {
             "memory.search" => self.handle_memory_search(state, input).await,
             "memory.pack" => self.handle_memory_pack(state, input).await,
             "modular.agent_message" => self.handle_modular_agent_message(state, input).await,
-            "modular.tool_invocation" => self.handle_modular_tool_invocation(input).await,
+            "modular.tool_invocation" => self.handle_modular_tool_invocation(state, input).await,
             _ => match execute_dynamic_action(state, kind, input).await {
                 Ok(value) => Ok(ActionOutcome::new(value)),
                 Err(err) => Err(ActionFailure::new(err)),
@@ -291,9 +291,10 @@ impl WorkerContext {
 
     async fn handle_modular_tool_invocation(
         &self,
+        state: &AppState,
         input: &Value,
     ) -> Result<ActionOutcome, ActionFailure> {
-        let validated = match modular::validate_tool_invocation(input).await {
+        let validated = match modular::validate_tool_invocation(state, input).await {
             Ok(value) => value,
             Err(ModularValidationError::Internal(err)) => {
                 return Err(ActionFailure::new(ToolError::Runtime(err)));
@@ -303,6 +304,7 @@ impl WorkerContext {
             }
         };
         let summary = modular::tool_invocation_summary(&validated);
+        modular::persist_tool_memory(state, &validated, &summary).await;
         self.bus
             .publish(topics::TOPIC_MODULAR_TOOL_ACCEPTED, &summary);
         if let Some(tool_id) = summary.get("tool_id").and_then(|v| v.as_str()) {
@@ -1690,6 +1692,23 @@ mod tests {
             Some(8),
         );
 
+        let ttl =
+            (Utc::now() + ChronoDuration::minutes(5)).to_rfc3339_opts(SecondsFormat::Millis, true);
+        let lease_id = Uuid::new_v4().to_string();
+        state
+            .kernel()
+            .insert_lease_async(
+                lease_id.clone(),
+                "worker.tests".into(),
+                "sandbox:tool".into(),
+                Some("stack".into()),
+                ttl,
+                None,
+                None,
+            )
+            .await
+            .expect("insert lease");
+
         let action_id = Uuid::new_v4().to_string();
         let payload = json!({
             "invocation_id": "invoke-1",
@@ -1703,6 +1722,10 @@ mod tests {
             "sandbox_requirements": {
                 "needs_network": false,
                 "filesystem_scopes": []
+            },
+            "policy_scope": {
+                "leases": [lease_id],
+                "capabilities": []
             },
             "evidence_id": "evidence-1"
         });

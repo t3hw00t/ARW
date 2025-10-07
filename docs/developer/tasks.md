@@ -4,22 +4,25 @@ title: Tasks Status
 
 # Tasks Status
 
-Updated: 2025-10-05 23:12 UTC
+Updated: 2025-10-07 19:05 UTC
 
 
 ## To Do
-- [t-202510060906-msc03] Validation & tool guardrails: integrate validation agent decisions, sandboxed tool brokerage, and provenance surfaces.
 
 ## In Progress
-- [t-202510060901-msc01] Modular cognitive stack: define agent contracts, typed envelopes, and orchestrator lifecycle (lease scopes, validation hooks).
-    - 2025-10-07 11:10:00 UTC: Landed typed payload schemas for chat/recall/compression/interpretation/validation/tool/orchestrator agents, server validation now emits `payload_kind` and lifecycle summaries with lease scopes + validation gate in `modular.agent.accepted`.
-- [t-202510060903-msc02] Memory fabric wiring: attach short-term buffers, episodic log hooks, and compression loops with loss metrics + hygiene jobs.
-    - 2025-10-07 14:45:00 UTC: Modular turns now persist to the `short_term` lane (15-minute TTL) and mirrored episodic entries with loss metrics + tags; hygiene sweep caps updated and `/state/memory` gains richer provenance for modular runs.
-    - 2025-10-07 15:30:00 UTC: Added `memory_modular_review` read-model + `/state/memory/modular` endpoint so Hub/Launcher can subscribe to lightweight modular review queues without replaying the full memory feed.
 
 ## Paused
 
 ## Done
+- [t-202510060906-msc03] Validation & tool guardrails: integrate validation agent decisions, sandboxed tool brokerage, and provenance surfaces — done (updated: 2025-10-07 19:05:00 UTC)
+    - 2025-10-07 19:05:00 UTC: Tool broker now enforces sandbox-derived capability leases, emits enriched provenance (policy/sandbox/result) into SSE + memory lanes, and launcher summaries consume the new data for review queues and evaluation harness feeds.
+- [t-202510060903-msc02] Memory fabric wiring: attach short-term buffers, episodic log hooks, and compression loops with loss metrics + hygiene jobs — done (updated: 2025-10-07 18:35:00 UTC)
+    - 2025-10-07 14:45:00 UTC: Modular turns now persist to the `short_term` lane (15-minute TTL) and mirrored episodic entries with loss metrics + tags; hygiene sweep caps updated and `/state/memory` gains richer provenance for modular runs.
+    - 2025-10-07 15:30:00 UTC: Added `memory_modular_review` read-model + `/state/memory/modular` endpoint so Hub/Launcher can subscribe to lightweight modular review queues without replaying the full memory feed.
+    - 2025-10-07 18:35:00 UTC: Loss-metric telemetry and modular review counters covered by new tests; short-term and episodic persistence verified for pending/blocked queues.
+- [t-202510060901-msc01] Modular cognitive stack: define agent contracts, typed envelopes, and orchestrator lifecycle (lease scopes, validation hooks) — done (updated: 2025-10-07 18:30:00 UTC)
+    - 2025-10-07 11:10:00 UTC: Landed typed payload schemas for chat/recall/compression/interpretation/validation/tool/orchestrator agents, server validation now emits `payload_kind` and lifecycle summaries with lease scopes + validation gate in `modular.agent.accepted`.
+    - 2025-10-07 18:30:00 UTC: Lifecycle stage/gate + lease-scope enforcement covered by modular tests; validation-block and human-review flows now surface in memory/read-model snapshots.
 - [t-250913213501-ev02] Event docs normalization — done (updated: 2025-10-05 23:02:12 UTC)
     - 2025-10-05 23:02:12 UTC: Swept docs/snippets to dot.case event names and extended docs_check to fail when legacy "Models.*" strings appear outside release notes.
 - [trial-autonomy-governor] Autonomy governor & kill switch — done (updated: 2025-10-02 14:45:00 UTC)

@@ -139,6 +139,33 @@ pub(crate) fn summarize_memory_recent_items(items: &[Value]) -> Value {
                 .cloned()
                 .unwrap_or(Value::Null),
         );
+        if payload_kind == "tool_invocation" {
+            recent_entry.insert(
+                "invocation_id".into(),
+                value_obj
+                    .get("invocation_id")
+                    .cloned()
+                    .unwrap_or(Value::Null),
+            );
+            recent_entry.insert(
+                "tool_id".into(),
+                value_obj.get("tool_id").cloned().unwrap_or(Value::Null),
+            );
+            recent_entry.insert(
+                "requested_by".into(),
+                value_obj
+                    .get("requested_by")
+                    .cloned()
+                    .unwrap_or(Value::Null),
+            );
+            recent_entry.insert(
+                "result_status".into(),
+                value_obj
+                    .get("result_status")
+                    .cloned()
+                    .unwrap_or(Value::Null),
+            );
+        }
         if let Some(summary_excerpt) = item
             .get("extra")
             .and_then(|v| v.get("summary_excerpt"))

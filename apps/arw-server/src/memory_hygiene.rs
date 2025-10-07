@@ -269,6 +269,7 @@ mod tests {
             caps,
             vec![
                 ("ephemeral".to_string(), 256),
+                ("short_term".to_string(), 512),
                 ("episodic".to_string(), 2048),
                 ("episodic_summary".to_string(), 1024),
                 ("semantic".to_string(), 8192),
@@ -281,6 +282,7 @@ mod tests {
             defaults,
             vec![
                 ("ephemeral".to_string(), 256),
+                ("short_term".to_string(), 512),
                 ("episodic".to_string(), 1024),
                 ("episodic_summary".to_string(), 1024),
                 ("semantic".to_string(), 4096),

@@ -17,6 +17,8 @@ const SHORT_TERM_TTL_SECS_DEFAULT: i64 = 900;
 const SHORT_TERM_TTL_ENV: &str = "ARW_MEMORY_SHORT_TTL_SECS";
 const MODULAR_SHORT_TERM_SOURCE: &str = "modular.agent.short_term";
 const MODULAR_EPISODIC_SOURCE: &str = "modular.agent.episodic";
+const MODULAR_TOOL_SHORT_TERM_SOURCE: &str = "modular.tool.short_term";
+const MODULAR_TOOL_EPISODIC_SOURCE: &str = "modular.tool.episodic";
 
 static MODULAR_AGENT_MESSAGE_SCHEMA: Lazy<JSONSchema> = Lazy::new(|| {
     let raw = include_str!("../../../spec/schemas/modular_agent_message.json");
@@ -574,7 +576,7 @@ impl ValidatedLease {
     }
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct SandboxRequirements {
     #[serde(default)]
     pub needs_network: Option<bool>,
@@ -590,6 +592,16 @@ pub enum InvocationStatus {
     Pending,
     Ok,
     Error,
+}
+
+impl InvocationStatus {
+    fn as_str(&self) -> &'static str {
+        match self {
+            InvocationStatus::Pending => "pending",
+            InvocationStatus::Ok => "ok",
+            InvocationStatus::Error => "error",
+        }
+    }
 }
 
 #[allow(dead_code)]
@@ -624,6 +636,7 @@ pub struct ModularToolInvocation {
     pub input_payload: Value,
     pub sandbox_requirements: SandboxRequirements,
     pub evidence_id: String,
+    pub policy_scope: PolicyScope,
     #[serde(default)]
     pub result: Option<InvocationResult>,
     #[serde(default)]
@@ -632,8 +645,105 @@ pub struct ModularToolInvocation {
     pub completed_ms: Option<i64>,
 }
 
+#[derive(Debug)]
 pub struct ValidatedToolInvocation {
     pub invocation: ModularToolInvocation,
+    pub leases: Vec<ValidatedLease>,
+    pub required_capabilities: Vec<CapabilityRequirement>,
+}
+
+#[derive(Debug, Clone)]
+pub struct CapabilityRequirement {
+    any_of: Vec<String>,
+}
+
+impl CapabilityRequirement {
+    fn any_of<I, S>(caps: I) -> Self
+    where
+        I: IntoIterator<Item = S>,
+        S: Into<String>,
+    {
+        let mut any_of = caps.into_iter().map(Into::into).collect::<Vec<_>>();
+        any_of.retain(|cap| !cap.trim().is_empty());
+        any_of.sort();
+        any_of.dedup();
+        Self { any_of }
+    }
+
+    fn is_empty(&self) -> bool {
+        self.any_of.is_empty()
+    }
+
+    fn satisfied_by_caps(&self, caps: &[String]) -> bool {
+        self.any_of
+            .iter()
+            .any(|required| caps.iter().any(|cap| required == cap))
+    }
+
+    fn satisfied_by_leases(&self, leases: &[ValidatedLease]) -> bool {
+        self.any_of.iter().any(|required| {
+            leases
+                .iter()
+                .any(|lease| capability_satisfies(required, &lease.capability))
+        })
+    }
+
+    fn representative(&self) -> String {
+        self.any_of
+            .first()
+            .cloned()
+            .unwrap_or_else(|| "capability".to_string())
+    }
+
+    fn options(&self) -> &[String] {
+        &self.any_of
+    }
+}
+
+fn derive_capability_requirements(req: &SandboxRequirements) -> Vec<CapabilityRequirement> {
+    let mut requirements = Vec::new();
+    if req.needs_network.unwrap_or(false) {
+        let net_caps = vec!["net:https", "net:http", "io:egress"];
+        let req = CapabilityRequirement::any_of(net_caps);
+        if !req.is_empty() {
+            requirements.push(req);
+        }
+    }
+    if !req.filesystem_scopes.is_empty() {
+        let fs_caps = vec!["fs", "fs:read", "fs:write", "fs:patch"];
+        let req = CapabilityRequirement::any_of(fs_caps);
+        if !req.is_empty() {
+            requirements.push(req);
+        }
+    }
+    requirements
+}
+
+fn flatten_capability_requirements(reqs: &[CapabilityRequirement]) -> Vec<String> {
+    let mut seen = HashSet::new();
+    let mut flattened = Vec::new();
+    for req in reqs {
+        for cap in req.options() {
+            if seen.insert(cap) {
+                flattened.push(cap.clone());
+            }
+        }
+    }
+    flattened
+}
+
+fn capability_satisfies(required: &str, lease_capability: &str) -> bool {
+    if required == lease_capability {
+        return true;
+    }
+    match required {
+        "net:http" | "net:https" => {
+            lease_capability == "io:egress" || lease_capability.starts_with("net:")
+        }
+        "io:egress" => lease_capability == "io:egress",
+        "fs" | "fs:read" | "fs:write" | "fs:patch" => lease_capability.starts_with("fs"),
+        _ => false,
+    }
 }
 
 pub async fn validate_agent_message(
@@ -711,6 +821,7 @@ pub async fn validate_agent_message(
 }
 
 pub async fn validate_tool_invocation(
+    state: &AppState,
     value: &Value,
 ) -> Result<ValidatedToolInvocation, ModularValidationError> {
     validate_against_schema(&MODULAR_TOOL_INVOCATION_SCHEMA, value)?;
@@ -738,8 +849,60 @@ pub async fn validate_tool_invocation(
             "input_payload must be an object".into(),
         ));
     }
+    if invocation.policy_scope.leases.is_empty() {
+        return Err(ModularValidationError::Invalid(
+            "policy_scope.leases must include at least one lease".into(),
+        ));
+    }
     ensure_unique(&invocation.sandbox_requirements.filesystem_scopes)?;
-    Ok(ValidatedToolInvocation { invocation })
+    ensure_unique(&invocation.policy_scope.leases)?;
+
+    let leases_index = fetch_active_leases(state).await?;
+    let mut validated_leases = Vec::new();
+    for lease_id in &invocation.policy_scope.leases {
+        let row =
+            leases_index
+                .get(lease_id)
+                .ok_or_else(|| ModularValidationError::MissingLease {
+                    id: lease_id.clone(),
+                })?;
+        let lease = ValidatedLease::from_row(row)?;
+        if lease.ttl_until <= Utc::now() {
+            return Err(ModularValidationError::ExpiredLease {
+                id: lease.id.clone(),
+                expired: lease.ttl_until.to_rfc3339_opts(SecondsFormat::Millis, true),
+            });
+        }
+        validated_leases.push(lease);
+    }
+
+    let declared_caps = invocation
+        .policy_scope
+        .capabilities
+        .clone()
+        .unwrap_or_default();
+    let capability_requirements = derive_capability_requirements(&invocation.sandbox_requirements);
+    for requirement in &capability_requirements {
+        if requirement.is_empty() {
+            continue;
+        }
+        if !requirement.satisfied_by_caps(&declared_caps) {
+            return Err(ModularValidationError::MissingCapability {
+                capability: requirement.representative(),
+            });
+        }
+        if !requirement.satisfied_by_leases(&validated_leases) {
+            return Err(ModularValidationError::MissingCapability {
+                capability: requirement.representative(),
+            });
+        }
+    }
+
+    Ok(ValidatedToolInvocation {
+        invocation,
+        leases: validated_leases,
+        required_capabilities: capability_requirements,
+    })
 }
 
 pub fn agent_message_summary(validated: &ValidatedAgentMessage) -> Value {
@@ -864,26 +1027,81 @@ pub fn agent_message_summary(validated: &ValidatedAgentMessage) -> Value {
 
 pub fn tool_invocation_summary(validated: &ValidatedToolInvocation) -> Value {
     let invocation = &validated.invocation;
+    let sandbox_value =
+        serde_json::to_value(&invocation.sandbox_requirements).unwrap_or_else(|_| json!({}));
+    let required_capabilities = flatten_capability_requirements(&validated.required_capabilities);
+    let declared_capabilities = invocation
+        .policy_scope
+        .capabilities
+        .clone()
+        .unwrap_or_default();
+    let policy_scope_value = json!({
+        "leases": validated
+            .leases
+            .iter()
+            .map(|lease| lease.to_value())
+            .collect::<Vec<_>>(),
+        "capabilities": declared_capabilities,
+        "requires_human_review": invocation.policy_scope.requires_human_review(),
+    });
+    let result_status = invocation
+        .result
+        .as_ref()
+        .map(|r| r.status.as_str().to_string());
+    let result_latency = invocation.result.as_ref().and_then(|r| r.latency_ms);
+    let result_error = invocation
+        .result
+        .as_ref()
+        .and_then(|r| r.error.as_ref())
+        .map(|err| {
+            json!({
+                "kind": err.kind,
+                "message": err.message,
+                "retryable": err.retryable,
+            })
+        });
+    let result_output_keys = invocation
+        .result
+        .as_ref()
+        .and_then(|r| r.output.as_ref())
+        .and_then(|out| out.as_object())
+        .map(|obj| obj.keys().cloned().collect::<Vec<_>>())
+        .unwrap_or_default();
+    let created_ms = invocation.started_ms.or(invocation.completed_ms);
+
     json!({
         "status": "accepted",
+        "payload_kind": "tool_invocation",
         "invocation_id": invocation.invocation_id,
         "requested_by": invocation.requested_by,
         "tool_id": invocation.tool_id,
         "operation_id": invocation.operation_id,
+        "input_payload": invocation.input_payload,
+        "sandbox_requirements": sandbox_value,
+        "policy_scope": policy_scope_value,
+        "required_capabilities": required_capabilities,
         "has_result": invocation.result.is_some(),
-        "sandbox": {
-            "needs_network": invocation.sandbox_requirements.needs_network.unwrap_or(false),
-            "filesystem_scopes": invocation.sandbox_requirements.filesystem_scopes,
-            "environment_keys": invocation
+        "result_status": result_status,
+        "result_latency_ms": result_latency,
+        "result_error": result_error,
+        "result_output_keys": result_output_keys,
+        "lifecycle": {
+            "stage": "accepted",
+            "validation_gate": "skipped"
+        },
+        "payload_summary": {
+            "result_status": result_status.clone(),
+            "needs_network": invocation
                 .sandbox_requirements
-                .environment
-                .as_ref()
-                .map(|env| env.keys().cloned().collect::<Vec<_>>())
-                .unwrap_or_default(),
+                .needs_network
+                .unwrap_or(false),
+            "filesystem_scopes": invocation.sandbox_requirements.filesystem_scopes.len(),
+            "required_capabilities": required_capabilities.clone(),
         },
         "evidence_id": invocation.evidence_id,
         "started_ms": invocation.started_ms,
         "completed_ms": invocation.completed_ms,
+        "created_ms": created_ms,
     })
 }
 
@@ -1113,6 +1331,193 @@ async fn persist_agent_memory_inner(
                 target: "arw::modular",
                 error = %err,
                 "failed to refresh memory_recent snapshot after modular turn"
+            );
+        }
+    }
+
+    Ok(())
+}
+
+pub async fn persist_tool_memory(
+    state: &AppState,
+    validated: &ValidatedToolInvocation,
+    summary: &Value,
+) {
+    if let Err(err) = persist_tool_memory_inner(state, validated, summary).await {
+        warn!(
+            target: "arw::modular",
+            error = %err,
+            tool_id = %validated.invocation.tool_id,
+            invocation_id = %validated.invocation.invocation_id,
+            "failed to persist modular tool invocation memory"
+        );
+    }
+}
+
+async fn persist_tool_memory_inner(
+    state: &AppState,
+    validated: &ValidatedToolInvocation,
+    summary: &Value,
+) -> AnyhowResult<()> {
+    let invocation = &validated.invocation;
+    let sandbox_value =
+        serde_json::to_value(&invocation.sandbox_requirements).unwrap_or_else(|_| json!({}));
+    let policy_scope_value = summary.get("policy_scope").cloned().unwrap_or_else(|| {
+        json!({
+            "leases": validated
+                .leases
+                .iter()
+                .map(|lease| lease.to_value())
+                .collect::<Vec<_>>(),
+            "capabilities": invocation
+                .policy_scope
+                .capabilities
+                .clone()
+                .unwrap_or_default(),
+            "requires_human_review": invocation.policy_scope.requires_human_review(),
+        })
+    });
+    let required_caps = flatten_capability_requirements(&validated.required_capabilities);
+    let result_status = summary
+        .get("result_status")
+        .cloned()
+        .unwrap_or(json!("pending"));
+
+    let mut record_map = Map::new();
+    record_map.insert("invocation_id".into(), json!(invocation.invocation_id));
+    record_map.insert("requested_by".into(), json!(invocation.requested_by));
+    record_map.insert("tool_id".into(), json!(invocation.tool_id));
+    record_map.insert("operation_id".into(), json!(invocation.operation_id));
+    record_map.insert("input_payload".into(), invocation.input_payload.clone());
+    record_map.insert("sandbox_requirements".into(), sandbox_value.clone());
+    record_map.insert("policy_scope".into(), policy_scope_value.clone());
+    record_map.insert("required_capabilities".into(), json!(required_caps.clone()));
+    record_map.insert("summary".into(), summary.clone());
+    record_map.insert("payload_kind".into(), json!("tool_invocation"));
+    record_map.insert("result_status".into(), result_status.clone());
+    if let Some(lifecycle) = summary.get("lifecycle").cloned() {
+        record_map.insert("lifecycle".into(), lifecycle);
+    }
+    if let Some(payload_summary) = summary.get("payload_summary").cloned() {
+        record_map.insert("payload_summary".into(), payload_summary);
+    }
+    if let Some(value) = summary.get("result_latency_ms").cloned() {
+        record_map.insert("result_latency_ms".into(), value);
+    }
+    if let Some(value) = summary.get("result_error").cloned() {
+        record_map.insert("result_error".into(), value);
+    }
+    if let Some(value) = summary.get("result_output_keys").cloned() {
+        record_map.insert("result_output_keys".into(), value);
+    }
+    if let Some(value) = summary.get("started_ms").cloned() {
+        record_map.insert("started_ms".into(), value);
+    }
+    if let Some(value) = summary.get("completed_ms").cloned() {
+        record_map.insert("completed_ms".into(), value);
+    }
+    if let Some(value) = summary.get("created_ms").cloned() {
+        record_map.insert("created_ms".into(), value);
+    }
+    record_map.insert("evidence_id".into(), json!(invocation.evidence_id));
+
+    let base_value = Value::Object(record_map.clone());
+    let summary_excerpt = format!(
+        "{} · {}",
+        invocation.tool_id,
+        result_status.as_str().unwrap_or("pending")
+    );
+
+    let mut extra_map = Map::new();
+    extra_map.insert("payload_kind".into(), json!("tool_invocation"));
+    extra_map.insert("summary_excerpt".into(), json!(summary_excerpt.clone()));
+    if !required_caps.is_empty() {
+        extra_map.insert("required_capabilities".into(), json!(required_caps.clone()));
+    }
+
+    let short_text = format!(
+        "tool {} ({})",
+        invocation.tool_id,
+        result_status.as_str().unwrap_or("pending")
+    );
+    let mut tags = vec!["modular".to_string(), "tool_invocation".to_string()];
+    tags.push(invocation.tool_id.clone());
+    tags.retain(|tag| !tag.is_empty());
+    tags.sort();
+    tags.dedup();
+    let mut keywords = vec![
+        "modular".to_string(),
+        "tool".to_string(),
+        invocation.tool_id.clone(),
+        invocation.operation_id.clone(),
+    ];
+    keywords.sort();
+    keywords.dedup();
+
+    let short_term_input = MemoryUpsertInput {
+        lane: "short_term".to_string(),
+        kind: Some("tool.invocation".to_string()),
+        key: Some(invocation.invocation_id.clone()),
+        value: base_value.clone(),
+        text: Some(short_text.clone()),
+        agent_id: Some(invocation.requested_by.clone()),
+        ttl_s: Some(short_term_ttl_secs()),
+        tags: tags.clone(),
+        keywords: keywords.clone(),
+        durability: Some("volatile".to_string()),
+        privacy: Some("private".to_string()),
+        source: json!({
+            "kind": "modular_tool_invocation",
+            "lane": "short_term",
+            "invocation_id": invocation.invocation_id,
+            "tool_id": invocation.tool_id,
+        }),
+        extra: Value::Object(extra_map.clone()),
+        dedupe: true,
+        ..Default::default()
+    };
+    let short_result =
+        memory_service::upsert_memory(state, short_term_input, MODULAR_TOOL_SHORT_TERM_SOURCE)
+            .await
+            .context("persist short-term tool invocation memory")?;
+
+    let mut episodic_extra = extra_map;
+    episodic_extra.insert("short_term_id".into(), json!(short_result.id));
+    let episodic_input = MemoryUpsertInput {
+        lane: "episodic".to_string(),
+        kind: Some("tool.invocation".to_string()),
+        key: Some(invocation.invocation_id.clone()),
+        value: base_value,
+        text: Some(short_text),
+        agent_id: Some(invocation.requested_by.clone()),
+        tags,
+        keywords,
+        durability: Some("short".to_string()),
+        privacy: Some("private".to_string()),
+        source: json!({
+            "kind": "modular_tool_invocation",
+            "lane": "episodic",
+            "invocation_id": invocation.invocation_id,
+            "tool_id": invocation.tool_id,
+        }),
+        extra: Value::Object(episodic_extra),
+        dedupe: true,
+        ..Default::default()
+    };
+    memory_service::upsert_memory(state, episodic_input, MODULAR_TOOL_EPISODIC_SOURCE)
+        .await
+        .context("persist episodic tool invocation memory")?;
+
+    match state.kernel().list_recent_memory_async(None, 200).await {
+        Ok(items) => {
+            let bundle = read_models::build_memory_recent_bundle(items);
+            read_models::publish_memory_bundle(&state.bus(), &bundle);
+        }
+        Err(err) => {
+            warn!(
+                target: "arw::modular",
+                error = %err,
+                "failed to refresh memory_recent snapshot after modular tool invocation"
             );
         }
     }
@@ -1513,7 +1918,107 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn requires_human_review_sets_pending_stage() {
+        let (state, _tmp) = test_state().await;
+        let lease_id = seed_lease(&state, "context:read").await;
+        let body = json!({
+            "agent_id": "assistant.chat",
+            "turn_id": "turn-789",
+            "intent": "draft_response",
+            "payload": { "text": "needs approver" },
+            "context_refs": [],
+            "evidence_ids": [],
+            "confidence": 0.7,
+            "latency_budget_ms": 400,
+            "policy_scope": {
+                "leases": [lease_id],
+                "capabilities": ["context:read"],
+                "requires_human_review": true
+            }
+        });
+
+        let validated = validate_agent_message(&state, &body)
+            .await
+            .expect("validation succeeds");
+        assert_eq!(validated.lifecycle.stage_str(), "pending_human_review");
+        assert_eq!(validated.lifecycle.validation_gate_str(), "required");
+
+        let summary = agent_message_summary(&validated);
+        assert_eq!(summary["lifecycle"]["stage"], json!("pending_human_review"));
+        assert_eq!(summary["lifecycle"]["validation_gate"], json!("required"));
+    }
+
+    #[tokio::test]
+    async fn validation_agent_with_blocked_status_sets_blocked_stage() {
+        let (state, _tmp) = test_state().await;
+        let lease_id = seed_lease(&state, "validation:run").await;
+        let body = json!({
+            "agent_id": "validation.guard",
+            "turn_id": "turn-901",
+            "intent": "validation_report",
+            "payload": {
+                "status": "blocked",
+                "findings": [],
+                "summary": "guard failed"
+            },
+            "context_refs": [],
+            "evidence_ids": [],
+            "confidence": 0.4,
+            "latency_budget_ms": 250,
+            "policy_scope": {
+                "leases": [lease_id],
+                "capabilities": ["validation:run"],
+                "requires_human_review": false
+            }
+        });
+
+        let validated = validate_agent_message(&state, &body)
+            .await
+            .expect("validation succeeds");
+        assert_eq!(validated.lifecycle.stage_str(), "blocked");
+        assert_eq!(validated.lifecycle.validation_gate_str(), "rejected");
+
+        let summary = agent_message_summary(&validated);
+        assert_eq!(summary["lifecycle"]["stage"], json!("blocked"));
+        assert_eq!(summary["lifecycle"]["validation_gate"], json!("rejected"));
+        assert_eq!(summary["payload_summary"]["status"], json!("blocked"));
+    }
+
+    #[tokio::test]
+    async fn missing_capability_causes_validation_error() {
+        let (state, _tmp) = test_state().await;
+        let lease_id = seed_lease(&state, "tool:execute").await;
+        let body = json!({
+            "agent_id": "assistant.chat",
+            "turn_id": "turn-333",
+            "intent": "draft_response",
+            "payload": { "text": "capability mismatch" },
+            "context_refs": [],
+            "evidence_ids": [],
+            "confidence": 0.5,
+            "latency_budget_ms": 500,
+            "policy_scope": {
+                "leases": [lease_id],
+                "capabilities": ["context:read"],
+                "requires_human_review": false
+            }
+        });
+
+        let err = validate_agent_message(&state, &body)
+            .await
+            .expect_err("validation should fail");
+        match err {
+            ModularValidationError::MissingCapability { capability } => {
+                assert_eq!(capability, "context:read");
+            }
+            other => panic!("unexpected error: {other:?}"),
+        }
+    }
+
+    #[tokio::test]
     async fn validate_tool_invocation_accepts_basic_payload() {
+        let (state, _tmp) = test_state().await;
+        let lease_id = seed_lease(&state, "sandbox:tool").await;
         let body = json!({
             "invocation_id": "invoke-123",
             "requested_by": "agent.recall",
@@ -1527,12 +2032,177 @@ mod tests {
                 "needs_network": false,
                 "filesystem_scopes": []
             },
+            "policy_scope": {
+                "leases": [lease_id],
+                "capabilities": []
+            },
             "evidence_id": "evidence-456"
         });
 
-        let validated = validate_tool_invocation(&body)
+        let validated = validate_tool_invocation(&state, &body)
             .await
             .expect("tool invocation valid");
         assert_eq!(validated.invocation.operation_id, "memory.search@1.0.0");
+    }
+
+    #[tokio::test]
+    async fn validate_tool_invocation_requires_active_lease() {
+        let (state, _tmp) = test_state().await;
+        let body = json!({
+            "invocation_id": "invoke-999",
+            "requested_by": "agent.validation",
+            "tool_id": "http.fetch",
+            "operation_id": "http.fetch@1.0.0",
+            "input_payload": { "url": "https://example.com" },
+            "sandbox_requirements": {
+                "needs_network": true,
+                "filesystem_scopes": []
+            },
+            "policy_scope": {
+                "leases": ["missing-lease"],
+                "capabilities": ["net:http", "io:egress"]
+            },
+            "evidence_id": "evidence-lease"
+        });
+
+        let err = validate_tool_invocation(&state, &body)
+            .await
+            .expect_err("validation should fail");
+        match err {
+            ModularValidationError::MissingLease { id } => {
+                assert_eq!(id, "missing-lease");
+            }
+            other => panic!("unexpected error: {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn validate_tool_invocation_enforces_capability_declaration() {
+        let (state, _tmp) = test_state().await;
+        let lease_id = seed_lease(&state, "net:http").await;
+        let body = json!({
+            "invocation_id": "invoke-124",
+            "requested_by": "agent.validation",
+            "tool_id": "http.fetch",
+            "operation_id": "http.fetch@1.0.0",
+            "input_payload": { "url": "https://example.com" },
+            "sandbox_requirements": {
+                "needs_network": true,
+                "filesystem_scopes": []
+            },
+            "policy_scope": {
+                "leases": [lease_id.clone()],
+                "capabilities": []
+            },
+            "evidence_id": "evidence-457"
+        });
+
+        let err = validate_tool_invocation(&state, &body)
+            .await
+            .expect_err("validation should fail");
+        match err {
+            ModularValidationError::MissingCapability { capability } => {
+                assert_eq!(capability, "io:egress");
+            }
+            other => panic!("unexpected error: {other:?}"),
+        }
+
+        let lease_id = seed_lease(&state, "fs").await;
+        let body = json!({
+            "invocation_id": "invoke-125",
+            "requested_by": "agent.validation",
+            "tool_id": "http.fetch",
+            "operation_id": "http.fetch@1.0.0",
+            "input_payload": { "url": "https://example.com" },
+            "sandbox_requirements": {
+                "needs_network": true,
+                "filesystem_scopes": []
+            },
+            "policy_scope": {
+                "leases": [lease_id],
+                "capabilities": ["net:http", "io:egress"]
+            },
+            "evidence_id": "evidence-458"
+        });
+
+        let err = validate_tool_invocation(&state, &body)
+            .await
+            .expect_err("validation should fail");
+        match err {
+            ModularValidationError::MissingCapability { capability } => {
+                assert_eq!(capability, "io:egress");
+            }
+            other => panic!("unexpected error: {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn validate_tool_invocation_accepts_io_egress_alias() {
+        let (state, _tmp) = test_state().await;
+        let lease_id = seed_lease(&state, "io:egress").await;
+        let body = json!({
+            "invocation_id": "invoke-126",
+            "requested_by": "agent.validation",
+            "tool_id": "http.fetch",
+            "operation_id": "http.fetch@1.0.0",
+            "input_payload": { "url": "https://example.com" },
+            "sandbox_requirements": {
+                "needs_network": true,
+                "filesystem_scopes": []
+            },
+            "policy_scope": {
+                "leases": [lease_id],
+                "capabilities": ["io:egress"]
+            },
+            "evidence_id": "evidence-459"
+        });
+
+        let validated = validate_tool_invocation(&state, &body)
+            .await
+            .expect("validation succeeds with io:egress lease");
+        assert_eq!(validated.invocation.tool_id, "http.fetch");
+    }
+
+    #[tokio::test]
+    async fn tool_invocation_summary_includes_policy_scope() {
+        let (state, _tmp) = test_state().await;
+        let net_lease = seed_lease(&state, "io:egress").await;
+        let fs_lease = seed_lease(&state, "fs").await;
+        let body = json!({
+            "invocation_id": "invoke-200",
+            "requested_by": "agent.tools",
+            "tool_id": "fs.patch",
+            "operation_id": "fs.patch@1.0.0",
+            "input_payload": {
+                "path": "project://notes.md",
+                "contents": "updated"
+            },
+            "sandbox_requirements": {
+                "needs_network": true,
+                "filesystem_scopes": ["project://notes.md"]
+            },
+            "policy_scope": {
+                "leases": [net_lease.clone(), fs_lease.clone()],
+                "capabilities": ["io:egress", "fs"]
+            },
+            "evidence_id": "evidence-summary"
+        });
+
+        let validated = validate_tool_invocation(&state, &body)
+            .await
+            .expect("tool invocation valid");
+        let summary = tool_invocation_summary(&validated);
+        assert_eq!(summary["payload_kind"], json!("tool_invocation"));
+        assert_eq!(summary["tool_id"], json!("fs.patch"));
+        let caps = summary["required_capabilities"]
+            .as_array()
+            .expect("required caps array");
+        assert!(caps.iter().any(|cap| cap == "io:egress"));
+        assert!(caps.iter().any(|cap| cap == "fs" || cap == "fs:read"));
+        let leases = summary["policy_scope"]["leases"]
+            .as_array()
+            .expect("leases array");
+        assert_eq!(leases.len(), 2);
+        assert!(summary["sandbox_requirements"].is_object());
     }
 }

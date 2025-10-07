@@ -893,7 +893,7 @@ mod tests {
             .expect("insert semantic memory");
 
         let app = Router::new()
-            .route("/state/memory/lane/:lane", get(state_memory_lane))
+            .route("/state/memory/lane/{lane}", get(state_memory_lane))
             .with_state(state.clone());
 
         let response = app

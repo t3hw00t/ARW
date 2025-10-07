@@ -39,6 +39,7 @@ Message Contracts
 - Payloads are agent-specific: chat responses require `text` + provenance citations, recall/compression agents declare structured item lists with scoring, validation agents emit `status` + findings, and orchestrator trainers surface goals and bundle hints. Unknown agents fall back to generic payloads but still carry lease envelopes.
 - The server validation path enriches accepted envelopes with `payload_kind` and a `lifecycle` summary (lease scopes + validation gate) so Launcher's provenance lane can show whether human review or validation is still pending.
 - Tool calls include `tool_id`, `operation_id`, `input_payload`, `sandbox_requirements`, `result`, and `evidence_id` for provenance linking (see `spec/schemas/modular_tool_invocation.json`).
+- Tool broker submissions now carry a `policy_scope` (leases + declared capabilities); the kernel enforces sandbox-derived capability requirements before accepting an invocation and records the enriched provenance for Launcher and Evaluation Harness consumers.
 - Schemas live in the shared registry (see [API and Schema](../API_AND_SCHEMA.md)) and are versioned; orchestrator rejects payloads that fail validation.
 - Server actions `modular.agent_message` and `modular.tool_invocation` already perform schema validation plus active-lease checks so specialists can be exercised safely during development.
 - Successful validations emit `modular.agent.accepted` and `modular.tool.accepted` bus events so dashboards and provenance panes can surface outcomes without parsing generic action logs.
