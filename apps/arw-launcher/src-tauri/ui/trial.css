@@ -889,3 +889,32 @@ button.danger:disabled{
   opacity: 0.65;
   cursor: not-allowed;
 }
+}
+
+.trial-guide{
+  display:grid;
+  gap: var(--sp2);
+  margin-bottom: var(--sp4);
+}
+.trial-guide-head{
+  display:flex;
+  flex-direction:column;
+  gap:4px;
+}
+.trial-guide-head h2{
+  margin:0;
+  font-size:1.2rem;
+}
+.trial-guide ol{
+  margin:0;
+  padding-left: var(--sp4);
+  display:grid;
+  gap: var(--sp1);
+}
+.trial-guide li{
+  line-height:1.45;
+}
+.trial-guide-actions{
+  align-items:center;
+  gap: var(--sp2);
+  flex-wrap:wrap;

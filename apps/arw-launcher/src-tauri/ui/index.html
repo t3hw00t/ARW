@@ -16,46 +16,59 @@
     <div class="wrap launcher-wrap">
       <section class="card launcher-hero">
         <div class="hero-head">
-          <div>
-            <h1>Control Room <span class="badge"><span class="dot" id="svc-dot"></span><span id="svc-text">unknown</span></span></h1>
-            <p>Keep your local Agent Hub stack healthy, then jump into the workspaces you need.</p>
+          <div class="hero-heading">
+            <h1>Control Room</h1>
+            <p class="hero-copy">Keep your local Agent Hub stack healthy, then jump into the surfaces you need.</p>
+          </div>
+          <div class="hero-status" role="status" aria-live="polite">
+            <span class="status-chip">
+              <span class="dot" id="svc-dot" aria-hidden="true"></span>
+              <span class="status-body">
+                <strong>Local stack</strong>
+                <small id="svc-text">unknown</small>
+              </span>
+            </span>
+            <p class="status-hint">Start the service to unlock workspaces and live telemetry.</p>
           </div>
         </div>
-        <div class="hero-meta">
-          <div class="pref-field">
-            <label for="port">API port</label>
-            <input id="port" aria-label="Port" type="number" min="1" max="65535" value="8091"/>
-            <p class="field-note">Clients and packs connect to this port. Switch when hosting for teammates.</p>
-            <span id="baseBadge" class="badge base-badge mono" aria-live="polite"></span>
+        <details class="hero-preferences" data-role="advanced">
+          <summary aria-controls="heroAdvanced">Connection &amp; alerts</summary>
+          <div class="hero-meta" id="heroAdvanced">
+            <div class="pref-field">
+              <label for="port">API port</label>
+              <input id="port" aria-label="Port" type="number" min="1" max="65535" value="8091"/>
+              <p class="field-note">Clients and packs connect to this port. Switch when hosting for teammates.</p>
+              <span id="baseBadge" class="badge base-badge mono" aria-live="polite"></span>
+            </div>
+            <div class="pref-field pref-toggle">
+              <label>
+                <input id="autostart" type="checkbox"/>
+                <span>
+                  <strong>Autostart service</strong>
+                  <small>Start <code>arw-server</code> as soon as the launcher opens.</small>
+                </span>
+              </label>
+            </div>
+            <div class="pref-field pref-toggle">
+              <label>
+                <input id="notif" type="checkbox" checked/>
+                <span>
+                  <strong>Notify on status change</strong>
+                  <small>Show a desktop notification when health flips.</small>
+                </span>
+              </label>
+            </div>
+            <div class="pref-field pref-toggle">
+              <label>
+                <input id="loginstart" type="checkbox"/>
+                <span>
+                  <strong>Launch at login</strong>
+                  <small>Keep the control room ready after you sign in.</small>
+                </span>
+              </label>
+            </div>
           </div>
-          <div class="pref-field pref-toggle">
-            <label>
-              <input id="autostart" type="checkbox"/>
-              <span>
-                <strong>Autostart service</strong>
-                <small>Start <code>arw-server</code> as soon as the launcher opens.</small>
-              </span>
-            </label>
-          </div>
-          <div class="pref-field pref-toggle">
-            <label>
-              <input id="notif" type="checkbox" checked/>
-              <span>
-                <strong>Notify on status change</strong>
-                <small>Show a desktop notification when health flips.</small>
-              </span>
-            </label>
-          </div>
-          <div class="pref-field pref-toggle">
-            <label>
-              <input id="loginstart" type="checkbox"/>
-              <span>
-                <strong>Launch at login</strong>
-                <small>Keep the control room ready after you sign in.</small>
-              </span>
-            </label>
-          </div>
-        </div>
+        </details>
         <div class="hero-footer">
           <div class="hero-actions">
             <button id="btn-save" type="button" class="ghost" title="Save preferences" disabled>Save preferences</button>

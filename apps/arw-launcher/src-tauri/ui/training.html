@@ -34,6 +34,22 @@
         </div>
       </header>
       <p class="training-intro">Tune presets, monitor cascade telemetry, and act on job-level suggestions without leaving your project.</p>
+      <section class="card training-guide" aria-labelledby="trainingGuideTitle">
+        <div class="training-guide-head">
+          <h2 id="trainingGuideTitle">Quick start</h2>
+          <p class="dim">Run a safe dry-run before promoting changes to live cascades.</p>
+        </div>
+        <ol>
+          <li><strong>Select a preset.</strong> Start with <em>balanced</em> or <em>performance</em> to inherit guardrails.</li>
+          <li><strong>Adjust sliders with intent.</strong> Keep changes within ±0.1 unless you have new telemetry to justify more.</li>
+          <li><strong>Run an A/B dry run.</strong> Use “Run A/B” to schedule a comparison before applying suggestions.</li>
+        </ol>
+        <div class="training-guide-actions row">
+          <button id="trainingGuideDocs" class="ghost" type="button">Open training guide</button>
+          <button id="trainingGuideDismiss" class="ghost" type="button">Hide tips</button>
+          <span class="dim">Shift+A applies a suggestion • Shift+D dry-runs the focused job</span>
+        </div>
+      </section>
       <div class="layout">
         <main class="training-grid" role="region" aria-label="Training panels">
           <section class="card" role="region" aria-labelledby="controlsTitle">

@@ -1565,6 +1565,11 @@ document.addEventListener('DOMContentLoaded', async () => {
   baseMeta = updateBaseMeta();
   telemetryBase = baseMeta.base || getCurrentBase();
   const base = telemetryBase;
+  const prefs = (await ARW.getPrefs('launcher')) || {};
+  const guideCard = document.querySelector('.training-guide');
+  if (guideCard && prefs.hideTrainingGuide) {
+    guideCard.setAttribute('hidden', 'true');
+  }
   trainingSidecar = ARW.sidecar.mount('sidecar', ['timeline','approvals','context','provenance','policy','metrics','models'], { base });
   const applyBaseChange = async () => {
     baseMeta = updateBaseMeta();
@@ -1589,6 +1594,34 @@ document.addEventListener('DOMContentLoaded', async () => {
   ARW.sse.indicator('sseStat', { prefix: 'SSE' });
   const sseFilters = ['state.', 'models.', 'logic.unit.', 'config.patch.', 'context.cascade.'];
   ARW.sse.connect(base, { replay: 10, prefix: sseFilters });
+  const guideBtn = document.getElementById('trainingGuideDocs');
+  if (guideBtn) {
+    guideBtn.addEventListener('click', async () => {
+      try {
+        await ARW.invoke('open_url', { url: 'https://t3hw00t.github.io/ARW/guide/training_park/' });
+      } catch (err) {
+        console.error('open training guide failed', err);
+        ARW.toast('Unable to open guide');
+      }
+    });
+  }
+  const dismissGuideBtn = document.getElementById('trainingGuideDismiss');
+  if (dismissGuideBtn) {
+    dismissGuideBtn.addEventListener('click', async () => {
+      const card = document.querySelector('.training-guide');
+      if (card) card.setAttribute('hidden', 'true');
+      try {
+        const next = (await ARW.getPrefs('launcher')) || {};
+        if (!next.hideTrainingGuide) {
+          next.hideTrainingGuide = true;
+          await ARW.setPrefs('launcher', next);
+        }
+      } catch (err) {
+        console.error('store training guide pref failed', err);
+      }
+      ARW.toast('Training quick start hidden (Command Palette → Show Training Quick Start to restore).');
+    });
+  }
 
   const logicUnitEvents = ([kind, env]) => {
     const match = kind.startsWith('logic.unit.') || kind.startsWith('config.patch.');

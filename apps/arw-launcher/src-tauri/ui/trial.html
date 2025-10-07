@@ -56,6 +56,22 @@
       </header>
 
       <main id="main" tabindex="-1">
+        <section class="card trial-guide" aria-labelledby="trialGuideTitle">
+          <div class="trial-guide-head">
+            <h2 id="trialGuideTitle">Stabilize the gates</h2>
+            <p class="dim">Work left to right before you flip autonomy beyond guided mode.</p>
+          </div>
+          <ol>
+            <li><strong>Run preflight.</strong> Capture logs and confirm Gate G0 indicators are green.</li>
+            <li><strong>Review autonomy.</strong> Pause or resume the lane once systems are calm.</li>
+            <li><strong>Clear approvals and quarantine.</strong> Resolve blockers before inviting collaborators.</li>
+          </ol>
+          <div class="trial-guide-actions row">
+            <button id="trialGuideDocs" class="ghost" type="button">Open trial runbook</button>
+            <button id="trialGuideDismiss" class="ghost" type="button">Hide checklist</button>
+            <span class="dim">Tip: use the status tray to spot the next gate needing attention.</span>
+          </div>
+        </section>
         <section class="card hero" aria-label="Preflight and focus">
           <div class="hero-main">
             <button id="btn-preflight" class="primary">Run preflight</button>

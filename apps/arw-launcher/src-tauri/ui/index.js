@@ -10,6 +10,25 @@ const prefBaseline = { port: '', autostart: false, notif: true, loginstart: fals
 let lastHealthCheck = null;
 let healthMetaTimer = null;
 
+function shouldOpenAdvancedPrefs() {
+  const portEl = document.getElementById('port');
+  const auto = document.getElementById('autostart');
+  const notif = document.getElementById('notif');
+  const login = document.getElementById('loginstart');
+  const portVal = portEl ? String(portEl.value ?? '') : '';
+  const portChanged = portVal && portVal !== '8091';
+  const autostartOn = !!(auto && auto.checked);
+  const notificationsOff = !!(notif && !notif.checked);
+  const loginOn = !!(login && login.checked);
+  return portChanged || autostartOn || notificationsOff || loginOn;
+}
+
+function syncAdvancedPrefsDisclosure() {
+  const advanced = document.querySelector('.hero-preferences');
+  if (!advanced) return;
+  advanced.open = shouldOpenAdvancedPrefs();
+}
+
 function applyPrefsDirty(state) {
   prefsDirty = !!state;
   const btn = document.getElementById('btn-save');
@@ -51,6 +70,7 @@ function calculatePrefsDirty() {
 
 function refreshPrefsDirty() {
   applyPrefsDirty(calculatePrefsDirty());
+  syncAdvancedPrefsDisclosure();
 }
 
 function bindPrefWatchers() {
@@ -121,6 +141,7 @@ async function loadPrefs() {
     document.getElementById('loginstart').checked = !!enabled
   } catch {}
   snapshotPrefsBaseline();
+  syncAdvancedPrefsDisclosure();
   baseMeta = updateBaseMeta();
   connectSse({ replay: 5, resume: false });
   miniDownloads();
@@ -144,6 +165,7 @@ async function health() {
   const stopBtn = document.getElementById('btn-stop');
   const statusLabel = document.getElementById('health');
   const metaLabel = document.getElementById('healthMeta');
+  const heroHint = document.querySelector('.status-hint');
   try {
     const ok = await invoke('check_service_health', { port: effectivePort() });
     if (dot) dot.className = 'dot ' + (ok ? 'ok' : 'bad');
@@ -153,6 +175,11 @@ async function health() {
     if (statusLabel) {
       statusLabel.textContent = ok ? 'Service online' : 'Service offline';
       statusLabel.className = ok ? 'ok' : 'bad';
+    }
+    if (heroHint) {
+      heroHint.textContent = ok
+        ? 'Stack is ready. Open a workspace to dive in.'
+        : 'Start the service to unlock workspaces and live telemetry.';
     }
     lastHealthCheck = Date.now();
     if (metaLabel) updateHealthMetaLabel();
@@ -164,6 +191,9 @@ async function health() {
     if (statusLabel) {
       statusLabel.textContent = 'Status unavailable';
       statusLabel.className = 'bad';
+    }
+    if (heroHint) {
+      heroHint.textContent = 'Health check failed. Verify the port and try again.';
     }
     lastHealthCheck = Date.now();
     if (metaLabel) updateHealthMetaLabel();

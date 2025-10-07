@@ -2232,6 +2232,46 @@ document.addEventListener('DOMContentLoaded', async () => {
   const elProjPrefsBadge = document.getElementById('projPrefsBadge');
   const elFileFilter = document.getElementById('fileFilter');
   const elTreeMeta = document.getElementById('treeMeta');
+  const hubLayout = document.getElementById('hubLayout');
+  const hubOnboarding = document.getElementById('hubOnboarding');
+  const btnOnboardCreate = document.getElementById('btnOnboardCreate');
+  const btnOnboardDocs = document.getElementById('btnOnboardDocs');
+  let isFirstRun = false;
+  function toggleFirstRun(state){
+    isFirstRun = !!state;
+    if (hubLayout) hubLayout.hidden = isFirstRun;
+    if (hubOnboarding) hubOnboarding.hidden = !isFirstRun;
+    if (isFirstRun) {
+      if (elCurProj) elCurProj.textContent = '–';
+      if (elNotes) elNotes.value = '';
+      clearNotesMeta();
+      clearTreeMeta();
+      clearContextPanel('Create or link a project to hydrate context.');
+      clearCascadePanel('Create or link a project to view cascade summaries.');
+    }
+  }
+  if (btnOnboardCreate) {
+    btnOnboardCreate.addEventListener('click', ()=>{
+      toggleFirstRun(false);
+      if (hubLayout) hubLayout.hidden = false;
+      const filesPanel = document.getElementById('files');
+      if (filesPanel && typeof filesPanel.scrollIntoView === 'function') {
+        filesPanel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+      if (elProjName) {
+        requestAnimationFrame(()=> elProjName.focus());
+      }
+    });
+  }
+  if (btnOnboardDocs) {
+    btnOnboardDocs.addEventListener('click', async ()=>{
+      try{
+        await ARW.invoke('open_url', { url: 'https://t3hw00t.github.io/ARW/guide/workflow_views/' });
+      }catch(e){
+        console.error(e);
+      }
+    });
+  }
   let currentPath = '';
   const pathStack = [];
   function setStat(txt){ if (elProjStat) { elProjStat.textContent = txt||''; if (txt) setTimeout(()=>{ if (elProjStat.textContent===txt) elProjStat.textContent=''; }, 1500); } }
@@ -2259,6 +2299,15 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
       }
     }
+    if (!names.length) {
+      toggleFirstRun(true);
+      if (elProjSel) {
+        elProjSel.innerHTML = '';
+      }
+      curProj = null;
+      return;
+    }
+    toggleFirstRun(false);
     let targetProj = curProj;
     if (!targetProj || !projectsIndex.has(targetProj)) {
       targetProj = names[0] || null;

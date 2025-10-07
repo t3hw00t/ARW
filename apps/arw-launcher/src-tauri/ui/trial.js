@@ -104,6 +104,15 @@
       const port = ARW.getPortFromInput('port');
       STATE.base = (baseMeta && baseMeta.base) || ARW.base(port);
     } catch {}
+    try{
+      const prefs = (await ARW.getPrefs('launcher')) || {};
+      const guideCard = document.querySelector('.trial-guide');
+      if (guideCard && prefs.hideTrialGuide) {
+        guideCard.setAttribute('hidden', 'true');
+      }
+    }catch(e){
+      console.error('load trial guide prefs failed', e);
+    }
     loadStoredPreflight();
     bindEvents();
     renderQuarantineLane();
@@ -134,6 +143,25 @@
 
     const runbookBtn = document.getElementById('btn-open-runbook');
     if (runbookBtn) runbookBtn.addEventListener('click', openRunbook);
+    const guideBtn = document.getElementById('trialGuideDocs');
+    if (guideBtn) guideBtn.addEventListener('click', openRunbook);
+    const dismissGuideBtn = document.getElementById('trialGuideDismiss');
+    if (dismissGuideBtn) {
+      dismissGuideBtn.addEventListener('click', async () => {
+        const card = document.querySelector('.trial-guide');
+        if (card) card.setAttribute('hidden', 'true');
+        try {
+          const prefs = (await ARW.getPrefs('launcher')) || {};
+          if (!prefs.hideTrialGuide) {
+            prefs.hideTrialGuide = true;
+            await ARW.setPrefs('launcher', prefs);
+          }
+        } catch (err) {
+          console.error('store trial guide pref failed', err);
+        }
+        ARW.toast('Trial checklist hidden (Command Palette → Show Trial Checklist to restore).');
+      });
+    }
 
     const connectionsBtn = document.getElementById('btn-open-connections');
     if (connectionsBtn) connectionsBtn.addEventListener('click', openConnectionsDrawer);

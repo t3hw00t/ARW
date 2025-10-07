@@ -49,6 +49,38 @@
   max-width:72ch;
   color: var(--color-muted);
 }
+.training-guide{
+  display:grid;
+  gap: var(--sp2);
+  margin-bottom: var(--sp4);
+}
+.training-guide-head{
+  display:flex;
+  flex-direction:column;
+  gap:4px;
+}
+.training-guide-head h2{
+  margin:0;
+  font-size:1.15rem;
+}
+.training-guide ol{
+  margin:0;
+  padding-left: var(--sp4);
+  display:grid;
+  gap: var(--sp1);
+}
+.training-guide li{
+  line-height:1.45;
+}
+.training-guide li em{
+  font-style:normal;
+  font-weight:600;
+}
+.training-guide-actions{
+  align-items:center;
+  gap: var(--sp2);
+  flex-wrap:wrap;
+}
 .training-grid{
   display:grid;
   gap: var(--sp4);

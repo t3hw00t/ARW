@@ -1060,6 +1060,16 @@ window.ARW = {
       if (!node) return { dispose(){} };
       node.classList.add('arw-sidecar');
       node.innerHTML = '';
+      const laneHints = Object.assign({
+        timeline: 'Live events appear here once the project streams updates.',
+        context: 'Assembled context items populate after the next cascade.',
+        provenance: 'Policy and memory provenance will list the latest capsules.',
+        metrics: 'Key health metrics load after the first telemetry fetch.',
+        models: 'Managed runtime activity shows here when models change.',
+        approvals: 'Approvals queue items arrive when reviewers are assigned.',
+        policy: 'Policy capsules, leases, and guardrail notes appear on activity.',
+        activity: 'Recent actions, runs, and snapshots populate automatically.'
+      }, opts?.laneHints || {});
       const sections = [];
       for (const name of lanes) {
         const sec = document.createElement('section');
@@ -1072,12 +1082,25 @@ window.ARW = {
         summary.hidden = true;
         const body = document.createElement('div');
         body.className = 'lane-body';
+        const placeholder = document.createElement('div');
+        placeholder.className = 'lane-placeholder';
+        placeholder.textContent = laneHints[name] || 'Live data will appear here once the project connects.';
+        body.dataset.placeholder = 'true';
+        body.appendChild(placeholder);
         sec.append(h, summary, body);
         node.appendChild(sec);
         sections.push([name, body, summary]);
       }
       const bodyFor = (lane) => sections.find(([n]) => n === lane)?.[1] || null;
       const summaryFor = (lane) => sections.find(([n]) => n === lane)?.[2] || null;
+      const clearLanePlaceholder = (laneOrEl) => {
+        const el = typeof laneOrEl === 'string' ? bodyFor(laneOrEl) : laneOrEl;
+        if (!el) return;
+        if (el.dataset.placeholder) {
+          el.innerHTML = '';
+          delete el.dataset.placeholder;
+        }
+      };
       const relativeTime = (value) => {
         if (value === null || value === undefined) return '';
         const dt = value instanceof Date
@@ -1107,6 +1130,7 @@ window.ARW = {
       const renderLaneMessage = (lane, text, tone = 'info') => {
         const el = bodyFor(lane);
         if (!el) return;
+        clearLanePlaceholder(el);
         el.dataset.emptyMsg = 'true';
         const span = document.createElement('div');
         span.className = 'context-msg';
@@ -1736,6 +1760,7 @@ window.ARW = {
         const renderApprovals = (restoreFilterFocus = false) => {
           const el = bodyFor('approvals');
           if (!el) return;
+          clearLanePlaceholder(el);
           el.innerHTML = '';
           if (approvalsState.error) {
             const msg = document.createElement('div');
@@ -2305,11 +2330,11 @@ window.ARW = {
       // Micro-batched updaters to reduce DOM thrash
       let tlQ = []; let tlTimer = null;
       const rTimeline = (env) => { if (!env) return; tlQ.push(env); if (tlTimer) return; tlTimer = setTimeout(()=>{
-        try{ const el = sections.find(([n])=>n==='timeline')?.[1]; if (!el) return; const frag=document.createDocumentFragment(); const take = tlQ.splice(0, tlQ.length); for (const e of take){ const d=document.createElement('div'); d.className='evt mono'; d.textContent = `${e.kind}: ${safeJson(e.env?.payload)}`.slice(0, 800); frag.prepend ? frag.prepend(d) : frag.appendChild(d); } el.prepend(frag); while (el.childElementCount>100) el.removeChild(el.lastChild); }finally{ tlTimer=null; }
+        try{ const el = sections.find(([n])=>n==='timeline')?.[1]; if (!el) return; if (el.dataset.placeholder){ el.innerHTML=''; delete el.dataset.placeholder; } const frag=document.createDocumentFragment(); const take = tlQ.splice(0, tlQ.length); for (const e of take){ const d=document.createElement('div'); d.className='evt mono'; d.textContent = `${e.kind}: ${safeJson(e.env?.payload)}`.slice(0, 800); frag.prepend ? frag.prepend(d) : frag.appendChild(d); } el.prepend(frag); while (el.childElementCount>100) el.removeChild(el.lastChild); }finally{ tlTimer=null; }
       }, 50); };
       let mdQ = []; let mdTimer = null;
       const rModels = (env) => { if (!(env && (env.kind.startsWith('models.') || env.kind==='state.read.model.patch'))) return; mdQ.push(env); if (mdTimer) return; mdTimer = setTimeout(()=>{
-        try{ const el = sections.find(([n])=>n==='models')?.[1]; if (!el) return; const frag=document.createDocumentFragment(); const take = mdQ.splice(0, mdQ.length); for (const e of take){ const d=document.createElement('div'); d.className='evt mono'; d.textContent = `${e.kind}: ${safeJson(e.env?.payload)}`.slice(0, 800); frag.prepend ? frag.prepend(d) : frag.appendChild(d); } el.prepend(frag); while (el.childElementCount>60) el.removeChild(el.lastChild); }finally{ mdTimer=null; }
+        try{ const el = sections.find(([n])=>n==='models')?.[1]; if (!el) return; if (el.dataset.placeholder){ el.innerHTML=''; delete el.dataset.placeholder; } const frag=document.createDocumentFragment(); const take = mdQ.splice(0, mdQ.length); for (const e of take){ const d=document.createElement('div'); d.className='evt mono'; d.textContent = `${e.kind}: ${safeJson(e.env?.payload)}`.slice(0, 800); frag.prepend ? frag.prepend(d) : frag.appendChild(d); } el.prepend(frag); while (el.childElementCount>60) el.removeChild(el.lastChild); }finally{ mdTimer=null; }
       }, 50); };
       let provQ = []; let provTimer = null;
       const rProvenance = ({ kind, env }) => {
@@ -2322,6 +2347,10 @@ window.ARW = {
             if (!el) {
               provQ = [];
               return;
+            }
+            if (el.dataset.placeholder) {
+              el.innerHTML = '';
+              delete el.dataset.placeholder;
             }
             if (el.dataset.emptyMsg) {
               el.innerHTML = '';
@@ -3225,6 +3254,46 @@ window.ARW.sse.subscribe('state.read.model.patch', ({ env }) => {
             const next = prompt('Editor command (use {path} placeholder)', cur || 'code --goto {path}');
             if (next != null){ const p = (await ARW.getPrefs('launcher'))||{}; p.editorCmd = String(next).trim(); await ARW.setPrefs('launcher', p); ARW.toast('Editor set'); }
           }catch(e){ console.error(e); ARW.toast('Failed to save'); }
+        }
+      },
+      { id:'training:show-guide', label:'Show Training Quick Start', hint:'help', run: async ()=>{
+          const card = document.querySelector('.training-guide');
+          if (!card){
+            ARW.toast('Open Training Park to show the quick start.');
+            return;
+          }
+          card.removeAttribute('hidden');
+          try{ card.scrollIntoView({ behavior:'smooth', block:'start' }); }catch{}
+          try{
+            const prefs = (await ARW.getPrefs('launcher')) || {};
+            if (prefs.hideTrainingGuide){
+              delete prefs.hideTrainingGuide;
+              await ARW.setPrefs('launcher', prefs);
+            }
+          }catch(err){
+            console.error('restore training guide failed', err);
+          }
+          ARW.toast('Training quick start shown.');
+        }
+      },
+      { id:'trial:show-guide', label:'Show Trial Checklist', hint:'help', run: async ()=>{
+          const card = document.querySelector('.trial-guide');
+          if (!card){
+            ARW.toast('Open Trial Control to show the checklist.');
+            return;
+          }
+          card.removeAttribute('hidden');
+          try{ card.scrollIntoView({ behavior:'smooth', block:'start' }); }catch{}
+          try{
+            const prefs = (await ARW.getPrefs('launcher')) || {};
+            if (prefs.hideTrialGuide){
+              delete prefs.hideTrialGuide;
+              await ARW.setPrefs('launcher', prefs);
+            }
+          }catch(err){
+            console.error('restore trial guide failed', err);
+          }
+          ARW.toast('Trial checklist shown.');
         }
       },
       { id:'theme:auto', label:'Theme: Auto (OS)', hint:'theme', run:()=> ARW.theme.set('auto') },

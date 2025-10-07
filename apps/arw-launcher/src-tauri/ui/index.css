@@ -18,22 +18,103 @@ body.has-global-bar .launcher-wrap{
   display:grid;
   gap: var(--sp4);
 }
+.hero-head{
+  display:flex;
+  flex-wrap:wrap;
+  align-items:flex-start;
+  justify-content:space-between;
+  gap: var(--sp4);
+}
 .hero-head h1{
   margin:0;
-  display:flex;
-  align-items:center;
-  gap: var(--sp2);
-  flex-wrap:wrap;
 }
 .hero-head p{
   margin:0;
   color: var(--color-muted);
   max-width:60ch;
 }
+.hero-heading{
+  display:flex;
+  flex-direction:column;
+  gap: calc(var(--sp2) / 2);
+}
+.hero-status{
+  display:flex;
+  flex-direction:column;
+  gap: var(--sp2);
+  max-width:32ch;
+}
+.status-chip{
+  display:inline-flex;
+  align-items:center;
+  gap: var(--sp2);
+  padding: var(--sp1) var(--sp2);
+  border-radius: 999px;
+  border:1px solid var(--color-line);
+  background: linear-gradient(180deg,#ffffff,#f6f7f9);
+  box-shadow: 0 1px 0 rgba(255,255,255,0.92) inset;
+}
+.status-chip .dot{
+  width:12px;
+  height:12px;
+  border-radius:999px;
+  box-shadow: inset 0 0 0 1px rgba(0,0,0,0.08);
+}
+.status-chip .dot:not(.ok):not(.bad):not(.warn){
+  background: var(--color-muted);
+}
+.status-chip .status-body{
+  display:flex;
+  flex-direction:column;
+  gap:2px;
+}
+.status-chip small{
+  color:var(--color-muted);
+}
+.status-hint{
+  margin:0;
+  font-size:0.85rem;
+  color: var(--color-muted);
+}
 .hero-meta{
   display:grid;
   gap: var(--sp3);
   grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+}
+.hero-preferences{
+  border:1px solid var(--color-line);
+  border-radius:10px;
+  padding: var(--sp2) var(--sp3);
+  background: linear-gradient(180deg,#fdfdfd,#f7f7f9);
+  margin:0;
+}
+.hero-preferences[open]{
+  box-shadow: var(--shadow-1);
+}
+.hero-preferences > summary{
+  cursor:pointer;
+  font-weight:600;
+  display:flex;
+  align-items:center;
+  gap: var(--sp1);
+  list-style:none;
+  color: var(--color-ink);
+}
+.hero-preferences > summary::-webkit-details-marker{
+  display:none;
+}
+.hero-preferences > summary::after{
+  content:'▾';
+  font-size:0.75rem;
+  margin-left:auto;
+  transition:transform .18s ease;
+  color: var(--color-muted);
+}
+.hero-preferences[open] > summary::after{
+  transform:rotate(180deg);
+}
+.hero-preferences[open] > summary{
+  color: var(--color-brand-copper);
 }
 .pref-field{
   display:flex;

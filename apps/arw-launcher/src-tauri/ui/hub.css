@@ -37,13 +37,44 @@
   display:flex;
   flex-wrap:wrap;
   gap: var(--sp2);
-  align-items:center;
+  align-items:flex-start;
 }
-.hub-toolbar .toolbar-secondary .cluster{
+.hub-toolbar .toolbar-group{
+  border:1px solid var(--color-line);
+  border-radius:10px;
+  padding:6px 10px;
+  background: linear-gradient(180deg,#ffffff,#f8fafc);
+}
+.hub-toolbar .toolbar-group[open]{
+  box-shadow: var(--shadow-1);
+}
+.hub-toolbar .toolbar-group > summary{
+  cursor:pointer;
+  font-weight:600;
+  display:flex;
+  align-items:center;
+  gap: var(--sp1);
+  list-style:none;
+}
+.hub-toolbar .toolbar-group > summary::-webkit-details-marker{
+  display:none;
+}
+.hub-toolbar .toolbar-group > summary::after{
+  content:'▾';
+  font-size:0.75rem;
+  margin-left:auto;
+  transition:transform .18s ease;
+  color: var(--color-muted);
+}
+.hub-toolbar .toolbar-group[open] > summary::after{
+  transform:rotate(180deg);
+}
+.hub-toolbar .toolbar-group .toolbar-actions{
   display:flex;
   flex-wrap:wrap;
   gap: var(--sp2);
   align-items:center;
+  margin-top: var(--sp2);
 }
 .hub-toolbar .toolbar-status{
   display:flex;
@@ -58,6 +89,50 @@
   margin: 4px 0 var(--sp2);
   font-size:0.9rem;
   color: var(--color-muted);
+}
+.hub-empty{
+  display:grid;
+  gap: var(--sp3);
+  border-style:dashed;
+  background: linear-gradient(180deg,#ffffff,#f9fafc);
+}
+.hub-empty[hidden]{
+  display:none !important;
+}
+.hub-empty-head{
+  display:flex;
+  flex-direction:column;
+  gap: calc(var(--sp2) / 2);
+}
+.hub-empty-head p{
+  margin:0;
+  color: var(--color-muted);
+  max-width:60ch;
+}
+.hub-empty-steps{
+  margin:0;
+  padding-left: var(--sp4);
+  display:flex;
+  flex-direction:column;
+  gap: var(--sp2);
+}
+.hub-empty-steps li{
+  line-height:1.4;
+}
+.hub-empty-steps span{
+  display:block;
+  color: var(--color-muted);
+  font-size:0.9rem;
+}
+.hub-empty-actions{
+  align-items:center;
+  gap: var(--sp2);
+}
+.metric-help{
+  margin:0 0 var(--sp2);
+  font-size:0.85rem;
+  color: var(--color-muted);
+  max-width:60ch;
 }
 .hub-intro{
   margin-top: calc(-1 * var(--sp2));

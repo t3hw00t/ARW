@@ -26,17 +26,23 @@
           </div>
         </div>
         <div class="toolbar-secondary">
-          <div class="cluster">
-            <button id="btn-focus" class="ghost">Toggle Focus</button>
-            <button id="btn-save" class="ghost">Save Layout</button>
-            <button id="btn-apply" class="ghost">Apply Layout</button>
-            <label class="key"><input type="checkbox" id="tplPerProj"> per-project</label>
-          </div>
-          <div class="cluster">
-            <button id="btn-gallery" class="ghost">Gallery</button>
-            <button id="btn-shortcuts" class="ghost" title="Show keyboard shortcuts">Shortcuts</button>
-            <button id="btn-help" class="ghost" title="Open keyboard shortcuts docs">Help</button>
-          </div>
+          <details class="toolbar-group" data-role="layout">
+            <summary>Customize layout</summary>
+            <div class="toolbar-actions">
+              <button id="btn-focus" class="ghost">Toggle Focus</button>
+              <button id="btn-save" class="ghost">Save Layout</button>
+              <button id="btn-apply" class="ghost">Apply Layout</button>
+              <label class="key"><input type="checkbox" id="tplPerProj"> per-project</label>
+            </div>
+          </details>
+          <details class="toolbar-group" data-role="shortcuts">
+            <summary>Quick tools</summary>
+            <div class="toolbar-actions">
+              <button id="btn-gallery" class="ghost">Gallery</button>
+              <button id="btn-shortcuts" class="ghost" title="Show keyboard shortcuts">Shortcuts</button>
+              <button id="btn-help" class="ghost" title="Open keyboard shortcuts docs">Help</button>
+            </div>
+          </details>
         </div>
         <div class="toolbar-status">
           <span id="galleryBadge" class="badge" title="Recent screenshots"><span class="dot"></span> 0</span>
@@ -46,7 +52,31 @@
         </div>
       </header>
       <p class="section-lead hub-intro">Pick a project to hydrate every panel—files, context, runs, and diagnostics stay in sync.</p>
-      <div class="layout">
+      <section class="card hub-empty" id="hubOnboarding" hidden aria-live="polite">
+        <div class="hub-empty-head">
+          <h2>Bring a project online</h2>
+          <p>Connect a repo or create a new project to sync files, notes, context, and runs across every workspace.</p>
+        </div>
+        <ol class="hub-empty-steps">
+          <li>
+            <strong>Create or link a project.</strong>
+            <span>Use the Files panel to add a project or point to an existing workspace.</span>
+          </li>
+          <li>
+            <strong>Fetch the first snapshot.</strong>
+            <span>Context, runs, and diagnostics hydrate automatically once the project is active.</span>
+          </li>
+          <li>
+            <strong>Invite teammates when ready.</strong>
+            <span>Federate trusted machines from the Connections manager to share load.</span>
+          </li>
+        </ol>
+        <div class="hub-empty-actions row">
+          <button id="btnOnboardCreate" class="primary" type="button">Create project</button>
+          <button id="btnOnboardDocs" class="ghost" type="button">Project Hub guide</button>
+        </div>
+      </section>
+      <div class="layout" id="hubLayout">
         <main class="grid cols-2" id="main">
           <section class="card" id="files" role="region" aria-labelledby="filesTitle">
             <h3 id="filesTitle">Files</h3>
@@ -131,6 +161,7 @@
           <section class="card" id="context" role="region" aria-labelledby="contextTitle">
             <h3 id="contextTitle">What's in Context Now</h3>
             <p class="section-lead">Understand the assembled prompt context, cascade summaries, and recall risk.</p>
+            <p class="metric-help">Run a cascade or orchestrated episode to refresh these signals. Coverage nudges help spot gaps before recall risk climbs.</p>
             <div class="row">
               <button id="btnContextRefresh" class="ghost">Refresh</button>
               <label class="key"><input id="contextIncludeSources" type="checkbox"> include seeds</label>
@@ -142,6 +173,7 @@
             <div id="contextMetrics" class="context-metrics">
               <div class="metric-block" aria-live="polite">
                 <h4>Coverage</h4>
+                <p class="metric-help">Tracks how many required slots still need grounding before the next run.</p>
                 <p class="metric-inline"><span class="metric-label">Status:</span><span id="contextCoverageStatus" class="metric-pill">Awaiting data</span></p>
                 <p class="metric-inline"><span class="metric-label">Needs more:</span><span id="contextCoverageRatio">—</span></p>
                 <div id="contextCoverageRatioBar" class="bar ratio-bar empty metric-meter" role="meter" aria-valuemin="0" aria-valuemax="1" aria-valuenow="0" aria-valuetext="No data"><i></i></div>
@@ -149,6 +181,7 @@
               </div>
               <div class="metric-block" aria-live="polite">
                 <h4>Recall Risk</h4>
+                <p class="metric-help">Blend of recency and diversity drift. Investigate any spikes before approving memory writes.</p>
                 <p class="metric-inline"><span class="metric-label">Avg score:</span><span id="contextRecallAvg">—</span></p>
                 <div id="contextRecallAvgBar" class="bar ratio-bar empty metric-meter" role="meter" aria-valuemin="0" aria-valuemax="1" aria-valuenow="0" aria-valuetext="No data"><i></i></div>
                 <p class="metric-inline"><span class="metric-label">At risk:</span><span id="contextRecallAtRisk">—</span></p>
