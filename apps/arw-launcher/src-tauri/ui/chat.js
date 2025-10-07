@@ -29,6 +29,45 @@ document.addEventListener('DOMContentLoaded', async () => {
   ARW.sse.indicator('sseStat', { prefix: 'SSE' });
   ARW.sse.connect(base, { replay: 10 });
 
+  const captureMenu = document.getElementById('captureMenu');
+  const captureToggle = document.getElementById('captureToggle');
+  const captureMenuList = document.getElementById('captureMenuList');
+  if (captureMenu && captureToggle && captureMenuList) {
+    const closeCaptureMenu = () => {
+      captureMenuList.hidden = true;
+      captureToggle.setAttribute('aria-expanded', 'false');
+    };
+    const openCaptureMenu = () => {
+      captureMenuList.hidden = false;
+      captureToggle.setAttribute('aria-expanded', 'true');
+      const firstItem = captureMenuList.querySelector('button');
+      if (firstItem) firstItem.focus();
+    };
+    captureToggle.addEventListener('click', (evt) => {
+      evt.preventDefault();
+      const expanded = captureToggle.getAttribute('aria-expanded') === 'true';
+      if (expanded) closeCaptureMenu();
+      else openCaptureMenu();
+    });
+    captureMenuList.addEventListener('click', (evt) => {
+      const target = evt.target;
+      if (target && target.classList && target.classList.contains('menu-item')) {
+        closeCaptureMenu();
+      }
+    });
+    document.addEventListener('click', (evt) => {
+      if (captureMenu.contains(evt.target)) return;
+      closeCaptureMenu();
+    });
+    document.addEventListener('keydown', (evt) => {
+      if (evt.key === 'Escape' && captureToggle.getAttribute('aria-expanded') === 'true') {
+        evt.stopPropagation();
+        closeCaptureMenu();
+        captureToggle.focus();
+      }
+    });
+  }
+
   // Compare helpers
   function highlightJSON(s){
     const esc = (t)=> t.replace(/&/g,'&amp;').replace(/</g,'&lt;');

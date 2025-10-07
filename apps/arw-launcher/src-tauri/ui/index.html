@@ -14,40 +14,69 @@
   <body>
     <a href="#btn-open" class="skip-link">Skip to controls</a>
     <div class="wrap">
-      <div class="card">
-        <h2>Agent Hub (ARW) Launcher <span class="badge"><span class="dot" id="svc-dot"></span><span id="svc-text">unknown</span></span></h2>
-        <p>Use the tray to start/stop the service or open the Debug UI.</p>
-        <div class="row">
-          <label>Port: <input id="port" aria-label="Port" type="number" min="1" max="65535" value="8091"/></label>
-          <span id="baseBadge" class="badge base-badge mono" aria-live="polite"></span>
-          <label><input id="autostart" type="checkbox"/> Autostart service</label>
-          <label><input id="notif" type="checkbox" checked/> Notify on status change</label>
-          <label><input id="loginstart" type="checkbox"/> Start launcher at login</label>
-          <span id="statusBadges" class="badges" style="margin-left:auto"></span>
+      <div class="card launcher-card">
+        <header class="launcher-head">
+          <h2>Agent Hub (ARW) Launcher <span class="badge"><span class="dot" id="svc-dot"></span><span id="svc-text">unknown</span></span></h2>
+          <p>Use the tray to start/stop the service or open the Debug UI.</p>
+          <div class="launcher-meta">
+            <label>Port: <input id="port" aria-label="Port" type="number" min="1" max="65535" value="8091"/></label>
+            <span id="baseBadge" class="badge base-badge mono" aria-live="polite"></span>
+            <label><input id="autostart" type="checkbox"/> Autostart service</label>
+            <label><input id="notif" type="checkbox" checked/> Notify on status change</label>
+            <label><input id="loginstart" type="checkbox"/> Start launcher at login</label>
+            <button id="btn-save" type="button" class="ghost" title="Save preferences" disabled>Save</button>
+            <span id="prefsStatus" class="dim" data-state="clean" role="status" aria-live="polite">All changes saved</span>
+            <span id="statusBadges" class="badges"></span>
+          </div>
+        </header>
+        <div class="control-grid">
+          <section class="control-group">
+            <h3>Service control</h3>
+            <div class="button-row emphasis">
+              <button id="btn-start" class="primary" title="Start local service">Start Service</button>
+              <button id="btn-stop" class="ghost" title="Stop local service">Stop Service</button>
+              <button id="btn-health" class="ghost" title="Check service health">Check Health</button>
+            </div>
+            <div class="button-row">
+              <button id="btn-open" class="primary" title="Open Debug UI in browser">Open Debug UI</button>
+              <button id="btn-open-window" class="ghost" title="Open Debug UI in window">Open in Window</button>
+            </div>
+            <div class="health-wrap" role="status" aria-live="polite">
+              <span id="health" class="dim"></span>
+              <span id="healthMeta" class="dim">Waiting for first check…</span>
+            </div>
+          </section>
+          <section class="control-group">
+            <h3>Workspaces</h3>
+            <div class="button-row">
+              <button id="btn-hub" class="primary" title="Open Project Hub">Project Hub</button>
+              <button id="btn-chat" class="ghost" title="Open Chat">Chat</button>
+              <button id="btn-training" class="ghost" title="Open Training Park">Training Park</button>
+              <button id="btn-trial" class="ghost" title="Open Trial Control Center">Trial Control</button>
+            </div>
+          </section>
+          <section class="control-group">
+            <h3>Diagnostics</h3>
+            <div class="button-row">
+              <button id="btn-events" class="ghost" title="Open Events window">Events</button>
+              <button id="btn-logs" class="ghost" title="Open Logs window">Logs</button>
+              <button id="btn-models" class="ghost" title="Open Models manager">Models</button>
+              <button id="btn-connections" class="ghost" title="Open Connections manager">Connections</button>
+            </div>
+          </section>
+          <section class="control-group">
+            <h3>Support</h3>
+            <div class="button-row">
+              <button id="btn-updates" class="ghost" title="Open releases page">Check Updates</button>
+              <button id="btn-shortcuts" class="ghost" title="Show keyboard shortcuts">Shortcuts</button>
+              <button id="btn-help" class="ghost" title="Open keyboard shortcuts docs">Help</button>
+            </div>
+          </section>
+          <section class="control-group">
+            <h3>Active downloads</h3>
+            <div id="dlmini" class="badge-row" role="status" aria-live="polite"></div>
+          </section>
         </div>
-        <div class="row">
-          <button id="btn-save" class="ghost" title="Save preferences">Save</button>
-          <button id="btn-start" class="primary" title="Start local service">Start Service</button>
-          <button id="btn-stop" class="ghost" title="Stop local service">Stop Service</button>
-          <button id="btn-open" class="primary" title="Open Debug UI in browser">Open Debug UI</button>
-          <button id="btn-open-window" class="ghost" title="Open Debug UI in window">Open in Window</button>
-          <button id="btn-events" class="ghost" title="Open Events window">Events Window</button>
-          <button id="btn-logs" class="ghost" title="Open Logs window">Logs</button>
-          <button id="btn-models" class="ghost" title="Open Models manager">Models</button>
-          <button id="btn-connections" class="ghost" title="Open Connections manager">Connections</button>
-          <button id="btn-hub" class="ghost" title="Open Project Hub">Project Hub</button>
-          <button id="btn-chat" class="ghost" title="Open Chat">Chat</button>
-          <button id="btn-training" class="ghost" title="Open Training Park">Training Park</button>
-          <button id="btn-trial" class="ghost" title="Open Trial Control Center">Trial Control</button>
-          <button id="btn-health" class="ghost" title="Check service health">Check Health</button>
-          <span id="health" role="status" aria-live="polite"></span>
-        </div>
-        <div class="row">
-          <button id="btn-updates" class="ghost" title="Open releases page">Check Updates</button>
-          <button id="btn-shortcuts" class="ghost" title="Show keyboard shortcuts">Shortcuts</button>
-          <button id="btn-help" class="ghost" title="Open keyboard shortcuts docs">Help</button>
-        </div>
-        <div class="row" id="dlmini"></div>
       </div>
     </div>
   </body>

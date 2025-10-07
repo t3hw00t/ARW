@@ -5,6 +5,86 @@ let baseMeta = null;
 const effectivePort = () => getPort() || (baseMeta && baseMeta.port) || 8091;
 
 let miniDownloadsSub = null;
+let prefsDirty = false;
+const prefBaseline = { port: '', autostart: false, notif: true, loginstart: false };
+let lastHealthCheck = null;
+let healthMetaTimer = null;
+
+function applyPrefsDirty(state) {
+  prefsDirty = !!state;
+  const btn = document.getElementById('btn-save');
+  if (btn) btn.disabled = !prefsDirty;
+  const status = document.getElementById('prefsStatus');
+  if (status) {
+    status.textContent = prefsDirty ? 'Unsaved changes' : 'All changes saved';
+    status.dataset.state = prefsDirty ? 'dirty' : 'clean';
+  }
+}
+
+function snapshotPrefsBaseline() {
+  const portEl = document.getElementById('port');
+  prefBaseline.port = portEl ? String(portEl.value ?? '') : '';
+  const getChecked = (id) => {
+    const el = document.getElementById(id);
+    return !!(el && el.checked);
+  };
+  prefBaseline.autostart = getChecked('autostart');
+  prefBaseline.notif = getChecked('notif');
+  prefBaseline.loginstart = getChecked('loginstart');
+  applyPrefsDirty(false);
+}
+
+function calculatePrefsDirty() {
+  const portEl = document.getElementById('port');
+  const portValue = portEl ? String(portEl.value ?? '') : '';
+  if (portValue !== prefBaseline.port) return true;
+  const isDirty = (id, key) => {
+    const el = document.getElementById(id);
+    const checked = !!(el && el.checked);
+    return checked !== !!prefBaseline[key];
+  };
+  if (isDirty('autostart', 'autostart')) return true;
+  if (isDirty('notif', 'notif')) return true;
+  if (isDirty('loginstart', 'loginstart')) return true;
+  return false;
+}
+
+function refreshPrefsDirty() {
+  applyPrefsDirty(calculatePrefsDirty());
+}
+
+function bindPrefWatchers() {
+  const portEl = document.getElementById('port');
+  if (portEl) portEl.addEventListener('input', refreshPrefsDirty);
+  ['autostart', 'notif', 'loginstart'].forEach((id) => {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener('change', refreshPrefsDirty);
+  });
+}
+
+function updateHealthMetaLabel() {
+  const metaLabel = document.getElementById('healthMeta');
+  if (!metaLabel) return;
+  if (!lastHealthCheck) {
+    metaLabel.textContent = 'Waiting for first check…';
+    return;
+  }
+  const diff = Date.now() - lastHealthCheck;
+  if (diff < 30_000) {
+    metaLabel.textContent = 'Checked just now';
+    return;
+  }
+  const minutes = Math.floor(diff / 60_000);
+  if (minutes < 60) {
+    metaLabel.textContent = `Checked ${minutes} minute${minutes === 1 ? '' : 's'} ago`;
+    return;
+  }
+  const hours = Math.floor(minutes / 60);
+  const minutesRemainder = minutes % 60;
+  const parts = [`${hours} hour${hours === 1 ? '' : 's'}`];
+  if (minutesRemainder) parts.push(`${minutesRemainder} minute${minutesRemainder === 1 ? '' : 's'}`);
+  metaLabel.textContent = `Checked ${parts.join(' ')} ago`;
+}
 
 function connectSse({ replay = 0, resume = true } = {}) {
   baseMeta = updateBaseMeta();
@@ -40,6 +120,7 @@ async function loadPrefs() {
     const enabled = await invoke('launcher_autostart_status');
     document.getElementById('loginstart').checked = !!enabled
   } catch {}
+  snapshotPrefsBaseline();
   baseMeta = updateBaseMeta();
   connectSse({ replay: 5, resume: false });
   miniDownloads();
@@ -61,17 +142,31 @@ async function health() {
   const txt = document.getElementById('svc-text');
   const startBtn = document.getElementById('btn-start');
   const stopBtn = document.getElementById('btn-stop');
+  const statusLabel = document.getElementById('health');
+  const metaLabel = document.getElementById('healthMeta');
   try {
     const ok = await invoke('check_service_health', { port: effectivePort() });
     if (dot) dot.className = 'dot ' + (ok ? 'ok' : 'bad');
     if (txt) txt.innerText = ok ? 'online' : 'offline';
     if (startBtn) startBtn.disabled = ok;
     if (stopBtn) stopBtn.disabled = !ok;
+    if (statusLabel) {
+      statusLabel.textContent = ok ? 'Service online' : 'Service offline';
+      statusLabel.className = ok ? 'ok' : 'bad';
+    }
+    lastHealthCheck = Date.now();
+    if (metaLabel) updateHealthMetaLabel();
   } catch {
     if (dot) dot.className = 'dot';
     if (txt) txt.innerText = 'unknown';
     if (startBtn) startBtn.disabled = false;
     if (stopBtn) stopBtn.disabled = true;
+    if (statusLabel) {
+      statusLabel.textContent = 'Status unavailable';
+      statusLabel.className = 'bad';
+    }
+    lastHealthCheck = Date.now();
+    if (metaLabel) updateHealthMetaLabel();
   }
 }
 
@@ -149,6 +244,7 @@ function miniDownloads() {
 
 document.addEventListener('DOMContentLoaded', () => {
   initStatusBadges();
+  bindPrefWatchers();
   // Buttons
   document.getElementById('btn-open').addEventListener('click', async () => {
     try { await invoke('open_debug_ui', { port: effectivePort() }); } catch (e) { console.error(e); }
@@ -187,13 +283,34 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('btn-stop').addEventListener('click', async () => {
     try { await invoke('stop_service', { port: effectivePort() }); ARW.toast('Service stop requested'); } catch (e) { console.error(e); }
   });
-  document.getElementById('btn-save').addEventListener('click', async () => {
-    try {
-      await savePrefs(); ARW.toast('Preferences saved');
-      const loginstart = document.getElementById('loginstart').checked;
-      await invoke('set_launcher_autostart', { enabled: loginstart });
-    } catch (e) { console.error(e); }
-  });
+  const saveBtn = document.getElementById('btn-save');
+  if (saveBtn) {
+    saveBtn.addEventListener('click', async () => {
+      if (saveBtn.disabled) return;
+      try {
+        const previousLoginBaseline = prefBaseline.loginstart;
+        await savePrefs();
+        snapshotPrefsBaseline();
+        const loginstart = document.getElementById('loginstart').checked;
+        try {
+          await invoke('set_launcher_autostart', { enabled: loginstart });
+        } catch (err) {
+          console.error(err);
+          ARW.toast('Unable to update launch at login');
+          const loginToggle = document.getElementById('loginstart');
+          if (loginToggle) loginToggle.checked = !!previousLoginBaseline;
+          prefBaseline.loginstart = previousLoginBaseline;
+          refreshPrefsDirty();
+          return;
+        }
+        ARW.toast('Preferences saved');
+      } catch (e) {
+        console.error(e);
+        ARW.toast('Save failed');
+        refreshPrefsDirty();
+      }
+    });
+  }
   document.getElementById('btn-updates').addEventListener('click', async () => {
     try {
       await invoke('open_url', { url: 'https://github.com/t3hw00t/ARW/releases' });
@@ -201,36 +318,44 @@ document.addEventListener('DOMContentLoaded', () => {
   });
   const portInput = document.getElementById('port');
   if (portInput) {
-    portInput.addEventListener('change', async () => {
+    portInput.addEventListener('change', () => {
       baseMeta = updateBaseMeta();
-      try {
-        const prefs = (await ARW.getPrefs('launcher')) || {};
-        prefs.port = effectivePort();
-        await ARW.setPrefs('launcher', prefs);
-      } catch {}
       connectSse({ replay: 5, resume: false });
       miniDownloads();
+      health();
+      refreshPrefsDirty();
     });
   }
   window.addEventListener('arw:base-override-changed', () => {
     connectSse({ replay: 5, resume: false });
     miniDownloads();
     health();
+    refreshPrefsDirty();
   });
   const healthBtn = document.getElementById('btn-health');
   if (healthBtn) healthBtn.addEventListener('click', async () => {
     const el = document.getElementById('health');
-    if (el) { el.textContent = '…'; el.className = ''; }
+    if (el) { el.textContent = 'Checking…'; el.className = 'dim'; }
     try {
-      const ok = await invoke('check_service_health', { port: effectivePort() });
-      if (el) { el.textContent = ok ? 'Service UP' : 'Service DOWN'; el.className = ok ? 'ok' : 'bad'; }
+      await health();
     } catch (e) {
-      if (el) { el.textContent = 'Error'; el.className = 'bad'; }
       console.error(e);
     }
   });
   // Service health polling
-  health(); setInterval(health, 4000);
+  health();
+  setInterval(health, 4000);
+  if (healthMetaTimer) clearInterval(healthMetaTimer);
+  healthMetaTimer = setInterval(updateHealthMetaLabel, 30_000);
   // Prefs and mini SSE downloads
-  loadPrefs();
+  loadPrefs().then(() => {
+    updateHealthMetaLabel();
+  });
+});
+
+window.addEventListener('beforeunload', () => {
+  if (healthMetaTimer) {
+    clearInterval(healthMetaTimer);
+    healthMetaTimer = null;
+  }
 });

@@ -29,10 +29,15 @@
             <div id="messages" role="log" aria-live="polite" aria-relevant="additions text" style="min-height:180px"></div>
             <div class="row" style="margin-top:8px">
               <input id="msg" aria-label="Message" style="flex:1" placeholder="Say hello" />
-              <button id="send" class="primary">Send</button>
-              <button id="capture" class="ghost" title="Capture screen">Capture</button>
-              <button id="captureWin" class="ghost" title="Capture this window">Capture window</button>
-              <button id="captureRegion" class="ghost" title="Capture region (drag)">Capture region</button>
+              <button id="send" type="button" class="primary">Send</button>
+              <div class="action-menu" id="captureMenu">
+                <button id="captureToggle" type="button" class="ghost menu-toggle" aria-haspopup="true" aria-expanded="false">Capture</button>
+                <div id="captureMenuList" class="menu-list" role="menu" hidden>
+                  <button id="capture" type="button" class="ghost menu-item" role="menuitem" title="Capture entire screen">Full screen</button>
+                  <button id="captureWin" type="button" class="ghost menu-item" role="menuitem" title="Capture this window">This window</button>
+                  <button id="captureRegion" type="button" class="ghost menu-item" role="menuitem" title="Capture a dragged region">Select region</button>
+                </div>
+              </div>
               <label class="key"><input type="checkbox" id="autoOcr"> Auto OCR</label>
             </div>
           </section>

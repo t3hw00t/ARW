@@ -1,4 +1,10 @@
-html, body { height: 100%; margin: 0; font-family: system-ui, sans-serif; }
+html, body {
+  height: 100%;
+  margin: 0;
+  font-family: system-ui, sans-serif;
+  background: var(--app-background);
+  background-color: var(--surface-muted);
+}
 .wrap { padding: 16px; display: grid; gap: 16px; }
 .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
 table { width: 100%; border-collapse: collapse; }
