@@ -1,0 +1,46 @@
+{
+  "version": 1,
+  "channel": "preview",
+  "notes": "Placeholder catalog for llava.cpp/Moondream managed vision bundles. Populate artifact coordinates once the signing pipeline lands.",
+  "bundles": [
+    {
+      "id": "llava.cpp-preview/linux-x86_64-gpu",
+      "name": "llava.cpp Preview (Linux x86_64 GPU)",
+      "description": "Vision-language llava.cpp build packaged for the managed runtime supervisor with consent-first capture flows.",
+      "adapter": "process",
+      "modalities": ["vision"],
+      "accelerator": "gpu_cuda",
+      "profiles": ["describe", "balanced"],
+      "platforms": [
+        {
+          "os": "linux",
+          "arch": "x86_64",
+          "min_version": "kernel 5.15",
+          "notes": "Requires glibc ≥ 2.35 and CUDA ≥ 12.2."
+        }
+      ],
+      "artifacts": [
+        {
+          "kind": "archive",
+          "format": "tar.zst",
+          "notes": "Release tooling will inject URL + checksum once binaries are staged."
+        }
+      ],
+      "notes": [
+        "Ships llava.cpp with vision inference support; generation backends (Stable Diffusion, etc.) will use the same catalog once licensed.",
+        "Supervisor exposes captions/transcript hooks so Launcher can surface accessible describe results."
+      ],
+      "license": "AGPL-3.0-or-later",
+      "support": {
+        "min_glibc": "2.35",
+        "driver_notes": "Preview build targets NVIDIA GPUs; ROCm/Metal variants will be added in follow-up revisions."
+      },
+      "metadata": {
+        "process": {
+          "command": "llava.cpp",
+          "health_probe": "/health"
+        }
+      }
+    }
+  ]
+}

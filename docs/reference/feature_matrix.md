@@ -747,9 +747,11 @@ Policy-aligned lifecycle manager for local text, audio, and vision runtimes with
   - `process` adapter ships in `arw-server` and loads manifests from `configs/runtime/runtimes.toml` (optional during preview).
   - `auto_start = true` in a manifest kicks off restores automatically after boot; removing it (or setting `false`) stops the runtime on the next reload.
   - Manifests follow `spec/schemas/runtime_manifest.json` (`version` field + adapter overrides).
+  - Vision adapters (llava/Moondream) are prioritized ahead of audio so consent overlays, restart budgets, and Memory Fabric provenance land before microphone tooling.
 - References:
   - [architecture/multimodal_runtime_plan.md](../architecture/multimodal_runtime_plan.md)
   - [architecture/managed_llamacpp_runtime.md](../architecture/managed_llamacpp_runtime.md)
+  - [guide/vision_runtime.md](../guide/vision_runtime.md)
   - spec/schemas/runtime_manifest.json
 
 ## Logic Units Library

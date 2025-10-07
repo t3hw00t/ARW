@@ -147,6 +147,10 @@ runtime-smoke-gpu:
 runtime-smoke-gpu-sim:
   LLAMA_GPU_SIMULATE=1 MODE=gpu bash scripts/runtime_llama_smoke.sh
 
+runtime-smoke-vision:
+  # Requires ARW_SERVER_BIN to point at a pre-built arw-server binary.
+  bash scripts/runtime_vision_smoke.sh
+
 context-ci:
   bash scripts/context_ci.sh
 
@@ -228,9 +232,9 @@ proxy-caddy-stop host='localhost' config_name='':
   exec bash scripts/reverse_proxy.sh "${args[@]}"
   ' _ {{host}} {{config_name}}
 
-proxy-nginx-generate host backend='' cert key config_name='':
+proxy-nginx-generate host cert key backend='' config_name='':
   bash -ceu '
-  host="$1"; backend="$2"; cert="$3"; key="$4"; cfg="$5";
+  host="$1"; cert="$2"; key="$3"; backend="$4"; cfg="$5";
   [[ -n "$host" ]] || { echo "host is required" >&2; exit 1; };
   [[ -n "$cert" ]] || { echo "cert is required" >&2; exit 1; };
   [[ -n "$key" ]] || { echo "key is required" >&2; exit 1; };
@@ -238,7 +242,7 @@ proxy-nginx-generate host backend='' cert key config_name='':
   if [[ -n "$backend" ]]; then args+=(--backend "$backend"); fi
   if [[ -n "$cfg" ]]; then args+=(--config-name "$cfg"); fi
   exec bash scripts/reverse_proxy.sh "${args[@]}"
-  ' _ {{host}} {{backend}} {{cert}} {{key}} {{config_name}}
+  ' _ {{host}} {{cert}} {{key}} {{backend}} {{config_name}}
 
 proxy-nginx-start host='localhost' config_name='':
   bash -ceu '

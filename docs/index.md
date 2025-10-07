@@ -74,6 +74,7 @@ Tip: ARW treats context as a just‑in‑time working set assembled from layered
 ## Choose Your Path
 - [Run Locally](guide/quickstart.md)
 - [Operate & Secure](guide/security_hardening.md) · [Deployment](guide/deployment.md) · [Admin Endpoints](guide/admin_endpoints.md)
+- [Vision Runtime Preview](guide/vision_runtime.md)
 - [Contribute](developer/index.md)
 
 Related:

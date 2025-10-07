@@ -83,6 +83,7 @@ nav:
       - Projects UI: guide/projects_ui.md
       - Recipes: guide/recipes.md
       - Runtime Matrix: guide/runtime_matrix.md
+      - Vision Runtime Preview: guide/vision_runtime.md
       - Security Posture: guide/security_posture.md
       - Threat Model: guide/threat_model.md
       - UI Architecture: guide/ui_architecture.md

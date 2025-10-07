@@ -2,9 +2,11 @@
 # Copy to configs/runtime/runtimes.toml and adjust paths for your environment.
 # Toggle auto_start to control whether ARW launches (true) or keeps the runtime stopped (false).
 # Adapter-specific overrides (env vars, health probes) live under the `process` table.
+# Refer to the preview bundle catalogs (configs/runtime/bundles.*.json) for adapter hints.
 
 version = 1
 
+# --- Text (llama.cpp) example -------------------------------------------------
 [[runtimes]]
 id = "llama.local"
 adapter = "process"
@@ -33,3 +35,36 @@ method = "GET"
 expect_status = 200
 expect_body = "ready"
 timeout_ms = 3000
+
+# --- Vision (llava.cpp) example -----------------------------------------------
+[[runtimes]]
+id = "vision.llava.preview"
+adapter = "process"
+name = "LLaVA Vision Describe"
+profile = "describe"
+modalities = ["vision"]
+accelerator = "gpu_cuda"
+auto_start = false
+preset = "balanced"
+tags = { "bundle" = "llava.cpp-preview/linux-x86_64-gpu" }
+
+[runtimes.process]
+command = "/opt/llava/bin/llava-server"
+args = [
+  "--model", "/opt/llava/models/llava-v1.6-vicuna-q4.gguf",
+  "--port", "12801",
+  "--vision-device", "cuda:0",
+  "--vision-warm-cache", "/var/lib/arw/runtime/llava/cache",
+  "--listen", "127.0.0.1"
+]
+workdir = "/opt/llava"
+
+[runtimes.process.env]
+LLAVA_LOG_LEVEL = "info"
+
+[runtimes.process.health]
+url = "http://127.0.0.1:12801/healthz"
+method = "GET"
+expect_status = 200
+timeout_ms = 3000
+expect_body = "ready"

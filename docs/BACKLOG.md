@@ -43,11 +43,12 @@ Managed Runtime Supervisor (Priority One)
 - [Kernel] Supervisor Core Phase 2: finalize `RuntimeRegistry` adapter trait, lease-gated start/stop APIs, structured logs, and policy simulator coverage — plan (structured log stream with heartbeat dedupe, plus `state_label`/`severity_label` exposed to clients, landed).
 - [Pack: Collaboration][Kernel] Launcher runtime panels: expose profiles, consent cues, and start/stop controls with keyboard parity; publish operator runbook excerpt in Launcher help cards — plan.
 - [Kernel] Supply-chain readiness for bundled runtimes: sign binary manifests, document update cadence, and ship rollback checklist — plan.
-- [Kernel] Bundle catalog & signatures: publish `configs/runtime/bundles.llama.json` + `bundles.audio.json` with signed hashes; pipeline to resolve bundle channel metadata — in_progress (preview catalogs + `/state/runtime/bundles` read-model shipping; signing workflow pending) (Expert Alignment Plan §1A).
+- [Kernel] Bundle catalog & signatures: publish `configs/runtime/bundles.llama.json`, `bundles.vision.json`, and `bundles.audio.json` with signed hashes; pipeline to resolve bundle channel metadata — in_progress (preview catalogs + `/state/runtime/bundles` read-model shipping; signing workflow pending) (Expert Alignment Plan §1A).
 - [Kernel] Runtime bundle CLI: ship `arw-cli runtime bundles list/install/import` to manage downloads, offline imports, and rollbacks — in_progress (list/inspect shipped; install/import workflows pending) (Expert Alignment Plan §1A/§1D).
 - [Kernel] Supervisor bundle resolver: integrate bundle registry with `RuntimeSupervisor`, enforce preset mapping + accelerator detection, and expose bundle info via `/state/runtimes` — in_progress (bundle inventory exposed; supervisor auto-pinning still pending) (Expert Alignment Plan §1B).
 - [Pack: Collaboration][Kernel] Launcher runtime wizard: guided install + consent flow with keyboard parity, hardware probe recommendations, and health toasts — plan (Expert Alignment Plan §1C).
 - [Kernel] Accessibility smoke harness for managed runtimes: automate NVDA/VoiceOver + high-contrast checks across Launcher runtime tabs — plan (Expert Alignment Plan §1C/§4).
+- [Kernel] Vision runtime smoke: wire `just runtime-smoke-vision` into CI to exercise supervisor restore loops for llava-style adapters — done (stub manifest + describe probe + restart cycle now part of the smoke helper).
 
 Never‑Out‑Of‑Context (High Priority)
 - [Pack: Research] [t-250912143009-0003] Retrieval: add MMR-style selector across vector/graph mounts and world beliefs — done (world belief snapshots now flow through the mmrd selector alongside hybrid memory lanes)

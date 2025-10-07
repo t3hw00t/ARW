@@ -1,33 +1,10 @@
-# Rust
-/target
-**/*.rs.bk
-# Keep Cargo.lock committed for workspace reproducibility
-
-# Node (future)
-/apps/**/node_modules
-/apps/**/dist
-
-# OS junk
-.DS_Store
-Thumbs.db
-
-# Local backups and logs
-/.backups/
-**/*.bak_*
-*.log
-
-# Dist artifacts
-/dist/
-/# MkDocs build output
-/site/
-
-# Python virtual envs
-/.venv/
-%LOCALAPPDATA%/
-apps/arw-launcher/src-tauri/gen/
+# Local smoke/test state
+.smoke/
+.install.log
+.venv/
 apps/arw-launcher/src-tauri/bin/
-__pycache__/
-*.pyc
-apps/arw-server/state/
-apps/arw-server/%LOCALAPPDATA%/
+apps/arw-launcher/src-tauri/gen/
 configs/runtime/runtimes.toml
+scripts/__pycache__/
+site/
+target/

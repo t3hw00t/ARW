@@ -1594,12 +1594,16 @@
         },
         {
           "path": "docs/architecture/managed_llamacpp_runtime.md"
+        },
+        {
+          "path": "docs/guide/vision_runtime.md"
         }
       ],
       "notes": [
         "Promotes the runtime matrix scaffolding to a full supervisor with adapters for llama.cpp, ONNX Runtime, and vLLM.",
         "Process adapter + manifest loader available today (see configs/runtime/runtimes.toml, with auto_start flags to boot or stop runtimes on reload); additional adapters land behind preview gates.",
-        "Bundles hardware-aware profiles and accessibility-first controls into Launcher and server surfaces."
+        "Bundles hardware-aware profiles and accessibility-first controls into Launcher and server surfaces.",
+        "Vision bundles (configs/runtime/bundles.vision.json) ship ahead of audio so consent overlays, provenance hooks, and restart budgets land before microphone tooling."
       ]
     },
     {

@@ -45,9 +45,9 @@ This plan translates the external architectural review into a concrete execution
 | A. Bundle Catalog | Signed llama.cpp & Whisper.cpp binaries per platform; manifest schema updates (`spec/schemas/runtime_manifest.json`) to declare bundle channel & hash. | - `configs/runtime/bundles.llama.json` + `bundles.audio.json` checked in with signature metadata.<br>- CLI helper `arw-cli runtime bundles list/install`. |
 | B. Supervisor integration | Extend `RuntimeSupervisor` with bundle resolver, preset mapping, and accelerator detection. | - `arw-server` auto-registers bundles found in `state/runtime/bundles`.<br>- `/state/runtimes` exposes bundle + health summary.<br>- Restart budgets enforced per bundle. |
 | C. Launcher UX | Voice & runtime tabs with consent prompts, install/activate flows, health toasts. | - Guided setup wizard with hardware probe + recommended profile.<br>- Keyboard-only path validated (NVDA/VoiceOver smoke). |
-| D. Accessibility + Docs | Consent overlays, troubleshooting, scripts for offline installs. | - `docs/guide/runtime_manager.md` and `guide/voice_vision.md` published.<br>- Offline bundle import workflow (`arw-cli runtime bundles import`). |
+| D. Accessibility + Docs | Consent overlays, troubleshooting, scripts for offline installs. | - `docs/guide/runtime_manager.md` and `guide/vision_runtime.md` published.<br>- Offline bundle import workflow (`arw-cli runtime bundles import`). |
 
-_Status (2025-10-06): placeholder catalogs (`bundles.llama.json`, `bundles.audio.json`) ship in preview with URLs left for the signing pipeline; `/state/runtime/bundles`, `arw-cli runtime bundles list --remote --json`, and `arw-cli runtime bundles reload` expose and refresh the inventory for early testing._
+_Status (2025-10-06): placeholder catalogs (`bundles.llama.json`, `bundles.vision.json`, `bundles.audio.json`) ship in preview with URLs left for the signing pipeline; `/state/runtime/bundles`, `arw-cli runtime bundles list --remote --json`, and `arw-cli runtime bundles reload` expose and refresh the inventory for early testing._
 ### 2. Federation MVP & Cluster Matrix (Q1 2026)
 **Goal:** Reliable remote execution with observable cluster health and policy continuity.
 

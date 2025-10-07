@@ -20,8 +20,8 @@ Promote the runtime manager from proposal to a first-class kernel capability. Th
 - Restore attempts flow through the supervisor: restart budgets apply, health loops publish status back into `/state/runtime_matrix`, and the public API surfaces concrete errors when launches fail.
 - Manifests can mark runtimes with `auto_start = true`; the server now schedules those restores automatically on boot without waiting for manual intervention. Removing the flag (or setting it to `false`) stops the runtime gracefully on the next reload.
 - Manifests are optional; when none are present the registry still behaves as before, letting operators opt in incrementally while we continue wiring additional adapters (ONNX Runtime, vLLM, multimodal).
-- `/state/runtime/bundles` now surfaces discovered bundle catalogs (including the preview `bundles.llama.json` and `bundles.audio.json` entries); operators can also inspect the same data via `arw-cli runtime bundles list` or force a rescan with `arw-cli runtime bundles reload`.
-- Preview bundle catalogs live in `configs/runtime/bundles.llama.json` and `configs/runtime/bundles.audio.json`; inspect available entries with `arw-cli runtime bundles list` (add `--remote` to query a running server, `--json/--pretty` for scripting). Artifact URLs remain placeholders until the signing pipeline lands.
+- `/state/runtime/bundles` now surfaces discovered bundle catalogs (including the preview `bundles.llama.json`, `bundles.vision.json`, and `bundles.audio.json` entries); operators can also inspect the same data via `arw-cli runtime bundles list` or force a rescan with `arw-cli runtime bundles reload`.
+- Preview bundle catalogs live in `configs/runtime/bundles.llama.json`, `configs/runtime/bundles.vision.json`, and `configs/runtime/bundles.audio.json`; inspect available entries with `arw-cli runtime bundles list` (add `--remote` to query a running server, `--json/--pretty` for scripting). Artifact URLs remain placeholders until the signing pipeline lands.
 
 ## Guiding Principles
 
@@ -36,7 +36,7 @@ Promote the runtime manager from proposal to a first-class kernel capability. Th
 | --- | --- | --- | --- |
 | 1. Runtime Matrix Stabilization | Harden the existing runtime heartbeat feed. | `runtime_matrix` read-model exposes health reasons, restart quotas, accessible status strings; Snappy budgets for runtime endpoints; CPU-only llama smoke tests | `/state/runtime_matrix` returns detailed health; CI job launches llama runtime twice (Linux/Windows) and asserts ready state; Launcher surfaces accessible status pill. |
 | 2. Supervisor Core | Create the supervisor process, registry, and API. | `RuntimeRegistry` service, adapter trait, start/stop orchestrations, guardrail policy hooks, minimal `/runtimes/*` endpoints, structured logs | Integration tests cover crash restart, lease denial, and prompt-cache warm start; policy simulator reflects runtime capabilities; docs include operator checklist. |
-| 3. Multimodal Expansion | Add audio/vision adapters and consent workflows. | Whisper/llava adapters, shared prompt cache manager, Launcher Consent dialog with transcripts, pointer/keyboard parity actions | Accessibility review signed off (screen reader walkthrough + caption audit); instrumentation publishes modality-specific metrics; failure fallbacks degrade to text runtime without hanging jobs. |
+| 3. Multimodal Expansion | Add vision-first adapters and consent workflows, then layer audio. | llava/Moondream adapters with Memory Fabric provenance, shared prompt cache manager, Launcher consent dialog with transcripts, pointer/keyboard parity actions, Whisper/Piper adapters follow once overlays/stability land | Accessibility review signed off (screen reader walkthrough + caption audit); instrumentation publishes modality-specific metrics; failure fallbacks degrade to text runtime without hanging jobs. |
 | 4. Federation Hooks | Allow remote nodes to advertise and claim runtimes. | `runtime.claim.*` protocol, worker manifest extensions, ledger entries for GPU consumption, orchestrator scheduling hints | Remote worker demo passes health, refusal, and reclamation tests; ledger shows aggregated runtime usage by collaborator; policy asserts remote accelerator leases before jobs run. |
 
 ## Architecture Outline
@@ -78,7 +78,7 @@ Promote the runtime manager from proposal to a first-class kernel capability. Th
 
 ## Next Actions
 
-1. Land Runtime Matrix enhancements (Phase 1) with accessible Launcher indicators — restart budgets now block auto-restores once the window is exhausted; stubbed llama smoke (`just runtime-smoke`) keeps the pipeline honest while we wire real CPU/GPU llama builds.
+1. Land Runtime Matrix enhancements (Phase 1) with accessible Launcher indicators — restart budgets now block auto-restores once the window is exhausted; stubbed llama smoke (`just runtime-smoke`) and the vision supervisor smoke (`just runtime-smoke-vision`) keep the pipeline honest while we wire real CPU/GPU builds.
 2. Draft supervisor module scaffolding (`crates/arw-runtime`) and adapter trait tests.
 3. Coordinate with Policy team to define accelerator lease keys and guardrail presets.
 4. Produce operator runbook (checklist + rollback steps) before default-on rollout.

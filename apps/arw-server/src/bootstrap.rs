@@ -10,6 +10,20 @@ use tracing::{error, info, warn};
 #[cfg(not(test))]
 use utoipa::OpenApi;
 
+fn smoke_mode_enabled() -> bool {
+    matches!(
+        std::env::var("ARW_SMOKE_MODE")
+            .ok()
+            .map(|v| v.trim().to_ascii_lowercase()),
+        Some(ref v)
+            if v == "1"
+                || v == "true"
+                || v == "yes"
+                || v == "smoke"
+                || v == "vision"
+    )
+}
+
 use crate::{
     access_log,
     app_state::AppState,
@@ -37,6 +51,7 @@ pub(crate) async fn build() -> BootstrapOutput {
     let initial_config = config::load_initial_config_state();
     config::init_gating_from_configs();
     config::init_cache_policy_from_manifest();
+    let smoke_mode = smoke_mode_enabled();
 
     let bus = Bus::new_with_replay(256, 256);
     let kernel = Kernel::open(&crate::util::state_dir()).expect("init kernel");
@@ -135,10 +150,12 @@ pub(crate) async fn build() -> BootstrapOutput {
     config::apply_env_overrides_from(&initial_env_cfg);
     crate::logic_units_builtin::seed(&state).await;
 
-    background_tasks.merge(initialise_state(&state, kernel_enabled).await);
-    background_tasks.extend(config_watcher::start(state.clone()));
-    if let Some(handle) = identity_registry.watch() {
-        background_tasks.push(handle);
+    background_tasks.merge(initialise_state(&state, kernel_enabled, smoke_mode).await);
+    if !smoke_mode {
+        background_tasks.extend(config_watcher::start(state.clone()));
+        if let Some(handle) = identity_registry.watch() {
+            background_tasks.push(handle);
+        }
     }
 
     BootstrapOutput {
@@ -409,7 +426,7 @@ fn spawn_bus_forwarders(
     handles
 }
 
-async fn initialise_state(state: &AppState, kernel_enabled: bool) -> TaskManager {
+async fn initialise_state(state: &AppState, kernel_enabled: bool, smoke_mode: bool) -> TaskManager {
     let mut tasks = TaskManager::with_metrics(state.metrics());
     // Announce and clear any crash markers from previous runs.
     crate::crashguard::sweep_on_start(state).await;
@@ -444,32 +461,40 @@ async fn initialise_state(state: &AppState, kernel_enabled: bool) -> TaskManager
         &json!({ "items": [], "count": 0 }),
     );
 
-    world::load_persisted().await;
+    if !smoke_mode {
+        world::load_persisted().await;
+    }
 
-    if kernel_enabled {
+    if kernel_enabled && !smoke_mode {
         tasks.push(worker::start_local_worker(state.clone()));
     }
 
     tasks.extend(read_models::start_read_models(state.clone()));
-    tasks.extend(crate::cluster::start(state.clone()));
+    if !smoke_mode {
+        tasks.extend(crate::cluster::start(state.clone()));
+    }
     tasks.extend(crate::runtime::start(state.clone()));
     tasks.extend(crate::runtime_matrix::start(state.clone()));
     tasks.extend(crate::state_observer::start(state.clone()));
-    tasks.extend(crate::world::start(state.clone()));
-    tasks.push(crate::distill::start(state.clone()));
-    tasks.push(crate::context_cascade::start(state.clone()));
-    tasks.push(crate::training::start_logic_history_recorder(state.clone()));
-    tasks.push(crate::memory_hygiene::start(state.clone()));
-    tasks.extend(crate::self_model::start_aggregators(state.clone()));
-    tasks.extend(crate::research_watcher::start(state.clone()));
-    tasks.push(crate::capsule_guard::start_refresh_task(state.clone()));
+    if !smoke_mode {
+        tasks.extend(crate::world::start(state.clone()));
+        tasks.push(crate::distill::start(state.clone()));
+        tasks.push(crate::context_cascade::start(state.clone()));
+        tasks.push(crate::training::start_logic_history_recorder(state.clone()));
+        tasks.push(crate::memory_hygiene::start(state.clone()));
+        tasks.extend(crate::self_model::start_aggregators(state.clone()));
+        tasks.extend(crate::research_watcher::start(state.clone()));
+        tasks.push(crate::capsule_guard::start_refresh_task(state.clone()));
 
-    egress_proxy::apply_current(state.clone()).await;
-    tasks.push(spawn_trust_store_watcher(state.clone()));
+        egress_proxy::apply_current(state.clone()).await;
+        tasks.push(spawn_trust_store_watcher(state.clone()));
+    }
 
     #[cfg(feature = "grpc")]
     {
-        tasks.push(TaskHandle::new("grpc.server", grpc::spawn(state.clone())));
+        if !smoke_mode {
+            tasks.push(TaskHandle::new("grpc.server", grpc::spawn(state.clone())));
+        }
     }
     tasks
 }

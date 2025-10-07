@@ -15,6 +15,7 @@ The managed runtime supervisor must cover text, audio, vision, and pointer/keybo
 ## Objectives
 
 - **Unified lifecycle**: all runtimes (text, audio, vision, pointer) register through the same adapter contract and expose status via `/state/runtimes`.
+- **Vision-first rollout**: prioritize vision adapters and consent surfaces so camera capture, redaction, and provenance land before microphone tooling.
 - **Generation & recognition parity**: each modality offers capture/ingest tools (recognition) and synthesis tools (generation) where feasible.
 - **Consent-first UX**: mic/camera/pointer access always flows through leases, visible consent overlays, and revocation controls.
 - **Accessibility first**: voice and pointer automation must respect screen readers, high-contrast modes, and alternative input devices.
@@ -60,19 +61,20 @@ The managed runtime supervisor must cover text, audio, vision, and pointer/keybo
 ### Phase A – Foundations
 1. Extend `RuntimeAdapter` contract definitions to include modality metadata (`text`, `audio`, `vision`, `pointer`).
 2. Add `/state/runtimes` schema support for multi-modal status (current adapter, health, active leases).
-3. Document bundle manifests for audio/vision adapters (`configs/runtime/audio_bundles.json`, `vision_bundles.json`).
+3. Document bundle manifests for vision/audio adapters (`configs/runtime/vision_bundles.json`, `audio_bundles.json`).
 
-### Phase B – Audio MVP
+### Phase B – Vision MVP
+1. Package llava.cpp (vision) builds first; include consented describe pipelines before optional generation backends (Stable Diffusion, etc.).
+2. Implement the vision adapter with capture/describe flows, redaction hooks, and recorder daemons; plug into runtime supervisor health, restart budgets, and Memory Fabric provenance journaling.
+3. Ship Launcher “Vision” surface with camera consent overlays, keyboard-friendly focus controls, per-project retention settings, and quick describe actions.
+4. Enforce `vision:capture`, `vision:describe`, `vision:generate` policy gates; publish manifest examples in `configs/runtime/runtimes.toml` with accessibility cues (contrast, captions) and per-adapter health probes.
+5. Extend memory/tooling pipelines so extracted descriptions land in the Memory Fabric with provenance for replay and world-diff updates.
+
+### Phase C – Audio MVP
 1. Package Whisper.cpp + Piper binaries (CPU/GPU) with signed hashes.
-2. Implement audio adapter with capture/transcribe/generate commands; integrate with runtime supervisor.
-3. Update Launcher with Voice tab: microphone permission flow, level meters, caption preview, quick TTS playback.
-4. Add policy gates `audio:capture`, `audio:transcribe`, `audio:generate`.
-
-### Phase C – Vision MVP
-1. Package llava.cpp (vision) builds; optionally include Stable Diffusion runtime for generation (license permitting).
-2. Implement vision adapter with capture/describe/generate tools; integrate camera consent overlays.
-3. Launcher Vision tab: camera preview (only when lease granted), per-project storage controls, quick describe button.
-4. Policy gates `vision:capture`, `vision:describe`, `vision:generate`; document manifest examples in `configs/runtime/runtimes.toml` with `auto_start` guidance and adapter-specific overrides (health probes, env vars).
+2. Implement audio adapter with capture/transcribe/generate commands; reuse consent overlays and journal hooks from vision.
+3. Update Launcher with Voice tab: microphone permission flow, level meters, caption preview, quick TTS playback, and fallbacks for muted devices.
+4. Add policy gates `audio:capture`, `audio:transcribe`, `audio:generate`; document manifests mirroring the vision bundle format for harmonized ops.
 
 ### Phase D – Pointer Automation
 1. Build pointer/keyboard adapter using sandboxed automation process with explicit allowlists.
@@ -88,15 +90,15 @@ The managed runtime supervisor must cover text, audio, vision, and pointer/keybo
 
 ## Documentation Updates
 - `docs/architecture/managed_llamacpp_runtime.md`: reference this blueprint; expand multi-modal tooling sections.
-- New tutorials: `guide/runtime_manager.md`, `guide/voice_vision.md`, `guide/pointer_automation.md`.
+- New tutorials: `guide/runtime_manager.md`, `guide/vision_runtime.md`, `guide/pointer_automation.md`.
 - Update CLI docs with new `arw-cli` commands once adapters expose them.
 - Add manifest appendix covering `auto_start` and adapter override fields.
 
 ## Initial Tasks
 1. `t-multimodal-0001`: Extend runtime adapter trait + `/state/runtimes` schema for modality metadata.
-2. `t-multimodal-0002`: Define audio bundle manifest; integrate into build packaging pipeline.
-3. `t-multimodal-0003`: Launcher consent overlay components (shared across audio/vision/pointer).
-4. `t-multimodal-0004`: Policy gating expansions (`audio:*`, `vision:*`, `input:*`).
+2. `t-multimodal-0002`: Define vision bundle manifest and supervisor install pipeline; stage llava.cpp baselines.
+3. `t-multimodal-0003`: Launcher consent overlay components (shared across vision/audio/pointer) with screen-reader focus tests.
+4. `t-multimodal-0004`: Policy gating expansions (`vision:*`, `audio:*`, `input:*`) plus Memory Fabric provenance hooks for captured media.
 
 ## Open Questions
 - Licensing/size constraints for bundling vision generation runtimes; may require optional download.
