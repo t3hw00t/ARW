@@ -11,72 +11,142 @@
     <script src="common.js" defer></script>
     <script src="index.js" defer></script>
   </head>
-  <body>
-    <a href="#btn-open" class="skip-link">Skip to controls</a>
-    <div class="wrap">
-      <div class="card launcher-card">
-        <header class="launcher-head">
-          <h2>Agent Hub (ARW) Launcher <span class="badge"><span class="dot" id="svc-dot"></span><span id="svc-text">unknown</span></span></h2>
-          <p>Use the tray to start/stop the service or open the Debug UI.</p>
-          <div class="launcher-meta">
-            <label>Port: <input id="port" aria-label="Port" type="number" min="1" max="65535" value="8091"/></label>
-            <span id="baseBadge" class="badge base-badge mono" aria-live="polite"></span>
-            <label><input id="autostart" type="checkbox"/> Autostart service</label>
-            <label><input id="notif" type="checkbox" checked/> Notify on status change</label>
-            <label><input id="loginstart" type="checkbox"/> Start launcher at login</label>
-            <button id="btn-save" type="button" class="ghost" title="Save preferences" disabled>Save</button>
-            <span id="prefsStatus" class="dim" data-state="clean" role="status" aria-live="polite">All changes saved</span>
-            <span id="statusBadges" class="badges"></span>
+  <body data-page="index">
+    <a href="#service" class="skip-link">Skip to service controls</a>
+    <div class="wrap launcher-wrap">
+      <section class="card launcher-hero">
+        <div class="hero-head">
+          <div>
+            <h1>Control Room <span class="badge"><span class="dot" id="svc-dot"></span><span id="svc-text">unknown</span></span></h1>
+            <p>Keep your local Agent Hub stack healthy, then jump into the workspaces you need.</p>
           </div>
-        </header>
-        <div class="control-grid">
-          <section class="control-group">
-            <h3>Service control</h3>
-            <div class="button-row emphasis">
-              <button id="btn-start" class="primary" title="Start local service">Start Service</button>
-              <button id="btn-stop" class="ghost" title="Stop local service">Stop Service</button>
-              <button id="btn-health" class="ghost" title="Check service health">Check Health</button>
-            </div>
-            <div class="button-row">
-              <button id="btn-open" class="primary" title="Open Debug UI in browser">Open Debug UI</button>
-              <button id="btn-open-window" class="ghost" title="Open Debug UI in window">Open in Window</button>
-            </div>
-            <div class="health-wrap" role="status" aria-live="polite">
-              <span id="health" class="dim"></span>
-              <span id="healthMeta" class="dim">Waiting for first check…</span>
-            </div>
-          </section>
-          <section class="control-group">
-            <h3>Workspaces</h3>
-            <div class="button-row">
-              <button id="btn-hub" class="primary" title="Open Project Hub">Project Hub</button>
-              <button id="btn-chat" class="ghost" title="Open Chat">Chat</button>
-              <button id="btn-training" class="ghost" title="Open Training Park">Training Park</button>
-              <button id="btn-trial" class="ghost" title="Open Trial Control Center">Trial Control</button>
-            </div>
-          </section>
-          <section class="control-group">
-            <h3>Diagnostics</h3>
-            <div class="button-row">
-              <button id="btn-events" class="ghost" title="Open Events window">Events</button>
-              <button id="btn-logs" class="ghost" title="Open Logs window">Logs</button>
-              <button id="btn-models" class="ghost" title="Open Models manager">Models</button>
-              <button id="btn-connections" class="ghost" title="Open Connections manager">Connections</button>
-            </div>
-          </section>
-          <section class="control-group">
-            <h3>Support</h3>
-            <div class="button-row">
-              <button id="btn-updates" class="ghost" title="Open releases page">Check Updates</button>
-              <button id="btn-shortcuts" class="ghost" title="Show keyboard shortcuts">Shortcuts</button>
-              <button id="btn-help" class="ghost" title="Open keyboard shortcuts docs">Help</button>
-            </div>
-          </section>
-          <section class="control-group">
-            <h3>Active downloads</h3>
-            <div id="dlmini" class="badge-row" role="status" aria-live="polite"></div>
-          </section>
         </div>
+        <div class="hero-meta">
+          <div class="pref-field">
+            <label for="port">API port</label>
+            <input id="port" aria-label="Port" type="number" min="1" max="65535" value="8091"/>
+            <p class="field-note">Clients and packs connect to this port. Switch when hosting for teammates.</p>
+            <span id="baseBadge" class="badge base-badge mono" aria-live="polite"></span>
+          </div>
+          <div class="pref-field pref-toggle">
+            <label>
+              <input id="autostart" type="checkbox"/>
+              <span>
+                <strong>Autostart service</strong>
+                <small>Start <code>arw-server</code> as soon as the launcher opens.</small>
+              </span>
+            </label>
+          </div>
+          <div class="pref-field pref-toggle">
+            <label>
+              <input id="notif" type="checkbox" checked/>
+              <span>
+                <strong>Notify on status change</strong>
+                <small>Show a desktop notification when health flips.</small>
+              </span>
+            </label>
+          </div>
+          <div class="pref-field pref-toggle">
+            <label>
+              <input id="loginstart" type="checkbox"/>
+              <span>
+                <strong>Launch at login</strong>
+                <small>Keep the control room ready after you sign in.</small>
+              </span>
+            </label>
+          </div>
+        </div>
+        <div class="hero-footer">
+          <div class="hero-actions">
+            <button id="btn-save" type="button" class="ghost" title="Save preferences" disabled>Save preferences</button>
+            <span id="prefsStatus" class="dim" data-state="clean" role="status" aria-live="polite">All changes saved</span>
+          </div>
+          <span id="statusBadges" class="badges"></span>
+        </div>
+      </section>
+      <div class="launcher-grid">
+        <section class="card service-card" id="service">
+          <header class="section-head">
+            <div>
+              <h2>Local service</h2>
+              <p class="dim">Control and audit the unified <code>arw-server</code> instance running on this machine.</p>
+            </div>
+          </header>
+          <div class="button-row emphasis">
+            <button id="btn-start" class="primary" title="Start local service">Start Service</button>
+            <button id="btn-stop" class="ghost" title="Stop local service">Stop Service</button>
+            <button id="btn-health" class="ghost" title="Check service health">Check Health</button>
+          </div>
+          <div class="button-row">
+            <button id="btn-open" class="primary" title="Open Debug UI in browser">Open Debug UI</button>
+            <button id="btn-open-window" class="ghost" title="Open Debug UI in window">Open in Window</button>
+          </div>
+          <div class="health-wrap" role="status" aria-live="polite">
+            <span id="health" class="dim"></span>
+            <span id="healthMeta" class="dim">Waiting for first check…</span>
+          </div>
+        </section>
+        <section class="card">
+          <header class="section-head">
+            <div>
+              <h2>Workspaces</h2>
+              <p class="dim">Open focused surfaces for the current project. Each workspace launches in its own window.</p>
+            </div>
+          </header>
+          <div class="button-column">
+            <button id="btn-hub" class="primary" title="Open Project Hub">Project Hub</button>
+            <p class="button-hint">Manage files, notes, assembled context, and run history.</p>
+            <button id="btn-chat" class="ghost" title="Open Chat">Chat</button>
+            <p class="button-hint">Episode-first conversation view with shared sidecar tools.</p>
+            <button id="btn-training" class="ghost" title="Open Training Park">Training Park</button>
+            <p class="button-hint">Monitor cascades, run A/B jobs, and inspect telemetry.</p>
+            <button id="btn-trial" class="ghost" title="Open Trial Control Center">Trial Control</button>
+            <p class="button-hint">Coordinate staged experiments and capture decisions.</p>
+          </div>
+        </section>
+        <section class="card">
+          <header class="section-head">
+            <div>
+              <h2>Diagnostics</h2>
+              <p class="dim">Inspect live streams and runtime inventory when something needs attention.</p>
+            </div>
+          </header>
+          <div class="button-column">
+            <button id="btn-events" class="ghost" title="Open Events window">Events</button>
+            <p class="button-hint">Follow the live event stream (SSE) as it happens.</p>
+            <button id="btn-logs" class="ghost" title="Open Logs window">Logs</button>
+            <p class="button-hint">Review structured service logs with filtering.</p>
+            <button id="btn-models" class="ghost" title="Open Models manager">Models</button>
+            <p class="button-hint">Track managed runtimes, restart budgets, and downloads.</p>
+            <button id="btn-connections" class="ghost" title="Open Connections manager">Connections</button>
+            <p class="button-hint">Manage remotes, pooled compute, and guardrail policies.</p>
+          </div>
+        </section>
+        <section class="card">
+          <header class="section-head">
+            <div>
+              <h2>Support</h2>
+              <p class="dim">Stay up to date or revisit quick-reference docs.</p>
+            </div>
+          </header>
+          <div class="button-column">
+            <button id="btn-updates" class="ghost" title="Open releases page">Check Updates</button>
+            <p class="button-hint">Grab the latest builds and release notes.</p>
+            <button id="btn-shortcuts" class="ghost" title="Show keyboard shortcuts">Shortcuts</button>
+            <p class="button-hint">Show the in-launcher shortcut reference.</p>
+            <button id="btn-help" class="ghost" title="Open keyboard shortcuts docs">Help</button>
+            <p class="button-hint">Open the online guide for deeper help.</p>
+          </div>
+        </section>
+        <section class="card">
+          <header class="section-head">
+            <div>
+              <h2>Active downloads</h2>
+              <p class="dim">See runtime assets in flight. Entries clear automatically when complete.</p>
+            </div>
+          </header>
+          <div id="dlmini" class="badge-row" role="status" aria-live="polite"></div>
+        </section>
       </div>
     </div>
   </body>

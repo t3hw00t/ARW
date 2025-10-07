@@ -6,54 +6,80 @@ html, body{
   background: var(--app-background);
   background-color: var(--surface-muted);
 }
-.wrap{
+.launcher-wrap{
+  max-width: 1120px;
+  width:100%;
+  margin: 0 auto;
+}
+body.has-global-bar .launcher-wrap{
+  padding-top: calc(var(--sp4) + var(--sp3));
+}
+.launcher-hero{
+  display:grid;
+  gap: var(--sp4);
+}
+.hero-head h1{
+  margin:0;
   display:flex;
-  height:100%;
   align-items:center;
-  justify-content:center;
-  padding: var(--sp4);
-  position:relative;
+  gap: var(--sp2);
+  flex-wrap:wrap;
 }
-.wrap::before{
-  content:"";
-  position:absolute;
-  inset:0;
-  background-image:var(--noise);
-  opacity:.45;
-  mix-blend-mode: soft-light;
-  pointer-events:none;
+.hero-head p{
+  margin:0;
+  color: var(--color-muted);
+  max-width:60ch;
 }
-.launcher-card{
-  width:min(820px, 96vw);
+.hero-meta{
+  display:grid;
+  gap: var(--sp3);
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
 }
-.launcher-head{
+.pref-field{
   display:flex;
   flex-direction:column;
   gap: var(--sp2);
 }
-.launcher-head h2{
-  margin:0;
-  display:flex;
-  align-items:center;
-  gap: var(--sp2);
-  flex-wrap:wrap;
+.pref-field label{
+  font-weight:600;
 }
-.launcher-head p{
+.pref-field .field-note{
   margin:0;
+  font-size:0.85rem;
   color: var(--color-muted);
-  font-size: 0.95rem;
 }
-.launcher-meta{
+.pref-field .badge{
+  align-self:flex-start;
+}
+.pref-toggle label{
+  display:flex;
+  gap: var(--sp2);
+  align-items:flex-start;
+}
+.pref-toggle input{
+  margin-top:4px;
+}
+.pref-toggle strong{
+  font-size:0.95rem;
+}
+.pref-toggle small{
+  display:block;
+  font-size:0.82rem;
+  color: var(--color-muted);
+  max-width:38ch;
+}
+.hero-footer{
   display:flex;
   flex-wrap:wrap;
-  gap: var(--sp2);
+  gap: var(--sp3);
   align-items:center;
-  margin-top: var(--sp2);
+  justify-content:space-between;
 }
-.launcher-meta label{
+.hero-actions{
   display:flex;
+  flex-wrap:wrap;
   align-items:center;
-  gap:6px;
+  gap: var(--sp2);
 }
 #prefsStatus{
   font-size:0.85rem;
@@ -64,23 +90,26 @@ html, body{
 }
 #statusBadges{
   display:flex;
+  flex-wrap:wrap;
   gap: var(--sp2);
-  margin-left:auto;
 }
-.control-grid{
+.launcher-grid{
   display:grid;
   gap: var(--sp4);
   margin-top: var(--sp4);
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
 }
-.control-group{
+.section-head{
   display:flex;
   flex-direction:column;
-  gap: var(--sp2);
+  gap: calc(var(--sp2) / 1.5);
 }
-.control-group h3{
+.section-head h2{
   margin:0;
-  font-size:1rem;
+  font-size:1.1rem;
+}
+.section-head p{
+  margin:0;
 }
 .button-row{
   display:flex;
@@ -93,41 +122,67 @@ html, body{
 }
 .button-row.emphasis .primary{
   flex:1;
-  min-width:160px;
-}
-.button-row .primary{
-  box-shadow: var(--shadow-2);
-}
-#health{
-  min-height:1.25rem;
+  min-width:180px;
 }
 .health-wrap{
   display:flex;
   flex-wrap:wrap;
-  gap: 10px;
+  gap: var(--sp2);
   align-items:center;
 }
+#health{
+  min-height:1.25rem;
+}
 #healthMeta{
-  font-size:0.8rem;
+  font-size:0.85rem;
+  color: var(--color-muted);
+}
+.button-column{
+  display:grid;
+  gap: var(--sp2);
+}
+.button-column button{
+  justify-self:flex-start;
+}
+.button-column button + .button-hint{
+  margin-top:4px;
+}
+.button-column .button-hint{
+  margin:0;
+  font-size:0.85rem;
+  color: var(--color-muted);
+  max-width:48ch;
+}
+.button-column .button-hint + button{
+  margin-top: var(--sp2);
+}
+.button-column .button-hint:last-child{
+  margin-bottom:0;
 }
 #dlmini{
-  min-height: 1.5rem;
+  min-height: 1.75rem;
+  display:flex;
+  flex-wrap:wrap;
+  gap: var(--sp2);
 }
 #dlmini:empty::after{
   content:"No active downloads";
   color: var(--color-muted);
   font-size:0.85rem;
 }
-@media (max-width: 720px){
-  .launcher-card{
-    width:100%;
+@media (max-width: 900px){
+  .hero-meta{
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
   }
-  #statusBadges{
-    width:100%;
-    justify-content:flex-start;
-    margin-left:0;
+}
+@media (max-width: 720px){
+  .launcher-grid{
+    grid-template-columns: 1fr;
+  }
+  .hero-head h1{
+    font-size:1.5rem;
   }
 }
 @media (prefers-contrast: more){
-  .wrap::before{ display:none }
+  #prefsStatus{ font-weight:600; }
 }

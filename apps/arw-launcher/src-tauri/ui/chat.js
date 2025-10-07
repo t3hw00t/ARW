@@ -111,12 +111,26 @@ document.addEventListener('DOMContentLoaded', async () => {
     wrap.appendChild(meta); wrap.appendChild(body); wrap.appendChild(row);
     document.getElementById('messages').appendChild(wrap);
   }
-  document.getElementById('send').addEventListener('click', async ()=>{
-    const t = document.getElementById('msg').value.trim();
-    if (!t) return; addMessage('you', t); document.getElementById('msg').value='';
+  const msgBox = document.getElementById('msg');
+  async function sendCurrentMessage(){
+    if (!msgBox) return;
+    const text = msgBox.value.trim();
+    if (!text) return;
+    addMessage('you', text);
+    msgBox.value = '';
+    try{ msgBox.focus({ preventScroll:true }); }catch{ try{ msgBox.focus(); }catch{} }
     // Placeholder echo; real chat will call service endpoint
-    setTimeout(()=> addMessage('assistant', t.split('').reverse().join('')), 120);
-  });
+    setTimeout(()=> addMessage('assistant', text.split('').reverse().join('')), 120);
+  }
+  document.getElementById('send').addEventListener('click', sendCurrentMessage);
+  if (msgBox){
+    msgBox.addEventListener('keydown', (evt)=>{
+      if ((evt.ctrlKey || evt.metaKey) && evt.key === 'Enter'){
+        evt.preventDefault();
+        sendCurrentMessage();
+      }
+    });
+  }
   document.getElementById('capture').addEventListener('click', async ()=>{
     try{
       const portForTools = ARW.toolPort();

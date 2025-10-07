@@ -3404,8 +3404,108 @@ window.ARW.ui.badges = {
   }
 };
 
+window.ARW.nav = {
+  groups: [
+    {
+      label: 'Control',
+      items: [
+        { id: 'index', href: 'index.html', label: 'Control Room', desc: 'Start & monitor services' },
+      ],
+    },
+    {
+      label: 'Workspaces',
+      items: [
+        { id: 'hub', href: 'hub.html', label: 'Project Hub', desc: 'Files, runs, context' },
+        { id: 'chat', href: 'chat.html', label: 'Chat', desc: 'Episodes & compare' },
+        { id: 'training', href: 'training.html', label: 'Training Park', desc: 'A/B & telemetry' },
+        { id: 'trial', href: 'trial.html', label: 'Trial Control', desc: 'Experiments' },
+      ],
+    },
+    {
+      label: 'Diagnostics',
+      items: [
+        { id: 'events', href: 'events.html', label: 'Events', desc: 'Live event stream' },
+        { id: 'logs', href: 'logs.html', label: 'Logs', desc: 'Runtime logs' },
+        { id: 'models', href: 'models.html', label: 'Models', desc: 'Runtime catalog' },
+        { id: 'connections', href: 'connections.html', label: 'Connections', desc: 'Remotes & federation' },
+      ],
+    },
+  ],
+  ensure(){
+    try{
+      const body = document.body;
+      if (!body || body.dataset.globalNav === 'on') return;
+      const current = ARW.util?.pageId ? ARW.util.pageId() : 'index';
+      const header = document.createElement('header');
+      header.className = 'global-bar';
+      header.setAttribute('role','banner');
+      const inner = document.createElement('div');
+      inner.className = 'global-bar__inner';
+      header.appendChild(inner);
+
+      const brand = document.createElement('a');
+      brand.className = 'global-bar__brand';
+      brand.href = 'index.html';
+      brand.setAttribute('aria-label', 'Agent Hub launcher');
+      brand.innerHTML = '<span class="global-bar__brand-title">Agent Hub</span><span class="global-bar__brand-tag">ARW</span>';
+      inner.appendChild(brand);
+
+      const nav = document.createElement('nav');
+      nav.className = 'global-bar__nav';
+      nav.setAttribute('aria-label', 'Primary navigation');
+
+      const makeLink = (item) => {
+        const link = document.createElement('a');
+        link.className = 'global-bar__link';
+        link.href = item.href;
+        link.dataset.page = item.id;
+        const title = document.createElement('span');
+        title.textContent = item.label;
+        link.appendChild(title);
+        if (item.desc) {
+          const hint = document.createElement('small');
+          hint.textContent = item.desc;
+          link.appendChild(hint);
+          link.title = item.desc;
+        }
+        if (item.id === current) {
+          link.classList.add('is-active');
+          link.setAttribute('aria-current', 'page');
+        }
+        return link;
+      };
+
+      for (const group of this.groups) {
+        const groupWrap = document.createElement('div');
+        groupWrap.className = 'global-bar__group';
+        const label = document.createElement('span');
+        label.className = 'global-bar__group-label';
+        label.textContent = group.label;
+        groupWrap.appendChild(label);
+        const linkWrap = document.createElement('div');
+        linkWrap.className = 'global-bar__group-links';
+        for (const item of group.items) {
+          linkWrap.appendChild(makeLink(item));
+        }
+        groupWrap.appendChild(linkWrap);
+        nav.appendChild(groupWrap);
+      }
+
+      inner.appendChild(nav);
+      const skip = body.querySelector('.skip-link');
+      if (skip && skip.parentElement === body) {
+        body.insertBefore(header, skip.nextSibling);
+      } else {
+        body.insertBefore(header, body.firstChild);
+      }
+      body.dataset.globalNav = 'on';
+      body.classList.add('has-global-bar');
+    }catch(e){ console.error(e); }
+  }
+};
+
 // Apply theme/density on load and mount badges
-document.addEventListener('DOMContentLoaded', ()=>{ try{ ARW.theme.init(); }catch{} try{ ARW.density.init(); }catch{} try{ ARW.layout.init(); }catch{} try{ ARW.ui.badges.mount(); }catch{} });
+document.addEventListener('DOMContentLoaded', ()=>{ try{ ARW.nav.ensure(); }catch{} try{ ARW.theme.init(); }catch{} try{ ARW.density.init(); }catch{} try{ ARW.layout.init(); }catch{} try{ ARW.ui.badges.mount(); }catch{} });
 // Universal ESC closes overlays (palette/gallery/shortcuts/annot)
 window.addEventListener('keydown', (e)=>{
   if (e.key !== 'Escape') return;

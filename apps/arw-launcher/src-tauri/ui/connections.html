@@ -11,33 +11,61 @@
     <script src="common.js" defer></script>
     <script src="connections.js" defer></script>
   </head>
-  <body>
+  <body data-page="connections">
     <a href="#rows" class="skip-link">Skip to connections table</a>
-    <div class="wrap">
-      <div class="row" role="region" aria-label="Connections controls">
-        <input id="cname" aria-label="Connection name" type="text" placeholder="name">
-        <input id="curl" aria-label="Base URL" type="url" placeholder="http://127.0.0.1:8091">
-        <input id="ctok" aria-label="Admin token" type="text" placeholder="admin token (optional)">
-        <button id="btn-add">Add</button>
-        <button id="btn-save">Save</button>
-        <button id="btn-shortcuts" class="ghost" title="Show keyboard shortcuts">Shortcuts</button>
-        <button id="btn-help" class="ghost" title="Open keyboard shortcuts docs">Help</button>
-        <span id="statusBadges" class="badges" style="margin-left:auto"></span>
-        <span id="stat" class="dim"></span>
-      </div>
-      <div>
-        <table aria-label="Saved connections">
-          <thead>
-            <tr><th>Name</th><th>Base URL</th><th>Status</th><th>Actions</th></tr>
-          </thead>
-          <tbody id="rows"></tbody>
-        </table>
-        <p class="dim hint">Tip: click a row to load it into the form above.</p>
-        <div class="row hint" style="align-items:center; gap:12px;">
-          <span id="activeBaseInfo" class="dim"></span>
-          <button id="btn-clear-override" class="ghost" title="Clear active override">Clear override</button>
+    <div class="wrap connections-wrap">
+      <header class="connections-head">
+        <div class="connections-title">
+          <strong>Remote Connections</strong>
+          <p>Store trusted endpoints and tokens so you can flip between local and remote agents without retyping credentials.</p>
         </div>
-      </div>
+        <div class="connections-actions">
+          <button id="btn-shortcuts" class="ghost" title="Show keyboard shortcuts">Shortcuts</button>
+          <button id="btn-help" class="ghost" title="Open keyboard shortcuts docs">Help</button>
+        </div>
+        <div class="connections-status">
+          <span id="statusBadges" class="badges"></span>
+          <span id="stat" class="dim" role="status" aria-live="polite"></span>
+        </div>
+      </header>
+      <main class="connections-main">
+        <section class="card connections-form" role="region" aria-labelledby="connectionsFormTitle">
+          <h2 id="connectionsFormTitle">Save a connection</h2>
+          <p class="section-lead">Name the connection, normalize the base URL, and optionally provide an admin token.</p>
+          <div class="connections-form-grid">
+            <label>Name
+              <input id="cname" aria-label="Connection name" type="text" placeholder="workspace">
+            </label>
+            <label>Base URL
+              <input id="curl" aria-label="Base URL" type="url" placeholder="http://127.0.0.1:8091">
+            </label>
+            <label>Admin token
+              <input id="ctok" aria-label="Admin token" type="text" placeholder="admin token (optional)">
+            </label>
+          </div>
+          <div class="row">
+            <button id="btn-add" class="primary">Stage connection</button>
+            <button id="btn-save" class="ghost">Save list</button>
+          </div>
+        </section>
+        <section class="card connections-table" role="region" aria-labelledby="connectionsTableTitle">
+          <div class="connections-table-head">
+            <h2 id="connectionsTableTitle">Saved connections</h2>
+            <p class="section-lead">Activate any row to set it as the current base override or jump into tooling windows.</p>
+          </div>
+          <table aria-label="Saved connections">
+            <thead>
+              <tr><th>Name</th><th>Base URL</th><th>Status</th><th>Actions</th></tr>
+            </thead>
+            <tbody id="rows"></tbody>
+          </table>
+          <p class="dim hint">Tip: click a row to load it into the form above.</p>
+          <div class="connections-active">
+            <span id="activeBaseInfo" class="dim"></span>
+            <button id="btn-clear-override" class="ghost" title="Clear active override">Clear override</button>
+          </div>
+        </section>
+      </main>
     </div>
   </body>
   </html>

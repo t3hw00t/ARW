@@ -11,163 +11,183 @@
     <script src="common.js" defer></script>
     <script src="models.js" defer></script>
   </head>
-  <body>
-    <a href="#models" class="skip-link">Skip to models list</a>
-    <div class="wrap">
-      <div class="row" role="region" aria-label="Models controls">
-        <label>Port: <input id="port" aria-label="Port" type="number" min="1" max="65535" value="8091"></label>
-        <label>Admin Token: <input id="admintok" aria-label="Admin token" type="text" placeholder="optional"></label>
-        <button id="btn-save-prefs" class="ghost">Save Prefs</button>
-        <button id="btn-refresh">Refresh</button>
-        <button id="btn-load">Load</button>
-        <button id="btn-save" class="ghost">Save</button>
-        <button id="btn-shortcuts" class="ghost" title="Show keyboard shortcuts">Shortcuts</button>
-        <button id="btn-help" class="ghost" title="Open keyboard shortcuts docs">Help</button>
-        <span id="baseBadge" class="badge base-badge mono" aria-live="polite"></span>
-        <span id="statusBadges" class="badges" style="margin-left:auto"></span>
-        <span id="stat" class="dim"></span>
-        <span id="disk" class="dim"></span>
-      </div>
-      <div class="row">
-        <label>Max Concurrency: <input id="concmax" type="number" min="1" max="64" value="2" style="width:90px"></label>
-        <label><input id="concblock" type="checkbox" checked> Block shrink</label>
-        <button id="btn-conc-apply" class="ghost">Apply</button>
-        <button id="btn-conc-shrink" class="ghost">Apply Shrink Now</button>
-        <span id="conc-pending" class="dim"></span>
-      </div>
-
-      <div>
-        <h3 id="modelsTitle">Models</h3>
-        <div class="row">
-          <label><input id="models-active-only" type="checkbox" aria-label="Show only active models"> Show only active</label>
+  <body data-page="models">
+    <a href="#modelsTable" class="skip-link">Skip to models list</a>
+    <div class="wrap models-wrap">
+      <header class="models-head">
+        <div class="models-title">
+          <strong>Model Manager</strong>
+          <p>Install, stage, and supervise runtime models across your fleet.</p>
         </div>
-        <table id="models" aria-labelledby="modelsTitle">
-          <thead>
-            <tr><th>Id</th><th>Provider</th><th>Status</th><th>Path</th><th>Default</th><th>Actions</th></tr>
-          </thead>
-          <tbody id="models-body"></tbody>
-        </table>
-      </div>
-
-      <div>
-        <h3>Add / Delete / Default</h3>
-        <div class="row" role="region" aria-label="Model add/delete">
-          <input id="mid" aria-label="Model id" type="text" placeholder="model id" class="mono">
-          <input id="mpr" aria-label="Provider (optional)" type="text" placeholder="provider (optional)">
-          <button id="btn-add">Add</button>
-          <button id="btn-del">Delete</button>
-          <button id="btn-setdef">Set Default</button>
-          <span id="def" class="dim"></span>
+        <div class="models-meta">
+          <label>Port: <input id="port" type="number" min="1" max="65535" value="8091"></label>
+          <span id="baseBadge" class="badge base-badge mono" aria-live="polite"></span>
         </div>
-      </div>
-
-      <div>
-        <h3>Download</h3>
-        <div class="row" role="region" aria-label="Model download">
-          <input id="did" aria-label="Download model id" type="text" placeholder="model id" class="mono">
-          <input id="durl" aria-label="Download URL" type="url" placeholder="https://...">
-          <input id="dsha" aria-label="SHA-256 checksum" type="text" placeholder="sha256 (required)" class="mono">
-          <label>Quant:
-            <select id="dquant">
-              <option value="">(unchanged)</option>
-              <option>Q4_K_M</option>
-              <option>Q5_K_M</option>
-              <option>Q6_K</option>
-              <option>Q8_0</option>
-            </select>
+        <div class="models-actions">
+          <label class="models-token">Admin token
+            <input id="admintok" type="text" placeholder="optional">
           </label>
-          <button id="btn-copy-sha" title="Copy checksum">Copy</button>
-          <button id="btn-paste-sha" title="Paste checksum">Paste</button>
-          <button id="btn-dl" class="primary" title="Start download">Download</button>
-          <button id="btn-cancel" class="ghost" title="Cancel download">Cancel</button>
+          <button id="btn-save-prefs" class="ghost">Save Prefs</button>
+          <button id="btn-refresh">Refresh</button>
+          <button id="btn-load">Load</button>
+          <button id="btn-save" class="ghost">Save</button>
+          <button id="btn-shortcuts" class="ghost" title="Show keyboard shortcuts">Shortcuts</button>
+          <button id="btn-help" class="ghost" title="Open keyboard shortcuts docs">Help</button>
         </div>
-        <div id="dlprog" class="mono dim"></div>
-        <div id="dlbars"></div>
-      </div>
+        <div class="models-status">
+          <span id="statusBadges" class="badges"></span>
+          <span id="disk" class="dim"></span>
+          <span id="stat" class="dim" role="status" aria-live="polite"></span>
+        </div>
+      </header>
+      <main class="models-main">
+        <section class="card models-concurrency" role="region" aria-labelledby="modelsConcurrencyTitle">
+          <h2 id="modelsConcurrencyTitle">Concurrency guardrails</h2>
+          <p class="section-lead">Throttle concurrent model loads to protect your runtime.</p>
+          <div class="row">
+            <label>Max concurrency: <input id="concmax" type="number" min="1" max="64" value="2"></label>
+            <label><input id="concblock" type="checkbox" checked> Block shrink</label>
+            <button id="btn-conc-apply" class="ghost">Apply</button>
+            <button id="btn-conc-shrink" class="ghost">Apply Shrink Now</button>
+          </div>
+          <span id="conc-pending" class="dim"></span>
+        </section>
 
-      <div>
-        <h3>Catalog</h3>
-        <div class="row" role="region" aria-label="Catalog controls">
-          <button id="btn-load-local">Load Built-in Catalog</button>
-          <input id="caturl" aria-label="Catalog URL" type="url" placeholder="https://.../models_catalog.json">
-          <button id="btn-load-remote">Load Remote Catalog</button>
-        </div>
-        <table aria-label="Catalog entries">
-          <thead>
-            <tr><th>Id</th><th>Provider</th><th>URL</th><th>Checksum</th><th>Notes</th><th>Action</th></tr>
-          </thead>
-          <tbody id="catalog"></tbody>
-        </table>
-      </div>
+        <section class="card models-table" role="region" aria-labelledby="modelsTableTitle">
+          <div class="section-head">
+            <h2 id="modelsTableTitle">Models</h2>
+            <div class="row">
+              <label><input id="models-active-only" type="checkbox" aria-label="Show only active models"> Show only active</label>
+            </div>
+          </div>
+          <table id="models" aria-labelledby="modelsTableTitle">
+            <thead>
+              <tr><th>Id</th><th>Provider</th><th>Status</th><th>Path</th><th>Default</th><th>Actions</th></tr>
+            </thead>
+            <tbody id="models-body"></tbody>
+          </table>
+        </section>
 
-      <div>
-        <h3>Installed Hashes</h3>
-        <div class="row" role="region" aria-label="Installed hashes filters">
-          <label>Provider: <input id="hash-prov" placeholder="(any)"></label>
-          <label>Sort: 
-            <select id="hash-sort">
-              <option value="bytes">bytes</option>
-              <option value="sha256">sha256</option>
-              <option value="path">path</option>
-              <option value="providers_count">providers_count</option>
-            </select>
-          </label>
-          <label>Order: 
-            <select id="hash-order">
-              <option value="desc">desc</option>
-              <option value="asc">asc</option>
-            </select>
-          </label>
-          <label>Limit: <input id="hash-limit" type="number" min="1" max="10000" value="50" style="width:90px"></label>
-          <button id="btn-hashes" class="ghost">Refresh Hashes</button>
-          <button id="btn-hashes-reset" class="ghost">Reset Filters</button>
-          <button id="btn-hashes-first" class="ghost">First</button>
-          <button id="btn-hashes-prev" class="ghost">Prev</button>
-          <button id="btn-hashes-next" class="ghost">Next</button>
-          <button id="btn-hashes-last" class="ghost">Last</button>
-          <label>Page: <input id="hash-page" type="number" min="1" value="1" style="width:80px"></label>
-          <span id="hash-page-stat" class="dim"></span>
-        </div>
-        <table aria-label="Installed model hashes">
-          <thead>
-            <tr><th>SHA-256</th><th>Bytes</th><th>Path</th><th>Providers</th><th>Models</th></tr>
-          </thead>
-          <tbody id="hashes"></tbody>
-        </table>
-      </div>
+        <section class="card models-add" role="region" aria-labelledby="modelsAddTitle">
+          <h2 id="modelsAddTitle">Add, delete, or set default</h2>
+          <div class="row">
+            <input id="mid" aria-label="Model id" type="text" placeholder="model id" class="mono">
+            <input id="mpr" aria-label="Provider (optional)" type="text" placeholder="provider (optional)">
+            <button id="btn-add">Add</button>
+            <button id="btn-del">Delete</button>
+            <button id="btn-setdef">Set Default</button>
+            <span id="def" class="dim"></span>
+          </div>
+        </section>
 
-      <div>
-        <h3>Jobs</h3>
-        <div class="row" role="region" aria-label="Jobs controls">
-          <button id="btn-jobs" class="ghost">Refresh Jobs</button>
-          <label><input id="jobs-auto" type="checkbox"> Auto-refresh</label>
-          <label>Filter: <input id="jobs-filter" placeholder="model id (substring)"></label>
-          <button id="btn-jobs-apply" class="ghost">Apply</button>
-          <button id="btn-jobs-clear" class="ghost">Clear</button>
-          <span id="jobs-stat" class="dim"></span>
-        </div>
-        <table aria-label="Active jobs">
-          <thead>
-            <tr><th>Model Id</th><th>Job Id</th><th>Corr Id</th><th>ETA</th></tr>
-          </thead>
-          <tbody id="jobs-active"></tbody>
-        </table>
-        <div class="row"><strong>Inflight Hashes:</strong> <span id="jobs-inflight" class="mono dim"></span></div>
-        <div class="row" role="region" aria-label="Ledger preview">
-          <strong>Ledger Preview:</strong>
-          <div id="ledger-preview" class="mono dim" aria-live="polite">Select a job to preview recent egress entries.</div>
-        </div>
-      </div>
+        <section class="card models-download" role="region" aria-labelledby="modelsDownloadTitle">
+          <h2 id="modelsDownloadTitle">Download models</h2>
+          <div class="row">
+            <input id="did" aria-label="Download model id" type="text" placeholder="model id" class="mono">
+            <input id="durl" aria-label="Download URL" type="url" placeholder="https://...">
+            <input id="dsha" aria-label="SHA-256 checksum" type="text" placeholder="sha256 (required)" class="mono">
+            <label>Quant:
+              <select id="dquant">
+                <option value="">(unchanged)</option>
+                <option>Q4_K_M</option>
+                <option>Q5_K_M</option>
+                <option>Q6_K</option>
+                <option>Q8_0</option>
+              </select>
+            </label>
+            <button id="btn-copy-sha" title="Copy checksum">Copy</button>
+            <button id="btn-paste-sha" title="Paste checksum">Paste</button>
+            <button id="btn-dl" class="primary" title="Start download">Download</button>
+            <button id="btn-cancel" class="ghost" title="Cancel download">Cancel</button>
+          </div>
+          <div id="dlprog" class="mono dim"></div>
+          <div id="dlbars"></div>
+        </section>
 
-      <div>
-        <h3>Egress Scopes</h3>
-        <div id="egress-scopes-summary" class="dim"></div>
-        <div class="scope-controls">
-          <button id="btn-scope-add" class="pill">Add Scope</button>
-        </div>
-        <div id="egress-scopes" class="dim" aria-live="polite">Scopes not loaded yet.</div>
-        <div id="scope-form" class="scope-form hidden" aria-live="assertive"></div>
-      </div>
+        <section class="card models-catalog" role="region" aria-labelledby="modelsCatalogTitle">
+          <h2 id="modelsCatalogTitle">Catalog</h2>
+          <div class="row">
+            <button id="btn-load-local">Load Built-in Catalog</button>
+            <input id="caturl" aria-label="Catalog URL" type="url" placeholder="https://.../models_catalog.json">
+            <button id="btn-load-remote">Load Remote Catalog</button>
+          </div>
+          <table aria-label="Catalog entries">
+            <thead>
+              <tr><th>Id</th><th>Provider</th><th>URL</th><th>Checksum</th><th>Notes</th><th>Action</th></tr>
+            </thead>
+            <tbody id="catalog"></tbody>
+          </table>
+        </section>
+
+        <section class="card models-hashes" role="region" aria-labelledby="modelsHashesTitle">
+          <h2 id="modelsHashesTitle">Installed hashes</h2>
+          <div class="row">
+            <label>Provider: <input id="hash-prov" placeholder="(any)"></label>
+            <label>Sort:
+              <select id="hash-sort">
+                <option value="bytes">bytes</option>
+                <option value="sha256">sha256</option>
+                <option value="path">path</option>
+                <option value="providers_count">providers_count</option>
+              </select>
+            </label>
+            <label>Order:
+              <select id="hash-order">
+                <option value="desc">desc</option>
+                <option value="asc">asc</option>
+              </select>
+            </label>
+            <label>Limit: <input id="hash-limit" type="number" min="1" max="10000" value="50"></label>
+            <button id="btn-hashes" class="ghost">Refresh Hashes</button>
+            <button id="btn-hashes-reset" class="ghost">Reset Filters</button>
+            <button id="btn-hashes-first" class="ghost">First</button>
+            <button id="btn-hashes-prev" class="ghost">Prev</button>
+            <button id="btn-hashes-next" class="ghost">Next</button>
+            <button id="btn-hashes-last" class="ghost">Last</button>
+            <label>Page: <input id="hash-page" type="number" min="1" value="1"></label>
+            <span id="hash-page-stat" class="dim"></span>
+          </div>
+          <table aria-label="Installed model hashes">
+            <thead>
+              <tr><th>SHA-256</th><th>Bytes</th><th>Path</th><th>Providers</th><th>Models</th></tr>
+            </thead>
+            <tbody id="hashes"></tbody>
+          </table>
+        </section>
+
+        <section class="card models-jobs" role="region" aria-labelledby="modelsJobsTitle">
+          <h2 id="modelsJobsTitle">Jobs</h2>
+          <div class="row">
+            <button id="btn-jobs" class="ghost">Refresh Jobs</button>
+            <label><input id="jobs-auto" type="checkbox"> Auto-refresh</label>
+            <label>Filter: <input id="jobs-filter" placeholder="model id (substring)"></label>
+            <button id="btn-jobs-apply" class="ghost">Apply</button>
+            <button id="btn-jobs-clear" class="ghost">Clear</button>
+            <span id="jobs-stat" class="dim"></span>
+          </div>
+          <table aria-label="Active jobs">
+            <thead>
+              <tr><th>Model Id</th><th>Job Id</th><th>Corr Id</th><th>ETA</th></tr>
+            </thead>
+            <tbody id="jobs-active"></tbody>
+          </table>
+          <div class="row"><strong>Inflight Hashes:</strong> <span id="jobs-inflight" class="mono dim"></span></div>
+          <div class="row" role="region" aria-label="Ledger preview">
+            <strong>Ledger Preview:</strong>
+            <div id="ledger-preview" class="mono dim" aria-live="polite">Select a job to preview recent egress entries.</div>
+          </div>
+        </section>
+
+        <section class="card models-egress" role="region" aria-labelledby="modelsEgressTitle">
+          <h2 id="modelsEgressTitle">Egress scopes</h2>
+          <div id="egress-scopes-summary" class="dim"></div>
+          <div class="scope-controls">
+            <button id="btn-scope-add" class="pill">Add Scope</button>
+          </div>
+          <div id="egress-scopes" class="dim" aria-live="polite">Scopes not loaded yet.</div>
+          <div id="scope-form" class="scope-form hidden" aria-live="assertive"></div>
+        </section>
+      </main>
     </div>
   </body>
 </html>

@@ -11,28 +11,64 @@
     <script src="common.js" defer></script>
     <script src="logs.js" defer></script>
   </head>
-  <body>
+  <body data-page="logs">
     <a href="#out" class="skip-link">Skip to logs</a>
-    <div class="toolbar" role="region" aria-label="Logs controls">
-      <label>Port: <input id="port" aria-label="Port" type="number" min="1" max="65535" value="8091"></label>
-      <button id="btn-refresh" class="primary">Refresh</button>
-      <label>Filter: <input id="routeFilter" aria-label="Route filter" type="text" placeholder="route contains…"></label>
-      <label class="dim">SLO p95 (ms): <input id="slo" aria-label="SLO threshold" type="number" min="10" step="10" value="150" style="width:90px"></label>
-      <label class="dim"><input type="checkbox" id="focus"/> focus tables</label>
-      <label class="dim"><input type="checkbox" id="auto" checked> auto</label>
-      <label class="dim"><input type="checkbox" id="wrap" checked> wrap</label>
-      <button id="btn-copy">Copy JSON</button>
-      <button id="btn-shortcuts" class="ghost" title="Show keyboard shortcuts">Shortcuts</button>
-      <button id="btn-help" class="ghost" title="Open keyboard shortcuts docs">Help</button>
-      <span id="baseBadge" class="badge base-badge mono" aria-live="polite"></span>
-      <span id="statusBadges" class="badges" style="margin-left:auto"></span>
-      <span class="badges" style="margin-left:12px">
-        <span id="cpuBadge" class="badge">CPU: –</span>
-        <span id="memBadge" class="badge">Mem: –</span>
-        <span id="gpuBadge" class="badge">GPU: –</span>
-      </span>
-      <span class="dim">Status: <b id="stat" role="status" aria-live="polite">…</b></span>
+    <div class="wrap logs-wrap">
+      <header class="logs-head">
+        <div class="logs-title">
+          <strong>Service Logs</strong>
+          <p>Inspect route performance, event distributions, and probe metrics to keep the unified server healthy.</p>
+        </div>
+        <div class="logs-meta">
+          <label>Port: <input id="port" aria-label="Port" type="number" min="1" max="65535" value="8091"></label>
+          <span id="baseBadge" class="badge base-badge mono" aria-live="polite"></span>
+        </div>
+        <div class="logs-actions">
+          <button id="btn-shortcuts" class="ghost" title="Show keyboard shortcuts">Shortcuts</button>
+          <button id="btn-help" class="ghost" title="Open keyboard shortcuts docs">Help</button>
+        </div>
+        <div class="logs-status">
+          <span id="statusBadges" class="badges"></span>
+          <div class="logs-metrics badges">
+            <span id="cpuBadge" class="badge">CPU: –</span>
+            <span id="memBadge" class="badge">Mem: –</span>
+            <span id="gpuBadge" class="badge">GPU: –</span>
+          </div>
+          <span class="dim">Status: <b id="stat" role="status" aria-live="polite">…</b></span>
+        </div>
+      </header>
+      <main class="logs-main">
+        <section class="card logs-controls" role="region" aria-labelledby="logsControlsTitle">
+          <div class="logs-controls-head">
+            <h2 id="logsControlsTitle">Controls</h2>
+            <div class="logs-controls-actions">
+              <button id="btn-refresh" class="primary">Refresh</button>
+              <button id="btn-copy" class="ghost">Copy JSON</button>
+            </div>
+          </div>
+          <p class="section-lead">Filter the snapshot or let it auto-refresh as new route stats arrive.</p>
+          <div class="logs-control-grid">
+            <label>Route filter
+              <input id="routeFilter" aria-label="Route filter" type="text" placeholder="route contains…">
+            </label>
+            <label>SLO p95 (ms)
+              <input id="slo" aria-label="SLO threshold" type="number" min="10" step="10" value="150">
+            </label>
+          </div>
+          <div class="logs-toggles">
+            <label class="key"><input type="checkbox" id="focus"> focus tables</label>
+            <label class="key"><input type="checkbox" id="auto" checked> auto render</label>
+            <label class="key"><input type="checkbox" id="wrap" checked> wrap JSON</label>
+          </div>
+        </section>
+        <section class="card logs-output" role="region" aria-labelledby="logsOutputTitle">
+          <div class="logs-output-head">
+            <h2 id="logsOutputTitle">Route metrics &amp; events</h2>
+            <p class="section-lead">The view updates automatically when data changes or when you press Refresh.</p>
+          </div>
+          <div class="logs-output-body" id="out" role="region" aria-label="Log output"></div>
+        </section>
+      </main>
     </div>
-    <div id="out" role="region" aria-label="Log output"></div>
   </body>
   </html>

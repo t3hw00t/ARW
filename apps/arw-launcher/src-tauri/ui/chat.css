@@ -1,0 +1,77 @@
+.chat-head{
+  display:grid;
+  gap: var(--sp2);
+  margin-bottom: var(--sp3);
+}
+.chat-primary{
+  display:flex;
+  flex-wrap:wrap;
+  gap: var(--sp2);
+  align-items:baseline;
+}
+.chat-primary p{
+  margin:0;
+  color: var(--color-muted);
+}
+.chat-controls{
+  display:flex;
+  flex-wrap:wrap;
+  gap: var(--sp2);
+  align-items:center;
+}
+.chat-status{
+  display:flex;
+  flex-wrap:wrap;
+  gap: var(--sp2);
+  align-items:center;
+  margin-left:auto;
+}
+.chat-status .badges{
+  display:flex;
+  flex-wrap:wrap;
+  gap: var(--sp2);
+}
+.composer{
+  display:grid;
+  gap: var(--sp2);
+  margin-top: var(--sp3);
+}
+.composer-row{
+  display:flex;
+  gap: var(--sp2);
+}
+.composer-row textarea{
+  flex:1;
+  resize:vertical;
+  min-height:120px;
+}
+.composer-buttons{
+  display:flex;
+  flex-direction:column;
+  gap: var(--sp2);
+  align-items:stretch;
+}
+.composer-buttons > .primary{
+  min-width:120px;
+}
+.composer-buttons .action-menu{
+  align-self:flex-start;
+}
+.composer-footer{
+  display:flex;
+  flex-wrap:wrap;
+  gap: var(--sp2);
+  align-items:center;
+  justify-content:space-between;
+}
+@media (max-width: 720px){
+  .composer-row{
+    flex-direction:column;
+  }
+  .composer-buttons{
+    flex-direction:row;
+  }
+  .composer-buttons > .primary{
+    min-width:0;
+  }
+}

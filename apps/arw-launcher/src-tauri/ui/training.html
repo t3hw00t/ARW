@@ -7,52 +7,38 @@
     <link rel="stylesheet" href="tokens.css" />
     <link rel="stylesheet" href="ui-kit.css" />
     <link rel="stylesheet" href="common.css" />
-    <style>
-      .metric-block { display: grid; gap: var(--sp2); margin-bottom: var(--sp4); }
-      .metric-block:last-of-type { margin-bottom: 0; }
-      .metric-block h4 { margin: 0; font-size: 1rem; }
-      .metric-list { margin: 0; padding-left: 1.25rem; }
-      .metric-list li { margin: 0.15rem 0; }
-      .metric-pill { display: inline-flex; align-items: center; gap: 6px; padding: 4px 8px; border-radius: 999px; border: 1px solid var(--color-line); background: linear-gradient(180deg,#ffffff,#f6f7f9); font-size: 0.9rem; }
-      .metric-pill.ok { color: var(--status-ok); border-color: rgba(var(--status-ok-rgb),0.35); }
-      .metric-pill.bad { color: var(--status-bad); border-color: rgba(var(--status-bad-rgb),0.35); }
-      .metric-label { font-weight: 600; margin-right: 6px; }
-      #contextTelemetryBody { display: grid; gap: var(--sp4); }
-      .metric-inline { margin: 0; }
-      .metric-meter { margin: 0 0 var(--sp2); }
-      .metric-meter:last-child { margin-bottom: 0; }
-      .metric-meter .bar { margin: 2px 0 0; height: 12px; }
-      .ratio-bar { position: relative; }
-      .ratio-bar>i { transition: width 0.25s ease; }
-      .ratio-bar.ok>i { background: var(--status-ok); }
-      .ratio-bar.warn>i { background: var(--status-warn); }
-      .ratio-bar.bad>i { background: var(--status-bad); }
-      .ratio-bar.empty>i { background: rgba(148,163,184,0.45); }
-      .ratio-bar.empty { opacity: 0.7; }
-      .jobs-table tr.focused-row { outline: 2px solid rgba(var(--brand-copper-rgb), 0.6); outline-offset: 1px; background: rgba(27,179,163,0.08); }
-      .jobs-table tr:focus { outline: none; }
-      .jobs-table .hint { display: block; margin-top: 2px; font-size: 0.85rem; color: var(--color-muted); }
-    </style>
+    <link rel="stylesheet" href="training.css" />
     <script src="common.js" defer></script>
     <script src="training.js" defer></script>
   </head>
-  <body>
+  <body data-page="training">
     <a href="#results" class="skip-link">Skip to results</a>
     <div class="wrap">
-      <header class="row">
-        <strong>Training Park</strong>
-        <label>Port: <input id="port" type="number" min="1" max="65535" value="8091"></label>
-        <span id="baseBadge" class="badge base-badge mono" aria-live="polite"></span>
-        <button id="abRun" class="primary">Run A/B</button>
-        <span id="statusBadges" class="badges" style="margin-left:auto"></span>
-        <span id="sseStat" class="dim" role="status" aria-live="polite">SSE: off</span>
-        <button id="btn-shortcuts" class="ghost" title="Show keyboard shortcuts">Shortcuts</button>
-        <button id="btn-help" class="ghost" title="Open keyboard shortcuts docs">Help</button>
+      <header class="training-head">
+        <div class="training-top">
+          <div class="training-primary">
+            <strong>Training Park</strong>
+            <p>Shape cascades and governors, then measure how changes land before you promote them.</p>
+          </div>
+          <button id="abRun" class="primary">Run A/B</button>
+        </div>
+        <div class="training-meta">
+          <label>Port: <input id="port" type="number" min="1" max="65535" value="8091"></label>
+          <span id="baseBadge" class="badge base-badge mono" aria-live="polite"></span>
+          <div class="training-status">
+            <span id="statusBadges" class="badges"></span>
+            <span id="sseStat" class="dim" role="status" aria-live="polite">SSE: off</span>
+          </div>
+          <button id="btn-shortcuts" class="ghost" title="Show keyboard shortcuts">Shortcuts</button>
+          <button id="btn-help" class="ghost" title="Open keyboard shortcuts docs">Help</button>
+        </div>
       </header>
+      <p class="training-intro">Tune presets, monitor cascade telemetry, and act on job-level suggestions without leaving your project.</p>
       <div class="layout">
-        <main class="grid cols-3" role="region" aria-label="Training panels">
+        <main class="training-grid" role="region" aria-label="Training panels">
           <section class="card" role="region" aria-labelledby="controlsTitle">
             <h3 id="controlsTitle">Controls</h3>
+            <p class="section-lead">Start with a preset, then adjust the governor sliders before running new experiments.</p>
             <div class="row">
               <label for="presetSelect">Preset</label>
               <select id="presetSelect">
@@ -85,11 +71,12 @@
             </div>
           </section>
           <section class="card" role="region" aria-labelledby="contextTitle">
-            <div class="row" style="justify-content: space-between; align-items: center;">
+            <div class="row row-between">
               <h3 id="contextTitle">Context Telemetry</h3>
               <button id="refreshTelemetry" class="ghost" type="button">Refresh</button>
             </div>
-            <p id="contextTelemetryStatus" class="dim mono">Loading…</p>
+            <p class="section-lead">Live signals from context assembly, governor health, and recall risk.</p>
+            <p id="contextTelemetryStatus" class="dim mono" role="status" aria-live="polite">Loading…</p>
             <div id="contextTelemetryBody" hidden>
               <div class="metric-block" aria-live="polite">
                 <h4>Coverage</h4>
@@ -154,11 +141,12 @@
             </div>
           </section>
           <section class="card" role="region" aria-labelledby="resultsTitle">
-            <div class="row" style="justify-content: space-between; align-items: center;">
+            <div class="row row-between">
               <h3 id="resultsTitle" title="↑/↓ to move • Enter to toggle details • Shift+A apply • Shift+D dry-run">Training jobs</h3>
               <button id="refreshJobs" class="ghost" type="button">Refresh</button>
             </div>
-            <div class="row" style="align-items: center; gap: var(--sp2);">
+            <p class="section-lead">Track orchestrated jobs, apply recommended logic units, and export history for deeper analysis.</p>
+            <div class="row">
               <label for="jobStatusFilter">Status</label>
               <select id="jobStatusFilter">
                 <option value="all" selected>All</option>
@@ -172,12 +160,13 @@
             <p id="jobsStatus" class="dim mono">Loading…</p>
             <div id="results" class="mono"></div>
             <div id="logicUnitHistory" class="metric-block" aria-live="polite"></div>
-            <div class="row" style="margin-top: var(--sp2); align-items: center;">
+            <div class="row row-tight">
               <button id="exportHistory" class="ghost" type="button">Download history (JSON)</button>
             </div>
           </section>
           <section class="card" role="region" aria-labelledby="shortcutsTitle">
             <h3 id="shortcutsTitle">Keyboard shortcuts</h3>
+            <p class="section-lead">Navigate training jobs quickly without leaving the keyboard.</p>
             <ul class="metric-list">
               <li><strong>↑ / ↓</strong> — focus previous/next job</li>
               <li><strong>Enter</strong> — toggle job details</li>

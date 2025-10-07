@@ -11,38 +11,84 @@
     <script src="common.js" defer></script>
     <script src="events.js" defer></script>
   </head>
-  <body>
+  <body data-page="events">
     <a href="#log" class="skip-link">Skip to events log</a>
-    <div class="toolbar" role="region" aria-label="Events controls">
-      <label>Port: <input id="port" aria-label="Port" type="number" min="1" max="65535" value="8091"></label>
-      <label>Prefix: <input id="filter" aria-label="Event prefix filter" type="text" placeholder="e.g. models. or state."></label>
-      <label>Include: <input id="inc" aria-label="Include text" type="text" placeholder="text in body"></label>
-      <label>Exclude: <input id="exc" aria-label="Exclude text" type="text" placeholder="text to skip"></label>
-      <button id="btn-replay" class="primary">Replay 50</button>
-      <span class="dim">Presets:</span>
-      <button class="ghost" data-preset="state.">state</button>
-      <button class="ghost" data-preset="models.">models</button>
-      <button class="ghost" data-preset="tools.">tools</button>
-      <button class="ghost" data-preset="egress.">egress</button>
-      <button class="ghost" data-preset="feedback.">feedback</button>
-      <button class="ghost" data-preset="rpu.">rpu</button>
-      <button id="btn-shortcuts" class="ghost" title="Show keyboard shortcuts">Shortcuts</button>
-      <button id="btn-help" class="ghost" title="Open keyboard shortcuts docs">Help</button>
-      <button id="btn-clear" title="Clear events">Clear</button>
-      <button id="btn-copy" title="Copy last event">Copy last</button>
-      <label class="dim"><input type="checkbox" id="pretty" checked> pretty</label>
-      <label class="dim"><input type="checkbox" id="wrap" checked> wrap</label>
-      <label class="dim">SLO p95 (ms): <input id="slo" type="number" min="10" step="10" value="150" style="width:90px"></label>
-      <label class="dim"><input type="checkbox" id="pause"> pause</label>
-      <span id="baseBadge" class="badge base-badge mono" aria-live="polite"></span>
-      <span id="statusBadges" class="badges" style="margin-left:auto"></span>
-      <span class="badges" style="margin-left:12px">
-        <span id="cpuBadge" class="badge" aria-label="CPU usage">CPU: –</span>
-        <span id="memBadge" class="badge" aria-label="Memory usage">Mem: –</span>
-        <span id="gpuBadge" class="badge" aria-label="GPU usage">GPU: –</span>
-      </span>
-      <span class="dim">SSE: <b id="stat" role="status" aria-live="polite">off</b></span>
+    <div class="wrap events-wrap">
+      <header class="events-head">
+        <div class="events-title">
+          <strong>Events Stream</strong>
+          <p>Monitor live SSE traffic, probe metrics, and replay recent activity when you need to retrace steps.</p>
+        </div>
+        <div class="events-meta">
+          <label>Port: <input id="port" aria-label="Port" type="number" min="1" max="65535" value="8091"></label>
+          <span id="baseBadge" class="badge base-badge mono" aria-live="polite"></span>
+        </div>
+        <div class="events-actions">
+          <button id="btn-shortcuts" class="ghost" title="Show keyboard shortcuts">Shortcuts</button>
+          <button id="btn-help" class="ghost" title="Open keyboard shortcuts docs">Help</button>
+        </div>
+        <div class="events-status">
+          <span id="statusBadges" class="badges"></span>
+          <div class="events-metrics badges">
+            <span id="cpuBadge" class="badge" aria-label="CPU usage">CPU: –</span>
+            <span id="memBadge" class="badge" aria-label="Memory usage">Mem: –</span>
+            <span id="gpuBadge" class="badge" aria-label="GPU usage">GPU: –</span>
+          </div>
+          <span class="dim">SSE: <b id="stat" role="status" aria-live="polite">off</b></span>
+        </div>
+      </header>
+      <main class="events-main">
+        <section class="card events-controls" role="region" aria-labelledby="eventsControlsTitle">
+          <div class="events-controls-head">
+            <h2 id="eventsControlsTitle">Controls</h2>
+            <div class="events-controls-actions">
+              <button id="btn-replay" class="primary">Replay 50</button>
+              <button id="btn-clear" class="ghost" title="Clear events">Clear</button>
+              <button id="btn-copy" class="ghost" title="Copy last event">Copy last</button>
+            </div>
+          </div>
+          <p class="section-lead">Adjust filters, manage replays, and keep the stream focused on what matters.</p>
+          <div class="events-control-grid">
+            <label>Prefix
+              <input id="filter" aria-label="Event prefix filter" type="text" placeholder="e.g. models. or state.">
+            </label>
+            <label>Include text
+              <input id="inc" aria-label="Include text" type="text" placeholder="text in body">
+            </label>
+            <label>Exclude text
+              <input id="exc" aria-label="Exclude text" type="text" placeholder="text to skip">
+            </label>
+            <label>SLO p95 (ms)
+              <input id="slo" type="number" min="10" step="10" value="150">
+            </label>
+          </div>
+          <div class="events-presets">
+            <span class="dim">Presets</span>
+            <div class="button-row">
+              <button class="ghost" data-preset="state.">state</button>
+              <button class="ghost" data-preset="models.">models</button>
+              <button class="ghost" data-preset="tools.">tools</button>
+              <button class="ghost" data-preset="egress.">egress</button>
+              <button class="ghost" data-preset="feedback.">feedback</button>
+              <button class="ghost" data-preset="rpu.">rpu</button>
+            </div>
+          </div>
+          <div class="events-toggles">
+            <label class="key"><input type="checkbox" id="pretty" checked> pretty JSON</label>
+            <label class="key"><input type="checkbox" id="wrap" checked> wrap lines</label>
+            <label class="key"><input type="checkbox" id="pause"> pause stream</label>
+          </div>
+        </section>
+        <section class="card events-stream" role="region" aria-labelledby="eventsStreamTitle">
+          <div class="events-stream-head">
+            <h2 id="eventsStreamTitle">Live events</h2>
+            <p class="section-lead">Newest events appear first. Filters apply before entries render.</p>
+          </div>
+          <div class="events-stream-body">
+            <div id="log" role="log" aria-live="polite" aria-relevant="additions text"></div>
+          </div>
+        </section>
+      </main>
     </div>
-    <div id="log" role="log" aria-live="polite" aria-relevant="additions text"></div>
   </body>
   </html>

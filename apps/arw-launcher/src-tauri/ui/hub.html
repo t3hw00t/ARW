@@ -7,32 +7,50 @@
     <link rel="stylesheet" href="tokens.css" />
     <link rel="stylesheet" href="ui-kit.css" />
     <link rel="stylesheet" href="common.css" />
+    <link rel="stylesheet" href="hub.css" />
     <script src="common.js" defer></script>
     <script src="hub.js" defer></script>
   </head>
-  <body>
+  <body data-page="hub">
     <a href="#main" class="skip-link">Skip to main content</a>
     <div class="wrap">
-      <header class="row">
-        <strong>Project Hub</strong>
-        <label>Port: <input id="port" type="number" min="1" max="65535" value="8091"></label>
-        <span id="baseBadge" class="badge base-badge mono" aria-live="polite"></span>
-        <button id="btn-focus" class="ghost">Toggle Focus</button>
-        <button id="btn-save" class="ghost">Save Layout</button>
-        <button id="btn-apply" class="ghost">Apply Layout</button>
-        <label class="key"><input type="checkbox" id="tplPerProj"> per‑project</label>
-        <button id="btn-gallery" class="ghost">Gallery</button>
-        <button id="btn-shortcuts" class="ghost" title="Show keyboard shortcuts">Shortcuts</button>
-        <button id="btn-help" class="ghost" title="Open keyboard shortcuts docs">Help</button>
-        <span id="galleryBadge" class="badge" title="Recent screenshots"><span class="dot"></span> 0</span>
-        <span id="runtimeBadge" class="badge" aria-live="polite" aria-atomic="true" style="margin-left:auto"></span>
-        <span id="statusBadges" class="badges"></span>
-        <span id="sseStat" class="dim" role="status" aria-live="polite">SSE: off</span>
+      <header class="hub-toolbar">
+        <div class="toolbar-primary">
+          <div class="title-block">
+            <strong>Project Hub</strong>
+            <p>Manage projects, live context, and run artifacts from one place.</p>
+          </div>
+          <div class="connection-block">
+            <label>Port: <input id="port" type="number" min="1" max="65535" value="8091"></label>
+            <span id="baseBadge" class="badge base-badge mono" aria-live="polite"></span>
+          </div>
+        </div>
+        <div class="toolbar-secondary">
+          <div class="cluster">
+            <button id="btn-focus" class="ghost">Toggle Focus</button>
+            <button id="btn-save" class="ghost">Save Layout</button>
+            <button id="btn-apply" class="ghost">Apply Layout</button>
+            <label class="key"><input type="checkbox" id="tplPerProj"> per-project</label>
+          </div>
+          <div class="cluster">
+            <button id="btn-gallery" class="ghost">Gallery</button>
+            <button id="btn-shortcuts" class="ghost" title="Show keyboard shortcuts">Shortcuts</button>
+            <button id="btn-help" class="ghost" title="Open keyboard shortcuts docs">Help</button>
+          </div>
+        </div>
+        <div class="toolbar-status">
+          <span id="galleryBadge" class="badge" title="Recent screenshots"><span class="dot"></span> 0</span>
+          <span id="runtimeBadge" class="badge" aria-live="polite" aria-atomic="true"></span>
+          <span id="statusBadges" class="badges"></span>
+          <span id="sseStat" class="dim" role="status" aria-live="polite">SSE: off</span>
+        </div>
       </header>
+      <p class="section-lead hub-intro">Pick a project to hydrate every panel—files, context, runs, and diagnostics stay in sync.</p>
       <div class="layout">
         <main class="grid cols-2" id="main">
           <section class="card" id="files" role="region" aria-labelledby="filesTitle">
             <h3 id="filesTitle">Files</h3>
+            <p class="section-lead">Browse the project tree, preview files, and copy paths in a click.</p>
             <div class="row">
               <label class="key">Project</label>
               <select id="projSel" aria-label="Select project" style="min-width:180px"></select>
@@ -54,6 +72,7 @@
           </section>
           <section class="card" id="notes" role="region" aria-labelledby="notesTitle">
             <h3 id="notesTitle">Notes</h3>
+            <p class="section-lead">Keep lightweight context or next actions alongside the project.</p>
             <div class="row"><span class="key">project</span> <code id="curProj">–</code></div>
             <textarea id="notesArea" style="width:100%; min-height:160px" placeholder="Project notes..."></textarea>
             <div id="notesMeta" class="notes-meta" role="status" aria-live="polite" style="display:none"></div>
@@ -61,6 +80,7 @@
           </section>
           <section class="card" id="agents" role="region" aria-labelledby="agentsTitle">
             <h3 id="agentsTitle">Agents</h3>
+            <p class="section-lead">Inspect orchestrator roles and switch scopes to debug distributed runs.</p>
             <div class="row">
               <label class="key">role</label>
               <select id="roleSel">
@@ -77,6 +97,7 @@
           </section>
           <section class="card" id="runtime" role="region" aria-labelledby="runtimeTitle">
             <h3 id="runtimeTitle">Runtimes <span class="dim" style="font-weight:400">(Managed)</span></h3>
+            <p class="section-lead">Monitor managed runtimes, restart budgets, and accelerator coverage.</p>
             <div class="row" role="toolbar" aria-label="Runtime controls">
               <button id="runtimeRefresh" class="ghost">Refresh</button>
               <label class="key"><input type="checkbox" id="runtimeAuto" checked> auto refresh</label>
@@ -109,6 +130,7 @@
           </section>
           <section class="card" id="context" role="region" aria-labelledby="contextTitle">
             <h3 id="contextTitle">What's in Context Now</h3>
+            <p class="section-lead">Understand the assembled prompt context, cascade summaries, and recall risk.</p>
             <div class="row">
               <button id="btnContextRefresh" class="ghost">Refresh</button>
               <label class="key"><input id="contextIncludeSources" type="checkbox"> include seeds</label>
@@ -153,6 +175,7 @@
           </section>
           <section class="card" id="runs" role="region" aria-labelledby="runsTitle">
             <h3 id="runsTitle">Runs</h3>
+            <p class="section-lead">Filter recent orchestrations, compare snapshots, and inspect artifacts.</p>
             <div class="row">
               <input id="runFilter" placeholder="filter runs…" aria-label="Filter runs by id, actor, kind, or project" style="min-width:200px">
               <label class="key">Actor
@@ -192,6 +215,7 @@
           </section>
           <section class="card" id="compare" role="region" aria-labelledby="compareTitle">
             <h3 id="compareTitle">Compare</h3>
+            <p class="section-lead">Pin two outputs and diff them across text, images, or tabular data.</p>
             <div class="cmp-tabs" role="tablist" aria-label="Compare views">
               <button id="tab-text" role="tab" class="active" aria-selected="true" aria-controls="cmpText" tabindex="0" title="Show Text / JSON compare">Text / JSON</button>
               <button id="tab-image" role="tab" aria-selected="false" aria-controls="cmpImage" tabindex="-1" title="Show Image compare">Image</button>
