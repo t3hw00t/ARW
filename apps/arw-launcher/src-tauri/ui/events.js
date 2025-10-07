@@ -6,6 +6,13 @@ function bytesHuman(n){ if(!n && n!==0) return '–'; const kb=1024, mb=kb*1024,
 function setCpuBadge(p){ try{ const el=document.getElementById('cpuBadge'); if(!el) return; const v = Number(p)||0; el.textContent = 'CPU: ' + v.toFixed(1) + '%'; el.className = 'badge ' + (v>=90? 'bad' : v>=75? 'warn':''); }catch{} }
 function setMemBadge(used,total){ try{ const el=document.getElementById('memBadge'); if(!el) return; const pct = total>0? (100*used/total):0; el.textContent = 'Mem: ' + pct.toFixed(1) + '% ('+bytesHuman(used)+'/'+bytesHuman(total)+')'; el.className = 'badge ' + (pct>=90? 'bad' : pct>=75? 'warn':''); }catch{} }
 function setGpuBadge(used,total){ try{ const el=document.getElementById('gpuBadge'); if(!el) return; const pct = total>0? (100*used/total):0; el.textContent = 'GPU: ' + pct.toFixed(1) + '%'; el.className = 'badge ' + (pct>=95? 'bad' : pct>=80? 'warn':''); }catch{} }
+async function refreshRouteStats(meta){
+  try {
+    await ARW.metrics.routeStats({ base: meta?.base });
+  } catch (err) {
+    console.warn('route stats refresh failed', err);
+  }
+}
 function add(kind, envelope) {
   const compact = JSON.stringify(envelope || {});
   const prettyBody = (()=>{ try{return JSON.stringify(envelope, null, 2);}catch{return compact;} })();
@@ -81,7 +88,7 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     } catch {}
     sse(0);
-    await fetchRouteStatsSnapshot({ renderNow: true });
+    await refreshRouteStats(meta);
   };
   const portInput = document.getElementById('port');
   if (portInput) {
@@ -93,6 +100,7 @@ document.addEventListener('DOMContentLoaded', () => {
     await ARW.applyPortFromPrefs('port');
     const meta = updateBaseMeta();
     sse(0);
+    await refreshRouteStats(meta);
     try {
       const current = meta.base;
       const j = await ARW.http.json(current, '/admin/probe/metrics');

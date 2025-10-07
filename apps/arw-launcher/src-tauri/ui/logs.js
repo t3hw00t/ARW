@@ -86,21 +86,19 @@ function handleProbeMetrics({ env }){
 
 async function fetchRouteStatsSnapshot({ renderNow = false } = {}) {
   const out = document.getElementById('out');
-  if (renderNow) out.innerHTML = '';
-  document.getElementById('stat').textContent = 'Loading…';
-  const statsPath = 'state/route_stats';
+  if (renderNow && out) out.innerHTML = '';
+  const statEl = document.getElementById('stat');
+  if (statEl) statEl.textContent = 'Loading…';
   const meta = updateBaseMeta();
   const baseUrl = meta.base;
   try {
-    const snapshot = await ARW.http.json(baseUrl, `/${statsPath}`, { headers: { 'Accept': 'application/json' } });
+    const snapshot = await ARW.metrics.routeStats({ base: baseUrl });
     lastJson = snapshot;
-    ARW.read._store.set('route_stats', snapshot);
-    ARW.read._emit('route_stats');
     if (!autoEnabled() || renderNow) render(snapshot);
-    document.getElementById('stat').textContent = 'OK';
+    if (statEl) statEl.textContent = 'OK';
   } catch (e) {
-    document.getElementById('stat').textContent = 'Error';
-    if (renderNow) {
+    if (statEl) statEl.textContent = 'Error';
+    if (renderNow && out) {
       const pre = document.createElement('pre');
       pre.textContent = String(e);
       out.appendChild(pre);

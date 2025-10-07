@@ -1,5 +1,12 @@
 const port = () => ARW.getPortFromInput('port');
-const REMOTE_BASE = ARW.baseOverride() || null;
+const currentRemoteBase = () => {
+  try {
+    const override = ARW.baseOverride();
+    return override ? override : null;
+  } catch {
+    return null;
+  }
+};
 const updateBaseMeta = () => ARW.applyBaseMeta({ portInputId: 'port', badgeId: 'baseBadge', label: 'Base' });
 
 let modelsSseSub = null;
@@ -31,10 +38,11 @@ function connectModelsSse({ replay = 0, resume = true } = {}) {
 }
 
 async function ivk(cmd, args){
-  if (!REMOTE_BASE) return ARW.invoke(cmd, args);
-  const tok = await ARW.connections.tokenFor(REMOTE_BASE);
-  const get = (p)=> ARW.invoke('admin_get_json_base', { base: REMOTE_BASE, path: p, token: tok });
-  const post = (p, body)=> ARW.invoke('admin_post_json_base', { base: REMOTE_BASE, path: p, body: body||{}, token: tok });
+  const remoteBase = currentRemoteBase();
+  if (!remoteBase) return ARW.invoke(cmd, args);
+  const tok = await ARW.connections.tokenFor(remoteBase);
+  const get = (p)=> ARW.invoke('admin_get_json_base', { base: remoteBase, path: p, token: tok });
+  const post = (p, body)=> ARW.invoke('admin_post_json_base', { base: remoteBase, path: p, body: body||{}, token: tok });
   switch(cmd){
     case 'models_summary':{
       const env = await get('admin/models/summary');
@@ -75,7 +83,7 @@ async function ivk(cmd, args){
       const order= args?.order ? `&order=${encodeURIComponent(args.order)}` : '';
       const path = `state/models_hashes?limit=${limit}&offset=${offset}${prov}${sort}${order}`;
       // public endpoint
-      return ARW.invoke('admin_get_json_base', { base: REMOTE_BASE, path, token: null });
+      return ARW.invoke('admin_get_json_base', { base: remoteBase, path, token: null });
     }
     default:
       // Fallback to local behavior
@@ -231,9 +239,10 @@ function renderStatusBadge(model){
 async function fetchAdminJson(path){
   const clean = String(path || '').replace(/^\/+/, '');
   try{
-    if (REMOTE_BASE){
-      const token = await ARW.connections.tokenFor(REMOTE_BASE);
-      return await ARW.invoke('admin_get_json_base', { base: REMOTE_BASE, path: clean, token });
+    const remoteBase = currentRemoteBase();
+    if (remoteBase){
+      const token = await ARW.connections.tokenFor(remoteBase);
+      return await ARW.invoke('admin_get_json_base', { base: remoteBase, path: clean, token });
     }
   }catch(e){ console.error(e); }
   const headers = {};
@@ -251,10 +260,11 @@ async function fetchAdminJson(path){
 async function postAdminJson(path, body){
   const clean = String(path || '').replace(/^\/+/, '');
   try{
-    if (REMOTE_BASE){
-      const token = await ARW.connections.tokenFor(REMOTE_BASE);
+    const remoteBase = currentRemoteBase();
+    if (remoteBase){
+      const token = await ARW.connections.tokenFor(remoteBase);
       return await ARW.invoke('admin_post_json_base', {
-        base: REMOTE_BASE,
+        base: remoteBase,
         path: clean,
         body: body || {},
         token,
@@ -373,6 +383,7 @@ async function refresh() {
   document.getElementById('stat').textContent = 'Loading...';
   const sum = await ivk('models_summary', { port: port() });
   const def = (sum && sum.default) || '';
+  const remoteBase = currentRemoteBase();
   document.getElementById('def').textContent = `Default: ${def || '(none)'}`;
   // Concurrency + metrics line
   try{
@@ -425,7 +436,7 @@ async function refresh() {
     `;
 
     const pathCell = tr.children[3];
-    if (!REMOTE_BASE && m.path){
+    if (!remoteBase && m.path){
       const openBtn = document.createElement('button');
       openBtn.textContent = 'Open';
       openBtn.title = 'Open path locally';
@@ -613,7 +624,8 @@ function startModelsSse() {
               await refresh();
               const list = await ivk('models_list', { port: port() });
               const found = (list || []).find((mm) => mm.id === id);
-              if (!REMOTE_BASE && found && found.path) {
+              const remote = currentRemoteBase();
+              if (!remote && found && found.path) {
                 try { await ivk('open_path', { path: found.path }); } catch (e) { console.error(e); }
               }
               removeBar(id);
@@ -631,7 +643,8 @@ function startModelsSse() {
             await refresh();
             const list2 = await ivk('models_list', { port: port() });
             const found = (list2 || []).find((mm) => mm.id === pl.id);
-            if (found && found.path) {
+            const remote = currentRemoteBase();
+            if (!remote && found && found.path) {
               try { await ivk('open_path', { path: found.path }); } catch (e) { console.error(e); }
             }
           })();
@@ -868,6 +881,7 @@ async function hashesRefresh(){
     const order = document.getElementById('hash-order').value || null;
     const limit = parseInt(document.getElementById('hash-limit').value||'50', 10);
     const offset = (typeof window.__hashOffset==='number') ? Math.max(0, window.__hashOffset|0) : 0;
+    const remoteBase = currentRemoteBase();
     const page = await ivk('state_models_hashes', { limit, offset, provider: prov, sort, order, port: port() });
     const tb = document.getElementById('hashes'); tb.innerHTML = '';
     const fragHashes = document.createDocumentFragment();
@@ -881,7 +895,8 @@ async function hashesRefresh(){
       const hasPath = typeof it.path === 'string' && it.path.length > 0;
       const pathSafe = hasPath ? escapeHtml(it.path) : '<span class="dim">—</span>';
       const pathAttr = hasPath ? escapeHtml(it.path) : '';
-      const pbtn = hasPath ? ` <button data-open="${pathAttr}">Open</button>` : '';
+      const showOpen = hasPath && !remoteBase;
+      const pbtn = showOpen ? ` <button data-open="${pathAttr}">Open</button>` : '';
       tr.innerHTML = `
         <td class="mono">${it.sha256||''}</td>
         <td>${bytesHuman(it.bytes||0)}</td>
@@ -889,8 +904,10 @@ async function hashesRefresh(){
         <td>${provsCell}</td>
         <td>${modelsCell}</td>
       `;
-      const op = tr.querySelector('[data-open]');
-      if (op) op.addEventListener('click', async (e)=>{ await ivk('open_path', { path: e.target.getAttribute('data-open') }); });
+      if (showOpen) {
+        const op = tr.querySelector('[data-open]');
+        if (op) op.addEventListener('click', async (e)=>{ await ivk('open_path', { path: e.target.getAttribute('data-open') }); });
+      }
       fragHashes.appendChild(tr);
     });
     tb.appendChild(fragHashes);

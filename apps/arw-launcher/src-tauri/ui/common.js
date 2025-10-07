@@ -148,6 +148,35 @@ window.ARW = {
       return null;
     }
   },
+  metrics: {
+    async routeStats({ base, signal, headers, store = true } = {}) {
+      try {
+        const resolvedBase = base || (() => {
+          try {
+            const meta = ARW.baseMeta(ARW.getPortFromInput('port'));
+            return meta.base;
+          } catch {
+            return ARW.base();
+          }
+        })();
+        const init = {};
+        if (signal) init.signal = signal;
+        const mergedHeaders = Object.assign({ Accept: 'application/json' }, headers || {});
+        init.headers = mergedHeaders;
+        const snapshot = await ARW.http.json(resolvedBase, '/state/route_stats', init);
+        const safe = snapshot && typeof snapshot === 'object' ? snapshot : {};
+        if (store && ARW.read && ARW.read._store && typeof ARW.read._emit === 'function') {
+          try {
+            ARW.read._store.set('route_stats', safe);
+            ARW.read._emit('route_stats');
+          } catch {}
+        }
+        return safe;
+      } catch (err) {
+        throw err;
+      }
+    },
+  },
   validateProjectName(name) {
     const raw = String(name ?? '').trim();
     if (!raw) return { ok: false, error: 'Project name cannot be empty' };
