@@ -747,7 +747,7 @@ impl Kernel {
         };
         let mut out = Vec::new();
         while let Some(row) = rows.next()? {
-            out.push(Self::map_event_row(&row)?);
+            out.push(Self::map_event_row(row)?);
         }
         // Ensure ascending order for replay
         if after_id.is_none() {
@@ -773,7 +773,7 @@ impl Kernel {
         };
         let mut out = Vec::new();
         while let Some(row) = rows.next()? {
-            out.push(Self::map_event_row(&row)?);
+            out.push(Self::map_event_row(row)?);
         }
         Ok(out)
     }
@@ -825,7 +825,7 @@ impl Kernel {
         let mut rows = stmt.query(params_from_iter(query_params.iter()))?;
         let mut out_desc = Vec::new();
         while let Some(row) = rows.next()? {
-            out_desc.push(Self::map_event_row(&row)?);
+            out_desc.push(Self::map_event_row(row)?);
         }
         out_desc.reverse();
         Ok((out_desc, total))

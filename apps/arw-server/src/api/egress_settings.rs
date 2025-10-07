@@ -110,7 +110,7 @@ fn scope_configs_to_view(scopes: &[egress_policy::ScopeConfig]) -> Vec<NetworkSc
             expired: scope
                 .expires_at_ts
                 .as_ref()
-                .map(|ts| ts.clone() <= now)
+                .map(|ts| *ts <= now)
                 .unwrap_or(false),
         })
         .collect()

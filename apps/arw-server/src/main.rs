@@ -970,6 +970,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[allow(clippy::await_holding_lock)]
     async fn admin_ok_rate_limits_plain_token() {
         let _lock = super::ADMIN_ENV_GUARD.lock();
         crate::security::reset_admin_rate_limiter_for_tests();
@@ -989,18 +990,19 @@ mod tests {
     }
 
     #[tokio::test]
+    #[allow(clippy::await_holding_lock)]
     async fn admin_ok_rate_limits_hashed_token() {
-        let _lock = super::ADMIN_ENV_GUARD.lock();
-        crate::security::reset_admin_rate_limiter_for_tests();
-        let mut env = crate::test_support::env::guard();
-        env.set("ARW_DEBUG", "0");
-        env.remove("ARW_ADMIN_TOKEN");
         let plain = "topsecret";
         let digest = {
             let mut h = sha2::Sha256::new();
             h.update(plain.as_bytes());
             hex::encode(h.finalize())
         };
+        let _lock = super::ADMIN_ENV_GUARD.lock();
+        crate::security::reset_admin_rate_limiter_for_tests();
+        let mut env = crate::test_support::env::guard();
+        env.set("ARW_DEBUG", "0");
+        env.remove("ARW_ADMIN_TOKEN");
         env.set("ARW_ADMIN_TOKEN_SHA256", digest);
         env.set("ARW_ADMIN_RATE_LIMIT", "1");
         env.set("ARW_ADMIN_RATE_WINDOW_SECS", "300");

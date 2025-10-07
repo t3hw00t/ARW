@@ -15,6 +15,7 @@ use reqwest::{blocking::Client, header::ACCEPT, StatusCode};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value as JsonValue};
 use sha2::Digest;
+use std::cmp::Reverse;
 use std::collections::{BTreeMap, HashSet, VecDeque};
 use std::env;
 use std::fmt::Write as _;
@@ -2760,7 +2761,7 @@ fn cmd_admin_review_quarantine_list(args: &AdminReviewQuarantineListArgs) -> Res
         })
         .collect();
 
-    filtered.sort_by(|a, b| parse_quarantine_time(b).cmp(&parse_quarantine_time(a)));
+    filtered.sort_by_key(|entry| Reverse(parse_quarantine_time(entry)));
     if let Some(limit) = args.limit {
         if filtered.len() > limit {
             filtered.truncate(limit);
@@ -2865,7 +2866,7 @@ fn cmd_admin_review_quarantine_admit(args: &AdminReviewQuarantineAdmitArgs) -> R
 
         if let Some(entry) = response.get("entry") {
             if !entry.is_null() {
-                render_quarantine_entries_text(&[entry.clone()], args.show_preview)?;
+                render_quarantine_entries_text(std::slice::from_ref(entry), args.show_preview)?;
             }
         }
     }
@@ -3744,6 +3745,7 @@ fn append_context_summary(path: &Path, stamp: Option<&str>, summary: &str) -> Re
     append_text_output(path, stamp, summary, None)
 }
 
+#[cfg_attr(not(test), allow(dead_code))]
 fn append_context_json(path: &Path, body: &JsonValue, pretty: bool) -> Result<()> {
     append_json_output(path, body, pretty, None)
 }
@@ -4398,8 +4400,8 @@ fn render_identity_snapshot(snapshot: &CliIdentitySnapshot) {
     entries.sort_by(|a, b| a.1.id.cmp(&b.1.id));
 
     println!(
-        "\n{:<4} {:<24} {:<18} {:<28} {:<8} {}",
-        "Src", "ID", "Roles", "Scopes", "Tokens", "Name / Notes"
+        "\n{:<4} {:<24} {:<18} {:<28} {:<8} Name / Notes",
+        "Src", "ID", "Roles", "Scopes", "Tokens"
     );
     for (source, principal) in entries {
         let id_display = ellipsize_str(&principal.id, 24);
@@ -4895,8 +4897,8 @@ fn render_quarantine_entries_text(entries: &[JsonValue], show_preview: bool) -> 
     );
 
     println!(
-        "{:<32} {:<14} {:<12} {:>6} {:<19} {:<12} {}",
-        "ID", "State", "Source", "Score", "When", "Project", "Markers"
+        "{:<32} {:<14} {:<12} {:>6} {:<19} {:<12} Markers",
+        "ID", "State", "Source", "Score", "When", "Project"
     );
 
     for entry in entries {
@@ -5166,7 +5168,7 @@ fn sanitize_list(list: &[String]) -> Vec<String> {
 }
 
 fn sanitize_ports(list: &[u16]) -> Vec<u16> {
-    let mut ports: Vec<u16> = list.iter().copied().collect();
+    let mut ports: Vec<u16> = list.to_vec();
     ports.sort_unstable();
     ports.dedup();
     ports

@@ -395,6 +395,71 @@ pub async fn memory_quarantine_admit(
     Ok((removed_count, removed))
 }
 
+pub async fn world_diffs_queue(bus: &Bus, req: WorldDiffQueueRequest) -> Result<WorldDiffEntry> {
+    let entry = WorldDiffEntry {
+        id: req.id.unwrap_or_else(|| Uuid::new_v4().to_string()),
+        project_id: req.project_id.unwrap_or_else(default_project_id),
+        from_node: req.from_node.unwrap_or_default(),
+        issued_at: now_iso(),
+        summary: req.summary.unwrap_or_default(),
+        changes: req.changes.unwrap_or_else(|| Value::Array(Vec::new())),
+        conflicts: Value::Array(Vec::new()),
+        note: None,
+        state: "queued".into(),
+    };
+    let path = world_diffs_review_path();
+    let mut items = read_array(&path).await;
+    items.push(Value::from(entry.clone()));
+    write_array(&path, &items).await?;
+    let mut ev = Value::from(entry.clone());
+    responses::attach_corr(&mut ev);
+    bus.publish(topics::TOPIC_WORLDDIFF_QUEUED, &ev);
+    Ok(entry)
+}
+
+pub async fn world_diffs_decision(bus: &Bus, req: WorldDiffDecision) -> Result<Option<Value>> {
+    let path = world_diffs_review_path();
+    let mut items = read_array(&path).await;
+    let mut updated: Option<Value> = None;
+    for item in items.iter_mut() {
+        let Some(obj) = item.as_object_mut() else {
+            continue;
+        };
+        if obj
+            .get("id")
+            .and_then(|x| x.as_str())
+            .map(|id| id == req.id)
+            .unwrap_or(false)
+        {
+            let state = match req.decision.as_str() {
+                "apply" => "applied",
+                "reject" => "rejected",
+                _ => "queued",
+            };
+            obj.insert("state".into(), Value::String(state.into()));
+            if let Some(note) = req.note.clone() {
+                obj.insert("note".into(), Value::String(note));
+            }
+            updated = Some(Value::Object(obj.clone()));
+            break;
+        }
+    }
+    if updated.is_none() {
+        return Ok(None);
+    }
+    write_array(&path, &items).await?;
+    if let Some(mut ev) = updated.clone() {
+        responses::attach_corr(&mut ev);
+        let topic = match ev.get("state").and_then(|v| v.as_str()).unwrap_or("queued") {
+            "applied" => topics::TOPIC_WORLDDIFF_APPLIED,
+            "rejected" => topics::TOPIC_WORLDDIFF_REJECTED,
+            _ => topics::TOPIC_WORLDDIFF_QUEUED,
+        };
+        bus.publish(topic, &ev);
+    }
+    Ok(updated)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -410,18 +475,19 @@ mod tests {
         let mut rx_queue = bus.subscribe();
 
         let preview_input = "<script>alert(1)</script>".repeat(200);
-        let mut request = MemoryQuarantineRequest::default();
-        request.id = Some("entry-test".to_string());
-        request.project_id = Some("proj-A".to_string());
-        request.episode_id = Some("episode-42".to_string());
-        request.corr_id = Some("  corr-xyz  ".to_string());
-        request.source = Some("World_Diff".to_string());
-        request.content_type = Some("text/html".to_string());
-        request.content_preview = Some(preview_input.clone());
-        request.provenance = Some(" https://example.test/page ".to_string());
-        request.risk_markers = Some(vec!["html".to_string(), "html".to_string()]);
-        request.evidence_score = Some(2.5);
-        request.extractor = Some("dom@1".to_string());
+        let request = MemoryQuarantineRequest {
+            id: Some("entry-test".to_string()),
+            project_id: Some("proj-A".to_string()),
+            episode_id: Some("episode-42".to_string()),
+            corr_id: Some("  corr-xyz  ".to_string()),
+            source: Some("World_Diff".to_string()),
+            content_type: Some("text/html".to_string()),
+            content_preview: Some(preview_input.clone()),
+            provenance: Some(" https://example.test/page ".to_string()),
+            risk_markers: Some(vec!["html".to_string(), "html".to_string()]),
+            evidence_score: Some(2.5),
+            extractor: Some("dom@1".to_string()),
+        };
 
         let entry = memory_quarantine_queue(&bus, request)
             .await
@@ -520,69 +586,4 @@ mod tests {
             "quarantine should be empty after admit"
         );
     }
-}
-
-pub async fn world_diffs_queue(bus: &Bus, req: WorldDiffQueueRequest) -> Result<WorldDiffEntry> {
-    let entry = WorldDiffEntry {
-        id: req.id.unwrap_or_else(|| Uuid::new_v4().to_string()),
-        project_id: req.project_id.unwrap_or_else(default_project_id),
-        from_node: req.from_node.unwrap_or_default(),
-        issued_at: now_iso(),
-        summary: req.summary.unwrap_or_default(),
-        changes: req.changes.unwrap_or_else(|| Value::Array(Vec::new())),
-        conflicts: Value::Array(Vec::new()),
-        note: None,
-        state: "queued".into(),
-    };
-    let path = world_diffs_review_path();
-    let mut items = read_array(&path).await;
-    items.push(Value::from(entry.clone()));
-    write_array(&path, &items).await?;
-    let mut ev = Value::from(entry.clone());
-    responses::attach_corr(&mut ev);
-    bus.publish(topics::TOPIC_WORLDDIFF_QUEUED, &ev);
-    Ok(entry)
-}
-
-pub async fn world_diffs_decision(bus: &Bus, req: WorldDiffDecision) -> Result<Option<Value>> {
-    let path = world_diffs_review_path();
-    let mut items = read_array(&path).await;
-    let mut updated: Option<Value> = None;
-    for item in items.iter_mut() {
-        let Some(obj) = item.as_object_mut() else {
-            continue;
-        };
-        if obj
-            .get("id")
-            .and_then(|x| x.as_str())
-            .map(|id| id == req.id)
-            .unwrap_or(false)
-        {
-            let state = match req.decision.as_str() {
-                "apply" => "applied",
-                "reject" => "rejected",
-                _ => "queued",
-            };
-            obj.insert("state".into(), Value::String(state.into()));
-            if let Some(note) = req.note.clone() {
-                obj.insert("note".into(), Value::String(note));
-            }
-            updated = Some(Value::Object(obj.clone()));
-            break;
-        }
-    }
-    if updated.is_none() {
-        return Ok(None);
-    }
-    write_array(&path, &items).await?;
-    if let Some(mut ev) = updated.clone() {
-        responses::attach_corr(&mut ev);
-        let topic = match ev.get("state").and_then(|v| v.as_str()).unwrap_or("queued") {
-            "applied" => topics::TOPIC_WORLDDIFF_APPLIED,
-            "rejected" => topics::TOPIC_WORLDDIFF_REJECTED,
-            _ => topics::TOPIC_WORLDDIFF_QUEUED,
-        };
-        bus.publish(topic, &ev);
-    }
-    Ok(updated)
 }

@@ -170,45 +170,53 @@ function resolveContainer(
     const nextSeg = segments[i + 1];
     const nextIsIndex = nextSeg === '-' || /^\d+$/.test(nextSeg ?? '');
     if (Array.isArray(node)) {
-      let idx = seg === '-' ? node.length : Number(seg);
-      if (!Number.isFinite(idx)) {
+      const idxRaw = seg === '-' ? node.length : Number(seg);
+      if (!Number.isInteger(idxRaw) || idxRaw < 0) {
         return null;
       }
-      if (idx >= node.length) {
+      const idx = idxRaw;
+      if (idx > node.length) {
+        return null;
+      }
+      if (idx === node.length) {
         if (!createMissing) {
           return null;
         }
-        while (node.length <= idx) {
-          node.push(nextIsIndex ? [] : {});
-        }
+        const newChild = nextIsIndex ? [] : {};
+        node.push(newChild);
+        node = newChild;
+        continue;
       }
-      if (node[idx] == null || typeof node[idx] !== 'object') {
+      let child = node[idx];
+      if (child === undefined) {
         if (!createMissing) {
           return null;
         }
-        node[idx] = nextIsIndex ? [] : {};
+        child = nextIsIndex ? [] : {};
+        node[idx] = child;
+      } else if (child === null || typeof child !== 'object') {
+        return null;
       }
-      node = node[idx];
+      node = child;
       continue;
     }
     if (isPlainObject(node)) {
-      if (!(seg in node) || node[seg] == null || typeof node[seg] !== 'object') {
+      const obj = node as Record<string, unknown>;
+      if (!(seg in obj) || obj[seg] === undefined) {
         if (!createMissing) {
-          if (!(seg in node)) {
-            return null;
-          }
-          if (node[seg] == null) {
-            return null;
-          }
           return null;
         }
-        node[seg] = nextIsIndex ? [] : {};
+        const newChild = nextIsIndex ? [] : {};
+        obj[seg] = newChild;
+        node = newChild;
+        continue;
       }
-      node = node[seg];
+      const child = obj[seg];
+      if (child === null || typeof child !== 'object') {
+        return null;
+      }
+      node = child;
       continue;
-    }
-    if (!createMissing) {
-      return null;
     }
     return null;
   }
