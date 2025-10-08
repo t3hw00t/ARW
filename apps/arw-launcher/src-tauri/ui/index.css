@@ -149,6 +149,19 @@ body.has-global-bar .launcher-wrap{
   color: var(--color-muted);
   max-width:38ch;
 }
+.connection-select{
+  display:flex;
+  flex-wrap:wrap;
+  gap: var(--sp2);
+  align-items:center;
+}
+.connection-select select{
+  flex:1 1 220px;
+  min-width:200px;
+}
+.connection-select .mini{
+  white-space:nowrap;
+}
 .token-control{
   display:flex;
   flex-wrap:wrap;

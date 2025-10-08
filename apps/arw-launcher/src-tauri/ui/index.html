@@ -68,6 +68,16 @@
               </label>
             </div>
             <div class="pref-field">
+              <label for="connectionSelect">Active connection</label>
+              <div class="connection-select">
+                <select id="connectionSelect" aria-label="Active connection">
+                  <option value="" selected>Local default (127.0.0.1)</option>
+                </select>
+                <button id="btn-open-connections" class="ghost mini" type="button" aria-label="Manage connections">Manage</button>
+              </div>
+              <p class="field-note">Jump to a saved remote or return to the default local stack without leaving the Control Room.</p>
+            </div>
+            <div class="pref-field">
               <label for="admintok">Admin token <small class="dim">(required for Hub, Chat, Training)</small></label>
               <div class="input-with-toggle token-control">
                 <input id="admintok" type="password" autocomplete="off" placeholder="Paste admin token"/>
@@ -94,6 +104,7 @@
             <strong>Secure setup required.</strong>
             <span id="tokenCalloutBody">Paste an admin token to unlock Project Hub, Chat, Training, and other admin surfaces.</span>
           </span>
+          <button id="btn-token-callout" class="ghost mini" type="button" aria-label="Open admin token controls">Set token</button>
         </div>
       </section>
       <div class="launcher-grid">

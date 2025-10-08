@@ -31,6 +31,7 @@ powershell -ExecutionPolicy Bypass -File scripts\start.ps1 -ServiceOnly -WaitHea
 - If WebView2 is missing, you’ll see a friendly warning and the launcher may prompt to install it.
 - Service console: starts minimized by default to dodge antivirus heuristics; use `-HideWindow` to keep it fully hidden like
   previous versions.
+- Want to skip the toolchain entirely? Grab the latest portable `.zip` (and MSI when available) from [GitHub Releases](https://github.com/t3hw00t/ARW/releases), extract, and run `bin\arw-launcher.exe` / `bin\arw-server.exe`.
 
 ## Install WebView2 (if needed)
 
@@ -55,6 +56,7 @@ This creates `dist/arw-<version>-windows-<arch>.zip` with:
 - Health: status in tray tooltip with optional desktop notifications.
 - Autostart: toggle launcher autostart at login from the UI.
 - Connection & alerts now includes a **Test** button that verifies the saved admin token against `/state/projects`, surfacing “valid”, “invalid”, or “offline” states inline before you open the workspaces.
+- The hero panel now exposes an **Active connection** selector so you can flip between the local stack and saved remotes without leaving the Control Room. Use the **Manage** shortcut beside it to open the full Connections manager.
 
 ## Installer status
 
@@ -82,3 +84,4 @@ This creates `dist/arw-<version>-windows-<arch>.zip` with:
 - Interactive start menu: `scripts\interactive-start-windows.ps1`
 - Quick smoke checks: `arw-cli smoke triad` (action/state/events) and `arw-cli smoke context` (wrappers respect `SMOKE_TRIAD_TIMEOUT_SECS` / `SMOKE_CONTEXT_TIMEOUT_SECS`; both fall back to `SMOKE_TIMEOUT_SECS`, default 600 — set to `0` to stream indefinitely when debugging)
 - Need different ports or want to keep the temp directory for debugging? Run `arw-cli smoke --help` to see all flags, or use the wrapper scripts under `scripts\smoke_*.ps1`.
+- Running the service on a different machine (Linux server, WSL, container)? Keep this launcher on Windows and point it at the remote via the Active connection picker; the hub/chat/debug browsers remain available at `http://<remote>:8091/admin/...` when you only need a browser.

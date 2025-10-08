@@ -28,6 +28,7 @@ bash scripts/start.sh --wait-health --admin-token "$(openssl rand -hex 32)"
 - `scripts/setup.sh` compiles `arw-server` (headless) and the Tauri launcher. The first build can take several minutes on a cold toolchain.
 - `scripts/start.sh` launches the service, waits for `/healthz`, and then opens the Control Room if the launcher is available. Pass `--service-only` to skip the launcher.
 - The script exports `ARW_EGRESS_PROXY_ENABLE=1` and `ARW_DNS_GUARD_ENABLE=1` by default. Override them if you need a fully offline profile.
+- Prefer to skip compiling? Download the latest macOS portable `.zip` from [GitHub Releases](https://github.com/t3hw00t/ARW/releases), extract, and run `bin/arw-server` / `bin/arw-launcher`.
 
 ## Control Room (Launcher) highlights
 
@@ -35,6 +36,7 @@ bash scripts/start.sh --wait-health --admin-token "$(openssl rand -hex 32)"
 - Unsaved token edits show a warning badge and explain the next steps (save changes, restart service). When the service is offline the callout tells you to restart before retrying.
 - Use **Open Service Log** to jump straight to the current `arw-server` stdout/stderr file in Finder.
 - Start/Stop buttons manage the bundled service; status polling every four seconds keeps the badge in sync.
+- Switch between the local stack and saved remotes directly from the **Active connection** selector—no need to leave the hero panel. The adjacent **Manage** button opens the full Connections manager.
 
 ## Portable bundles
 
@@ -67,6 +69,7 @@ bash scripts/package.sh
 - **Launcher rebuild** – `cargo build --release -p arw-launcher`
 - **WebKit errors** – ensure the Command Line Tools are up to date; WebKit is bundled with macOS so no extra packages are required.
 - **Token rejected** – use the Control Room **Test** button to confirm the value, then restart the service with the new token (`scripts/start.sh --admin-token ...`).
+- Running the service somewhere else (Linux box, container, teammate’s machine)? Keep the macOS Control Room and point it at the remote via Active connection, or just open `http://remote-host:8091/admin/debug` in Safari/Chrome when you only need a browser.
 
 ## Removing ARW
 

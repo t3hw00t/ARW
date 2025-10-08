@@ -3,6 +3,7 @@ const getPort = () => ARW.getPortFromInput('port');
 const updateBaseMeta = () => ARW.applyBaseMeta({ portInputId: 'port', badgeId: 'baseBadge', label: 'Base' });
 let baseMeta = null;
 const effectivePort = () => getPort() || (baseMeta && baseMeta.port) || 8091;
+const CONNECTION_SELECT_ID = 'connectionSelect';
 
 let miniDownloadsSub = null;
 let prefsDirty = false;
@@ -27,6 +28,8 @@ const CONTROL_BUTTONS = [
   { id: 'btn-open-window', requiresService: true, requiresToken: false },
 ];
 let tokenStatusState = { state: 'missing', message: '', token: '', context: 'saved' };
+let connectionsList = [];
+let tokenCalloutPrimed = false;
 
 function shouldOpenAdvancedPrefs() {
   const portEl = document.getElementById('port');
@@ -40,13 +43,44 @@ function shouldOpenAdvancedPrefs() {
   const loginOn = !!(login && login.checked);
   const token = document.getElementById('admintok');
   const tokenSet = !!(token && String(token.value || '').trim());
-  return portChanged || autostartOn || notificationsOff || loginOn || tokenSet;
+  const baseOverrideActive = !!(typeof ARW !== 'undefined' && ARW.baseOverride && ARW.baseOverride());
+  return portChanged || autostartOn || notificationsOff || loginOn || tokenSet || baseOverrideActive;
 }
 
 function syncAdvancedPrefsDisclosure() {
   const advanced = document.querySelector('.hero-preferences');
   if (!advanced) return;
+  if (advanced.dataset.forceOpen === 'true') {
+    advanced.open = true;
+    return;
+  }
   advanced.open = shouldOpenAdvancedPrefs();
+}
+
+function ensureAdvancedOpen({ focusToken = false, scrollIntoView = false } = {}) {
+  const advanced = document.querySelector('.hero-preferences');
+  if (!advanced) return;
+  if (!advanced.open) {
+    advanced.open = true;
+  }
+  advanced.dataset.forceOpen = 'true';
+  if (scrollIntoView) {
+    try {
+      advanced.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    } catch {}
+  }
+  if (focusToken) {
+    const input = tokenInputEl();
+    if (input) {
+      window.requestAnimationFrame(() => {
+        try {
+          input.focus();
+          const len = input.value.length;
+          input.setSelectionRange(len, len);
+        } catch {}
+      });
+    }
+  }
 }
 
 function applyPrefsDirty(state) {
@@ -112,6 +146,90 @@ function bindPrefWatchers() {
   });
   const tokenEl = document.getElementById('admintok');
   if (tokenEl) tokenEl.addEventListener('input', refreshPrefsDirty);
+}
+
+async function fetchLauncherPrefs({ fresh = false } = {}) {
+  if (!fresh) {
+    return (await ARW.getPrefs('launcher')) || {};
+  }
+  try {
+    const raw = await ARW.invoke('get_prefs', { namespace: 'launcher' });
+    if (raw && typeof raw === 'object') {
+      try {
+        ARW._prefsCache?.set?.('launcher', { ...raw });
+      } catch {}
+      return raw;
+    }
+  } catch {}
+  return {};
+}
+
+function normalizeConnectionEntry(entry) {
+  const name = typeof entry?.name === 'string' ? entry.name.trim() : '';
+  const baseRaw = typeof entry?.base === 'string' ? entry.base.trim() : '';
+  const normalizedBase =
+    (ARW.normalizeBase && ARW.normalizeBase(baseRaw)) || baseRaw || '';
+  const hasToken =
+    typeof entry?.token === 'string' && entry.token.trim().length > 0;
+  return {
+    name,
+    base: baseRaw,
+    normalizedBase,
+    hasToken,
+  };
+}
+
+function renderConnectionSelect() {
+  const select = document.getElementById(CONNECTION_SELECT_ID);
+  if (!select) return;
+  const override = (ARW.baseOverride && ARW.baseOverride()) || '';
+  const options = [
+    {
+      value: '',
+      label: 'Local default (127.0.0.1)',
+    },
+  ];
+  connectionsList.forEach((entry) => {
+    if (!entry.normalizedBase) return;
+    let host = entry.normalizedBase;
+    try {
+      const parsed = new URL(entry.normalizedBase);
+      host = parsed.host || parsed.hostname || entry.normalizedBase;
+    } catch {}
+    const prefix = entry.name ? `${entry.name} — ` : '';
+    const suffix = entry.hasToken ? ' (token saved)' : '';
+    options.push({
+      value: entry.normalizedBase,
+      label: `${prefix}${host}${suffix}`,
+    });
+  });
+  const currentValue = override || '';
+  const previousFocus = document.activeElement === select;
+  select.innerHTML = '';
+  options.forEach((opt) => {
+    const node = document.createElement('option');
+    node.value = opt.value;
+    node.textContent = opt.label;
+    select.appendChild(node);
+  });
+  select.value = currentValue;
+  if (select.value !== currentValue) {
+    select.value = '';
+  }
+  select.disabled = options.length === 1 && !override;
+  if (previousFocus) {
+    try {
+      select.focus();
+    } catch {}
+  }
+}
+
+async function refreshConnections({ fresh = false } = {}) {
+  const prefs = await fetchLauncherPrefs({ fresh });
+  const rawList = Array.isArray(prefs.connections) ? prefs.connections : [];
+  connectionsList = rawList.map(normalizeConnectionEntry);
+  renderConnectionSelect();
+  syncAdvancedPrefsDisclosure();
 }
 
 function updateHealthMetaLabel() {
@@ -188,7 +306,21 @@ function syncTokenCallout({ tokenValue, state, context } = {}) {
   }
   callout.hidden = !show;
   callout.setAttribute('aria-hidden', show ? 'false' : 'true');
-  if (!show || !body) return;
+  if (!show) {
+    tokenCalloutPrimed = false;
+    const advanced = document.querySelector('.hero-preferences');
+    if (advanced && advanced.dataset.forceOpen === 'true') {
+      delete advanced.dataset.forceOpen;
+      syncAdvancedPrefsDisclosure();
+    }
+    return;
+  }
+  const needsFocusStates = new Set(['missing', 'pending', 'invalid', 'offline', 'error']);
+  if (!tokenCalloutPrimed && needsFocusStates.has(currentState)) {
+    ensureAdvancedOpen({ focusToken: true, scrollIntoView: true });
+    tokenCalloutPrimed = true;
+  }
+  if (!body) return;
   body.textContent = message;
 }
 
@@ -650,20 +782,21 @@ function initStatusBadges() {
 }
 
 async function loadPrefs() {
-  try {
-    const v = await ARW.getPrefs('launcher');
-    if (v && typeof v === 'object') {
-      if (v.port) document.getElementById('port').value = v.port;
-      if (typeof v.autostart === 'boolean') document.getElementById('autostart').checked = v.autostart;
-      if (typeof v.notifyOnStatus === 'boolean') document.getElementById('notif').checked = v.notifyOnStatus;
-      if (typeof v.adminToken === 'string') document.getElementById('admintok').value = String(v.adminToken).trim();
-    }
-  } catch {}
+  const prefs = await fetchLauncherPrefs({ fresh: true });
+  if (prefs && typeof prefs === 'object') {
+    if (prefs.port) document.getElementById('port').value = prefs.port;
+    if (typeof prefs.autostart === 'boolean') document.getElementById('autostart').checked = prefs.autostart;
+    if (typeof prefs.notifyOnStatus === 'boolean') document.getElementById('notif').checked = prefs.notifyOnStatus;
+    if (typeof prefs.adminToken === 'string') document.getElementById('admintok').value = String(prefs.adminToken).trim();
+  }
   setTokenVisibility(false);
   try {
     const enabled = await invoke('launcher_autostart_status');
     document.getElementById('loginstart').checked = !!enabled
   } catch {}
+  const rawConnections = Array.isArray(prefs.connections) ? prefs.connections : [];
+  connectionsList = rawConnections.map(normalizeConnectionEntry);
+  renderConnectionSelect();
   snapshotPrefsBaseline();
   updateTokenBadge(prefBaseline.adminToken);
   syncAdvancedPrefsDisclosure();
@@ -846,6 +979,16 @@ document.addEventListener('DOMContentLoaded', () => {
   bindPrefWatchers();
   setTokenVisibility(false);
   initControlButtons();
+  const advanced = document.querySelector('.hero-preferences');
+  if (advanced) {
+    advanced.addEventListener('toggle', () => {
+      if (!advanced.open) {
+        delete advanced.dataset.forceOpen;
+        syncAdvancedPrefsDisclosure();
+      }
+    });
+  }
+  renderConnectionSelect();
   updateWorkspaceAvailability();
   const tokenToggle = document.getElementById('btn-token-toggle');
   if (tokenToggle) {
@@ -885,6 +1028,13 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     });
   }
+  const tokenCalloutBtn = document.getElementById('btn-token-callout');
+  if (tokenCalloutBtn) {
+    tokenCalloutBtn.addEventListener('click', () => {
+      tokenCalloutPrimed = true;
+      ensureAdvancedOpen({ focusToken: true, scrollIntoView: true });
+    });
+  }
   const tokenTest = document.getElementById('btn-token-test');
   if (tokenTest) {
     tokenTest.addEventListener('click', async () => {
@@ -918,6 +1068,37 @@ document.addEventListener('DOMContentLoaded', () => {
       } catch (err) {
         console.error(err);
         ARW.toast('Unable to open docs');
+      }
+    });
+  }
+  const manageConnectionsBtn = document.getElementById('btn-open-connections');
+  if (manageConnectionsBtn) {
+    manageConnectionsBtn.addEventListener('click', async () => {
+      try {
+        await invoke('open_connections_window');
+      } catch (err) {
+        console.error(err);
+        ARW.toast('Unable to open connections');
+      }
+    });
+  }
+  const connectionSelect = document.getElementById(CONNECTION_SELECT_ID);
+  if (connectionSelect) {
+    connectionSelect.addEventListener('change', () => {
+      const currentOverride = (ARW.baseOverride && ARW.baseOverride()) || '';
+      const next = connectionSelect.value;
+      if (next === currentOverride) return;
+      if (!next) {
+        ARW.clearBaseOverride();
+        ARW.toast('Switched to local stack');
+        return;
+      }
+      const normalized = ARW.setBaseOverride(next);
+      if (normalized) {
+        ARW.toast(`Active base: ${normalized}`);
+      } else {
+        connectionSelect.value = currentOverride || '';
+        ARW.toast('Unable to activate connection');
       }
     });
   }
@@ -1076,6 +1257,8 @@ document.addEventListener('DOMContentLoaded', () => {
     miniDownloads();
     health();
     refreshPrefsDirty();
+    renderConnectionSelect();
+    syncAdvancedPrefsDisclosure();
     updateWorkspaceAvailability();
   });
   const healthBtn = document.getElementById('btn-health');
@@ -1097,6 +1280,11 @@ document.addEventListener('DOMContentLoaded', () => {
   loadPrefs().then(() => {
     updateHealthMetaLabel();
   });
+});
+
+window.addEventListener('focus', () => {
+  if (document.hidden) return;
+  refreshConnections({ fresh: true });
 });
 
 window.addEventListener('beforeunload', () => {
