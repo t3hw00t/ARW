@@ -127,6 +127,8 @@ try {
   Warn "arw-launcher build skipped (optional): $($_.Exception.Message)"
 }
 
+Add-Content $installLog 'DIR target'
+
 if ($RunTests) {
   Title 'Run tests (workspace)'
   $nextest = Get-Command cargo-nextest -ErrorAction SilentlyContinue
@@ -168,25 +170,29 @@ if ($RunTests) {
   }
 }
 
-Title 'Generate workspace status page'
-try { & (Join-Path $PSScriptRoot 'docgen.ps1') } catch { Warn "docgen failed: $($_.Exception.Message)" }
+if (-not $Minimal) {
+  Title 'Generate workspace status page'
+  try { & (Join-Path $PSScriptRoot 'docgen.ps1') } catch { Warn "docgen failed: $($_.Exception.Message)" }
 
-Title 'Package portable bundle'
-try {
-  $packageScript = Join-Path $PSScriptRoot 'package.ps1'
-  $packageParams = @{ NoBuild = $true }
-  if ($StrictReleaseGate) { $packageParams['StrictReleaseGate'] = $true }
-  if ($SkipReleaseGate) { $packageParams['SkipReleaseGate'] = $true }
-  & $packageScript @packageParams
-} catch {
-  Warn "package.ps1 blocked by execution policy; retrying via child PowerShell with Bypass"
-  $fallback = @('-ExecutionPolicy','Bypass','-File',(Join-Path $PSScriptRoot 'package.ps1'),'-NoBuild')
-  if ($StrictReleaseGate) { $fallback += '-StrictReleaseGate' }
-  if ($SkipReleaseGate) { $fallback += '-SkipReleaseGate' }
-  & powershell @fallback
+  Title 'Package portable bundle'
+  try {
+    $packageScript = Join-Path $PSScriptRoot 'package.ps1'
+    $packageParams = @{ NoBuild = $true }
+    if ($StrictReleaseGate) { $packageParams['StrictReleaseGate'] = $true }
+    if ($SkipReleaseGate) { $packageParams['SkipReleaseGate'] = $true }
+    & $packageScript @packageParams
+  } catch {
+    Warn "package.ps1 blocked by execution policy; retrying via child PowerShell with Bypass"
+    $fallback = @('-ExecutionPolicy','Bypass','-File',(Join-Path $PSScriptRoot 'package.ps1'),'-NoBuild')
+    if ($StrictReleaseGate) { $fallback += '-StrictReleaseGate' }
+    if ($SkipReleaseGate) { $fallback += '-SkipReleaseGate' }
+    & powershell @fallback
+  }
+  Add-Content $installLog 'DIR dist'
+  if (Test-Path (Join-Path $root 'site')) { Add-Content $installLog 'DIR site' }
+} else {
+  Info 'Minimal mode: skipping docgen and packaging.'
 }
-'DIR target','DIR dist' | ForEach-Object { Add-Content $installLog $_ }
-if (Test-Path (Join-Path $root 'site')) { Add-Content $installLog 'DIR site' }
 
 Title 'Windows runtime check (WebView2 for Launcher)'
 try {
@@ -217,5 +223,9 @@ if ($warnings.Count -gt 0) {
   Title 'Warnings'
   foreach ($w in $warnings) { Write-Host "- $w" -ForegroundColor Yellow }
 }
-Info 'Done. See dist/ for portable bundle.'
+if ($Minimal) {
+  Info 'Done. Core binaries are available under target\release\'
+} else {
+  Info 'Done. See dist\ for portable bundle.'
+}
 

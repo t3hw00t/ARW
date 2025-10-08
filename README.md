@@ -157,6 +157,7 @@ If you prefer the bundled helper (build + package, docs optional), run:
 
 - Windows: `powershell -ExecutionPolicy Bypass -File scripts/setup.ps1`
 - Linux / macOS: `bash scripts/setup.sh`
+- Add `-Minimal` / `--minimal` to build only `arw-server`, `arw-cli`, and the launcher without packaging docs on the first run.
 - Prefer a portable build with no compilation? Grab the latest release archive from [GitHub Releases](https://github.com/t3hw00t/ARW/releases), then run `bin/arw-server` (service) and optionally `bin/arw-launcher`.
 
 ### 2. Set an admin token & start the unified server

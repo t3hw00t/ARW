@@ -37,6 +37,7 @@ problems.
     - Arch: `sudo pacman -S --needed gtk3 webkit2gtk-4.1 libsoup3`
     - Stuck on a distro without WebKitGTK 4.1 packages (e.g., Ubuntu 22.04, Debian 12 stable)? Run the service headless instead: `bash scripts/start.sh --service-only --wait-health`, then open the browser Control Room at `http://127.0.0.1:8091/admin/ui/control/`. Desktop-only actions (start/stop service, local log tails) still need the launcher or CLI. Saved Connections also let you point a desktop launcher running on another machine that meets the requirements.
     - `scripts/setup.sh` and `scripts/start.sh` emit a preflight warning when these libraries are missing so you can install them (`scripts/install-tauri-deps.sh`) before attempting another launcher build.
+    - Use `scripts/setup.sh --minimal` when you want to build only `arw-server`, `arw-cli`, and the launcher without generating docs or packaging; add docs later with `docgen.sh` / `package.sh`.
   - Headless components (server/CLI) often continue to run on older glibc-based
     distros, but we only validate and support the full stack on Ubuntu 24.04 LTS+
     and equivalents.

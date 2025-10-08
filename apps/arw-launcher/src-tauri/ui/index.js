@@ -31,6 +31,8 @@ const CONTROL_BUTTONS = [
 let tokenStatusState = { state: 'missing', message: '', token: '', context: 'saved' };
 let connectionsList = [];
 let tokenCalloutPrimed = false;
+let anonymousAdminAccess = { state: 'unknown', at: 0, base: '' };
+let allowAnonymousAdmin = false;
 
 function detectPreferredRestartShell() {
   try {
@@ -95,7 +97,30 @@ async function copyRestartCommandToClipboard(token, event) {
     ARW.toast(`Restart command copied (${restartShellLabel(shell)})`);
   } catch (err) {
     console.error(err);
-    ARW.toast('Copy failed');
+    ARW.toast('Copy failed — showing command');
+    try {
+      await ARW.modal.form({
+        title: `Restart command (${restartShellLabel(shell)})`,
+        description:
+          'Copy this command manually. Use Shift with “Copy restart” to switch shells.',
+        submitLabel: 'Close',
+        hideCancel: true,
+        fields: [
+          {
+            name: 'restart',
+            label: 'Command',
+            type: 'textarea',
+            value: command,
+            rows: 6,
+            readonly: true,
+            monospace: true,
+            autoSelect: true,
+          },
+        ],
+      });
+    } catch (modalErr) {
+      console.error(modalErr);
+    }
   }
 }
 
@@ -149,6 +174,58 @@ function ensureAdvancedOpen({ focusToken = false, scrollIntoView = false } = {})
       });
     }
   }
+}
+
+function normalizedBaseForAnonymous(meta) {
+  const raw = meta && typeof meta.base === 'string' ? meta.base.trim() : '';
+  if (!raw) return '';
+  return raw.replace(/\/+$/, '');
+}
+
+function resetAnonymousAdminAccess() {
+  anonymousAdminAccess = { state: 'unknown', at: 0, base: '' };
+  allowAnonymousAdmin = false;
+}
+
+async function probeAnonymousAdminAccess({ force = false, meta } = {}) {
+  const info = meta || baseMeta || updateBaseMeta();
+  const base = normalizedBaseForAnonymous(info);
+  if (!base) {
+    resetAnonymousAdminAccess();
+    anonymousAdminAccess.at = Date.now();
+    return false;
+  }
+  const now = Date.now();
+  if (
+    !force &&
+    anonymousAdminAccess.base === base &&
+    anonymousAdminAccess.state !== 'unknown' &&
+    now - anonymousAdminAccess.at < 10000
+  ) {
+    allowAnonymousAdmin = anonymousAdminAccess.state === 'ok';
+    return allowAnonymousAdmin;
+  }
+  anonymousAdminAccess = { state: 'checking', at: now, base };
+  try {
+    const resp = await fetch(`${base}/state/projects`, {
+      method: 'GET',
+      headers: { Accept: 'application/json' },
+    });
+    if (resp.ok) {
+      anonymousAdminAccess = { state: 'ok', at: Date.now(), base };
+      allowAnonymousAdmin = true;
+      return true;
+    }
+    if (resp.status === 401 || resp.status === 403) {
+      anonymousAdminAccess = { state: 'denied', at: Date.now(), base };
+    } else {
+      anonymousAdminAccess = { state: 'error', at: Date.now(), base };
+    }
+  } catch {
+    anonymousAdminAccess = { state: 'offline', at: Date.now(), base };
+  }
+  allowAnonymousAdmin = false;
+  return false;
 }
 
 function enterBrowserMode() {
@@ -390,6 +467,11 @@ function syncTokenCallout({ tokenValue, state, context } = {}) {
       show = true;
       message = 'Unable to verify the admin token. Check service logs and retry.';
       break;
+    case 'open':
+      show = true;
+      message =
+        'Running in debug mode. Admin surfaces are open without a token—set one before exposing the service.';
+      break;
     default:
       if (!trimmed) {
         show = true;
@@ -470,6 +552,7 @@ const TOKEN_STATUS_MESSAGES = {
     testing: 'Testing admin token…',
     offline: 'Service unreachable. Start the service, then try again.',
     error: 'Unable to verify admin token. Check the service logs and retry.',
+    open: 'Admin surfaces unlocked (debug mode). Set a token before you invite others.',
   },
   pending: {
     pending: 'Unsaved admin token. Save preferences to apply it.',
@@ -480,6 +563,7 @@ const TOKEN_STATUS_MESSAGES = {
     error: 'Unable to verify unsaved token. Adjust and retry.',
     missing: 'No admin token in progress.',
     saved: 'Admin token saved.',
+    open: 'Debug mode active. Save a token when you are ready to lock access.',
   },
 };
 
@@ -490,6 +574,8 @@ function tokenBadgeClass(state) {
     case 'invalid':
     case 'error':
       return 'badge bad';
+    case 'open':
+      return 'badge ok';
     case 'pending':
     case 'missing':
     case 'testing':
@@ -516,6 +602,8 @@ function tokenBadgeText(state) {
       return 'Admin token: error';
     case 'offline':
       return 'Admin token: awaiting service';
+    case 'open':
+      return 'Admin token: debug access';
     case 'saved':
     default:
       return 'Admin token: saved';
@@ -538,6 +626,8 @@ function tokenBadgeAria(state) {
       return 'Admin token verification failed';
     case 'offline':
       return 'Admin token saved; waiting for service';
+    case 'open':
+      return 'Admin token not required (debug mode active)';
     case 'saved':
     default:
       return 'Admin token saved';
@@ -551,6 +641,8 @@ function tokenStatusTone(state) {
     case 'invalid':
     case 'error':
       return 'bad';
+    case 'open':
+      return 'ok';
     default:
       return 'warn';
   }
@@ -805,10 +897,12 @@ function updateWorkspaceAvailability() {
   const tokenState = tokenStatusState.state;
   const tokenValue = typeof tokenStatusState.token === 'string' ? tokenStatusState.token : '';
   const tokenReadyStates = new Set(['valid', 'saved']);
-  const tokenReady = tokenValue && tokenReadyStates.has(tokenState);
+  const credentialReady = tokenValue && tokenReadyStates.has(tokenState);
+  const openAccessActive = tokenState === 'open' && allowAnonymousAdmin;
+  const tokenReady = credentialReady || openAccessActive;
   const tokenNeedsSave = tokenState === 'pending';
   const tokenTesting = tokenState === 'testing';
-  const tokenMissing = !tokenValue || tokenState === 'missing';
+  const tokenMissing = !credentialReady && !openAccessActive && (tokenState === 'missing' || !tokenValue);
   const tokenInvalid = tokenState === 'invalid';
   const tokenOffline = tokenState === 'offline';
   const tokenErrored = tokenState === 'error';
@@ -866,6 +960,8 @@ function updateWorkspaceAvailability() {
     gateMessage = 'Save your admin token before opening workspaces.';
   } else if (tokenTesting) {
     gateMessage = 'Testing admin token…';
+  } else if (openAccessActive) {
+    gateMessage = 'Debug mode active — admin surfaces are open. Set a token before sharing this service.';
   } else if (tokenMissing) {
     gateMessage = 'Paste and save an admin token to unlock Project Hub, Chat, and Training.';
   } else if (tokenInvalid) {
@@ -908,6 +1004,14 @@ async function loadPrefs() {
     if (typeof prefs.autostart === 'boolean') document.getElementById('autostart').checked = prefs.autostart;
     if (typeof prefs.notifyOnStatus === 'boolean') document.getElementById('notif').checked = prefs.notifyOnStatus;
     if (typeof prefs.adminToken === 'string') document.getElementById('admintok').value = String(prefs.adminToken).trim();
+    if (typeof prefs.baseOverride === 'string') {
+      const override = prefs.baseOverride.trim();
+      if (override) {
+        ARW.setBaseOverride(override, { persist: false });
+      } else {
+        ARW.clearBaseOverride({ persist: false });
+      }
+    }
   }
   setTokenVisibility(false);
   try {
@@ -953,11 +1057,22 @@ async function health() {
   const metaLabel = document.getElementById('healthMeta');
   const heroHint = document.querySelector('.status-hint');
   try {
-    const ok = await invoke('check_service_health', { port: effectivePort() });
+    const metaInfo = baseMeta || updateBaseMeta();
+    const healthArgs = { port: effectivePort() };
+    if (metaInfo && typeof metaInfo.base === 'string' && metaInfo.base.trim()) {
+      healthArgs.base = metaInfo.base;
+    }
+    const ok = await invoke('check_service_health', healthArgs);
     serviceOnline = !!ok;
     const savedToken = typeof prefBaseline.adminToken === 'string'
       ? prefBaseline.adminToken.trim()
       : '';
+    const tokenInput = tokenInputEl();
+    const inputValue = tokenInput ? String(tokenInput.value || '').trim() : '';
+    const pendingToken =
+      prefsDirty &&
+      inputValue &&
+      inputValue !== savedToken;
     const hasToken =
       typeof prefBaseline.adminToken === 'string' &&
       prefBaseline.adminToken.trim().length > 0;
@@ -974,19 +1089,6 @@ async function health() {
       statusLabel.textContent = ok ? 'Service online' : 'Service offline';
       statusLabel.className = ok ? 'ok' : 'bad';
     }
-    if (heroHint) {
-      if (IS_DESKTOP) {
-        heroHint.textContent = ok
-          ? hasToken
-            ? 'Stack online. Launch a workspace when you are ready.'
-            : 'Stack online. Paste or generate an admin token to unlock Hub, Chat, and Training.'
-          : 'Start the service, then paste or generate an admin token to unlock workspaces.';
-      } else {
-        heroHint.textContent = ok
-          ? 'Stack online. Desktop launcher controls are disabled in browser mode.'
-          : 'Start the service with CLI scripts or the desktop launcher.';
-      }
-    }
     lastHealthCheck = Date.now();
     if (metaLabel) updateHealthMetaLabel();
     if (ok) {
@@ -997,10 +1099,53 @@ async function health() {
           tokenProbeLast.token === savedToken &&
           (tokenProbeLast.state === 'offline' || tokenProbeLast.state === 'error'));
       await maybeProbeSavedToken({ force: shouldForceProbe, reason: 'health' });
+      if (!hasToken && !pendingToken) {
+        const normalizedBase = normalizedBaseForAnonymous(metaInfo);
+        const forceAnon =
+          anonymousAdminAccess.base !== normalizedBase ||
+          anonymousAdminAccess.state === 'offline' ||
+          anonymousAdminAccess.state === 'error';
+        const openAccess = await probeAnonymousAdminAccess({
+          force: forceAnon,
+          meta: metaInfo,
+        });
+        allowAnonymousAdmin = openAccess;
+        if (openAccess) {
+          updateTokenBadge('', {
+            state: 'open',
+            message: 'Admin surfaces unlocked (debug mode). Set a token before sharing.',
+            context: 'saved',
+          });
+        } else if (tokenStatusState.state === 'open') {
+          updateTokenBadge('', { state: 'missing' });
+        }
+      } else {
+        allowAnonymousAdmin = false;
+      }
+    } else {
+      allowAnonymousAdmin = false;
+      resetAnonymousAdminAccess();
+    }
+    if (heroHint) {
+      if (IS_DESKTOP) {
+        heroHint.textContent = ok
+          ? hasToken
+            ? 'Stack online. Launch a workspace when you are ready.'
+            : allowAnonymousAdmin
+              ? 'Stack online (debug mode). Admin surfaces are open; set a token before sharing.'
+              : 'Stack online. Paste or generate an admin token to unlock Hub, Chat, and Training.'
+          : 'Start the service, then paste or generate an admin token to unlock workspaces.';
+      } else {
+        heroHint.textContent = ok
+          ? 'Stack online. Desktop launcher controls are disabled in browser mode.'
+          : 'Start the service with CLI scripts or the desktop launcher.';
+      }
     }
     updateWorkspaceAvailability();
   } catch {
     serviceOnline = false;
+    allowAnonymousAdmin = false;
+    resetAnonymousAdminAccess();
     if (dot) dot.className = 'dot';
     if (txt) txt.innerText = 'unknown';
     if (startBtn) startBtn.disabled = false;
@@ -1403,6 +1548,8 @@ document.addEventListener('DOMContentLoaded', () => {
   }
   window.addEventListener('arw:base-override-changed', () => {
     baseMeta = updateBaseMeta();
+    resetAnonymousAdminAccess();
+    allowAnonymousAdmin = false;
     connectSse({ replay: 5, resume: false });
     miniDownloads();
     health();

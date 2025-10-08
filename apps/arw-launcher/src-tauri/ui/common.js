@@ -269,6 +269,13 @@ window.ARW = {
           if (field.inputmode) control.setAttribute('inputmode', field.inputmode);
           if (field.spellcheck === false) control.spellcheck = false;
           if (field.rows) control.rows = field.rows;
+          if (field.readonly) {
+            control.readOnly = true;
+            control.setAttribute('aria-readonly', 'true');
+          }
+          if (field.monospace) {
+            control.classList.add('mono');
+          }
           wrap.appendChild(control);
 
           const describedBy = [];
@@ -991,11 +998,19 @@ window.ARW = {
   normalizeBase(base) {
     const raw = (base ?? '').toString().trim();
     if (!raw) return '';
-    const strip = (val) => val.replace(/\/+$/, '');
+    const stripTrailing = (val) => val.replace(/\/+$/, '');
     const parse = (input) => {
       const url = new URL(input);
-      if (!url || url.origin === 'null') return strip(input.toLowerCase());
-      return strip(url.origin.toLowerCase());
+      if (!url || url.origin === 'null') return stripTrailing(input);
+      const origin = url.origin.toLowerCase();
+      let path = url.pathname || '';
+      path = stripTrailing(path);
+      if (path === '/' || path === '') {
+        path = '';
+      } else if (!path.startsWith('/')) {
+        path = `/${path}`;
+      }
+      return `${origin}${path}`;
     };
     const attempts = [raw, `http://${raw}`];
     for (const attempt of attempts) {
@@ -1003,9 +1018,12 @@ window.ARW = {
         return parse(attempt);
       } catch {}
     }
-    const lowered = strip(raw.toLowerCase());
-    if (!lowered) return '';
-    return /^[a-zA-Z][a-zA-Z0-9+\-.]*:\/\//.test(lowered) ? lowered : `http://${lowered}`;
+    const fallback = stripTrailing(raw);
+    if (!fallback) return '';
+    if (/^[a-zA-Z][a-zA-Z0-9+\-.]*:\/\//.test(fallback)) {
+      return fallback;
+    }
+    return `http://${fallback}`;
   },
   isLoopbackHost(host) {
     if (!host) return false;
@@ -1070,9 +1088,10 @@ window.ARW = {
   baseMeta(port) {
     const override = this.baseOverride();
     if (override) {
+      const normalized = this.normalizeBase(override);
       const info = {
-        base: override,
-        origin: override,
+        base: normalized || override,
+        origin: normalized || override,
         override: true,
         protocol: null,
         host: override,
@@ -1090,7 +1109,6 @@ window.ARW = {
         url = parseUrl(`${override}/`);
       }
       if (url) {
-        info.origin = url.origin || info.origin;
         info.protocol = url.protocol ? url.protocol.replace(/:$/, '') : info.protocol;
         info.host = url.host || info.host;
         if (url.port) {
@@ -1222,20 +1240,40 @@ window.ARW = {
     return meta.port || 8091;
   },
   _BASE_OVERRIDE_KEY: 'arw:base:override',
-  setBaseOverride(base) {
+  _persistBaseOverride(value) {
+    try {
+      Promise.resolve(this.getPrefs('launcher'))
+        .then((prefs) => {
+          const next =
+            prefs && typeof prefs === 'object' && !Array.isArray(prefs) ? { ...prefs } : {};
+          if (value) {
+            next.baseOverride = value;
+          } else {
+            delete next.baseOverride;
+          }
+          return this.setPrefs('launcher', next);
+        })
+        .catch(() => {});
+    } catch {}
+  },
+  setBaseOverride(base, options = {}) {
+    const { persist = true } = options || {};
     const normalized = this.normalizeBase(base || '');
     if (!normalized) {
-      this.clearBaseOverride();
+      this.clearBaseOverride({ persist });
       return '';
     }
     try { localStorage.setItem(this._BASE_OVERRIDE_KEY, normalized); } catch {}
     try { window.__ARW_BASE_OVERRIDE = normalized; } catch {}
+    if (persist) this._persistBaseOverride(normalized);
     this._emitBaseOverride(normalized);
     return normalized;
   },
-  clearBaseOverride() {
+  clearBaseOverride(options = {}) {
+    const { persist = true } = options || {};
     try { localStorage.removeItem(this._BASE_OVERRIDE_KEY); } catch {}
     try { delete window.__ARW_BASE_OVERRIDE; } catch {}
+    if (persist) this._persistBaseOverride('');
     this._emitBaseOverride('');
     return '';
   },
@@ -4593,9 +4631,14 @@ if (!HAS_TAURI) {
   fallbackHandlers.projects_import = function() {
     this.unsupported('Project import');
   };
-  fallbackHandlers.check_service_health = async function({ port } = {}) {
-    const base = this.base(port);
-    const url = `${String(base || '').replace(/\/$/, '')}/healthz`;
+  fallbackHandlers.check_service_health = async function({ port, base } = {}) {
+    let origin = '';
+    if (typeof base === 'string' && base.trim()) {
+      origin = this.normalizeBase(base) || base.trim();
+    } else {
+      origin = this.base(port);
+    }
+    const url = `${String(origin || '').replace(/\/+$/, '')}/healthz`;
     try {
       const resp = await fetch(url, { method: 'GET', cache: 'no-store' });
       return resp.ok;

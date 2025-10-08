@@ -11,11 +11,13 @@ echo "# Install log - $(date)" > "$INSTALL_LOG"
 yes_flag=0
 run_tests=0
 no_docs=0
+minimal=0
 while [[ $# -gt 0 ]]; do
   case "$1" in
     -y|--yes) yes_flag=1; shift;;
     --no-docs) no_docs=1; shift;;
     --run-tests) run_tests=1; shift;;
+    --minimal) minimal=1; no_docs=1; shift;;
     *) echo "Unknown option: $1"; exit 1;;
   esac
 done
@@ -47,6 +49,10 @@ if ! command -v cargo >/dev/null 2>&1; then
   pause "Press Enter after installing Rust (or Ctrl+C to abort)"
 fi
 
+if [[ $minimal -eq 1 ]]; then
+  info "Minimal mode enabled: skipping docs toolchain, docgen, and packaging."
+fi
+
 mkdocs_ok=0
 if command -v mkdocs >/dev/null 2>&1; then mkdocs_ok=1; fi
 if [[ $no_docs -eq 0 && $mkdocs_ok -eq 0 ]]; then
@@ -71,34 +77,50 @@ if [[ $no_docs -eq 0 && $mkdocs_ok -eq 0 ]]; then
     else
       warn "MkDocs install failed or pip is unavailable; docs site build will be skipped."
     fi
-else
-  warn "python3 not found; skipping docs site build"
-fi
+  else
+    warn "python3 not found; skipping docs site build"
+  fi
 fi
 check_launcher_runtime
 title "Build workspace (release)"
-(cd "$ROOT" && cargo build --workspace --release --locked)
+if [[ $minimal -eq 1 ]]; then
+  info "Building arw-server (release)"
+  (cd "$ROOT" && cargo build --release --locked -p arw-server)
+  info "Building arw-cli (release)"
+  (cd "$ROOT" && cargo build --release --locked -p arw-cli)
+  info "Building arw-launcher (release)"
+  (cd "$ROOT" && cargo build --release --locked -p arw-launcher)
+else
+  (cd "$ROOT" && cargo build --workspace --release --locked)
+fi
+printf 'DIR target\n' >> "$INSTALL_LOG"
 
 if [[ $run_tests -eq 1 ]]; then
   title "Run tests (workspace)"
   cargo nextest run --workspace --locked
 fi
 
-title "Generate workspace status page"
-if command -v jq >/dev/null 2>&1; then
-  bash "$DIR/docgen.sh" || warn "docgen failed"
-else
-  warn "jq not found; skipping docgen page generation (install: apt-get install jq | brew install jq)"
-fi
+if [[ $minimal -eq 0 ]]; then
+  title "Generate workspace status page"
+  if command -v jq >/dev/null 2>&1; then
+    bash "$DIR/docgen.sh" || warn "docgen failed"
+  else
+    warn "jq not found; skipping docgen page generation (install: apt-get install jq | brew install jq)"
+  fi
 
-title "Package portable bundle"
-bash "$DIR/package.sh" --no-build
-printf '%s\n' 'DIR target' 'DIR dist' >> "$INSTALL_LOG"
-[[ -d "$ROOT/site" ]] && echo 'DIR site' >> "$INSTALL_LOG"
+  title "Package portable bundle"
+  bash "$DIR/package.sh" --no-build
+  printf 'DIR dist\n' >> "$INSTALL_LOG"
+  [[ -d "$ROOT/site" ]] && echo 'DIR site' >> "$INSTALL_LOG"
+fi
 if [[ ${#WARNINGS[@]} -gt 0 ]]; then
   title "Warnings"
   for w in "${WARNINGS[@]}"; do
     echo -e "\033[33m- $w\033[0m"
   done
 fi
-info "Done. See dist/ for portable bundle."
+if [[ $minimal -eq 1 ]]; then
+  info "Done. Core binaries are under target/release/."
+else
+  info "Done. See dist/ for portable bundle."
+fi

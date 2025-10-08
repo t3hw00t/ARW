@@ -25,6 +25,8 @@ bash scripts/setup.sh
 bash scripts/start.sh --wait-health --admin-token "$(openssl rand -hex 32)"
 ```
 
+- Use `bash scripts/setup.sh --minimal` if you only need the core binaries (`arw-server`, `arw-cli`, `arw-launcher`) and want to skip doc generation and packaging on the first run.
+
 - `scripts/setup.sh` compiles `arw-server` (headless) and the Tauri launcher. The first build can take several minutes on a cold toolchain.
 - `scripts/start.sh` launches the service, waits for `/healthz`, and then opens the Control Room if the launcher is available. Pass `--service-only` to skip the launcher.
 - The script exports `ARW_EGRESS_PROXY_ENABLE=1` and `ARW_DNS_GUARD_ENABLE=1` by default. Override them if you need a fully offline profile.

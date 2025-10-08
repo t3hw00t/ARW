@@ -257,7 +257,7 @@ pub(crate) mod paths {
     pub const ADMIN_SELF_MODEL_APPLY: &str = "/admin/self_model/apply";
     pub const ADMIN_UI_CONTROL_ROOT: &str = "/admin/ui/control";
     pub const ADMIN_UI_CONTROL_INDEX: &str = "/admin/ui/control/";
-    pub const ADMIN_UI_CONTROL_ASSET: &str = "/admin/ui/control/*path";
+    pub const ADMIN_UI_CONTROL_ASSET: &str = "/admin/ui/control/{*path}";
     pub const ADMIN_UI_MODELS: &str = "/admin/ui/models";
     pub const ADMIN_UI_AGENTS: &str = "/admin/ui/agents";
     pub const ADMIN_UI_PROJECTS: &str = "/admin/ui/projects";

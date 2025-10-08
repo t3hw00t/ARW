@@ -121,6 +121,7 @@ fn create_tray<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> tauri::Result<()
         let mut delay = Duration::from_secs(2);
         let mut last_prefs = std::time::Instant::now() - Duration::from_secs(60);
         let mut port_pref: Option<u16> = None;
+        let mut base_pref: Option<String> = None;
         let mut notify_pref = true;
         loop {
             // refresh prefs every 10s
@@ -130,13 +131,18 @@ fn create_tray<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> tauri::Result<()
                     .get("port")
                     .and_then(|v| v.as_u64())
                     .and_then(|n| u16::try_from(n).ok());
+                base_pref = prefs
+                    .get("baseOverride")
+                    .and_then(|v| v.as_str())
+                    .map(|s| s.trim().to_string())
+                    .filter(|s| !s.is_empty());
                 notify_pref = prefs
                     .get("notifyOnStatus")
                     .and_then(|v| v.as_bool())
                     .unwrap_or(true);
                 last_prefs = std::time::Instant::now();
             }
-            let is_up = arw_tauri::check_service_health(port_pref)
+            let is_up = arw_tauri::check_service_health(base_pref.clone(), port_pref)
                 .await
                 .unwrap_or(false);
             let _ = start_h.set_enabled(!is_up);

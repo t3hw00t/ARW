@@ -27,6 +27,8 @@ if (-not $env:ARW_ADMIN_TOKEN) { $env:ARW_ADMIN_TOKEN = [System.Guid]::NewGuid()
 powershell -ExecutionPolicy Bypass -File scripts\start.ps1 -ServiceOnly -WaitHealth -AdminToken $env:ARW_ADMIN_TOKEN
 ```
 
+- Prefer a leaner install? Append `-Minimal` to `scripts\setup.ps1` to skip doc packaging and build just the core binaries (`arw-server`, `arw-cli`, `arw-launcher`). You can always run the full setup later when you need docs or release bundles.
+
 - Packaging now tolerates missing Git remotes or offline hosts and surfaces a warning instead of failing. Set `ARW_STRICT_RELEASE_GATE=1` (or pass `-StrictReleaseGate`) if you need the setup to stop on open release blockers; CI environments continue to enforce the gate by default.
 - The start script launches the service in the background and, if present, the desktop launcher.
 - When Python or `jq` are available, `scripts\start.ps1` and `scripts\start.sh` persist the exported admin token into the launcher preferences so Hub/Chat/Training unlock automatically. You can still rotate the token from the Control Room later.

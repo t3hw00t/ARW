@@ -38,6 +38,8 @@ bash scripts/build.sh
 bash scripts/test.sh
 ```
 
+Need a slimmer first run? Add `--minimal` (`-Minimal` on Windows) to `scripts/setup.*` to build just `arw-server`, `arw-cli`, and the launcher without generating docs or packaging release archives. You can still call `docgen` or `package` later when you need the extras.
+
 ## Set an Admin Token
 
 Generate a secret and export it so the launcher scripts **and** your tooling reuse the same token.

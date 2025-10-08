@@ -436,7 +436,10 @@ mod cmds {
     use super::*;
 
     #[tauri::command]
-    pub async fn check_service_health(port: Option<u16>) -> Result<bool, String> {
+    pub async fn check_service_health(
+        base: Option<String>,
+        port: Option<u16>,
+    ) -> Result<bool, String> {
         static HTTP: OnceCell<reqwest::Client> = OnceCell::new();
         let client = HTTP.get_or_init(|| {
             reqwest::Client::builder()
@@ -444,7 +447,28 @@ mod cmds {
                 .build()
                 .unwrap()
         });
-        let url = service_url("healthz", port);
+        let url = base
+            .and_then(|raw| {
+                let trimmed = raw.trim();
+                if trimmed.is_empty() {
+                    None
+                } else {
+                    reqwest::Url::parse(trimmed)
+                        .map(|mut parsed| {
+                            let existing = parsed.path().trim_end_matches('/');
+                            let next = if existing.is_empty() || existing == "/" {
+                                "/healthz".to_string()
+                            } else {
+                                format!("{}/healthz", existing)
+                            };
+                            parsed.set_path(&next);
+                            parsed.set_query(None);
+                            parsed.to_string()
+                        })
+                        .ok()
+                }
+            })
+            .unwrap_or_else(|| service_url("healthz", port));
         match client.get(url).send().await {
             Ok(resp) => Ok(resp.status().is_success()),
             Err(err) => Err(format!("health request failed: {}", err)),
