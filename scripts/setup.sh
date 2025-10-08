@@ -36,14 +36,25 @@ mkdocs_ok=0
 if command -v mkdocs >/dev/null 2>&1; then mkdocs_ok=1; fi
 if [[ $no_docs -eq 0 && $mkdocs_ok -eq 0 ]]; then
   if command -v python3 >/dev/null 2>&1; then
-    info "Installing MkDocs via pip"
-    python3 -m pip install --upgrade pip || true
-    python3 -m pip install mkdocs mkdocs-material mkdocs-git-revision-date-localized-plugin || true
-    if command -v mkdocs >/dev/null 2>&1; then
+    info "Installing MkDocs via pip (user site)"
+    if ! python3 -m pip --version >/dev/null 2>&1; then
+      info "Bootstrapping pip in user site"
+      if python3 -m ensurepip --upgrade --user >/dev/null 2>&1; then
+        :
+      else
+        warn "Unable to bootstrap pip; docs site generation will be skipped unless MkDocs is installed manually."
+      fi
+    fi
+    if python3 -m pip install --user mkdocs mkdocs-material mkdocs-git-revision-date-localized-plugin; then
       mkdocs_ok=1
-      printf 'PIP %s\n' mkdocs mkdocs-material mkdocs-git-revision-date-localized-plugin >> "$INSTALL_LOG"
+      printf 'PIP_USER %s\n' mkdocs mkdocs-material mkdocs-git-revision-date-localized-plugin >> "$INSTALL_LOG"
+      user_base="$(python3 -m site --user-base 2>/dev/null || true)"
+      user_bin="${user_base:+$user_base/bin}"
+      if [[ -n "$user_bin" && -d "$user_bin" && ":$PATH:" != *":$user_bin:"* ]]; then
+        warn "MkDocs installed to $user_bin. Add it to PATH to run mkdocs directly."
+      fi
     else
-      warn "MkDocs install failed; docs site will be skipped"
+      warn "MkDocs install failed or pip is unavailable; docs site build will be skipped."
     fi
   else
     warn "python3 not found; skipping docs site build"

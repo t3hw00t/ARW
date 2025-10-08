@@ -69,8 +69,13 @@
             </div>
             <div class="pref-field">
               <label for="admintok">Admin token <small class="dim">(required for Hub, Chat, Training)</small></label>
-              <input id="admintok" type="password" autocomplete="off" placeholder="Paste admin token"/>
-              <p class="field-note">Set this once to unlock Project Hub, Chat, Training Park, and other admin APIs. Stored locally; restart the service after saving to rotate credentials.</p>
+              <div class="input-with-toggle token-control">
+                <input id="admintok" type="password" autocomplete="off" placeholder="Paste admin token"/>
+                <button id="btn-token-toggle" class="ghost mini" type="button" aria-pressed="false" aria-label="Show admin token">Show</button>
+                <button id="btn-token-generate" class="ghost mini" type="button" aria-label="Generate a new admin token">Generate</button>
+                <button id="btn-token-copy" class="ghost mini" type="button" aria-label="Copy admin token">Copy</button>
+              </div>
+              <p class="field-note">Set this once to unlock Project Hub, Chat, Training Park, and other admin APIs. Stored locally; restart the service after saving to rotate credentials. <button id="btn-token-guide" class="link-button" type="button">How do tokens work?</button></p>
             </div>
           </div>
         </details>
@@ -85,7 +90,7 @@
           <span class="hero-callout-icon" aria-hidden="true">!</span>
           <span>
             <strong>Secure setup required.</strong>
-            Paste an admin token to unlock Project Hub, Chat, Training, and other admin surfaces.
+            <span id="tokenCalloutBody">Paste an admin token to unlock Project Hub, Chat, Training, and other admin surfaces.</span>
           </span>
         </div>
       </section>

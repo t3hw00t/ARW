@@ -131,11 +131,63 @@ function connectSse({ replay = 0, resume = true } = {}) {
 
 function syncTokenCallout(tokenValue, { pending = false } = {}) {
   const callout = document.getElementById('tokenCallout');
+  const body = document.getElementById('tokenCalloutBody');
   if (!callout) return;
   const hasToken = typeof tokenValue === 'string' && tokenValue.trim().length > 0;
   const show = pending || !hasToken;
   callout.hidden = !show;
   callout.setAttribute('aria-hidden', show ? 'false' : 'true');
+  if (!show || !body) return;
+  if (pending) {
+    body.textContent =
+      'Save your changes to update the admin token, then restart the service when prompted so workspaces stay authorized.';
+    return;
+  }
+  body.textContent =
+    'Paste an existing token or use Generate to create a new secret. Tokens gate access to admin surfaces and should remain private.';
+}
+
+function tokenInputEl() {
+  return document.getElementById('admintok');
+}
+
+function setTokenVisibility(show) {
+  const input = tokenInputEl();
+  const toggle = document.getElementById('btn-token-toggle');
+  if (!input || !toggle) return;
+  const shouldShow = !!show;
+  input.type = shouldShow ? 'text' : 'password';
+  toggle.textContent = shouldShow ? 'Hide' : 'Show';
+  toggle.setAttribute('aria-pressed', shouldShow ? 'true' : 'false');
+  toggle.setAttribute(
+    'aria-label',
+    shouldShow ? 'Hide admin token' : 'Show admin token',
+  );
+}
+
+function toggleTokenVisibility() {
+  const input = tokenInputEl();
+  if (!input) return;
+  const shouldShow = input.type === 'password';
+  setTokenVisibility(shouldShow);
+}
+
+function setTokenValue(value, { focusEnd = false } = {}) {
+  const input = tokenInputEl();
+  if (!input) return '';
+  const trimmed = typeof value === 'string' ? value.trim() : '';
+  input.value = trimmed;
+  refreshPrefsDirty();
+  if (focusEnd) {
+    window.requestAnimationFrame(() => {
+      try {
+        input.focus();
+        const len = input.value.length;
+        input.setSelectionRange(len, len);
+      } catch {}
+    });
+  }
+  return trimmed;
 }
 
 function updateTokenBadge(tokenValue, { pending = false } = {}) {
@@ -206,6 +258,7 @@ async function loadPrefs() {
       if (typeof v.adminToken === 'string') document.getElementById('admintok').value = String(v.adminToken).trim();
     }
   } catch {}
+  setTokenVisibility(false);
   try {
     const enabled = await invoke('launcher_autostart_status');
     document.getElementById('loginstart').checked = !!enabled
@@ -259,8 +312,8 @@ async function health() {
       heroHint.textContent = ok
         ? hasToken
           ? 'Stack online. Launch a workspace when you are ready.'
-          : 'Stack online. Paste your admin token to unlock Hub, Chat, and Training.'
-        : 'Start the service, then paste your admin token to unlock workspaces.';
+          : 'Stack online. Paste or generate an admin token to unlock Hub, Chat, and Training.'
+        : 'Start the service, then paste or generate an admin token to unlock workspaces.';
     }
     lastHealthCheck = Date.now();
     if (metaLabel) updateHealthMetaLabel();
@@ -360,6 +413,56 @@ function miniDownloads() {
 document.addEventListener('DOMContentLoaded', () => {
   initStatusBadges();
   bindPrefWatchers();
+  setTokenVisibility(false);
+  const tokenToggle = document.getElementById('btn-token-toggle');
+  if (tokenToggle) {
+    tokenToggle.addEventListener('click', () => {
+      toggleTokenVisibility();
+    });
+  }
+  const tokenGenerate = document.getElementById('btn-token-generate');
+  if (tokenGenerate) {
+    tokenGenerate.addEventListener('click', async () => {
+      const token = ARW.tokens.generateHex(32);
+      if (!token) return;
+      setTokenVisibility(true);
+      const value = setTokenValue(token, { focusEnd: true });
+      try {
+        await navigator.clipboard.writeText(value);
+        ARW.toast('Token generated and copied');
+      } catch {
+        ARW.toast('Token generated');
+      }
+    });
+  }
+  const tokenCopy = document.getElementById('btn-token-copy');
+  if (tokenCopy) {
+    tokenCopy.addEventListener('click', async () => {
+      const input = tokenInputEl();
+      const value = input ? String(input.value || '').trim() : '';
+      if (!value) {
+        ARW.toast('No token to copy');
+        return;
+      }
+      try {
+        await navigator.clipboard.writeText(value);
+        ARW.toast('Token copied');
+      } catch {
+        ARW.toast('Copy failed');
+      }
+    });
+  }
+  const tokenGuide = document.getElementById('btn-token-guide');
+  if (tokenGuide) {
+    tokenGuide.addEventListener('click', async () => {
+      try {
+        await invoke('open_url', { url: 'https://t3hw00t.github.io/ARW/guide/quickstart/#minimum-secure-setup' });
+      } catch (err) {
+        console.error(err);
+        ARW.toast('Unable to open docs');
+      }
+    });
+  }
   // Buttons
   document.getElementById('btn-open').addEventListener('click', async () => {
     try { await invoke('open_debug_ui', { port: effectivePort() }); } catch (e) { console.error(e); }

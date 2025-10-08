@@ -1,5 +1,8 @@
 const invoke = (cmd, args) => ARW.invoke(cmd, args);
 let sseIndicatorHandle = null;
+let sseIndicatorPrefix = '';
+let sseIndicatorNode = null;
+let currentSseBase = null;
 
 const ESCAPE_ENTITIES = {
   '&': '&amp;',
@@ -41,23 +44,60 @@ function setTokenVisibility(visible) {
   toggle.setAttribute('aria-pressed', visible ? 'true' : 'false');
 }
 
-function ensureSseIndicator() {
+function ensureSseIndicator(prefix = 'SSE') {
   const wrap = document.getElementById('statusBadges');
-  if (!wrap) return;
-  if (sseIndicatorHandle) return;
-  let badge = document.getElementById('connectionsSseBadge');
-  if (!badge) {
-    badge = document.createElement('span');
-    badge.id = 'connectionsSseBadge';
-    badge.className = 'badge';
-    wrap.appendChild(badge);
+  if (!wrap) return null;
+  if (!sseIndicatorNode) {
+    sseIndicatorNode = document.getElementById('connectionsSseBadge');
+    if (!sseIndicatorNode) {
+      sseIndicatorNode = document.createElement('span');
+      sseIndicatorNode.id = 'connectionsSseBadge';
+      sseIndicatorNode.className = 'badge';
+      wrap.appendChild(sseIndicatorNode);
+    }
   }
-  sseIndicatorHandle = ARW.sse.indicator(badge, { prefix: 'SSE' });
+  if (sseIndicatorHandle && sseIndicatorPrefix === prefix) {
+    return sseIndicatorNode;
+  }
+  if (sseIndicatorHandle) {
+    try { sseIndicatorHandle.dispose(); } catch {}
+    sseIndicatorHandle = null;
+  }
+  sseIndicatorPrefix = prefix;
+  sseIndicatorHandle = ARW.sse.indicator(sseIndicatorNode, { prefix });
+  return sseIndicatorNode;
+}
+
+function resolveSseBase() {
+  const override = ARW.baseOverride();
+  if (override) return override;
+  const formInput = document.getElementById('curl');
+  const formBase = formInput ? normalizedBase(formInput.value) : '';
+  if (formBase) return formBase;
+  return ARW.base(8091);
 }
 
 function connectSse({ replay = 5, resume = false } = {}) {
-  ensureSseIndicator();
-  ARW.sse.connect(ARW.base(8091), { replay, prefix: 'probe.metrics' }, resume);
+  const base = resolveSseBase();
+  let hostLabel = 'SSE';
+  if (base) {
+    try {
+      const parsed = new URL(base);
+      const host = parsed.host || parsed.hostname;
+      if (host) hostLabel = `SSE ${host}`;
+    } catch {
+      hostLabel = `SSE ${base}`;
+    }
+  }
+  ensureSseIndicator(hostLabel);
+  if (!base) {
+    currentSseBase = null;
+    ARW.sse.close();
+    return;
+  }
+  const sameBase = currentSseBase === base;
+  currentSseBase = base;
+  ARW.sse.connect(base, { replay, prefix: 'probe.metrics' }, resume && sameBase);
 }
 
 async function load() {
@@ -338,8 +378,16 @@ document.addEventListener('DOMContentLoaded', () => {
       setTokenVisibility(!current);
     });
   }
+  const baseField = document.getElementById('curl');
+  if (baseField) {
+    baseField.addEventListener('change', () => {
+      currentSseBase = null;
+      connectSse({ replay: 5, resume: false });
+    });
+  }
 });
 
 window.addEventListener('arw:base-override-changed', () => {
+  connectSse({ replay: 5, resume: true });
   refresh();
 });

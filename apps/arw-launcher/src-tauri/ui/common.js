@@ -620,6 +620,24 @@ window.ARW = {
       }catch{ return null }
     }
   },
+  tokens: {
+    generateHex(byteLength = 32) {
+      const size = Number.isFinite(byteLength) && byteLength > 0 ? Math.min(Math.floor(byteLength), 1024) : 32;
+      const buffer = new Uint8Array(size);
+      if (globalThis.crypto && typeof globalThis.crypto.getRandomValues === 'function') {
+        globalThis.crypto.getRandomValues(buffer);
+      } else {
+        for (let i = 0; i < size; i += 1) {
+          buffer[i] = Math.floor(Math.random() * 256);
+        }
+      }
+      let out = '';
+      for (let i = 0; i < buffer.length; i += 1) {
+        out += buffer[i].toString(16).padStart(2, '0');
+      }
+      return out;
+    },
+  },
   connections: {
     _norm(b){
       try{
@@ -705,6 +723,31 @@ window.ARW = {
     d.className = 'toast'; d.textContent = msg;
     this._toastWrap.appendChild(d);
     setTimeout(()=>{ try{ this._toastWrap.removeChild(d); }catch(e){} }, 2500);
+  },
+  toastCaptureError(err, { scope = 'capture', lease = 'io:screenshot' } = {}) {
+    const prefix = `Unable to ${scope}`;
+    let raw = '';
+    if (err && typeof err === 'object' && err.message) raw = String(err.message);
+    else if (typeof err === 'string') raw = err;
+    else if (err && typeof err.toString === 'function') raw = String(err.toString());
+    const msg = raw.trim();
+    const lc = msg.toLowerCase();
+    let detail = '';
+    if (lc.includes('lease') || lc.includes('permission') || lc.includes('denied')) {
+      detail = `Grant the ${lease} lease from the sidecar before retrying.`;
+    } else if (lc.includes('unauthorized') || lc.includes('401') || lc.includes('403')) {
+      detail = 'Authorize this connection with your admin token in Control Room.';
+    } else if (lc.includes('active window') || lc.includes('focus window')) {
+      detail = 'Focus the window you want to capture, then try again.';
+    } else if (lc.includes('not implemented') || lc.includes('unsupported') || lc.includes('platform')) {
+      detail = 'This capture mode is not supported on this platform yet.';
+    } else if (lc.includes('timeout')) {
+      detail = 'Capture timed out. Retry in a moment.';
+    } else if (lc.includes('no displays') || lc.includes('no display') || lc.includes('monitor')) {
+      detail = 'No display was detected. Confirm a monitor is available and retry.';
+    }
+    const finalMsg = detail ? `${prefix}: ${detail}` : `${prefix}. Check service logs for details.`;
+    this.toast(finalMsg);
   },
   async getPrefs(ns = 'launcher') {
     try{
@@ -3732,7 +3775,7 @@ window.ARW.sse.subscribe('state.read.model.patch', ({ env }) => {
             const port = ARW.toolPort();
             const out = await ARW.invoke('run_tool_admin', { id: 'ui.screenshot.capture', input: { scope:'screen', format:'png', downscale:640 }, port });
             ARW.toast(out && out.path ? ('Saved: ' + out.path) : 'Capture requested');
-          }catch(e){ console.error(e); ARW.toast('Capture failed'); }
+          }catch(e){ console.error(e); ARW.toastCaptureError(e, { scope: 'capture screen', lease: 'io:screenshot' }); }
         }
       },
       { id:'shot:capture-window', label:'Capture this window (preview)', hint:'screenshot', run: async ()=>{
@@ -3743,7 +3786,7 @@ window.ARW.sse.subscribe('state.read.model.patch', ({ env }) => {
             const port = ARW.toolPort();
             const out = await ARW.invoke('run_tool_admin', { id: 'ui.screenshot.capture', input: { scope, format:'png', downscale:640 }, port });
             ARW.toast(out && out.path ? ('Saved: ' + out.path) : 'Capture requested');
-          }catch(e){ console.error(e); ARW.toast('Capture failed'); }
+          }catch(e){ console.error(e); ARW.toastCaptureError(e, { scope: 'capture window', lease: 'io:screenshot' }); }
         }
       },
       { id:'shot:capture-region', label:'Capture region (drag)', hint:'screenshot', run: async ()=>{ await ARW.region.captureAndSave(); } },

@@ -14,6 +14,7 @@ wait_health_timeout_secs=30
 pid_file="${ARW_PID_FILE:-}"
 service_only=0
 launcher_only=0
+launcher_build_failed=0
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -157,7 +158,12 @@ ensure_launcher() {
       exit 1
     fi
     echo "[start] Launcher binary not found ($launcher). Building release..."
-    (cd "$ROOT" && cargo build --release -p arw-launcher)
+    if (cd "$ROOT" && cargo build --release -p arw-launcher); then
+      :
+    else
+      echo "[start] Launcher build failed. The desktop UI requires WebKitGTK 4.1 + libsoup3 on Linux (scripts/install-tauri-deps.sh)." >&2
+      exit 1
+    fi
   else
     if [[ $use_dist -eq 1 ]]; then
       echo "[start] Launcher binary missing in dist bundle ($launcher); falling back to service only." >&2
@@ -170,7 +176,13 @@ ensure_launcher() {
       return 1
     fi
     echo "[start] Launcher binary not found ($launcher). Attempting build..."
-    (cd "$ROOT" && cargo build --release -p arw-launcher) || true
+    if (cd "$ROOT" && cargo build --release -p arw-launcher); then
+      :
+    else
+      launcher_build_failed=1
+      echo "[start] Launcher build failed; continuing with service only."
+      echo "[start] Hint: install WebKitGTK 4.1 + libsoup3 (scripts/install-tauri-deps.sh) or see docs/guide/compatibility.md."
+    fi
   fi
 }
 
@@ -229,6 +241,9 @@ else
   fi
   if [[ ! -x "$launcher" ]]; then
     echo "[start] Launcher binary not found ($launcher); falling back to service only"
+    if [[ $launcher_build_failed -eq 1 ]]; then
+      echo "[start] Hint: install WebKitGTK 4.1 + libsoup3 (scripts/install-tauri-deps.sh) or review docs/guide/compatibility.md before rebuilding the launcher."
+    fi
     exec "$0" --service-only "$@"
   fi
   if [[ $launcher_only -eq 0 ]]; then

@@ -149,6 +149,19 @@ body.has-global-bar .launcher-wrap{
   color: var(--color-muted);
   max-width:38ch;
 }
+.token-control{
+  display:flex;
+  flex-wrap:wrap;
+  gap: var(--sp2);
+  align-items:center;
+}
+.token-control input{
+  flex:1 1 220px;
+  min-width:200px;
+}
+.token-control .mini{
+  white-space:nowrap;
+}
 .hero-footer{
   display:flex;
   flex-wrap:wrap;

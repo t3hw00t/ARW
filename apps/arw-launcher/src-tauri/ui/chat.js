@@ -156,7 +156,7 @@ document.addEventListener('DOMContentLoaded', async () => {
           if (txt){ const pre = document.createElement('pre'); pre.className='mono'; pre.textContent = txt; wrap.appendChild(pre); }
         }
       }catch(e){ console.warn('OCR failed', e); }
-    }catch(e){ console.error(e); ARW.toast('Capture failed'); }
+    }catch(e){ console.error(e); ARW.toastCaptureError(e, { scope: 'capture screen', lease: 'io:screenshot' }); }
   });
   document.getElementById('captureWin').addEventListener('click', async ()=>{
     try{
@@ -185,7 +185,7 @@ document.addEventListener('DOMContentLoaded', async () => {
           if (txt){ const pre = document.createElement('pre'); pre.className='mono'; pre.textContent = txt; wrap.appendChild(pre); }
         }
       }catch(e){ console.warn('OCR failed', e); }
-    }catch(e){ console.error(e); ARW.toast('Capture failed'); }
+    }catch(e){ console.error(e); ARW.toastCaptureError(e, { scope: 'capture window', lease: 'io:screenshot' }); }
   });
   document.getElementById('captureRegion').addEventListener('click', async ()=>{
     try{
