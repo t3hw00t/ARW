@@ -11,6 +11,100 @@ updates:
     schedule:
       interval: weekly
     open-pull-requests-limit: 10
+    ignore:
+      - dependency-name: "atk"
+        versions: ["*"]
+        reason: "GTK3 bindings are unmaintained; waiting for upstream GTK4 migration in wry/tauri."
+      - dependency-name: "atk-sys"
+        versions: ["*"]
+        reason: "GTK3 bindings are unmaintained; waiting for upstream GTK4 migration in wry/tauri."
+      - dependency-name: "cairo-rs"
+        versions: ["*"]
+        reason: "GTK3 bindings are unmaintained; waiting for upstream GTK4 migration in wry/tauri."
+      - dependency-name: "gdk"
+        versions: ["*"]
+        reason: "GTK3 bindings are unmaintained; waiting for upstream GTK4 migration in wry/tauri."
+      - dependency-name: "gdk-pixbuf"
+        versions: ["*"]
+        reason: "GTK3 bindings are unmaintained; waiting for upstream GTK4 migration in wry/tauri."
+      - dependency-name: "gdk-pixbuf-sys"
+        versions: ["*"]
+        reason: "GTK3 bindings are unmaintained; waiting for upstream GTK4 migration in wry/tauri."
+      - dependency-name: "gdk-sys"
+        versions: ["*"]
+        reason: "GTK3 bindings are unmaintained; waiting for upstream GTK4 migration in wry/tauri."
+      - dependency-name: "gio"
+        versions: ["*"]
+        reason: "GTK3 bindings are unmaintained; waiting for upstream GTK4 migration in wry/tauri."
+      - dependency-name: "gio-sys"
+        versions: ["*"]
+        reason: "GTK3 bindings are unmaintained; waiting for upstream GTK4 migration in wry/tauri."
+      - dependency-name: "glib"
+        versions: ["*"]
+        reason: "GTK3 bindings are unmaintained; waiting for upstream GTK4 migration in wry/tauri."
+      - dependency-name: "glib-macros"
+        versions: ["*"]
+        reason: "GTK3 bindings are unmaintained; waiting for upstream GTK4 migration in wry/tauri."
+      - dependency-name: "glib-sys"
+        versions: ["*"]
+        reason: "GTK3 bindings are unmaintained; waiting for upstream GTK4 migration in wry/tauri."
+      - dependency-name: "gtk"
+        versions: ["*"]
+        reason: "GTK3 bindings are unmaintained; waiting for upstream GTK4 migration in wry/tauri."
+      - dependency-name: "gtk-sys"
+        versions: ["*"]
+        reason: "GTK3 bindings are unmaintained; waiting for upstream GTK4 migration in wry/tauri."
+      - dependency-name: "javascriptcore-rs"
+        versions: ["*"]
+        reason: "GTK3 bindings are unmaintained; waiting for upstream GTK4 migration in wry/tauri."
+      - dependency-name: "javascriptcore-rs-sys"
+        versions: ["*"]
+        reason: "GTK3 bindings are unmaintained; waiting for upstream GTK4 migration in wry/tauri."
+      - dependency-name: "libappindicator"
+        versions: ["*"]
+        reason: "GTK3 bindings are unmaintained; waiting for upstream GTK4 migration in wry/tauri."
+      - dependency-name: "libappindicator-sys"
+        versions: ["*"]
+        reason: "GTK3 bindings are unmaintained; waiting for upstream GTK4 migration in wry/tauri."
+      - dependency-name: "muda"
+        versions: ["*"]
+        reason: "Depends on GTK3 bindings; waiting for upstream GTK4 migration in wry/tauri."
+      - dependency-name: "pango"
+        versions: ["*"]
+        reason: "GTK3 bindings are unmaintained; waiting for upstream GTK4 migration in wry/tauri."
+      - dependency-name: "pango-sys"
+        versions: ["*"]
+        reason: "GTK3 bindings are unmaintained; waiting for upstream GTK4 migration in wry/tauri."
+      - dependency-name: "soup3"
+        versions: ["*"]
+        reason: "WebKitGTK 4.1 stack required until upstream releases GTK4 migration."
+      - dependency-name: "soup3-sys"
+        versions: ["*"]
+        reason: "WebKitGTK 4.1 stack required until upstream releases GTK4 migration."
+      - dependency-name: "tao"
+        versions: ["*"]
+        reason: "Depends on GTK3 backend; upstream GTK4 migration pending."
+      - dependency-name: "wry"
+        versions: ["*"]
+        reason: "Depends on GTK3 backend; upstream GTK4 migration pending."
+      - dependency-name: "webkit2gtk"
+        versions: ["*"]
+        reason: "WebKitGTK 4.1 stack required until upstream releases GTK4 migration."
+      - dependency-name: "webkit2gtk-sys"
+        versions: ["*"]
+        reason: "WebKitGTK 4.1 stack required until upstream releases GTK4 migration."
+      - dependency-name: "zbus"
+        versions: ["*"]
+        reason: "Transitive GTK3 dependency; upstream GTK4 migration pending."
+      - dependency-name: "zvariant"
+        versions: ["*"]
+        reason: "Transitive GTK3 dependency; upstream GTK4 migration pending."
+      - dependency-name: "zvariant_derive"
+        versions: ["*"]
+        reason: "Transitive GTK3 dependency; upstream GTK4 migration pending."
+      - dependency-name: "zvariant_utils"
+        versions: ["*"]
+        reason: "Transitive GTK3 dependency; upstream GTK4 migration pending."
     # Avoid excessive splitting: group minor+patch updates
     groups:
       rust-minor-patch:
