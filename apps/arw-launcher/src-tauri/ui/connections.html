@@ -40,7 +40,10 @@
               <input id="curl" aria-label="Base URL" type="url" placeholder="http://127.0.0.1:8091">
             </label>
             <label>Admin token
-              <input id="ctok" aria-label="Admin token" type="text" placeholder="admin token (optional)">
+              <div class="input-with-toggle">
+                <input id="ctok" aria-label="Admin token" type="password" placeholder="admin token (optional)">
+                <button id="ctokReveal" class="ghost mini" type="button" aria-pressed="false" aria-label="Show admin token">Show</button>
+              </div>
             </label>
           </div>
           <div class="row">

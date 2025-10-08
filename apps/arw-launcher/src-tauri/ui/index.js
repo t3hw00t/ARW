@@ -9,6 +9,7 @@ let prefsDirty = false;
 const prefBaseline = { port: '', autostart: false, notif: true, loginstart: false, adminToken: '' };
 let lastHealthCheck = null;
 let healthMetaTimer = null;
+let serviceLogPath = null;
 
 function shouldOpenAdvancedPrefs() {
   const portEl = document.getElementById('port');
@@ -76,7 +77,12 @@ function calculatePrefsDirty() {
 }
 
 function refreshPrefsDirty() {
-  applyPrefsDirty(calculatePrefsDirty());
+  const dirty = calculatePrefsDirty();
+  applyPrefsDirty(dirty);
+  const tokenEl = document.getElementById('admintok');
+  const tokenValue = tokenEl ? String(tokenEl.value ?? '').trim() : '';
+  const pending = dirty && tokenValue !== prefBaseline.adminToken;
+  updateTokenBadge(pending ? tokenValue : prefBaseline.adminToken, { pending });
   syncAdvancedPrefsDisclosure();
 }
 
@@ -123,9 +129,52 @@ function connectSse({ replay = 0, resume = true } = {}) {
   ARW.sse.connect(base, opts, resume);
 }
 
+function updateTokenBadge(tokenValue, { pending = false } = {}) {
+  const wrap = document.getElementById('statusBadges');
+  if (!wrap) return;
+  let badge = document.getElementById('tokenBadge');
+  if (!badge) {
+    badge = document.createElement('span');
+    badge.id = 'tokenBadge';
+    badge.className = 'badge';
+    wrap.appendChild(badge);
+  }
+  if (pending) {
+    badge.className = 'badge warn';
+    badge.textContent = 'Admin token: unsaved';
+    badge.setAttribute('aria-label', 'Admin token has unsaved changes');
+    return;
+  }
+  const hasToken =
+    typeof tokenValue === 'string' && tokenValue.trim().length > 0;
+  badge.className = hasToken ? 'badge ok' : 'badge warn';
+  badge.textContent = hasToken ? 'Admin token: set' : 'Admin token: not set';
+  badge.setAttribute(
+    'aria-label',
+    hasToken ? 'Admin token saved' : 'Admin token not set',
+  );
+}
+
+async function refreshServiceLogPath({ toastOnError = false } = {}) {
+  try {
+    const path = await invoke('launcher_service_log_path');
+    serviceLogPath =
+      typeof path === 'string' && path.trim().length > 0 ? path : null;
+  } catch (err) {
+    serviceLogPath = null;
+    if (toastOnError) {
+      ARW.toast('Unable to resolve service log');
+    }
+  }
+  const btn = document.getElementById('btn-log-file');
+  if (btn) btn.disabled = !serviceLogPath;
+  return serviceLogPath;
+}
+
 function initStatusBadges() {
   const wrap = document.getElementById('statusBadges');
   if (!wrap) return;
+  updateTokenBadge(prefBaseline.adminToken);
   let badge = document.getElementById('sseBadge');
   if (!badge) {
     badge = document.createElement('span');
@@ -151,11 +200,13 @@ async function loadPrefs() {
     document.getElementById('loginstart').checked = !!enabled
   } catch {}
   snapshotPrefsBaseline();
+  updateTokenBadge(prefBaseline.adminToken);
   syncAdvancedPrefsDisclosure();
   baseMeta = updateBaseMeta();
   connectSse({ replay: 5, resume: false });
   miniDownloads();
   health();
+  await refreshServiceLogPath();
 }
 
 async function savePrefs() {
@@ -182,6 +233,9 @@ async function health() {
   const heroHint = document.querySelector('.status-hint');
   try {
     const ok = await invoke('check_service_health', { port: effectivePort() });
+    const hasToken =
+      typeof prefBaseline.adminToken === 'string' &&
+      prefBaseline.adminToken.trim().length > 0;
     if (dot) dot.className = 'dot ' + (ok ? 'ok' : 'bad');
     if (txt) txt.innerText = ok ? 'online' : 'offline';
     if (startBtn) startBtn.disabled = ok;
@@ -192,11 +246,16 @@ async function health() {
     }
     if (heroHint) {
       heroHint.textContent = ok
-        ? 'Stack is ready. Open a workspace to dive in.'
+        ? hasToken
+          ? 'Stack is ready. Open a workspace to dive in.'
+          : 'Stack is ready. Set an admin token to secure admin-only surfaces.'
         : 'Start the service to unlock workspaces and live telemetry.';
     }
     lastHealthCheck = Date.now();
     if (metaLabel) updateHealthMetaLabel();
+    if (ok) {
+      await refreshServiceLogPath();
+    }
   } catch {
     if (dot) dot.className = 'dot';
     if (txt) txt.innerText = 'unknown';
@@ -211,6 +270,7 @@ async function health() {
     }
     lastHealthCheck = Date.now();
     if (metaLabel) updateHealthMetaLabel();
+    await refreshServiceLogPath();
   }
 }
 
@@ -296,6 +356,19 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('btn-open-window').addEventListener('click', async () => {
     try { await invoke('open_debug_window', { port: effectivePort() }); } catch (e) { console.error(e); }
   });
+  const logBtn = document.getElementById('btn-log-file');
+  if (logBtn) {
+    logBtn.addEventListener('click', async () => {
+      try {
+        const path = await refreshServiceLogPath({ toastOnError: true });
+        if (!path) return;
+        await invoke('open_path', { path });
+      } catch (err) {
+        console.error(err);
+        ARW.toast('Unable to open service log');
+      }
+    });
+  }
   document.getElementById('btn-events').addEventListener('click', async () => {
     try { await invoke('open_events_window'); } catch (e) { console.error(e); }
   });
@@ -325,6 +398,7 @@ document.addEventListener('DOMContentLoaded', () => {
     try {
       await invoke('start_service', { port: effectivePort() });
       ARW.toast('Service starting');
+      await refreshServiceLogPath();
     } catch (e) {
       console.error(e);
       const message = e && e.toString ? e.toString() : '';
@@ -336,7 +410,11 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
   document.getElementById('btn-stop').addEventListener('click', async () => {
-    try { await invoke('stop_service', { port: effectivePort() }); ARW.toast('Service stop requested'); } catch (e) { console.error(e); }
+    try {
+      await invoke('stop_service', { port: effectivePort() });
+      ARW.toast('Service stop requested');
+      await refreshServiceLogPath();
+    } catch (e) { console.error(e); }
   });
   const saveBtn = document.getElementById('btn-save');
   if (saveBtn) {
@@ -344,8 +422,10 @@ document.addEventListener('DOMContentLoaded', () => {
       if (saveBtn.disabled) return;
       try {
         const previousLoginBaseline = prefBaseline.loginstart;
+        const previousTokenBaseline = prefBaseline.adminToken;
         await savePrefs();
         snapshotPrefsBaseline();
+        updateTokenBadge(prefBaseline.adminToken);
         const loginstart = document.getElementById('loginstart').checked;
         try {
           await invoke('set_launcher_autostart', { enabled: loginstart });
@@ -357,6 +437,28 @@ document.addEventListener('DOMContentLoaded', () => {
           prefBaseline.loginstart = previousLoginBaseline;
           refreshPrefsDirty();
           return;
+        }
+        const tokenChanged = previousTokenBaseline !== prefBaseline.adminToken;
+        if (tokenChanged) {
+          const restart = window.confirm('Admin token updated. Restart the local service now to apply the new credentials?');
+          if (restart) {
+            try {
+              await invoke('stop_service', { port: effectivePort() });
+            } catch (err) {
+              console.error(err);
+            }
+            try {
+              await invoke('start_service', { port: effectivePort() });
+              ARW.toast('Service restarted with new token');
+            } catch (err) {
+              console.error(err);
+              ARW.toast('Unable to restart service');
+            }
+          } else {
+            ARW.toast('Restart required to apply token');
+          }
+          await refreshServiceLogPath();
+          await health();
         }
         ARW.toast('Preferences saved');
       } catch (e) {

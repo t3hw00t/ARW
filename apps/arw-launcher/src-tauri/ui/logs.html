@@ -68,6 +68,22 @@
           </div>
           <div class="logs-output-body" id="out" role="region" aria-label="Log output"></div>
         </section>
+        <section class="card logs-tail" role="region" aria-labelledby="logsTailTitle">
+          <div class="logs-output-head">
+            <h2 id="logsTailTitle">Live output</h2>
+            <div class="logs-tail-actions">
+              <button id="btn-tail-copy" class="ghost">Copy recent</button>
+              <button id="btn-tail-open" class="ghost" disabled>Open log file</button>
+              <button id="btn-tail-clear" class="ghost">Clear</button>
+            </div>
+          </div>
+          <p class="section-lead">Streamed stdout and stderr from the local service; use it for quick diagnostics without leaving the launcher.</p>
+          <div class="logs-tail-controls">
+            <label class="key"><input type="checkbox" id="tailFollow" checked> follow output</label>
+            <span id="tailLocation" class="dim" role="status" aria-live="polite"></span>
+          </div>
+          <div id="logTail" class="logs-tail-body" role="log" aria-live="polite"></div>
+        </section>
       </main>
     </div>
   </body>

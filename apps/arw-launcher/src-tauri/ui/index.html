@@ -70,7 +70,7 @@
             <div class="pref-field">
               <label for="admintok">Admin token</label>
               <input id="admintok" type="password" autocomplete="off" placeholder="Paste token (optional)"/>
-              <p class="field-note">Needed for Projects, Training, Trial, and other admin APIs. Stored locally.</p>
+              <p class="field-note">Needed for Projects, Training, Trial, and other admin APIs. Stored locally. Launcher applies this token when it starts the service; restart after saving to rotate credentials.</p>
             </div>
           </div>
         </details>
@@ -98,6 +98,9 @@
           <div class="button-row">
             <button id="btn-open" class="primary" title="Open Debug UI in browser">Open Debug UI</button>
             <button id="btn-open-window" class="ghost" title="Open Debug UI in window">Open in Window</button>
+          </div>
+          <div class="button-row">
+            <button id="btn-log-file" class="ghost" title="Open latest service log" disabled>Open Service Log</button>
           </div>
           <div class="health-wrap" role="status" aria-live="polite">
             <span id="health" class="dim"></span>

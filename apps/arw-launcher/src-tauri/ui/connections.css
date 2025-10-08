@@ -57,6 +57,18 @@ body.has-global-bar .connections-wrap{
 .connections-form-grid input{
   font:inherit;
 }
+.input-with-toggle{
+  display:flex;
+  gap: var(--sp1);
+  align-items:center;
+}
+.input-with-toggle input{
+  flex:1 1 auto;
+}
+.input-with-toggle .mini{
+  padding:4px 10px;
+  font-size:0.8rem;
+}
 .connections-table{
   display:grid;
   gap: var(--sp2);

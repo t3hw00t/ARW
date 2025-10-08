@@ -42,6 +42,8 @@
       "stop_service",
       "get_prefs",
       "set_prefs",
+      "launcher_service_log_path",
+      "launcher_recent_service_logs",
       "launcher_autostart_status",
       "set_launcher_autostart",
       "open_url",

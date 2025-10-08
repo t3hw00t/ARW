@@ -41,6 +41,8 @@ Status
 - Admin-only windows raise toast notifications when calls are unauthorized, pointing you back to Connection & alerts so you know where to fix access.
 - Home, Models, Chat, Hub, Training, and Events windows share an SSE status badge (`connecting → connected → retrying`) that announces retry windows, honours server `retry:` hints, auto-refreshes the “last event” timestamp, flags stale streams, and resumes with the last journal id after transient drops (accessible text, `role="status"`, and colour-contrast compliant styling).
 - The home card’s mini downloads row mirrors `models.download.progress` events, including live speed estimates and completion cleanup, without a separate polling loop.
+- Control Room exposes an “Open Service Log” shortcut once the launcher has spawned `arw-server`, so you can jump straight into the current stdout/stderr file without hunting for paths.
+- The Logs window includes a Live Output feed that streams launcher-managed stdout/stderr in real time and adds quick copy/open/clear controls for fast triage.
 
 ## Connections Manager
 

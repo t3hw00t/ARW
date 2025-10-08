@@ -65,13 +65,13 @@ fn create_tray<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> tauri::Result<()
             // Service
             "svc-start" => {
                 let st = app.state::<ServiceState>();
-                let _ = arw_tauri::start_service(st, None);
+                let _ = arw_tauri::start_service(app.clone(), st, None);
             }
             "svc-stop" => {
                 let app_c = app.clone();
                 tauri::async_runtime::spawn(async move {
                     let st = app_c.state::<ServiceState>();
-                    let _ = arw_tauri::stop_service(st, None).await;
+                    let _ = arw_tauri::stop_service(app_c.clone(), st, None).await;
                 });
             }
             // Debug
@@ -218,7 +218,7 @@ fn main() {
                 .unwrap_or(false);
             if auto_env || auto_pref {
                 let st = app.state::<ServiceState>();
-                let _ = arw_tauri::start_service(st, None);
+                let _ = arw_tauri::start_service(app.handle().clone(), st, None);
             }
             // Optionally, register updater plugin (no-op without config)
             #[cfg(all(desktop, not(test)))]

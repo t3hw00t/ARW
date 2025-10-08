@@ -3,27 +3,112 @@ use directories::ProjectDirs;
 use once_cell::sync::OnceCell;
 use reqwest::header::{HeaderMap, HeaderValue};
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
-use std::collections::{BTreeMap, HashSet};
+use serde_json::{json, Value};
+use std::collections::{BTreeMap, HashSet, VecDeque};
+use std::fs::{File, OpenOptions};
+use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::sync::{Arc, Mutex};
-use std::time::Duration;
-use tauri::Manager; // for get_webview_window on AppHandle
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use tauri::{Emitter, Manager}; // for get_webview_window on AppHandle
 use tauri_plugin_autostart::ManagerExt as AutostartManagerExt;
 
 /// Shared state holder for managing a spawned service child process.
 #[derive(Clone)]
 pub struct ServiceState {
-    inner: Arc<Mutex<Option<Child>>>,
+    inner: Arc<Mutex<Option<ServiceProcess>>>,
+    recent: Arc<Mutex<VecDeque<LogRecord>>>,
 }
 
 impl Default for ServiceState {
     fn default() -> Self {
         Self {
             inner: Arc::new(Mutex::new(None)),
+            recent: Arc::new(Mutex::new(VecDeque::new())),
         }
     }
+}
+
+const MAX_SERVICE_LOG_LINES: usize = 400;
+
+type SharedLogWriter = Arc<Mutex<File>>;
+
+struct ServiceProcess {
+    child: Child,
+    threads: Vec<std::thread::JoinHandle<()>>,
+    log_path: Option<PathBuf>,
+    writer: Option<SharedLogWriter>,
+}
+
+#[derive(Clone)]
+struct LogRecord {
+    stream: &'static str,
+    line: String,
+    timestamp: SystemTime,
+}
+
+fn service_log_path(create_dirs: bool) -> Option<PathBuf> {
+    let proj = ProjectDirs::from("org", "arw", "arw")?;
+    let dir = proj.data_dir().join("logs");
+    if create_dirs {
+        std::fs::create_dir_all(&dir).ok()?;
+    }
+    Some(dir.join("launcher-service.log"))
+}
+
+fn push_recent(recent: &Arc<Mutex<VecDeque<LogRecord>>>, record: LogRecord) {
+    let mut guard = recent.lock().unwrap_or_else(|poison| poison.into_inner());
+    guard.push_back(record);
+    if guard.len() > MAX_SERVICE_LOG_LINES {
+        guard.pop_front();
+    }
+}
+
+fn log_record_to_json(record: &LogRecord) -> serde_json::Value {
+    let ts = record
+        .timestamp
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_secs_f64())
+        .unwrap_or(0.0);
+    json!({
+        "stream": record.stream,
+        "line": record.line,
+        "timestamp": ts
+    })
+}
+
+fn capture_line<R: tauri::Runtime + 'static>(
+    app: &tauri::AppHandle<R>,
+    stream: &'static str,
+    line: &str,
+    writer: Option<&SharedLogWriter>,
+    recent: &Arc<Mutex<VecDeque<LogRecord>>>,
+    log_path: Option<&Path>,
+) {
+    if let Some(writer) = writer {
+        if let Ok(mut file) = writer.lock() {
+            let _ = writeln!(file, "{line}");
+        }
+    }
+    let timestamp = SystemTime::now();
+    let record = LogRecord {
+        stream,
+        line: line.to_string(),
+        timestamp,
+    };
+    push_recent(recent, record);
+    let ts = timestamp
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_secs_f64())
+        .unwrap_or(0.0);
+    let payload = json!({
+        "stream": stream,
+        "line": line,
+        "timestamp": ts,
+        "path": log_path.map(|p| p.display().to_string()),
+    });
+    let _ = app.emit("launcher://service-log", payload);
 }
 
 fn default_port() -> u16 {
@@ -660,38 +745,164 @@ mod cmds {
     }
 
     #[tauri::command]
-    pub fn start_service(
+    pub fn start_service<R: tauri::Runtime + 'static>(
+        app: tauri::AppHandle<R>,
         state: tauri::State<'_, ServiceState>,
         port: Option<u16>,
     ) -> Result<(), String> {
-        // already running?
         {
             let mut guard = state.inner.lock().map_err(|e| e.to_string())?;
-            if let Some(child) = guard.as_mut() {
-                if let Ok(None) = child.try_wait() {
+            if let Some(process) = guard.as_mut() {
+                if let Ok(None) = process.child.try_wait() {
                     return Ok(());
                 }
             }
         }
+
         let svc_bin =
             locate_service_binary().ok_or_else(|| "service binary not found".to_string())?;
+        let port_value = effective_port(port);
         let mut cmd = Command::new(svc_bin);
-        cmd.env("ARW_PORT", format!("{}", effective_port(port)))
-            .stdin(Stdio::null())
-            .stdout(Stdio::null())
-            .stderr(Stdio::null());
-        let child = cmd.spawn().map_err(|e| e.to_string())?;
-        *state.inner.lock().map_err(|e| e.to_string())? = Some(child);
+        cmd.env("ARW_PORT", format!("{port_value}"));
+        if let Some(token) = admin_token() {
+            cmd.env("ARW_ADMIN_TOKEN", token);
+        }
+        cmd.stdin(Stdio::null())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped());
+
+        let log_path = service_log_path(true);
+        let writer: Option<SharedLogWriter> = match log_path.as_ref() {
+            Some(path) => {
+                if let Some(parent) = path.parent() {
+                    std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+                }
+                let _ = OpenOptions::new()
+                    .create(true)
+                    .write(true)
+                    .truncate(true)
+                    .open(path);
+                match OpenOptions::new().create(true).append(true).open(path) {
+                    Ok(file) => Some(Arc::new(Mutex::new(file))),
+                    Err(_) => None,
+                }
+            }
+            None => None,
+        };
+
+        state.recent.lock().map_err(|e| e.to_string())?.clear();
+
+        let mut child = cmd.spawn().map_err(|e| e.to_string())?;
+        let stdout = child.stdout.take();
+        let stderr = child.stderr.take();
+        let recent = state.recent.clone();
+        let mut threads = Vec::new();
+
+        if let Some(stdout) = stdout {
+            let app_clone = app.clone();
+            let recent_clone = recent.clone();
+            let writer_clone = writer.clone();
+            let log_path_clone = log_path.clone();
+            threads.push(std::thread::spawn(move || {
+                let mut reader = BufReader::new(stdout);
+                let mut line = String::new();
+                loop {
+                    line.clear();
+                    match reader.read_line(&mut line) {
+                        Ok(0) => break,
+                        Ok(_) => {
+                            let trimmed = line.trim_end_matches(&['\r', '\n']).to_string();
+                            if trimmed.is_empty() {
+                                continue;
+                            }
+                            capture_line(
+                                &app_clone,
+                                "stdout",
+                                trimmed.as_str(),
+                                writer_clone.as_ref(),
+                                &recent_clone,
+                                log_path_clone.as_deref(),
+                            );
+                        }
+                        Err(_) => break,
+                    }
+                }
+            }));
+        }
+
+        if let Some(stderr) = stderr {
+            let app_clone = app.clone();
+            let recent_clone = recent.clone();
+            let writer_clone = writer.clone();
+            let log_path_clone = log_path.clone();
+            threads.push(std::thread::spawn(move || {
+                let mut reader = BufReader::new(stderr);
+                let mut line = String::new();
+                loop {
+                    line.clear();
+                    match reader.read_line(&mut line) {
+                        Ok(0) => break,
+                        Ok(_) => {
+                            let trimmed = line.trim_end_matches(&['\r', '\n']).to_string();
+                            if trimmed.is_empty() {
+                                continue;
+                            }
+                            capture_line(
+                                &app_clone,
+                                "stderr",
+                                trimmed.as_str(),
+                                writer_clone.as_ref(),
+                                &recent_clone,
+                                log_path_clone.as_deref(),
+                            );
+                        }
+                        Err(_) => break,
+                    }
+                }
+            }));
+        }
+
+        let process = ServiceProcess {
+            child,
+            threads,
+            log_path: log_path.clone(),
+            writer: writer.clone(),
+        };
+        *state.inner.lock().map_err(|e| e.to_string())? = Some(process);
+
+        let marker = format!("launcher started service on port {port_value}");
+        capture_line(
+            &app,
+            "launcher",
+            marker.as_str(),
+            writer.as_ref(),
+            &state.recent,
+            log_path.as_deref(),
+        );
+
         Ok(())
     }
 
     #[tauri::command]
-    pub async fn stop_service(
+    pub async fn stop_service<R: tauri::Runtime + 'static>(
+        app: tauri::AppHandle<R>,
         state: tauri::State<'_, ServiceState>,
         _port: Option<u16>,
     ) -> Result<(), String> {
-        if let Some(mut child) = state.inner.lock().map_err(|e| e.to_string())?.take() {
-            let _ = child.kill();
+        if let Some(mut process) = state.inner.lock().map_err(|e| e.to_string())?.take() {
+            let _ = process.child.kill();
+            let _ = process.child.wait();
+            for handle in process.threads.drain(..) {
+                let _ = handle.join();
+            }
+            capture_line(
+                &app,
+                "launcher",
+                "launcher requested service stop",
+                process.writer.as_ref(),
+                &state.recent,
+                process.log_path.as_deref(),
+            );
         }
         Ok(())
     }
@@ -704,6 +915,29 @@ mod cmds {
     #[tauri::command]
     pub fn set_prefs(namespace: Option<String>, value: Value) -> Result<(), String> {
         save_prefs(namespace.as_deref(), &value).map_err(|e| e.to_string())
+    }
+
+    #[tauri::command]
+    pub fn launcher_service_log_path() -> Result<Option<String>, String> {
+        Ok(service_log_path(true).map(|p| p.display().to_string()))
+    }
+
+    #[tauri::command]
+    pub fn launcher_recent_service_logs(
+        state: tauri::State<'_, ServiceState>,
+        limit: Option<usize>,
+    ) -> Result<Vec<serde_json::Value>, String> {
+        let max = limit
+            .unwrap_or(MAX_SERVICE_LOG_LINES)
+            .min(MAX_SERVICE_LOG_LINES);
+        let guard = state.recent.lock().map_err(|e| e.to_string())?;
+        let total = guard.len();
+        let skip = total.saturating_sub(max);
+        Ok(guard
+            .iter()
+            .skip(skip)
+            .map(log_record_to_json)
+            .collect::<Vec<_>>())
     }
 
     #[tauri::command]
@@ -1266,6 +1500,8 @@ mod cmds {
                 stop_service,
                 get_prefs,
                 set_prefs,
+                launcher_service_log_path,
+                launcher_recent_service_logs,
                 launcher_autostart_status,
                 set_launcher_autostart,
                 open_url,

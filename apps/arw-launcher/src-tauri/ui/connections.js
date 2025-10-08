@@ -32,6 +32,15 @@ const prepareConn = (raw) => {
   };
 };
 
+function setTokenVisibility(visible) {
+  const input = document.getElementById('ctok');
+  const toggle = document.getElementById('ctokReveal');
+  if (!input || !toggle) return;
+  input.type = visible ? 'text' : 'password';
+  toggle.textContent = visible ? 'Hide' : 'Show';
+  toggle.setAttribute('aria-pressed', visible ? 'true' : 'false');
+}
+
 function ensureSseIndicator() {
   const wrap = document.getElementById('statusBadges');
   if (!wrap) return;
@@ -319,6 +328,14 @@ document.addEventListener('DOMContentLoaded', () => {
     clearBtn.addEventListener('click', () => {
       ARW.clearBaseOverride();
       ARW.toast('Base override cleared');
+    });
+  }
+  const revealBtn = document.getElementById('ctokReveal');
+  if (revealBtn) {
+    setTokenVisibility(false);
+    revealBtn.addEventListener('click', () => {
+      const current = revealBtn.getAttribute('aria-pressed') === 'true';
+      setTokenVisibility(!current);
     });
   }
 });

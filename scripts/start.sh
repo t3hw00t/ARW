@@ -235,5 +235,14 @@ else
     export ARW_AUTOSTART=1
   fi
   echo "[start] Launching $launcher (port $ARW_PORT)"
-  exec "$launcher"
+  "$launcher" &
+  launcher_pid=$!
+  if ! kill -0 "$launcher_pid" >/dev/null 2>&1; then
+    wait "$launcher_pid"
+    exit $?
+  fi
+  if [[ $wait_health -eq 1 && $launcher_only -eq 0 ]]; then
+    wait_for_health || true
+  fi
+  wait "$launcher_pid"
 fi

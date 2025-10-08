@@ -1,7 +1,12 @@
+const invoke = (cmd, args) => ARW.invoke(cmd, args);
 let lastJson = null;
 let routeStatsSubId = null;
 let probeMetricsSubId = null;
 let sseIndicatorHandle = null;
+const MAX_TAIL_LINES = 400;
+const tailEntries = [];
+let tailListener = null;
+let tailLogPath = null;
 const updateBaseMeta = () => ARW.applyBaseMeta({ portInputId: 'port', badgeId: 'baseBadge', label: 'Base' });
 function bytesHuman(n){ if(!n && n!==0) return '–'; const kb=1024, mb=kb*1024, gb=mb*1024, tb=gb*1024; if(n>=tb) return (n/tb).toFixed(2)+' TiB'; if(n>=gb) return (n/gb).toFixed(2)+' GiB'; if(n>=mb) return (n/mb).toFixed(1)+' MiB'; if(n>=kb) return (n/kb).toFixed(1)+' KiB'; return n+' B'; }
 function setCpuBadge(p){ try{ const el=document.getElementById('cpuBadge'); if(!el) return; const v = Number(p)||0; el.textContent = 'CPU: ' + v.toFixed(1) + '%'; el.className = 'badge ' + (v>=90? 'bad' : v>=75? 'warn':''); }catch{} }
@@ -53,6 +58,173 @@ function connectSse({ replay = 25, resume = false } = {}) {
   ensureSseIndicator();
   const meta = updateBaseMeta();
   ARW.sse.connect(meta.base, { replay, prefix: ['state.read.model.patch', 'probe.metrics'] }, resume);
+}
+
+function normalizeTailEntry(raw) {
+  const line = typeof raw?.line === 'string' ? raw.line : '';
+  const stream =
+    typeof raw?.stream === 'string' && raw.stream ? raw.stream : 'stdout';
+  const ts =
+    typeof raw?.timestamp === 'number' && Number.isFinite(raw.timestamp)
+      ? raw.timestamp
+      : Date.now() / 1000;
+  return { line, stream, timestamp: ts };
+}
+
+function followTailEnabled() {
+  const el = document.getElementById('tailFollow');
+  return !el || !!el.checked;
+}
+
+function setLogPath(path) {
+  const resolved =
+    typeof path === 'string' && path.trim().length > 0 ? path.trim() : null;
+  tailLogPath = resolved;
+  const location = document.getElementById('tailLocation');
+  if (location) {
+    location.textContent = resolved
+      ? `Log file: ${resolved}`
+      : 'Log file not available yet';
+  }
+  const openBtn = document.getElementById('btn-tail-open');
+  if (openBtn) openBtn.disabled = !resolved;
+}
+
+function ensureTailPlaceholder() {
+  const wrap = document.getElementById('logTail');
+  if (!wrap) return;
+  if (!tailEntries.length) {
+    wrap.dataset.empty = 'true';
+    wrap.innerHTML = '<div class="empty">No output yet.</div>';
+  } else {
+    wrap.dataset.empty = 'false';
+    wrap.innerHTML = '';
+  }
+}
+
+function formatTailTime(timestamp) {
+  const date = Number.isFinite(timestamp)
+    ? new Date(timestamp * 1000)
+    : new Date();
+  return date.toLocaleTimeString([], {
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  });
+}
+
+function createTailLine(entry) {
+  const row = document.createElement('div');
+  row.className = 'tail-line';
+  const time = document.createElement('span');
+  time.className = 'time';
+  time.textContent = formatTailTime(entry.timestamp);
+  const stream = document.createElement('span');
+  const slug = entry.stream || 'stdout';
+  stream.className = `stream ${slug}`;
+  stream.textContent = slug.toUpperCase();
+  const text = document.createElement('span');
+  text.className = 'text';
+  text.textContent = entry.line || '';
+  row.appendChild(time);
+  row.appendChild(stream);
+  row.appendChild(text);
+  return row;
+}
+
+function renderTailFromHistory() {
+  const wrap = document.getElementById('logTail');
+  if (!wrap) return;
+  ensureTailPlaceholder();
+  if (!tailEntries.length) return;
+  const frag = document.createDocumentFragment();
+  tailEntries.forEach((entry) => {
+    frag.appendChild(createTailLine(entry));
+  });
+  wrap.appendChild(frag);
+  if (followTailEnabled()) {
+    wrap.scrollTop = wrap.scrollHeight;
+  }
+}
+
+function appendTailEntry(entry) {
+  const wrap = document.getElementById('logTail');
+  if (!wrap) return;
+  if (wrap.dataset.empty === 'true') {
+    wrap.innerHTML = '';
+    wrap.dataset.empty = 'false';
+  }
+  wrap.appendChild(createTailLine(entry));
+  while (wrap.childElementCount > MAX_TAIL_LINES) {
+    wrap.removeChild(wrap.firstChild);
+  }
+  if (followTailEnabled()) {
+    wrap.scrollTop = wrap.scrollHeight;
+  }
+}
+
+function pushTailEntry(entry) {
+  tailEntries.push(entry);
+  if (tailEntries.length > MAX_TAIL_LINES) {
+    tailEntries.shift();
+  }
+  appendTailEntry(entry);
+}
+
+async function preloadTailHistory() {
+  try {
+    const history = await invoke('launcher_recent_service_logs', {
+      limit: MAX_TAIL_LINES,
+    });
+    tailEntries.length = 0;
+    if (Array.isArray(history)) {
+      history.forEach((raw) => {
+        tailEntries.push(normalizeTailEntry(raw));
+      });
+    }
+    renderTailFromHistory();
+  } catch (err) {
+    console.warn('tail history load failed', err);
+    tailEntries.length = 0;
+    ensureTailPlaceholder();
+  }
+}
+
+async function subscribeToTail() {
+  if (!window.__TAURI__ || !window.__TAURI__.event) return;
+  tailListener = await window.__TAURI__.event.listen(
+    'launcher://service-log',
+    ({ payload }) => {
+      if (!payload) return;
+      if (payload.path) {
+        setLogPath(payload.path);
+      }
+      const entry = normalizeTailEntry(payload);
+      pushTailEntry(entry);
+    },
+  );
+}
+
+function disposeTailListener() {
+  if (typeof tailListener === 'function') {
+    tailListener();
+    tailListener = null;
+  }
+}
+
+async function fetchLogPath({ toastOnError = false } = {}) {
+  try {
+    const path = await invoke('launcher_service_log_path');
+    setLogPath(path);
+    return tailLogPath;
+  } catch (err) {
+    console.error(err);
+    setLogPath(null);
+    if (toastOnError) {
+      ARW.toast('Unable to resolve log path');
+    }
+    return null;
+  }
 }
 
 function autoEnabled(){
@@ -142,12 +314,59 @@ function exportRoutesCsv(routes){ const by = routes?.by_path || {}; const rows =
 function exportKindsCsv(ev){ const kinds = ev?.kinds || {}; const rows = [['kind','count']]; Object.entries(kinds).forEach(([k,c])=> rows.push([k,c])); downloadCsv('event_kinds.csv', rows); }
 document.addEventListener('DOMContentLoaded', () => {
   updateBaseMeta();
+  ensureTailPlaceholder();
   document.getElementById('btn-refresh').addEventListener('click', () => fetchRouteStatsSnapshot({ renderNow: true }));
   document.getElementById('wrap').addEventListener('change', ()=> render(lastJson||{}));
   document.getElementById('auto').addEventListener('change', ()=>{ if (autoEnabled() && lastJson) render(lastJson); });
   document.getElementById('focus').addEventListener('change', ()=> render(lastJson||{}));
   document.getElementById('routeFilter').addEventListener('input', ()=> render(lastJson||{}));
   document.getElementById('btn-copy').addEventListener('click', ()=>{ if (lastJson) ARW.copy(JSON.stringify(lastJson, null, 2)); });
+  const tailClear = document.getElementById('btn-tail-clear');
+  if (tailClear) {
+    tailClear.addEventListener('click', () => {
+      tailEntries.length = 0;
+      ensureTailPlaceholder();
+    });
+  }
+  const tailCopy = document.getElementById('btn-tail-copy');
+  if (tailCopy) {
+    tailCopy.addEventListener('click', async () => {
+      if (!tailEntries.length) {
+        ARW.toast('No log lines to copy');
+        return;
+      }
+      const slice = tailEntries.slice(-100).map((entry) => entry.line || '');
+      try {
+        await navigator.clipboard.writeText(slice.join('\n'));
+        ARW.toast('Copied');
+      } catch (err) {
+        console.error(err);
+        ARW.toast('Copy failed');
+      }
+    });
+  }
+  const tailOpen = document.getElementById('btn-tail-open');
+  if (tailOpen) {
+    tailOpen.addEventListener('click', async () => {
+      const path = await fetchLogPath({ toastOnError: true });
+      if (!path) return;
+      try {
+        await invoke('open_path', { path });
+      } catch (err) {
+        console.error(err);
+        ARW.toast('Unable to open log file');
+      }
+    });
+  }
+  const tailFollow = document.getElementById('tailFollow');
+  if (tailFollow) {
+    tailFollow.addEventListener('change', () => {
+      if (tailFollow.checked) {
+        const wrap = document.getElementById('logTail');
+        if (wrap) wrap.scrollTop = wrap.scrollHeight;
+      }
+    });
+  }
   const rebindBase = async () => {
     const meta = updateBaseMeta();
     const p = ARW.getPortFromInput('port') || meta.port || 8091;
@@ -166,6 +385,9 @@ document.addEventListener('DOMContentLoaded', () => {
     rebindBase().catch(() => {});
   });
   (async () => {
+    await fetchLogPath();
+    await preloadTailHistory();
+    await subscribeToTail();
     await ARW.applyPortFromPrefs('port');
     updateBaseMeta();
     connectSse({ replay: 25, resume: false });
@@ -177,6 +399,7 @@ document.addEventListener('DOMContentLoaded', () => {
   })();
   window.addEventListener('arw:base-override-changed', () => {
     rebindBase().catch(() => {});
+    fetchLogPath().catch(() => {});
   });
 });
 
@@ -188,5 +411,9 @@ window.addEventListener('keydown', (e)=>{
   const btn = (id)=> document.getElementById(id);
   if (e.key.toLowerCase()==='r'){ e.preventDefault(); btn('btn-refresh')?.click(); }
   else if (e.key.toLowerCase()==='w'){ e.preventDefault(); const el=document.getElementById('wrap'); if (el){ el.checked=!el.checked; render(lastJson||{}); } }
-  else if (e.key.toLowerCase()==='a'){ e.preventDefault(); const el=document.getElementById('auto'); if (el){ el.checked=!el.checked; if (el.checked) loadStats(); } }
+  else if (e.key.toLowerCase()==='a'){ e.preventDefault(); const el=document.getElementById('auto'); if (el){ el.checked=!el.checked; if (el.checked) fetchRouteStatsSnapshot({ renderNow: true }); } }
+});
+
+window.addEventListener('beforeunload', () => {
+  disposeTailListener();
 });
