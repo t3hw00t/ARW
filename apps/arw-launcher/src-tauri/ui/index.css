@@ -162,6 +162,27 @@ body.has-global-bar .launcher-wrap{
 .token-control .mini{
   white-space:nowrap;
 }
+.token-note{
+  margin-bottom:0;
+}
+.token-status{
+  margin:0;
+  font-size:0.85rem;
+  color: var(--color-muted);
+}
+.token-status.ok{
+  color: var(--status-ok);
+}
+.token-status.warn{
+  color: var(--status-warn);
+}
+.token-status.bad{
+  color: var(--status-bad);
+}
+.workspace-hint{
+  margin-top: var(--sp2);
+  max-width: 56ch;
+}
 .hero-footer{
   display:flex;
   flex-wrap:wrap;

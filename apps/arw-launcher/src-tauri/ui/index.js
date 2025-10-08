@@ -10,6 +10,23 @@ const prefBaseline = { port: '', autostart: false, notif: true, loginstart: fals
 let lastHealthCheck = null;
 let healthMetaTimer = null;
 let serviceLogPath = null;
+let tokenProbeController = null;
+let tokenProbeLast = { token: null, state: null, at: 0 };
+let serviceOnline = false;
+let controlButtonsInitialized = false;
+const CONTROL_BUTTONS = [
+  { id: 'btn-hub', requiresService: true, requiresToken: true },
+  { id: 'btn-chat', requiresService: true, requiresToken: true },
+  { id: 'btn-training', requiresService: true, requiresToken: true },
+  { id: 'btn-trial', requiresService: true, requiresToken: true },
+  { id: 'btn-events', requiresService: true, requiresToken: true },
+  { id: 'btn-logs', requiresService: true, requiresToken: true },
+  { id: 'btn-models', requiresService: true, requiresToken: true },
+  { id: 'btn-connections', requiresService: true, requiresToken: true },
+  { id: 'btn-open', requiresService: true, requiresToken: false },
+  { id: 'btn-open-window', requiresService: true, requiresToken: false },
+];
+let tokenStatusState = { state: 'missing', message: '', token: '', context: 'saved' };
 
 function shouldOpenAdvancedPrefs() {
   const portEl = document.getElementById('port');
@@ -129,22 +146,50 @@ function connectSse({ replay = 0, resume = true } = {}) {
   ARW.sse.connect(base, opts, resume);
 }
 
-function syncTokenCallout(tokenValue, { pending = false } = {}) {
+function syncTokenCallout({ tokenValue, state, context } = {}) {
   const callout = document.getElementById('tokenCallout');
   const body = document.getElementById('tokenCalloutBody');
   if (!callout) return;
-  const hasToken = typeof tokenValue === 'string' && tokenValue.trim().length > 0;
-  const show = pending || !hasToken;
+  const trimmed = typeof tokenValue === 'string' ? tokenValue.trim() : '';
+  const currentState = state || (trimmed ? 'saved' : 'missing');
+  let show = false;
+  let message = '';
+  switch (currentState) {
+    case 'pending':
+      show = true;
+      message =
+        'Save your changes to update the admin token, then restart the service when prompted so workspaces stay authorized.';
+      break;
+    case 'missing':
+      show = true;
+      message =
+        'Paste an existing token or use Generate to create a new secret. Tokens gate access to admin surfaces and should remain private.';
+      break;
+    case 'invalid':
+      show = true;
+      message =
+        'Token rejected. Generate a new secret or double-check the value, then save your changes.';
+      break;
+    case 'offline':
+      show = true;
+      message = 'Start the service so the launcher can verify your admin token.';
+      break;
+    case 'error':
+      show = true;
+      message = 'Unable to verify the admin token. Check service logs and retry.';
+      break;
+    default:
+      if (!trimmed) {
+        show = true;
+        message =
+          'Paste an existing token or use Generate to create a new secret. Tokens gate access to admin surfaces and should remain private.';
+      }
+      break;
+  }
   callout.hidden = !show;
   callout.setAttribute('aria-hidden', show ? 'false' : 'true');
   if (!show || !body) return;
-  if (pending) {
-    body.textContent =
-      'Save your changes to update the admin token, then restart the service when prompted so workspaces stay authorized.';
-    return;
-  }
-  body.textContent =
-    'Paste an existing token or use Generate to create a new secret. Tokens gate access to admin surfaces and should remain private.';
+  body.textContent = message;
 }
 
 function tokenInputEl() {
@@ -190,7 +235,139 @@ function setTokenValue(value, { focusEnd = false } = {}) {
   return trimmed;
 }
 
-function updateTokenBadge(tokenValue, { pending = false } = {}) {
+const TOKEN_STATUS_MESSAGES = {
+  saved: {
+    missing: 'No admin token saved. Generate or paste one to unlock Project Hub, Chat, and Training.',
+    saved: 'Admin token saved. Start the service or use Test to verify.',
+    valid: 'Admin token accepted.',
+    invalid: 'Admin token rejected. Generate a new secret or paste the correct value.',
+    testing: 'Testing admin token…',
+    offline: 'Service unreachable. Start the service, then try again.',
+    error: 'Unable to verify admin token. Check the service logs and retry.',
+  },
+  pending: {
+    pending: 'Unsaved admin token. Save preferences to apply it.',
+    valid: 'Token accepted. Save to apply.',
+    invalid: 'Token rejected. Update the value before saving.',
+    testing: 'Testing unsaved admin token…',
+    offline: 'Service unreachable. Save once the service is reachable, then retry.',
+    error: 'Unable to verify unsaved token. Adjust and retry.',
+    missing: 'No admin token in progress.',
+    saved: 'Admin token saved.',
+  },
+};
+
+function tokenBadgeClass(state) {
+  switch (state) {
+    case 'valid':
+      return 'badge ok';
+    case 'invalid':
+    case 'error':
+      return 'badge bad';
+    case 'pending':
+    case 'missing':
+    case 'testing':
+    case 'offline':
+      return 'badge warn';
+    default:
+      return 'badge';
+  }
+}
+
+function tokenBadgeText(state) {
+  switch (state) {
+    case 'pending':
+      return 'Admin token: unsaved';
+    case 'missing':
+      return 'Admin token: not set';
+    case 'testing':
+      return 'Admin token: testing…';
+    case 'valid':
+      return 'Admin token: valid';
+    case 'invalid':
+      return 'Admin token: invalid';
+    case 'error':
+      return 'Admin token: error';
+    case 'offline':
+      return 'Admin token: awaiting service';
+    case 'saved':
+    default:
+      return 'Admin token: saved';
+  }
+}
+
+function tokenBadgeAria(state) {
+  switch (state) {
+    case 'pending':
+      return 'Admin token has unsaved changes';
+    case 'missing':
+      return 'Admin token not set';
+    case 'testing':
+      return 'Admin token verification in progress';
+    case 'valid':
+      return 'Admin token verified';
+    case 'invalid':
+      return 'Admin token invalid';
+    case 'error':
+      return 'Admin token verification failed';
+    case 'offline':
+      return 'Admin token saved; waiting for service';
+    case 'saved':
+    default:
+      return 'Admin token saved';
+  }
+}
+
+function tokenStatusTone(state) {
+  switch (state) {
+    case 'valid':
+      return 'ok';
+    case 'invalid':
+    case 'error':
+      return 'bad';
+    default:
+      return 'warn';
+  }
+}
+
+function defaultTokenStatusMessage(state, context) {
+  const scope = context === 'pending' ? 'pending' : 'saved';
+  const table = TOKEN_STATUS_MESSAGES[scope] || TOKEN_STATUS_MESSAGES.saved;
+  return table[state] || (scope === 'pending'
+    ? 'Admin token pending save.'
+    : 'Admin token status pending verification.');
+}
+
+function setTokenStatus(state, options = {}) {
+  const { message, tokenValue = '', context = 'saved' } = options;
+  const trimmed = typeof tokenValue === 'string' ? tokenValue.trim() : '';
+  const resolvedMessage = typeof message === 'string' && message.trim()
+    ? message
+    : defaultTokenStatusMessage(state, context);
+  if (
+    tokenStatusState.state === state &&
+    tokenStatusState.context === context &&
+    tokenStatusState.token === trimmed &&
+    tokenStatusState.message === resolvedMessage
+  ) {
+    return;
+  }
+  tokenStatusState = {
+    state,
+    context,
+    token: trimmed,
+    message: resolvedMessage,
+  };
+  const statusEl = document.getElementById('tokenStatus');
+  if (statusEl) {
+    statusEl.textContent = resolvedMessage;
+    statusEl.className = `field-note token-status ${tokenStatusTone(state)}`;
+  }
+  syncTokenCallout({ tokenValue: trimmed, state, context });
+  updateWorkspaceAvailability();
+}
+
+function updateTokenBadge(tokenValue, { pending = false, state, message, context } = {}) {
   const wrap = document.getElementById('statusBadges');
   if (!wrap) return;
   let badge = document.getElementById('tokenBadge');
@@ -200,22 +377,19 @@ function updateTokenBadge(tokenValue, { pending = false } = {}) {
     badge.className = 'badge';
     wrap.appendChild(badge);
   }
-  if (pending) {
-    badge.className = 'badge warn';
-    badge.textContent = 'Admin token: unsaved';
-    badge.setAttribute('aria-label', 'Admin token has unsaved changes');
-    syncTokenCallout(tokenValue, { pending: true });
-    return;
+  const trimmed = typeof tokenValue === 'string' ? tokenValue.trim() : '';
+  const resolvedContext = context || (pending ? 'pending' : 'saved');
+  let effectiveState = state;
+  if (!effectiveState) {
+    if (pending) effectiveState = 'pending';
+    else if (!trimmed) effectiveState = 'missing';
+    else effectiveState = 'saved';
   }
-  const hasToken =
-    typeof tokenValue === 'string' && tokenValue.trim().length > 0;
-  badge.className = hasToken ? 'badge ok' : 'badge warn';
-  badge.textContent = hasToken ? 'Admin token: set' : 'Admin token: not set';
-  badge.setAttribute(
-    'aria-label',
-    hasToken ? 'Admin token saved' : 'Admin token not set',
-  );
-  syncTokenCallout(tokenValue, { pending: false });
+  badge.className = tokenBadgeClass(effectiveState);
+  badge.textContent = tokenBadgeText(effectiveState);
+  badge.setAttribute('aria-label', tokenBadgeAria(effectiveState));
+  badge.setAttribute('data-token-state', effectiveState);
+  setTokenStatus(effectiveState, { message, tokenValue: trimmed, context: resolvedContext });
 }
 
 async function refreshServiceLogPath({ toastOnError = false } = {}) {
@@ -232,6 +406,233 @@ async function refreshServiceLogPath({ toastOnError = false } = {}) {
   const btn = document.getElementById('btn-log-file');
   if (btn) btn.disabled = !serviceLogPath;
   return serviceLogPath;
+}
+
+function markTokenProbeState(token, state) {
+  tokenProbeLast = {
+    token: typeof token === 'string' ? token : null,
+    state: state || null,
+    at: Date.now(),
+  };
+}
+
+async function probeAdminToken(tokenValue, { context = 'saved', updateBadge = context === 'saved', reason = 'manual' } = {}) {
+  const trimmed = typeof tokenValue === 'string' ? tokenValue.trim() : '';
+  if (!trimmed) {
+    markTokenProbeState(null, null);
+    if (updateBadge) {
+      updateTokenBadge('', { state: 'missing', context });
+    } else {
+      setTokenStatus('missing', { tokenValue: '', context });
+    }
+    return null;
+  }
+  if (tokenProbeController) {
+    try {
+      tokenProbeController.abort();
+    } catch {}
+  }
+  const meta = baseMeta || updateBaseMeta();
+  const base = (meta && meta.base) || ARW.base(effectivePort());
+  const url = `${String(base).replace(/\/$/, '')}/state/projects`;
+  const controller = new AbortController();
+  tokenProbeController = controller;
+  const signal = controller.signal;
+  const testingMessage = context === 'pending'
+    ? 'Testing unsaved admin token…'
+    : 'Testing admin token…';
+  if (updateBadge) {
+    updateTokenBadge(trimmed, { state: 'testing', message: testingMessage, context });
+  } else {
+    setTokenStatus('testing', { tokenValue: trimmed, context, message: testingMessage });
+  }
+  try {
+    const resp = await fetch(url, {
+      method: 'GET',
+      headers: {
+        Accept: 'application/json',
+        Authorization: `Bearer ${trimmed}`,
+        'X-ARW-Admin': trimmed,
+      },
+      signal,
+    });
+    if (resp.ok) {
+      if (updateBadge) {
+        updateTokenBadge(trimmed, { state: 'valid', message: 'Admin token accepted.', context });
+      } else {
+        const msg = context === 'pending'
+          ? 'Token accepted. Save to apply.'
+          : 'Admin token accepted.';
+        setTokenStatus('valid', { tokenValue: trimmed, context, message: msg });
+      }
+      markTokenProbeState(trimmed, 'valid');
+      return true;
+    }
+    if (resp.status === 401 || resp.status === 403) {
+      if (updateBadge) {
+        updateTokenBadge(trimmed, {
+          state: 'invalid',
+          message: 'Admin token rejected. Generate a new secret or double-check the value.',
+          context,
+        });
+      } else {
+        const msg = context === 'pending'
+          ? 'Token rejected. Update the value before saving.'
+          : 'Admin token rejected. Generate a new secret or double-check the value.';
+        setTokenStatus('invalid', { tokenValue: trimmed, context, message: msg });
+      }
+      markTokenProbeState(trimmed, 'invalid');
+      return false;
+    }
+    const msg = `Unexpected response: ${resp.status}`;
+    if (updateBadge) {
+      updateTokenBadge(trimmed, { state: 'error', message: msg, context });
+    } else {
+      setTokenStatus('error', { tokenValue: trimmed, context, message: msg });
+    }
+    markTokenProbeState(trimmed, 'error');
+    return false;
+  } catch (err) {
+    if (err && err.name === 'AbortError') {
+      return null;
+    }
+    const msg = 'Service unreachable. Start the service, then try again.';
+    if (updateBadge) {
+      updateTokenBadge(trimmed, { state: 'offline', message: msg, context });
+    } else {
+      setTokenStatus('offline', { tokenValue: trimmed, context, message: msg });
+    }
+    markTokenProbeState(trimmed, 'offline');
+    return null;
+  } finally {
+    if (tokenProbeController === controller) {
+      tokenProbeController = null;
+    }
+  }
+}
+
+async function maybeProbeSavedToken({ force = false, reason = 'health' } = {}) {
+  const savedToken = typeof prefBaseline.adminToken === 'string'
+    ? prefBaseline.adminToken.trim()
+    : '';
+  if (!savedToken) return;
+  if (prefsDirty) return;
+  const last = tokenProbeLast || {};
+  if (!force && last.token === savedToken) {
+    if (last.state === 'valid') {
+      updateTokenBadge(savedToken, { state: 'valid' });
+      return;
+    }
+    if (last.state === 'invalid') {
+      updateTokenBadge(savedToken, { state: 'invalid' });
+      return;
+    }
+    if (last.state === 'offline' && Date.now() - (last.at || 0) < 5000) {
+      updateTokenBadge(savedToken, { state: 'offline' });
+      return;
+    }
+    if (last.state === 'error' && Date.now() - (last.at || 0) < 5000) {
+      updateTokenBadge(savedToken, { state: 'error' });
+      return;
+    }
+  }
+  await probeAdminToken(savedToken, { context: 'saved', updateBadge: true, reason });
+}
+
+function initControlButtons() {
+  if (controlButtonsInitialized) return;
+  CONTROL_BUTTONS.forEach((cfg) => {
+    const el = document.getElementById(cfg.id);
+    if (!el) return;
+    cfg.defaultTitle = el.getAttribute('title') || '';
+  });
+  controlButtonsInitialized = true;
+}
+
+function updateWorkspaceAvailability() {
+  initControlButtons();
+  const hint = document.getElementById('workspaceHint');
+  const tokenState = tokenStatusState.state;
+  const tokenValue = typeof tokenStatusState.token === 'string' ? tokenStatusState.token : '';
+  const tokenReadyStates = new Set(['valid', 'saved']);
+  const tokenReady = tokenValue && tokenReadyStates.has(tokenState);
+  const tokenNeedsSave = tokenState === 'pending';
+  const tokenTesting = tokenState === 'testing';
+  const tokenMissing = !tokenValue || tokenState === 'missing';
+  const tokenInvalid = tokenState === 'invalid';
+  const tokenOffline = tokenState === 'offline';
+  const tokenErrored = tokenState === 'error';
+
+  CONTROL_BUTTONS.forEach((cfg) => {
+    const el = document.getElementById(cfg.id);
+    if (!el) return;
+    const defaultTitle = typeof cfg.defaultTitle === 'string' ? cfg.defaultTitle : '';
+    let disabled = false;
+    let reason = '';
+
+    if (cfg.requiresService && !serviceOnline) {
+      disabled = true;
+      reason = 'Start the service to enable this action.';
+    } else if (cfg.requiresToken) {
+      if (tokenNeedsSave) {
+        disabled = true;
+        reason = 'Save your admin token before opening this surface.';
+      } else if (tokenTesting) {
+        disabled = true;
+        reason = 'Wait for token verification to finish.';
+      } else if (!tokenReady) {
+        disabled = true;
+        if (tokenMissing) {
+          reason = 'Paste and save an admin token first.';
+        } else if (tokenInvalid) {
+          reason = 'Admin token invalid. Update it before continuing.';
+        } else if (tokenOffline) {
+          reason = 'Bring the service online to verify your admin token.';
+        } else if (tokenErrored) {
+          reason = 'Resolve admin token errors before continuing.';
+        } else {
+          reason = 'Admin token not ready yet.';
+        }
+      }
+    }
+
+    if (disabled) {
+      el.disabled = true;
+      el.setAttribute('aria-disabled', 'true');
+      el.title = reason || defaultTitle || 'Unavailable';
+    } else {
+      el.disabled = false;
+      el.removeAttribute('aria-disabled');
+      el.title = defaultTitle;
+    }
+  });
+
+  let gateMessage = '';
+  if (!serviceOnline) {
+    gateMessage = 'Start the service to enable Project Hub, Chat, Training, and diagnostics.';
+  } else if (tokenNeedsSave) {
+    gateMessage = 'Save your admin token before opening workspaces.';
+  } else if (tokenTesting) {
+    gateMessage = 'Testing admin token…';
+  } else if (tokenMissing) {
+    gateMessage = 'Paste and save an admin token to unlock Project Hub, Chat, and Training.';
+  } else if (tokenInvalid) {
+    gateMessage = 'Fix the admin token (Test shows invalid) before opening workspaces.';
+  } else if (tokenOffline) {
+    gateMessage = 'Bring the service online to verify your admin token.';
+  } else if (tokenErrored) {
+    gateMessage = 'Resolve admin token errors before continuing.';
+  }
+
+  if (hint) {
+    if (gateMessage) {
+      hint.textContent = gateMessage;
+      hint.hidden = false;
+    } else {
+      hint.textContent = '';
+      hint.hidden = true;
+    }
+  }
 }
 
 function initStatusBadges() {
@@ -297,6 +698,10 @@ async function health() {
   const heroHint = document.querySelector('.status-hint');
   try {
     const ok = await invoke('check_service_health', { port: effectivePort() });
+    serviceOnline = !!ok;
+    const savedToken = typeof prefBaseline.adminToken === 'string'
+      ? prefBaseline.adminToken.trim()
+      : '';
     const hasToken =
       typeof prefBaseline.adminToken === 'string' &&
       prefBaseline.adminToken.trim().length > 0;
@@ -319,8 +724,16 @@ async function health() {
     if (metaLabel) updateHealthMetaLabel();
     if (ok) {
       await refreshServiceLogPath();
+      const shouldForceProbe =
+        tokenStatusState.state === 'offline' ||
+        (savedToken &&
+          tokenProbeLast.token === savedToken &&
+          (tokenProbeLast.state === 'offline' || tokenProbeLast.state === 'error'));
+      await maybeProbeSavedToken({ force: shouldForceProbe, reason: 'health' });
     }
+    updateWorkspaceAvailability();
   } catch {
+    serviceOnline = false;
     if (dot) dot.className = 'dot';
     if (txt) txt.innerText = 'unknown';
     if (startBtn) startBtn.disabled = false;
@@ -335,6 +748,24 @@ async function health() {
     lastHealthCheck = Date.now();
     if (metaLabel) updateHealthMetaLabel();
     await refreshServiceLogPath();
+    const savedToken = typeof prefBaseline.adminToken === 'string'
+      ? prefBaseline.adminToken.trim()
+      : '';
+    const offlineMessage = 'Service unreachable. Start the service, then test again.';
+    if (prefsDirty) {
+      setTokenStatus('offline', {
+        tokenValue: savedToken,
+        context: 'pending',
+        message: offlineMessage,
+      });
+    } else if (savedToken) {
+      updateTokenBadge(savedToken, { state: 'offline', message: offlineMessage });
+      markTokenProbeState(savedToken, 'offline');
+    } else {
+      updateTokenBadge('', { state: 'missing' });
+      markTokenProbeState(null, null);
+    }
+    updateWorkspaceAvailability();
   }
 }
 
@@ -414,6 +845,8 @@ document.addEventListener('DOMContentLoaded', () => {
   initStatusBadges();
   bindPrefWatchers();
   setTokenVisibility(false);
+  initControlButtons();
+  updateWorkspaceAvailability();
   const tokenToggle = document.getElementById('btn-token-toggle');
   if (tokenToggle) {
     tokenToggle.addEventListener('click', () => {
@@ -449,6 +882,31 @@ document.addEventListener('DOMContentLoaded', () => {
         ARW.toast('Token copied');
       } catch {
         ARW.toast('Copy failed');
+      }
+    });
+  }
+  const tokenTest = document.getElementById('btn-token-test');
+  if (tokenTest) {
+    tokenTest.addEventListener('click', async () => {
+      if (tokenTest.disabled) return;
+      const input = tokenInputEl();
+      const value = input ? String(input.value || '').trim() : '';
+      const dirtyToken = prefsDirty || value !== prefBaseline.adminToken;
+      const context = dirtyToken ? 'pending' : 'saved';
+      if (!value) {
+        setTokenStatus('missing', { tokenValue: value, context });
+        ARW.toast('Paste or generate a token first');
+        return;
+      }
+      tokenTest.disabled = true;
+      try {
+        await probeAdminToken(value, {
+          context,
+          updateBadge: context === 'saved',
+          reason: 'manual-test',
+        });
+      } finally {
+        tokenTest.disabled = false;
       }
     });
   }
@@ -579,6 +1037,16 @@ document.addEventListener('DOMContentLoaded', () => {
           await refreshServiceLogPath();
           await health();
         }
+        if (prefBaseline.adminToken) {
+          await probeAdminToken(prefBaseline.adminToken, {
+            context: 'saved',
+            updateBadge: true,
+            reason: tokenChanged ? 'save-token-changed' : 'save',
+          });
+        } else {
+          markTokenProbeState(null, null);
+          updateTokenBadge('', { state: 'missing' });
+        }
         ARW.toast('Preferences saved');
       } catch (e) {
         console.error(e);
@@ -600,6 +1068,7 @@ document.addEventListener('DOMContentLoaded', () => {
       miniDownloads();
       health();
       refreshPrefsDirty();
+      updateWorkspaceAvailability();
     });
   }
   window.addEventListener('arw:base-override-changed', () => {
@@ -607,6 +1076,7 @@ document.addEventListener('DOMContentLoaded', () => {
     miniDownloads();
     health();
     refreshPrefsDirty();
+    updateWorkspaceAvailability();
   });
   const healthBtn = document.getElementById('btn-health');
   if (healthBtn) healthBtn.addEventListener('click', async () => {

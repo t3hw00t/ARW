@@ -73,6 +73,8 @@ nav:
           - Install & Launcher: guide/windows_install.md
           - Download (x64 MSI): https://github.com/t3hw00t/ARW/releases/latest/download/arw-launcher-x64.msi
           - Download (ARM64 MSI): https://github.com/t3hw00t/ARW/releases/latest/download/arw-launcher-arm64.msi
+      - macOS:
+          - Install & Launcher: guide/macos_install.md
       - Screenshots: guide/screenshots.md
       - Screenshots Gallery: guide/gallery.md
       - CLI Guide: guide/cli.md

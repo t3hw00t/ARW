@@ -54,6 +54,7 @@ This creates `dist/arw-<version>-windows-<arch>.zip` with:
 - Tray menu: Start/Stop Service, Debug UI (Browser/Window), Windows (Events, Logs, Models, Connections).
 - Health: status in tray tooltip with optional desktop notifications.
 - Autostart: toggle launcher autostart at login from the UI.
+- Connection & alerts now includes a **Test** button that verifies the saved admin token against `/state/projects`, surfacing “valid”, “invalid”, or “offline” states inline before you open the workspaces.
 
 ## Installer status
 

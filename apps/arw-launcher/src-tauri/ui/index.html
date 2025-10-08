@@ -74,8 +74,10 @@
                 <button id="btn-token-toggle" class="ghost mini" type="button" aria-pressed="false" aria-label="Show admin token">Show</button>
                 <button id="btn-token-generate" class="ghost mini" type="button" aria-label="Generate a new admin token">Generate</button>
                 <button id="btn-token-copy" class="ghost mini" type="button" aria-label="Copy admin token">Copy</button>
+                <button id="btn-token-test" class="ghost mini" type="button" aria-label="Test admin token">Test</button>
               </div>
-              <p class="field-note">Set this once to unlock Project Hub, Chat, Training Park, and other admin APIs. Stored locally; restart the service after saving to rotate credentials. <button id="btn-token-guide" class="link-button" type="button">How do tokens work?</button></p>
+              <p class="field-note token-note">Set this once to unlock Project Hub, Chat, Training Park, and other admin APIs. Stored locally; restart the service after saving to rotate credentials. Use Test to confirm access before you restart. <button id="btn-token-guide" class="link-button" type="button">How do tokens work?</button></p>
+              <p id="tokenStatus" class="field-note token-status" role="status" aria-live="polite"></p>
             </div>
           </div>
         </details>
@@ -136,6 +138,7 @@
             <button id="btn-trial" class="ghost" title="Open Trial Control Center">Trial Control</button>
             <p class="button-hint">Coordinate staged experiments and capture decisions.</p>
           </div>
+          <p id="workspaceHint" class="dim workspace-hint" role="status" aria-live="polite" hidden></p>
         </section>
         <section class="card">
           <header class="section-head">

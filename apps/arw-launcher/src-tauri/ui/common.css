@@ -236,6 +236,8 @@ th{ color:#555; font-weight:600 }
 
 .badge{ display:inline-flex; align-items:center; gap:6px; padding:4px 8px; border:1px solid var(--color-line); border-radius:999px; font-size:12px; background:#fff; box-shadow:0 1px 0 rgba(255,255,255,0.9) inset }
 .badge.warn{ border-color: var(--status-warn); color: var(--status-warn) }
+.badge.ok{ border-color: var(--status-ok); color: var(--status-ok) }
+.badge.bad{ border-color: var(--status-bad); color: var(--status-bad) }
 .badge.base-badge{ font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size:12px; }
 .badge.base-badge[data-override="true"]{
   border-color: var(--color-accent-teal-strong);

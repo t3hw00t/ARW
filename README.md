@@ -228,6 +228,7 @@ scripts/audit.ps1 -Interactive
 ## Download
 
 - Windows installer status (x64/ARM64) and manual build steps: [docs/guide/windows_install.md#installer-status](docs/guide/windows_install.md#installer-status)
+- macOS install & launcher guide: [docs/guide/macos_install.md](docs/guide/macos_install.md)
 - Release archives and checksums: [GitHub Releases](https://github.com/t3hw00t/ARW/releases)
 
 _Note_: MSI bundles (when published) ship the launcher alongside `arw-server`. Run the unified server directly (`scripts/start.ps1 -ServiceOnly` or `scripts/start.sh --service-only`) for headless installs; the debug panels are served by `arw-server` when `ARW_DEBUG=1`.
