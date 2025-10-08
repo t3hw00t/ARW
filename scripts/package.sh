@@ -72,10 +72,20 @@ rm -rf "$out" && mkdir -p "$out/bin" "$out/configs"
 exe=''
 [[ "$os" == windows ]] && exe='.exe'
 
-if [[ -f "$bin_dir/arw-server$exe" ]]; then
-  cp "$bin_dir/arw-server$exe" "$out/bin/arw-server$exe"
+server_src="$bin_dir/arw-server$exe"
+cli_src="$bin_dir/arw-cli$exe"
+
+if [[ ! -f "$server_src" ]]; then
+  echo "[package] Error: arw-server binary not found at $server_src" >&2
+  exit 1
 fi
-cp "$bin_dir/arw-cli$exe" "$out/bin/arw-cli$exe" 2>/dev/null || true
+if [[ ! -f "$cli_src" ]]; then
+  echo "[package] Error: arw-cli binary not found at $cli_src" >&2
+  exit 1
+fi
+
+cp "$server_src" "$out/bin/arw-server$exe"
+cp "$cli_src" "$out/bin/arw-cli$exe"
 if [[ -f "$bin_dir/arw-launcher$exe" ]]; then
   cp "$bin_dir/arw-launcher$exe" "$out/bin/arw-launcher$exe"
 fi
@@ -115,12 +125,8 @@ Notes
 EOF
 
 mkdir -p "$dist"
-zip -qr "$dist/$name.zip" -j "$out/bin"/* "$out/README.txt" "$out/first-run.sh" "$out/first-run.ps1"
-if [[ -d "$out/sandbox" ]]; then
-  zip -qr "$dist/$name.zip" "$out/configs" "$out/docs" "$out/sandbox"
-else
-  zip -qr "$dist/$name.zip" "$out/configs" "$out/docs"
-fi
-if [[ -d "$out/docs-site" ]]; then zip -qr "$dist/$name.zip" "$out/docs-site"; fi
+zip_path="$dist/$name.zip"
+rm -f "$zip_path"
+( cd "$dist" && zip -qr "$zip_path" "$name" )
 
-echo "[package] Wrote $dist/$name.zip"
+echo "[package] Wrote $zip_path"

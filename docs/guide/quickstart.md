@@ -111,10 +111,20 @@ Open **Launcher Settings** (Control Room → Support) to tweak autostart behavio
 
 ## Verify the Server
 
+=== "Windows (PowerShell)"
+```powershell
+Invoke-RestMethod http://127.0.0.1:8091/healthz
+Invoke-RestMethod http://127.0.0.1:8091/about | ConvertTo-Json -Depth 6
+```
+
+=== "macOS / Linux"
 ```bash
 curl -sS http://127.0.0.1:8091/healthz
 curl -sS http://127.0.0.1:8091/about | jq
 ```
+
+!!! note
+    `jq` is optional—install it (`sudo apt install jq`, `brew install jq`, etc.) or switch to `curl ... | python -m json.tool` when a JSON formatter is not already available.
 
 You should see metadata that lists the unified endpoints, performance presets, and the current security posture.
 

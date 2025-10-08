@@ -58,6 +58,12 @@ elif [[ -d "$script_dir/../bin" ]]; then
 elif [[ -d "$script_dir/../target/release" ]]; then
   root="$(cd "$script_dir/.." && pwd)"
   bin_dir="$root/target/release"
+elif [[ -x "$script_dir/arw-server" ]]; then
+  root="$script_dir"
+  bin_dir="$root"
+elif [[ -x "$script_dir/../arw-server" ]]; then
+  root="$(cd "$script_dir/.." && pwd)"
+  bin_dir="$root"
 else
   echo "[first-run] Unable to locate portable bundle outputs. Run from the extracted release directory or ensure target/release exists." >&2
   exit 1

@@ -129,7 +129,7 @@ PY
     return 0
   fi
 
-  echo "[start] Warning: python3 and jq unavailable; launcher prefs not updated. Export ARW_ADMIN_TOKEN manually in the Control Room." >&2
+  echo "[start] Warning: python3 and jq unavailable; launcher prefs not updated. Save the token inside Control Room  Connection & alerts instead." >&2
 }
 
 load_launcher_settings() {

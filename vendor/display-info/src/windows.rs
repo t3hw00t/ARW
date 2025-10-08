@@ -116,11 +116,13 @@ fn get_scale_factor(sz_device: *const u16) -> f32 {
                 None,
             )
         },
-        |dcw| unsafe { DeleteDC(dcw) }
+        |dcw| unsafe {
+            let _ = DeleteDC(dcw).as_bool();
+        }
     );
 
-    let logical_width = unsafe { GetDeviceCaps(*dcw_drop_box, HORZRES) };
-    let physical_width = unsafe { GetDeviceCaps(*dcw_drop_box, DESKTOPHORZRES) };
+    let logical_width = unsafe { GetDeviceCaps(Some(*dcw_drop_box), HORZRES) };
+    let physical_width = unsafe { GetDeviceCaps(Some(*dcw_drop_box), DESKTOPHORZRES) };
 
     physical_width as f32 / logical_width as f32
 }
@@ -140,7 +142,7 @@ pub fn get_all() -> Result<Vec<DisplayInfo>> {
 
     unsafe {
         EnumDisplayMonitors(
-            HDC::default(),
+            None,
             None,
             Some(monitor_enum_proc),
             LPARAM(h_monitors_mut_ptr as isize),

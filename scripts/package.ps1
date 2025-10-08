@@ -63,12 +63,12 @@ $rootToml = Join-Path $root 'Cargo.toml'
 $version = (Get-Content -Path $rootToml | Select-String -Pattern '^version\s*=\s*"([^"]+)"' -Context 0,0 | Select-Object -First 1).Matches.Groups[1].Value
 if (-not $version) { $version = '0.0.0' }
 
-$isWindows = $env:OS -eq 'Windows_NT'
+$onWindows = $env:OS -eq 'Windows_NT'
 if ($Target) {
   if ($Target -like '*-pc-windows-msvc') { $os = 'windows' }
   elseif ($Target -like '*-apple-darwin') { $os = 'macos' }
   elseif ($Target -like '*-unknown-linux-gnu') { $os = 'linux' }
-  else { $os = if ($isWindows) { 'windows' } elseif ($IsMacOS) { 'macos' } else { 'linux' } }
+  else { $os = if ($onWindows) { 'windows' } elseif ($IsMacOS) { 'macos' } else { 'linux' } }
   if ($Target -like 'aarch64-*') { $arch = 'arm64' }
   elseif ($Target -like 'x86_64-*') { $arch = 'x64' }
   else { $arch = if ($env:PROCESSOR_ARCHITECTURE -match 'ARM') { 'arm64' } else { 'x64' } }
@@ -78,7 +78,7 @@ if ($Target) {
   $binRoot = Join-Path $root $relDir
   if (-not (Test-Path $binRoot)) { $binRoot = Join-Path $root $altDir }
 } else {
-  $os   = if ($isWindows) { 'windows' } elseif ($IsMacOS) { 'macos' } else { 'linux' }
+  $os   = if ($onWindows) { 'windows' } elseif ($IsMacOS) { 'macos' } else { 'linux' }
   $arch = if ($env:PROCESSOR_ARCHITECTURE -match 'ARM') { 'arm64' } else { 'x64' }
   # Detect profile dir: prefer 'release', fallback to 'maxperf'
   $binRoot = Join-Path $root 'target/release'
@@ -149,7 +149,11 @@ Set-Content -Path (Join-Path $out 'README.txt') -Value $readme -Encoding utf8
 # Zip
 $zip = Join-Path $dist ("$name.zip")
 if (Test-Path $zip) { Remove-Item $zip -Force }
-Compress-Archive -Path (Join-Path $out '*') -DestinationPath $zip
+Push-Location $dist
+try {
+  Compress-Archive -Path $name -DestinationPath $zip
+} finally {
+  Pop-Location
+}
 
 Info "Wrote $zip"
-
