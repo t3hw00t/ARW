@@ -3,9 +3,11 @@ param(
   [switch]$Yes,
   [switch]$RunTests,
   [switch]$NoDocs,
+  [switch]$Minimal,
   [switch]$MaxPerf,
   [switch]$StrictReleaseGate,
-  [switch]$SkipReleaseGate
+  [switch]$SkipReleaseGate,
+  [switch]$Clean
 )
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
@@ -15,6 +17,11 @@ function Title($t){ Write-Host "`n=== $t ===" -ForegroundColor Cyan }
 function Info($m){ Write-Host "[setup] $m" -ForegroundColor DarkCyan }
 function Warn($m){ $script:warnings += $m }
 function Pause($m){ if(-not $Yes){ Read-Host $m | Out-Null } }
+
+if ($Minimal) {
+  Info 'Minimal mode enabled: skipping docs and release packaging.'
+  $NoDocs = $true
+}
 
 Title 'Prerequisites'
 $root = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
@@ -88,8 +95,8 @@ if (-not $py) {
     if ($NoDocs) { Warn 'Skipping MkDocs install because -NoDocs was provided.' }
     else {
       Info 'MkDocs not found. Attempting to install via pip...'
-      try { & $py.Path -m pip install --upgrade pip | Out-Null } catch { Warn 'pip upgrade failed (continuing).'}
-      try { & $py.Path -m pip install mkdocs mkdocs-material mkdocs-git-revision-date-localized-plugin } catch { Warn 'pip install for mkdocs failed. Docs site will be skipped.' }
+      try { & $py.Path -m pip install --upgrade --user pip | Out-Null } catch { Warn 'pip upgrade failed (continuing).'}
+      try { & $py.Path -m pip install --user mkdocs mkdocs-material mkdocs-git-revision-date-localized-plugin } catch { Warn 'pip install for mkdocs failed. Docs site will be skipped.' }
       $mkOnPath = Get-Command mkdocs -ErrorAction SilentlyContinue
       $mkViaPy = $false
       try { & $py.Path -m mkdocs --version | Out-Null; $mkViaPy = $true } catch { $mkViaPy = $false }
@@ -102,7 +109,11 @@ if (-not $py) {
   }
 }
 Title 'Clean previous build artifacts'
-try { & cargo clean } catch {}
+if ($Clean) {
+  try { & cargo clean } catch {}
+} else {
+  Info 'Skipping cargo clean (pass -Clean to force a fresh build).'
+}
 
 Title 'Build (release): core binaries'
 # Build only the essential binaries first to keep memory usage low on all platforms.
@@ -190,8 +201,6 @@ if (-not $Minimal) {
   }
   Add-Content $installLog 'DIR dist'
   if (Test-Path (Join-Path $root 'site')) { Add-Content $installLog 'DIR site' }
-} else {
-  Info 'Minimal mode: skipping docgen and packaging.'
 }
 
 Title 'Windows runtime check (WebView2 for Launcher)'

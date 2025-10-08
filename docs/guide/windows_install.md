@@ -28,8 +28,9 @@ powershell -ExecutionPolicy Bypass -File scripts\start.ps1 -ServiceOnly -WaitHea
 ```
 
 - Prefer a leaner install? Append `-Minimal` to `scripts\setup.ps1` to skip doc packaging and build just the core binaries (`arw-server`, `arw-cli`, `arw-launcher`). You can always run the full setup later when you need docs or release bundles.
-
+- Need a completely fresh rebuild? Append `-Clean` to `scripts\setup.ps1` to clear existing artifacts before compiling. By default the script reuses incremental build caches for faster reruns.
 - Packaging now tolerates missing Git remotes or offline hosts and surfaces a warning instead of failing. Set `ARW_STRICT_RELEASE_GATE=1` (or pass `-StrictReleaseGate`) if you need the setup to stop on open release blockers; CI environments continue to enforce the gate by default.
+- When MkDocs is installed automatically, it lands in your user site directory (for example `%LOCALAPPDATA%\Programs\Python\PythonXX\Scripts`). Add that path to your `PATH` if you want to call `mkdocs` directly.
 - The start script launches the service in the background and, if present, the desktop launcher.
 - When Python or `jq` are available, `scripts\start.ps1` and `scripts\start.sh` persist the exported admin token into the launcher preferences so Hub/Chat/Training unlock automatically. You can still rotate the token from the Control Room later.
 - If the launcher isn’t built yet, the script attempts a `cargo build -p arw-launcher`.
@@ -53,6 +54,7 @@ powershell -ExecutionPolicy Bypass -File scripts\start.ps1 -ServiceOnly -UseDist
 This creates `dist/arw-<version>-windows-<arch>.zip` with:
 - `bin/` — `arw-server.exe`, `arw-cli.exe`, optional `arw-launcher.exe`
 - `docs/` and configs
+- After extracting a release bundle, run `.\first-run.ps1` from the archive root to generate/reuse an admin token (`state\admin-token.txt`) and start the unified server headless on `http://127.0.0.1:8091/`. Use the optional `-Launcher` switch when you want the Control Room tray app (WebView2 required), or `-NewToken` to rotate credentials on demand.
 
 ## Launcher details
 

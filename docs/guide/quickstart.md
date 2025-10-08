@@ -198,6 +198,7 @@ Generate the secret with any equivalent tool if `openssl` is unavailable.
 
 ## Portable Mode
 
+- Extracted release bundle? Run `./first-run.sh` (Linux/macOS) or `.\first-run.ps1` (Windows) from the archive root to generate/reuse an admin token (`state/admin-token.txt`) and start the unified server on `http://127.0.0.1:8091/`. Add `--launcher` / `-Launcher` to open the Control Room or `--new-token` / `-NewToken` to rotate credentials.
 - Set `ARW_STATE_DIR` to relocate state (defaults to `./state`).
 - Combine with `ARW_PORTABLE=1` in launchers or scripts to keep all files beside the binaries for USB-style deployment.
 

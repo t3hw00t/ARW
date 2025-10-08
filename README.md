@@ -159,6 +159,7 @@ If you prefer the bundled helper (build + package, docs optional), run:
 - Linux / macOS: `bash scripts/setup.sh`
 - Add `-Minimal` / `--minimal` to build only `arw-server`, `arw-cli`, and the launcher without packaging docs on the first run.
 - Prefer a portable build with no compilation? Grab the latest release archive from [GitHub Releases](https://github.com/t3hw00t/ARW/releases), then run `bin/arw-server` (service) and optionally `bin/arw-launcher`.
+- Portable bundle helper: run `./first-run.sh` (Linux/macOS) or `.\first-run.ps1` (Windows) from the extracted archive to generate an admin token, save it under `state/admin-token.txt`, and start the unified server on `http://127.0.0.1:8091/`. Add `--launcher` / `-Launcher` to open the Control Room, or `--new-token` / `-NewToken` to rotate credentials.
 
 ### 2. Set an admin token & start the unified server
 

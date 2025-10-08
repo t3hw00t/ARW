@@ -84,6 +84,13 @@ cp -r "$root_dir/docs" "$out/docs"
 if [[ -d "$root_dir/site" ]]; then
   cp -r "$root_dir/site" "$out/docs-site"
 fi
+if [[ -f "$root_dir/scripts/first-run.sh" ]]; then
+  cp "$root_dir/scripts/first-run.sh" "$out/first-run.sh"
+  chmod +x "$out/first-run.sh" 2>/dev/null || true
+fi
+if [[ -f "$root_dir/scripts/first-run.ps1" ]]; then
+  cp "$root_dir/scripts/first-run.ps1" "$out/first-run.ps1"
+fi
 if [[ "$os" == windows && -f "$root_dir/sandbox/ARW.wsb" ]]; then
   mkdir -p "$out/sandbox" && cp "$root_dir/sandbox/ARW.wsb" "$out/sandbox/ARW.wsb"
 fi
@@ -108,7 +115,7 @@ Notes
 EOF
 
 mkdir -p "$dist"
-zip -qr "$dist/$name.zip" -j "$out/bin"/* "$out/README.txt"
+zip -qr "$dist/$name.zip" -j "$out/bin"/* "$out/README.txt" "$out/first-run.sh" "$out/first-run.ps1"
 if [[ -d "$out/sandbox" ]]; then
   zip -qr "$dist/$name.zip" "$out/configs" "$out/docs" "$out/sandbox"
 else

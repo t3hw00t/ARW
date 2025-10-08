@@ -52,6 +52,7 @@ bash scripts/package.sh
   ```bash
   ./dist/arw-<version>-macos-<arch>/bin/arw-server --help
   ```
+- After extracting a release bundle, run `./first-run.sh` from the archive root to generate/reuse an admin token (`state/admin-token.txt`) and start the unified server headless on `http://127.0.0.1:8091/`. Add `--launcher` to launch the Control Room alongside the service, or `--new-token` when you need a fresh credential.
 
 - Gatekeeper may quarantine unsigned binaries. If you see “cannot be opened because the developer cannot be verified”, remove the quarantine attribute:
 
