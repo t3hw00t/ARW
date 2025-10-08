@@ -30,6 +30,14 @@
           <button id="btn-help" class="ghost" title="Open keyboard shortcuts docs">Help</button>
         </div>
       </header>
+      <div id="baseCallout" class="hero-callout" role="alert" hidden>
+        <span class="hero-callout-icon" aria-hidden="true">!</span>
+        <span>
+          <strong>Secure remote access.</strong>
+          <span id="baseCalloutBody">Remote base is using plain HTTP. Switch to HTTPS or a trusted tunnel before sharing admin surfaces.</span>
+        </span>
+        <button id="btn-base-callout" class="ghost mini" type="button" aria-label="Open network hardening guide">Network guide</button>
+      </div>
       <div class="layout">
         <main id="chatMain">
           <section class="card" style="min-height:240px" role="region" aria-labelledby="chatTitle">

@@ -40,6 +40,14 @@
           <span id="stat" class="dim" role="status" aria-live="polite"></span>
         </div>
       </header>
+      <div id="baseCallout" class="hero-callout" role="alert" hidden>
+        <span class="hero-callout-icon" aria-hidden="true">!</span>
+        <span>
+          <strong>Secure remote access.</strong>
+          <span id="baseCalloutBody">Remote base is using plain HTTP. Switch to HTTPS or a trusted tunnel before sharing admin surfaces.</span>
+        </span>
+        <button id="btn-base-callout" class="ghost mini" type="button" aria-label="Open network hardening guide">Network guide</button>
+      </div>
       <main class="models-main">
         <section class="card models-concurrency" role="region" aria-labelledby="modelsConcurrencyTitle">
           <h2 id="modelsConcurrencyTitle">Concurrency guardrails</h2>

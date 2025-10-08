@@ -1253,6 +1253,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
   window.addEventListener('arw:base-override-changed', () => {
+    baseMeta = updateBaseMeta();
     connectSse({ replay: 5, resume: false });
     miniDownloads();
     health();

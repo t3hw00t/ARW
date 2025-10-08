@@ -115,6 +115,26 @@ if [[ "${OS:-}" == "Windows_NT" ]]; then
   launcher_exe+=".exe"
 fi
 
+launcher_deps_checked=0
+
+check_launcher_deps() {
+  if [[ $launcher_deps_checked -eq 1 ]]; then
+    return 0
+  fi
+  launcher_deps_checked=1
+  if [[ "${OSTYPE:-}" != linux* ]]; then
+    return 0
+  fi
+  if ! command -v pkg-config >/dev/null 2>&1; then
+    echo "[start] Warning: pkg-config not found; unable to verify WebKitGTK 4.1 + libsoup3. If the launcher build fails, run scripts/install-tauri-deps.sh or see docs/guide/compatibility.md." >&2
+    return 0
+  fi
+  if pkg-config --exists webkit2gtk-4.1 javascriptcoregtk-4.1 libsoup-3.0 >/dev/null 2>&1; then
+    return 0
+  fi
+  echo "[start] Warning: WebKitGTK 4.1 + libsoup3 development packages were not detected. The launcher build may fail. Run scripts/install-tauri-deps.sh or review docs/guide/compatibility.md." >&2
+}
+
 if [[ $use_dist -eq 1 ]]; then
   base=$(ls -td "$ROOT"/dist/arw-* 2>/dev/null | head -n1 || true)
   if [[ -z "$base" ]]; then
@@ -158,6 +178,7 @@ ensure_launcher() {
       exit 1
     fi
     echo "[start] Launcher binary not found ($launcher). Building release..."
+    check_launcher_deps
     if (cd "$ROOT" && cargo build --release -p arw-launcher); then
       :
     else
@@ -176,6 +197,7 @@ ensure_launcher() {
       return 1
     fi
     echo "[start] Launcher binary not found ($launcher). Attempting build..."
+    check_launcher_deps
     if (cd "$ROOT" && cargo build --release -p arw-launcher); then
       :
     else

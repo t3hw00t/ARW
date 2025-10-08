@@ -13,7 +13,7 @@
         "img-src": "'self' asset: data:",
         "style-src": "'self'",
         "script-src": "'self'",
-        "connect-src": "asset: http://127.0.0.1:* ipc:",
+        "connect-src": "'self' asset: http://127.0.0.1:* http: https: ws: wss: ipc:",
         "frame-src": "'none'",
         "object-src": "'none'",
         "base-uri": "'none'",

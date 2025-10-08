@@ -25,6 +25,21 @@ info(){ echo -e "\033[36m[setup]\033[0m $*"; }
 warn(){ WARNINGS+=("$*"); }
 pause(){ [[ $yes_flag -eq 1 ]] || read -rp "$*" _; }
 
+check_launcher_runtime() {
+  if [[ "${OSTYPE:-}" != linux* ]]; then
+    return
+  fi
+  if ! command -v pkg-config >/dev/null 2>&1; then
+    warn "pkg-config not found; unable to verify WebKitGTK 4.1 + libsoup3 for the launcher. If the build fails, run scripts/install-tauri-deps.sh or see docs/guide/compatibility.md."
+    return
+  fi
+  if pkg-config --exists webkit2gtk-4.1 javascriptcoregtk-4.1 libsoup-3.0 >/dev/null 2>&1; then
+    info "WebKitGTK 4.1 + libsoup3 detected (launcher build ready)."
+  else
+    warn "WebKitGTK 4.1 + libsoup3 development packages not detected. Run scripts/install-tauri-deps.sh or review docs/guide/compatibility.md before rebuilding the launcher."
+  fi
+}
+
 title "Prerequisites"
 if ! command -v cargo >/dev/null 2>&1; then
   warn "Rust 'cargo' not found."
@@ -56,10 +71,11 @@ if [[ $no_docs -eq 0 && $mkdocs_ok -eq 0 ]]; then
     else
       warn "MkDocs install failed or pip is unavailable; docs site build will be skipped."
     fi
-  else
-    warn "python3 not found; skipping docs site build"
-  fi
+else
+  warn "python3 not found; skipping docs site build"
 fi
+fi
+check_launcher_runtime
 title "Build workspace (release)"
 (cd "$ROOT" && cargo build --workspace --release --locked)
 

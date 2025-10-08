@@ -51,6 +51,8 @@ Status
 - Save multiple local or remote server bases plus optional per-connection admin tokens. Bases are normalised (scheme/host/port) so HTTP helpers and SSE reconnects can reuse the credentials reliably.
 - The Events, Logs, and Models windows launched from Connections honour the saved base (via the `?base=` override) and reuse the token when present. Status badges distinguish `online`, `auth required`, and `token rejected` responses from `/healthz`.
 - Clicking a saved row reloads it into the form for quick edits. Tokens are trimmed client-side and never echoed back in the table; the badge simply signals that a token is stored.
+- Remote targets over `http://` or `https://` now work end-to-end from the Control Room and window surfaces (SSE, fetch, and tooling). Add an admin token before connecting to anything beyond `127.0.0.1`, and prefer TLS when you forward the service outside a trusted LAN.
+- If the active base is remote and still on plain HTTP, the Control Room shows a warning callout with a quick link to the network hardening guide. The base badge also turns amber so you can spot unsecured connections at a glance.
 - Rows poll every 10 seconds; the in-page SSE indicator follows the same base so metrics stay scoped to the selected connection.
 - Every launcher window now renders a base badge and disables the local port field whenever a saved override is active, making it explicit which host/port is being queried (and preventing accidental port mismatches).
 - Activate any saved connection to make it the global override (stored locally); a quick “Deactivate” control and badge highlight make it easy to flip between local and remote targets.

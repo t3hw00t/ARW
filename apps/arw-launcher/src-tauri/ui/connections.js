@@ -360,6 +360,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   (async () => {
     connectSse({ replay: 5, resume: false });
+    ARW.syncBaseCallout();
     await refresh();
     setInterval(refresh, 10000);
   })();
@@ -383,11 +384,13 @@ document.addEventListener('DOMContentLoaded', () => {
     baseField.addEventListener('change', () => {
       currentSseBase = null;
       connectSse({ replay: 5, resume: false });
+      ARW.syncBaseCallout();
     });
   }
 });
 
 window.addEventListener('arw:base-override-changed', () => {
   connectSse({ replay: 5, resume: true });
+  ARW.syncBaseCallout();
   refresh();
 });

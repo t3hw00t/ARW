@@ -50,4 +50,8 @@ Entries should represent effective TLDs (for example `gov.bc.ca`) so that hostna
 Preview endpoint
 - `POST /egress/preview` dry-runs posture, allowlist, leases, and policy evaluation for a URL/method before running tools.
 
+## Launcher guidance
+- When you pivot the desktop launcher to a remote base over plain HTTP, the Control Room and satellite windows surface an inline warning with a link to this guide.
+- Switch to HTTPS (or tunnel the port) before inviting collaborators or exposing admin surfaces beyond localhost.
+
 See also: Architecture → Egress Firewall; Policy; Security Hardening; Clustering.

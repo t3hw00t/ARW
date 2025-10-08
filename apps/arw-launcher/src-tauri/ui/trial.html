@@ -54,6 +54,14 @@
           <button id="btn-open-runbook" class="ghost">Runbook</button>
         </div>
       </header>
+      <div id="baseCallout" class="hero-callout" role="alert" hidden>
+        <span class="hero-callout-icon" aria-hidden="true">!</span>
+        <span>
+          <strong>Secure remote access.</strong>
+          <span id="baseCalloutBody">Remote base is using plain HTTP. Switch to HTTPS or a trusted tunnel before sharing admin surfaces.</span>
+        </span>
+        <button id="btn-base-callout" class="ghost mini" type="button" aria-label="Open network hardening guide">Network guide</button>
+      </div>
 
       <main id="main" tabindex="-1">
         <section class="card trial-guide" aria-labelledby="trialGuideTitle">

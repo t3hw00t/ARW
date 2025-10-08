@@ -942,6 +942,66 @@ window.ARW = {
     if (!lowered) return '';
     return /^[a-zA-Z][a-zA-Z0-9+\-.]*:\/\//.test(lowered) ? lowered : `http://${lowered}`;
   },
+  isLoopbackHost(host) {
+    if (!host) return false;
+    let value = String(host).trim().toLowerCase();
+    if (!value) return false;
+    if (value.includes('://')) {
+      try {
+        const parsed = new URL(value);
+        value = parsed.hostname.toLowerCase();
+      } catch {}
+    } else {
+      if (value.startsWith('[')) {
+        const closing = value.indexOf(']');
+        if (closing !== -1) {
+          value = value.slice(1, closing).toLowerCase();
+        }
+      }
+      if (value.includes(':')) {
+        value = value.split(':')[0];
+      }
+    }
+    if (!value) return false;
+    if (value === 'localhost') return true;
+    if (value === '::1') return true;
+    if (value === '0.0.0.0') return true;
+    if (value.startsWith('127.')) return true;
+    if (value.startsWith('::ffff:127.')) return true;
+    return false;
+  },
+  syncBaseCallout(meta) {
+    try {
+      const callout = document.getElementById('baseCallout');
+      if (!callout) return;
+      const info = meta || this.baseMeta(this.getPortFromInput('port'));
+      const override = info && info.override;
+      const remote = override && info.host && !this.isLoopbackHost(info.host);
+      const protocol = info && typeof info.protocol === 'string' ? info.protocol.toLowerCase() : '';
+      const insecure = remote && protocol === 'http';
+      if (!insecure) {
+        callout.hidden = true;
+        callout.setAttribute('aria-hidden', 'true');
+        return;
+      }
+      const body = document.getElementById('baseCalloutBody');
+      if (body) {
+        const origin = info.origin || info.base || 'remote host';
+        body.textContent = `Remote base ${origin} is using plain HTTP. Switch to HTTPS or a trusted tunnel before exposing admin surfaces beyond this machine.`;
+      }
+      const button = document.getElementById('btn-base-callout');
+      if (button && button.dataset.bound !== '1') {
+        button.addEventListener('click', async () => {
+          try {
+            await this.invoke('open_url', { url: 'https://t3hw00t.github.io/ARW/guide/network_posture/' });
+          } catch {}
+        });
+        button.dataset.bound = '1';
+      }
+      callout.hidden = false;
+      callout.setAttribute('aria-hidden', 'false');
+    } catch {}
+  },
   baseMeta(port) {
     const override = this.baseOverride();
     if (override) {
@@ -1067,9 +1127,23 @@ window.ARW = {
         const text = `${label}: ${meta.origin || meta.base}`;
         badge.textContent = text;
         badge.setAttribute('data-override', meta.override ? 'true' : 'false');
-        badge.setAttribute('title', text);
+        const remoteOverride = meta.override && meta.host && !this.isLoopbackHost(meta.host);
+        const protocol = typeof meta.protocol === 'string' ? meta.protocol.toLowerCase() : '';
+        let state = meta.override ? 'remote-https' : 'local';
+        if (remoteOverride) {
+          state = protocol === 'http' ? 'remote-http' : 'remote-https';
+        } else if (meta.override) {
+          state = 'loopback';
+        }
+        badge.setAttribute('data-state', state);
+        let title = text;
+        if (state === 'remote-http') {
+          title = `${text}\nWarning: remote base is using plain HTTP. Prefer HTTPS or a tunnel when sharing admin surfaces.`;
+        }
+        badge.setAttribute('title', title);
       }
     }
+    this.syncBaseCallout(meta);
     return meta;
   },
   base(port) {
