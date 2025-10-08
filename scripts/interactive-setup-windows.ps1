@@ -424,7 +424,7 @@ queue = "local"
   Info ("Wrote " + $cfgPath + ' and set ARW_CONFIG')
   if ($prof -eq '3') { Install-NatsLocal }
   Do-Build
-  $go = Read-Host 'Start service now? (Y/n)'; if (-not ($go -match '^[nN]')) { & (Join-Path $PSScriptRoot 'start.ps1') -Port $Port -Debug -WaitHealth -WaitHealthTimeoutSecs 20; Start-Process -FilePath ("http://127.0.0.1:" + $Port + "/spec") | Out-Null }
+  $go = Read-Host 'Start service now? (Y/n)'; if (-not ($go -match '^[nN]')) { & (Join-Path $PSScriptRoot 'start.ps1') -Port $Port -LauncherDebug -WaitHealth -WaitHealthTimeoutSecs 20; Start-Process -FilePath ("http://127.0.0.1:" + $Port + "/spec") | Out-Null }
   $sv = Read-Host 'Save preferences to .arw\env.ps1? (Y/n)'; if (-not ($sv -match '^[nN]')) { Save-Preferences }
 }
 

@@ -1,0 +1,111 @@
+.settings-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  padding: 2rem;
+  max-width: 960px;
+}
+
+.settings-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.settings-title {
+  flex: 1 1 320px;
+}
+
+.settings-title strong {
+  display: block;
+  font-size: 1.4rem;
+}
+
+.settings-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  align-items: flex-end;
+  min-width: 220px;
+}
+
+.settings-actions .settings-buttons {
+  display: flex;
+  gap: 0.75rem;
+}
+
+.settings-main {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.settings-section .section-head {
+  margin-bottom: 1rem;
+}
+
+.settings-fields {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.settings-toggle {
+  display: flex;
+  gap: 0.75rem;
+  align-items: flex-start;
+  padding: 0.75rem;
+  border: 1px solid var(--color-line);
+  border-radius: 0.5rem;
+}
+
+.settings-toggle input[type='checkbox'] {
+  margin-top: 0.3rem;
+}
+
+.settings-toggle strong {
+  display: block;
+}
+
+.settings-grid {
+  display: grid;
+  gap: 1rem;
+}
+
+.settings-grid label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.settings-grid input {
+  padding: 0.6rem 0.75rem;
+  border-radius: 0.4rem;
+  border: 1px solid var(--color-line);
+  font-size: 1rem;
+}
+
+.settings-status-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: center;
+  margin-bottom: 0.75rem;
+}
+
+.settings-actions-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.settings-section .hint {
+  margin-top: 0.75rem;
+}
+
+@media (min-width: 720px) {
+  .settings-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

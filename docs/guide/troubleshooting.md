@@ -24,7 +24,7 @@ Port already in use
     ```
   - Linux / macOS
     ```bash
-    ARW_PORT=8092 bash scripts/start.sh --service-only --wait-health
+    ARW_PORT=8092 bash scripts/start.sh --service-only --wait-health --launcher-debug
     ```
 
 ## Unauthorized Admin Calls (401/403)

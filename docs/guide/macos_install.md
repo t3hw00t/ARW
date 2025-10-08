@@ -26,6 +26,7 @@ bash scripts/start.sh --wait-health --admin-token "$(openssl rand -hex 32)"
 ```
 
 - Use `bash scripts/setup.sh --minimal` if you only need the core binaries (`arw-server`, `arw-cli`, `arw-launcher`) and want to skip doc generation and packaging on the first run.
+- Prefer to stay headless? Append `--service-only` to `scripts/start.sh` and open `http://127.0.0.1:8091/admin/ui/control/` in Safari/Chrome instead of launching the desktop Control Room.
 
 - `scripts/setup.sh` compiles `arw-server` (headless) and the Tauri launcher. The first build can take several minutes on a cold toolchain.
 - `scripts/start.sh` launches the service, waits for `/healthz`, and then opens the Control Room if the launcher is available. Pass `--service-only` to skip the launcher.
@@ -39,6 +40,7 @@ bash scripts/start.sh --wait-health --admin-token "$(openssl rand -hex 32)"
 - Use **Open Service Log** to jump straight to the current `arw-server` stdout/stderr file in Finder.
 - Start/Stop buttons manage the bundled service; status polling every four seconds keeps the badge in sync.
 - Switch between the local stack and saved remotes directly from the **Active connection** selector—no need to leave the hero panel. The adjacent **Manage** button opens the full Connections manager.
+- Tweak launcher defaults (autostart service, notifications, default port/base) from **Support → Launcher Settings** once the desktop UI is running.
 
 ## Portable bundles
 

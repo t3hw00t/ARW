@@ -2,7 +2,7 @@
 [CmdletBinding()]
 param(
   [int]$Port = 8091,
-  [switch]$Debug,
+  [switch]$LauncherDebug,
   [string]$DocsUrl,
   [string]$AdminToken,
   [int]$TimeoutSecs = 20,
@@ -13,7 +13,9 @@ param(
   [switch]$DryRun,
   [switch]$HideWindow,
   [switch]$ServiceOnly,
-  [switch]$LauncherOnly
+  [switch]$LauncherOnly,
+  [switch]$InstallWebView2,
+  [switch]$NoSummary
 )
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
@@ -50,6 +52,23 @@ function ConvertTo-LauncherHashtable {
   }
   return $table
 }
+
+
+function Load-LauncherSettings {
+  try {
+    $configDir = Get-LauncherConfigDir
+    if (-not $configDir) { return $null }
+    $prefsPath = Join-Path $configDir 'prefs-launcher.json'
+    if (-not (Test-Path $prefsPath)) { return $null }
+    $raw = Get-Content $prefsPath -Raw
+    if ([string]::IsNullOrWhiteSpace($raw)) { return $null }
+    $parsed = $raw | ConvertFrom-Json
+    return ConvertTo-LauncherHashtable -InputObject $parsed
+  } catch {
+    return $null
+  }
+}
+
 
 function Update-LauncherPrefs {
   param(
@@ -100,9 +119,56 @@ try {
 function Info($m){ Write-Host "[start] $m" -ForegroundColor DarkCyan }
 function Dry($m){ if ($DryRun) { Write-Host "[dryrun] $m" -ForegroundColor Yellow } }
 
+$showSummary = -not $NoSummary
+$summaryLines = New-Object System.Collections.Generic.List[string]
+function Add-SummaryLine {
+  param([string]$Text)
+  if ($showSummary -and $Text) { [void]$summaryLines.Add($Text) }
+}
+function Emit-Summary {
+  if (-not $showSummary -or $summaryLines.Count -eq 0) { return }
+  Write-Host ''
+  Write-Host '--- Launcher summary ---' -ForegroundColor DarkCyan
+  foreach ($line in $summaryLines) { Write-Host "  $line" }
+  Write-Host '------------------------' -ForegroundColor DarkCyan
+}
 $portWasSpecified = $PSBoundParameters.ContainsKey('Port')
 
-if ($Debug) { if (-not $DryRun) { $env:ARW_DEBUG = '1' } else { Dry 'Would set ARW_DEBUG=1' } }
+$launcherSettings = Load-LauncherSettings
+$settingsPort = $null
+$settingAutostartService = $null
+$settingNotifyOnStatus = $null
+$settingBaseOverride = $null
+
+if ($launcherSettings) {
+  if ($launcherSettings.ContainsKey('port')) {
+    try {
+      $settingsPort = [int]$launcherSettings['port']
+    } catch {}
+  }
+  if ($launcherSettings.ContainsKey('autostart')) {
+    $settingAutostartService = [bool]$launcherSettings['autostart']
+  }
+  if ($launcherSettings.ContainsKey('notifyOnStatus')) {
+    $settingNotifyOnStatus = [bool]$launcherSettings['notifyOnStatus']
+  }
+  if ($launcherSettings.ContainsKey('baseOverride')) {
+    $settingBaseOverride = [string]$launcherSettings['baseOverride']
+    if ([string]::IsNullOrWhiteSpace($settingBaseOverride)) { $settingBaseOverride = $null }
+    else { $settingBaseOverride = $settingBaseOverride.Trim() }
+  }
+}
+
+if (-not $portWasSpecified -and $settingsPort -and $settingsPort -ge 1 -and $settingsPort -le 65535) {
+  $Port = $settingsPort
+}
+
+$debugEnabled = $LauncherDebug
+if (-not $debugEnabled -and $PSBoundParameters.ContainsKey('Debug')) {
+  $debugEnabled = $true
+}
+
+if ($debugEnabled) { if (-not $DryRun) { $env:ARW_DEBUG = '1' } else { Dry 'Would set ARW_DEBUG=1' } }
 if ($DocsUrl) { if (-not $DryRun) { $env:ARW_DOCS_URL = $DocsUrl } else { Dry "Would set ARW_DOCS_URL=$DocsUrl" } }
 if ($AdminToken) { if (-not $DryRun) { $env:ARW_ADMIN_TOKEN = $AdminToken } else { Dry 'Would set ARW_ADMIN_TOKEN=<redacted>' } }
 if ($TimeoutSecs) { if (-not $DryRun) { $env:ARW_HTTP_TIMEOUT_SECS = "$TimeoutSecs" } else { Dry "Would set ARW_HTTP_TIMEOUT_SECS=$TimeoutSecs" } }
@@ -127,7 +193,7 @@ if (-not [string]::IsNullOrWhiteSpace($persistToken) -or $portWasSpecified) {
 $windowStyle = [System.Diagnostics.ProcessWindowStyle]::Minimized
 if ($HideWindow) {
   $windowStyle = [System.Diagnostics.ProcessWindowStyle]::Hidden
-} elseif ($Debug) {
+} elseif ($debugEnabled) {
   $windowStyle = [System.Diagnostics.ProcessWindowStyle]::Normal
 }
 
@@ -173,6 +239,51 @@ if (-not $startService -and -not $startLauncher) {
 
 if (-not $startService -and $WaitHealth) {
   Write-Warning '-WaitHealth requested but service launch disabled; skipping health probe.'
+}
+
+if ($startLauncher -and -not $DryRun) {
+  $webViewReady = $script:HasWebView2
+  if (-not $webViewReady -and $InstallWebView2) {
+    try {
+      if (Get-Command Install-WebView2Runtime -ErrorAction SilentlyContinue) {
+        Info 'WebView2 runtime missing. Attempting Evergreen installation (silent)...'
+        $installed = Install-WebView2Runtime -Silent
+        if ($installed) {
+          Info 'WebView2 runtime installed successfully.'
+          try {
+            if (Get-Command Test-WebView2Runtime -ErrorAction SilentlyContinue) {
+              $webViewReady = Test-WebView2Runtime
+              $script:HasWebView2 = $webViewReady
+            }
+          } catch {}
+        } else {
+          Write-Warning 'WebView2 installation failed or was cancelled. Launcher will be skipped unless the runtime is installed.'
+        }
+      } else {
+        Write-Warning 'Install-WebView2Runtime helper unavailable; please run scripts\webview2.ps1 manually.'
+      }
+    } catch {
+      Write-Warning "WebView2 installation attempt failed: $($_.Exception.Message)"
+    }
+  }
+  if (-not $webViewReady) {
+    if ($LauncherOnly) {
+      Write-Error 'WebView2 runtime not detected. Install it via scripts\webview2.ps1 or rerun with -InstallWebView2 before using -LauncherOnly.'
+      exit 1
+    }
+    Write-Warning 'WebView2 runtime not detected. Skipping desktop launcher; run scripts\webview2.ps1 or re-run with -InstallWebView2 after installing the Evergreen runtime.'
+    $startLauncher = $false
+    $ServiceOnly = $true
+    if (-not $DryRun) {
+      $env:ARW_NO_LAUNCHER = '1'
+      $env:ARW_NO_TRAY = '1'
+    }
+    Add-SummaryLine 'Launcher skipped: WebView2 runtime missing.'
+  } else {
+    Add-SummaryLine 'WebView2 runtime detected.'
+  }
+} elseif ($startLauncher -and $DryRun) {
+  Dry 'Would verify WebView2 runtime before launching the desktop UI.'
 }
 
 if ($startService -and (-not $svc -or -not (Test-Path $svc))) {
@@ -286,7 +397,11 @@ function Start-LauncherBinary {
     Write-Warning "WebView2 Runtime not detected; the launcher may prompt to install it. You can install it now via: powershell -ExecutionPolicy Bypass -File scripts/webview2.ps1"
   }
   if (-not $LauncherOnly) {
-    try { $env:ARW_AUTOSTART = '1' } catch {}
+    if ($settingAutostartService -eq $false) {
+      try { Remove-Item Env:ARW_AUTOSTART -ErrorAction SilentlyContinue } catch {}
+    } else {
+      try { $env:ARW_AUTOSTART = '1' } catch {}
+    }
   }
   & $launcher
 }
@@ -300,6 +415,40 @@ if ($startLauncher -and -not (Test-Path $launcher)) {
   $startLauncher = $false
 }
 
+$serviceBase = "http://127.0.0.1:$Port"
+if ($startService) {
+  Add-SummaryLine "Service listening on $serviceBase"
+} elseif ($startLauncher) {
+  Add-SummaryLine "Launcher-only mode: expecting service at $serviceBase"
+}
+if ($startLauncher) {
+  Add-SummaryLine 'Control Room launching via desktop launcher.'
+} elseif ($startService) {
+  Add-SummaryLine ("Headless mode: open Control Room in your browser → {0}/admin/ui/control/" -f $serviceBase)
+}
+if ($launcherSettings) {
+  $summaryPieces = @()
+  $summaryPieces += "port $Port"
+  if ($settingAutostartService -ne $null) {
+    $summaryPieces += "autostart " + ($settingAutostartService ? 'on' : 'off')
+  }
+  if ($settingNotifyOnStatus -ne $null) {
+    $summaryPieces += "notifications " + ($settingNotifyOnStatus ? 'on' : 'off')
+  }
+  Add-SummaryLine ("Launcher defaults → {0}" -f ($summaryPieces -join ', '))
+  if ($settingBaseOverride) {
+    Add-SummaryLine ("Default base override → {0}" -f $settingBaseOverride)
+  }
+  Add-SummaryLine 'Adjust via Control Room → Launcher Settings.'
+} else {
+  Add-SummaryLine 'Launcher settings: use Control Room → Launcher Settings to adjust defaults.'
+}
+if ($env:ARW_ADMIN_TOKEN -and -not [string]::IsNullOrWhiteSpace($env:ARW_ADMIN_TOKEN)) {
+  Add-SummaryLine 'Admin token detected via ARW_ADMIN_TOKEN.'
+} else {
+  Add-SummaryLine 'Admin token not set; export ARW_ADMIN_TOKEN to secure admin endpoints.'
+}
+
 if ($startService) {
   if (-not (Test-Path $svc)) {
     Write-Error "Service binary not found ($svc). Build it first or rerun without -ServiceOnly."
@@ -308,6 +457,8 @@ if ($startService) {
   $context = if ($startLauncher) { "Launching $svc on http://127.0.0.1:$Port" } else { "Launching $svc on http://127.0.0.1:$Port (service only)" }
   Start-ServiceBinary $context
 }
+
+Emit-Summary
 
 if ($startLauncher) {
   Start-LauncherBinary

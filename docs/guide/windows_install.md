@@ -28,10 +28,14 @@ powershell -ExecutionPolicy Bypass -File scripts\start.ps1 -ServiceOnly -WaitHea
 ```
 
 - Prefer a leaner install? Append `-Minimal` to `scripts\setup.ps1` to skip doc packaging and build just the core binaries (`arw-server`, `arw-cli`, `arw-launcher`). You can always run the full setup later when you need docs or release bundles.
+- Want the Control Room/tray to launch too? Re-run `scripts\start.ps1` without `-ServiceOnly`; the script starts the service and launcher together (WebView2 required).
+- Need WebView2? Add `-InstallWebView2` to the start command for a silent Evergreen install when the runtime is missing.
 - Need a completely fresh rebuild? Append `-Clean` to `scripts\setup.ps1` to clear existing artifacts before compiling. By default the script reuses incremental build caches for faster reruns.
 - Packaging now tolerates missing Git remotes or offline hosts and surfaces a warning instead of failing. Set `ARW_STRICT_RELEASE_GATE=1` (or pass `-StrictReleaseGate`) if you need the setup to stop on open release blockers; CI environments continue to enforce the gate by default.
 - When MkDocs is installed automatically, it lands in your user site directory (for example `%LOCALAPPDATA%\Programs\Python\PythonXX\Scripts`). Add that path to your `PATH` if you want to call `mkdocs` directly.
 - The start script launches the service in the background and, if present, the desktop launcher.
+- Every start run prints a summary (service URL, launcher/headless mode, token status) and falls back to headless mode automatically when WebView2 is missing, with guidance on installing it.
+- Tweak defaults (autostart, launch at login, notifications, log paths, WebView2 install) from Control Room → Launcher Settings once the desktop launcher is up.
 - When Python or `jq` are available, `scripts\start.ps1` and `scripts\start.sh` persist the exported admin token into the launcher preferences so Hub/Chat/Training unlock automatically. You can still rotate the token from the Control Room later.
 - If the launcher isn’t built yet, the script attempts a `cargo build -p arw-launcher`.
 - If WebView2 is missing, you’ll see a friendly warning and the launcher may prompt to install it.

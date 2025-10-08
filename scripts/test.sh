@@ -1,5 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
 command -v cargo >/dev/null || { echo 'cargo not found'; exit 1; }
-echo "[test] Running cargo nextest (workspace)"
-cargo nextest run --workspace
+
+if command -v cargo-nextest >/dev/null 2>&1; then
+  echo "[test] Running cargo nextest (workspace)"
+  cargo nextest run --workspace --locked
+else
+  echo "[test] cargo-nextest not found; running cargo test instead."
+  echo "[test] Install it with 'cargo install --locked cargo-nextest' for faster runs."
+  cargo test --workspace --locked
+fi

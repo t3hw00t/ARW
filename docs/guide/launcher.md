@@ -28,6 +28,7 @@ Menu
 - Service: Start Service, Stop Service
 - Debug: Open Debug (Browser), Open Debug (Window)
 - Windows: Events, Logs, Models, Connections
+- Settings: Configure launcher defaults (autostart, notifications, WebView2, logs)
 - Quit: exit the launcher
 
 API reference
@@ -47,6 +48,14 @@ Status
 - Control Room exposes an “Open Service Log” shortcut once the launcher has spawned `arw-server`, so you can jump straight into the current stdout/stderr file without hunting for paths.
 - “Copy restart” now falls back to an inline modal if clipboard access is blocked, so users on hardened desktops can still grab the token-aware restart snippet.
 - The Logs window includes a Live Output feed that streams launcher-managed stdout/stderr in real time and adds quick copy/open/clear controls for fast triage.
+
+## Launcher Settings
+
+- Open from the Support card in Control Room or the tray → Windows → Settings.
+- Configure launch behaviour (autostart service, launch at login, desktop notifications) and default port/base overrides shared across windows.
+- Inspect WebView2 status on Windows and trigger an Evergreen install/repair directly from the launcher.
+- Jump straight to the launcher log directory or the latest service log for fast diagnostics.
+- Saved changes broadcast to other launcher windows immediately; headless scripts pick up the same `prefs-launcher.json` values.
 
 ## Connections Manager
 

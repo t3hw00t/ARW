@@ -38,6 +38,8 @@ bash scripts/build.sh
 bash scripts/test.sh
 ```
 
+> The helpers fall back to `cargo test --workspace --locked` when `cargo-nextest` is missing and explain how to install it for faster runs.
+
 Need a slimmer first run? Add `--minimal` (`-Minimal` on Windows) to `scripts/setup.*` to build just `arw-server`, `arw-cli`, and the launcher without generating docs or packaging release archives. You can still call `docgen` or `package` later when you need the extras.
 
 ## Set an Admin Token
@@ -67,9 +69,11 @@ Keeping the variable in your shell ensures subsequent `curl` calls send `Authori
 
 When you launch the desktop Control Room later, the start scripts copy the token into the launcher’s preferences automatically. Use the **Test** button beside the token field to confirm the service accepts it before you jump into Hub or Training (or paste the token manually if you started the server by another path).
 
-## Run the Unified Server (Headless)
+## Run the Unified Server
 
-The new `arw-server` binary is headless-first. It streams events and state over HTTP/SSE while we finish porting the UI.
+The unified server streams events and state over HTTP/SSE; choose the headless path when you only need the API.
+
+**Headless only** — keep the service running without a desktop UI.
 
 === "Windows"
 ```powershell
@@ -82,6 +86,27 @@ powershell -ExecutionPolicy Bypass -File scripts/start.ps1 -ServiceOnly -WaitHea
 # Headless server (8091 by default)
 bash scripts/start.sh --service-only --wait-health --admin-token "$ARW_ADMIN_TOKEN"
 ```
+
+**Control Room + launcher** — start the service and the desktop UI together.
+
+=== "Windows"
+```powershell
+# Service + launcher (8091 by default)
+powershell -ExecutionPolicy Bypass -File scripts/start.ps1 -WaitHealth -AdminToken $env:ARW_ADMIN_TOKEN
+# Append -InstallWebView2 to auto-install the Evergreen runtime when missing.
+```
+
+=== "Linux / macOS"
+```bash
+# Service + launcher (8091 by default)
+bash scripts/start.sh --wait-health --admin-token "$ARW_ADMIN_TOKEN"
+```
+
+!!! tip "Linux launcher requirement"
+    The Tauri launcher depends on WebKitGTK 4.1 + libsoup3. Run `bash scripts/install-tauri-deps.sh` on Ubuntu 24.04+, Fedora, or Arch. If your distro lacks those packages (e.g., Ubuntu 22.04, Debian 12 stable), stay headless and open `http://127.0.0.1:8091/admin/ui/control/` or `/admin/debug` in a browser.
+
+The Windows launcher flow prints a summary (service URL, launcher/headless mode, admin token status) and automatically falls back to headless mode if WebView2 is missing, with guidance for installing it.
+Open **Launcher Settings** (Control Room → Support) to tweak autostart behaviour, notifications, default port/base, and WebView2 status after the desktop UI loads.
 
 ## Verify the Server
 

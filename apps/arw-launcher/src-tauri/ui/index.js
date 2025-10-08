@@ -8,7 +8,7 @@ const CONNECTION_SELECT_ID = 'connectionSelect';
 
 let miniDownloadsSub = null;
 let prefsDirty = false;
-const prefBaseline = { port: '', autostart: false, notif: true, loginstart: false, adminToken: '' };
+const prefBaseline = { port: '', autostart: false, notif: true, loginstart: false, adminToken: '', baseOverride: '' };
 let lastHealthCheck = null;
 let healthMetaTimer = null;
 let serviceLogPath = null;
@@ -277,6 +277,8 @@ function snapshotPrefsBaseline() {
   prefBaseline.loginstart = getChecked('loginstart');
   const tokenEl = document.getElementById('admintok');
   prefBaseline.adminToken = tokenEl ? String(tokenEl.value ?? '').trim() : '';
+  prefBaseline.baseOverride =
+    (typeof ARW.baseOverride === 'function' && ARW.baseOverride()) || '';
   applyPrefsDirty(false);
 }
 
@@ -295,6 +297,9 @@ function calculatePrefsDirty() {
   const tokenEl = document.getElementById('admintok');
   const tokenValue = tokenEl ? String(tokenEl.value ?? '').trim() : '';
   if (tokenValue !== prefBaseline.adminToken) return true;
+  const currentOverride =
+    (typeof ARW.baseOverride === 'function' && ARW.baseOverride()) || '';
+  if (currentOverride !== prefBaseline.baseOverride) return true;
   return false;
 }
 
@@ -1530,6 +1535,16 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     });
   }
+  const settingsBtn = document.getElementById('btn-settings');
+  if (settingsBtn) {
+    settingsBtn.addEventListener('click', async () => {
+      try {
+        await invoke('open_settings_window');
+      } catch (e) {
+        console.error(e);
+      }
+    });
+  }
   document.getElementById('btn-updates').addEventListener('click', async () => {
     try {
       await invoke('open_url', { url: 'https://github.com/t3hw00t/ARW/releases' });
@@ -1546,6 +1561,59 @@ document.addEventListener('DOMContentLoaded', () => {
       updateWorkspaceAvailability();
     });
   }
+
+  let settingsEventUnlisten = null;
+  async function handleLauncherSettingsUpdated(event) {
+    try {
+      const payload = event?.payload || {};
+      const settings = payload.settings || {};
+      if (!settings || typeof settings !== 'object') return;
+      if (prefsDirty) {
+        ARW.toast('Launcher settings updated in Settings. Save or discard local edits to sync.');
+        return;
+      }
+      if (typeof settings.default_port === 'number') {
+        const portEl = document.getElementById('port');
+        if (portEl) portEl.value = settings.default_port;
+      }
+      const applyCheckbox = (id, value) => {
+        const el = document.getElementById(id);
+        if (el && typeof value === 'boolean') el.checked = value;
+      };
+      applyCheckbox('autostart', settings.autostart_service);
+      applyCheckbox('notif', settings.notify_on_status);
+      applyCheckbox('loginstart', settings.launch_at_login);
+      if (typeof settings.base_override === 'string') {
+        const normalized = settings.base_override.trim();
+        if (normalized) {
+          ARW.setBaseOverride(normalized, { persist: false });
+        } else {
+          ARW.clearBaseOverride({ persist: false });
+        }
+      } else if (settings.base_override == null) {
+        ARW.clearBaseOverride({ persist: false });
+      }
+      snapshotPrefsBaseline();
+      refreshPrefsDirty();
+      baseMeta = updateBaseMeta();
+      renderConnectionSelect();
+      syncAdvancedPrefsDisclosure();
+    } catch (err) {
+      console.error('settings update application failed', err);
+    }
+  }
+
+  if (IS_DESKTOP && window.__TAURI__?.event) {
+    window.__TAURI__.event
+      .listen('launcher://settings-updated', handleLauncherSettingsUpdated)
+      .then((unlisten) => {
+        settingsEventUnlisten = unlisten;
+      })
+      .catch((err) => {
+        console.error('launcher settings listener failed', err);
+      });
+  }
+
   window.addEventListener('arw:base-override-changed', () => {
     baseMeta = updateBaseMeta();
     resetAnonymousAdminAccess();
@@ -1576,6 +1644,15 @@ document.addEventListener('DOMContentLoaded', () => {
   // Prefs and mini SSE downloads
   loadPrefs().then(() => {
     updateHealthMetaLabel();
+  });
+
+  window.addEventListener('beforeunload', () => {
+    if (typeof settingsEventUnlisten === 'function') {
+      try {
+        settingsEventUnlisten();
+      } catch {}
+      settingsEventUnlisten = null;
+    }
   });
 });
 

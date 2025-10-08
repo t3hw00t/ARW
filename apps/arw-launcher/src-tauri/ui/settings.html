@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Agent Hub (ARW) Launcher Settings</title>
+    <link rel="stylesheet" href="tokens.css" />
+    <link rel="stylesheet" href="ui-kit.css" />
+    <link rel="stylesheet" href="common.css" />
+    <link rel="stylesheet" href="settings.css" />
+    <script src="common.js" defer></script>
+    <script src="settings.js" defer></script>
+  </head>
+  <body data-page="settings">
+    <a href="#general" class="skip-link">Skip to settings</a>
+    <div class="wrap settings-wrap">
+      <header class="settings-head">
+        <div class="settings-title">
+          <strong>Launcher Settings</strong>
+          <p>Configure how the desktop launcher behaves, which defaults it applies, and how it integrates with Windows.</p>
+        </div>
+        <div class="settings-actions">
+          <span id="settingsStatus" class="dim" role="status" aria-live="polite">Loading…</span>
+          <div class="settings-buttons">
+            <button id="btn-settings-reset" class="ghost" type="button">Restore defaults</button>
+            <button id="btn-settings-save" class="primary" type="button" disabled>Save settings</button>
+          </div>
+        </div>
+      </header>
+      <main class="settings-main">
+        <section id="general" class="card settings-section" aria-labelledby="settingsGeneralTitle">
+          <header class="section-head">
+            <div>
+              <h2 id="settingsGeneralTitle">General</h2>
+              <p class="dim">Set how the launcher behaves when it opens and how it keeps you informed.</p>
+            </div>
+          </header>
+          <div class="settings-fields">
+            <label class="settings-toggle">
+              <input id="setting-autostart-service" type="checkbox" />
+              <span>
+                <strong>Autostart service</strong>
+                <small>Start <code>arw-server</code> automatically when the launcher opens.</small>
+              </span>
+            </label>
+            <label class="settings-toggle">
+              <input id="setting-launch-at-login" type="checkbox" />
+              <span>
+                <strong>Launch at login</strong>
+                <small>Keep the Control Room ready every time you sign in. Requires WebView2 on Windows.</small>
+              </span>
+            </label>
+            <label class="settings-toggle">
+              <input id="setting-notify" type="checkbox" />
+              <span>
+                <strong>Notify on status change</strong>
+                <small>Show a desktop notification when service health flips online/offline.</small>
+              </span>
+            </label>
+          </div>
+        </section>
+
+        <section class="card settings-section" aria-labelledby="settingsDefaultsTitle">
+          <header class="section-head">
+            <div>
+              <h2 id="settingsDefaultsTitle">Service defaults</h2>
+              <p class="dim">Choose the defaults that Control Room uses for new sessions.</p>
+            </div>
+          </header>
+          <div class="settings-grid">
+            <label>
+              <span class="field-label">API port</span>
+              <input id="setting-port" type="number" min="1" max="65535" inputmode="numeric" />
+              <small class="dim">Default port the launcher points tooling at (restart required to change service bindings).</small>
+            </label>
+            <label>
+              <span class="field-label">Base override</span>
+              <input id="setting-base" type="url" placeholder="https://host:8091" />
+              <small class="dim">Optional default remote base. Leave blank to keep <code>http://127.0.0.1</code>.</small>
+            </label>
+          </div>
+        </section>
+
+        <section class="card settings-section" aria-labelledby="settingsWebViewTitle">
+          <header class="section-head">
+            <div>
+              <h2 id="settingsWebViewTitle">WebView2 runtime</h2>
+              <p class="dim">The Windows launcher uses WebView2. Install or repair it here.</p>
+            </div>
+          </header>
+          <div class="settings-status-row">
+            <span id="webview2StatusBadge" class="badge" role="status" aria-live="polite">Detecting…</span>
+            <span id="webview2StatusDetail" class="dim"></span>
+          </div>
+          <div class="settings-actions-row">
+            <button id="btn-webview2-install" class="ghost" type="button">Install or repair WebView2</button>
+            <button id="btn-webview2-refresh" class="ghost" type="button">Re-check status</button>
+          </div>
+          <p class="hint">Need an offline installer? Grab the Evergreen runtime directly from Microsoft before returning.</p>
+        </section>
+
+        <section class="card settings-section" aria-labelledby="settingsLogsTitle">
+          <header class="section-head">
+            <div>
+              <h2 id="settingsLogsTitle">Logs &amp; diagnostics</h2>
+              <p class="dim">Open the launcher log directory or inspect the current service log.</p>
+            </div>
+          </header>
+          <div class="settings-status-row">
+            <span class="mono dim" id="logsPath">Locating log directory…</span>
+          </div>
+          <div class="settings-actions-row">
+            <button id="btn-open-logs" class="ghost" type="button">Open log directory</button>
+            <button id="btn-open-service-log" class="ghost" type="button">Open latest service log</button>
+          </div>
+        </section>
+      </main>
+    </div>
+  </body>
+</html>

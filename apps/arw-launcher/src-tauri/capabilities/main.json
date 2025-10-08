@@ -46,6 +46,10 @@
           "launcher_recent_service_logs",
           "launcher_autostart_status",
           "set_launcher_autostart",
+          "get_launcher_settings",
+          "save_launcher_settings",
+          "install_webview2_runtime",
+          "open_settings_window",
           "open_url",
           "open_path",
           "open_in_editor"

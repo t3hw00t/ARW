@@ -133,7 +133,7 @@ function Start-ServiceOnly {
   }
   if (-not (Security-Preflight)) { Warn 'Start canceled'; return }
   $svcArgs = @('-Port', $Port, '-TimeoutSecs', 20)
-  if ($Debug) { $svcArgs += '-Debug' }
+  if ($Debug) { $svcArgs += '-LauncherDebug' }
   if ($DocsUrl) { $svcArgs += @('-DocsUrl', $DocsUrl) }
   if ($AdminToken) { $svcArgs += @('-AdminToken', $AdminToken) }
   if ($UseDist) { $svcArgs += '-UseDist' }
@@ -152,7 +152,7 @@ function Start-LauncherPlusService {
   $logs = Join-Path $root '.arw\logs'; New-Item -ItemType Directory -Force $logs | Out-Null
   $env:ARW_LOG_FILE = (Join-Path $logs 'arw-server.out.log')
   $svcArgs = @('-Port', $Port, '-TimeoutSecs', 20)
-  if ($Debug) { $svcArgs += '-Debug' }
+  if ($Debug) { $svcArgs += '-LauncherDebug' }
   if ($DocsUrl) { $svcArgs += @('-DocsUrl', $DocsUrl) }
   if ($AdminToken) { $svcArgs += @('-AdminToken', $AdminToken) }
   if ($UseDist) { $svcArgs += '-UseDist' }
@@ -811,7 +811,7 @@ function Start-DryRun {
   Section 'Start: dry-run preview'
   # Do not set env vars here to avoid side-effects; just pass flags
   $svcArgs = @('-Port', $Port, '-TimeoutSecs', 20, '-DryRun')
-  if ($Debug) { $svcArgs += '-Debug' }
+  if ($Debug) { $svcArgs += '-LauncherDebug' }
   if ($DocsUrl) { $svcArgs += @('-DocsUrl', $DocsUrl) }
   if ($AdminToken) { $svcArgs += @('-AdminToken', $AdminToken) }
   if ($UseDist) { $svcArgs += '-UseDist' }

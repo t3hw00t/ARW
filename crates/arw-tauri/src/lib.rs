@@ -3,7 +3,7 @@ use directories::ProjectDirs;
 use once_cell::sync::OnceCell;
 use reqwest::header::{HeaderMap, HeaderValue};
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
+use serde_json::{json, Map, Value};
 use std::collections::{BTreeMap, HashSet, VecDeque};
 use std::fs::{File, OpenOptions};
 use std::io::{BufRead, BufReader, Write};
@@ -48,12 +48,83 @@ struct LogRecord {
     timestamp: SystemTime,
 }
 
-fn service_log_path(create_dirs: bool) -> Option<PathBuf> {
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default, rename_all = "camelCase")]
+pub struct LauncherSettings {
+    pub default_port: u16,
+    pub autostart_service: bool,
+    pub notify_on_status: bool,
+    pub launch_at_login: bool,
+    pub base_override: Option<String>,
+}
+
+impl Default for LauncherSettings {
+    fn default() -> Self {
+        Self {
+            default_port: default_port(),
+            autostart_service: false,
+            notify_on_status: true,
+            launch_at_login: false,
+            base_override: None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default, rename_all = "camelCase")]
+pub struct LauncherWebView2Status {
+    pub supported: bool,
+    pub installed: bool,
+    pub channel: Option<String>,
+    pub detail: Option<String>,
+}
+
+impl Default for LauncherWebView2Status {
+    fn default() -> Self {
+        Self {
+            supported: false,
+            installed: true,
+            channel: None,
+            detail: None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default, rename_all = "camelCase")]
+pub struct LauncherSettingsBundle {
+    pub settings: LauncherSettings,
+    pub webview2: LauncherWebView2Status,
+    pub logs_dir: Option<String>,
+}
+
+impl Default for LauncherSettingsBundle {
+    fn default() -> Self {
+        Self {
+            settings: LauncherSettings::default(),
+            webview2: LauncherWebView2Status::default(),
+            logs_dir: None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LauncherSettingsPayload {
+    pub settings: LauncherSettings,
+}
+
+fn launcher_logs_dir(create_dirs: bool) -> Option<PathBuf> {
     let proj = ProjectDirs::from("org", "arw", "arw")?;
     let dir = proj.data_dir().join("logs");
     if create_dirs {
         std::fs::create_dir_all(&dir).ok()?;
     }
+    Some(dir)
+}
+
+fn service_log_path(create_dirs: bool) -> Option<PathBuf> {
+    let dir = launcher_logs_dir(create_dirs)?;
     Some(dir.join("launcher-service.log"))
 }
 
@@ -196,6 +267,205 @@ fn candidate_trial_roots() -> Vec<PathBuf> {
     }
 
     roots
+}
+
+fn load_launcher_settings_from_prefs() -> Map<String, Value> {
+    match load_prefs(Some("launcher")) {
+        Value::Object(map) => map,
+        _ => Map::new(),
+    }
+}
+
+fn persist_launcher_prefs(mut map: Map<String, Value>) -> Result<()> {
+    // Remove nullish keys to keep the file tidy.
+    map.retain(|_, value| !matches!(value, Value::Null));
+    save_prefs(Some("launcher"), &Value::Object(map))
+}
+
+fn normalize_base_override(raw: Option<&str>) -> Option<String> {
+    let trimmed = raw.unwrap_or_default().trim();
+    if trimmed.is_empty() {
+        None
+    } else {
+        Some(trimmed.to_string())
+    }
+}
+
+pub fn load_launcher_settings<R: tauri::Runtime>(
+    app: Option<&tauri::AppHandle<R>>,
+) -> LauncherSettings {
+    let mut out = LauncherSettings::default();
+    let map = load_launcher_settings_from_prefs();
+    if let Some(port) = map
+        .get("port")
+        .and_then(|v| v.as_u64())
+        .and_then(|n| u16::try_from(n).ok())
+    {
+        out.default_port = port;
+    }
+    if let Some(b) = map.get("autostart").and_then(Value::as_bool) {
+        out.autostart_service = b;
+    }
+    if let Some(b) = map.get("notifyOnStatus").and_then(Value::as_bool) {
+        out.notify_on_status = b;
+    }
+    out.base_override = map
+        .get("baseOverride")
+        .and_then(Value::as_str)
+        .and_then(|raw| normalize_base_override(Some(raw)));
+    if let Some(app) = app {
+        if let Ok(enabled) = app.autolaunch().is_enabled() {
+            out.launch_at_login = enabled;
+        }
+    }
+    out
+}
+
+fn write_launcher_settings<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    settings: &LauncherSettings,
+) -> Result<(), String> {
+    let mut map = load_launcher_settings_from_prefs();
+    map.insert("port".into(), Value::from(settings.default_port as u64));
+    map.insert("autostart".into(), Value::from(settings.autostart_service));
+    map.insert(
+        "notifyOnStatus".into(),
+        Value::from(settings.notify_on_status),
+    );
+    match settings
+        .base_override
+        .as_ref()
+        .and_then(|s| normalize_base_override(Some(s)))
+    {
+        Some(value) => {
+            map.insert("baseOverride".into(), Value::from(value));
+        }
+        None => {
+            map.remove("baseOverride");
+        }
+    }
+    persist_launcher_prefs(map).map_err(|e| e.to_string())?;
+
+    // Update launcher autostart (login) flag.
+    let mgr = app.autolaunch();
+    let currently_enabled = mgr.is_enabled().map_err(|e| e.to_string())?;
+    if settings.launch_at_login && !currently_enabled {
+        mgr.enable().map_err(|e| e.to_string())?;
+    } else if !settings.launch_at_login && currently_enabled {
+        mgr.disable().map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
+fn launcher_logs_dir_string(create_dirs: bool) -> Option<String> {
+    launcher_logs_dir(create_dirs).map(|p| p.to_string_lossy().to_string())
+}
+
+#[cfg(windows)]
+fn detect_webview2_runtime() -> LauncherWebView2Status {
+    use winreg::enums::{HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE, KEY_READ};
+    use winreg::RegKey;
+
+    const GUID: &str = "{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}";
+    let subkeys = [
+        (
+            HKEY_LOCAL_MACHINE,
+            format!(r"SOFTWARE\Microsoft\EdgeUpdate\Clients\{GUID}"),
+        ),
+        (
+            HKEY_LOCAL_MACHINE,
+            format!(r"SOFTWARE\WOW6432Node\Microsoft\EdgeUpdate\Clients\{GUID}"),
+        ),
+        (
+            HKEY_CURRENT_USER,
+            format!(r"SOFTWARE\Microsoft\EdgeUpdate\Clients\{GUID}"),
+        ),
+    ];
+
+    for (hive, path) in subkeys {
+        if let Ok(key) = RegKey::predef(hive).open_subkey_with_flags(path, KEY_READ) {
+            if let Ok(version) = key.get_value::<String, _>("pv") {
+                return LauncherWebView2Status {
+                    supported: true,
+                    installed: true,
+                    channel: Some("Evergreen".into()),
+                    detail: Some(version),
+                };
+            }
+        }
+    }
+
+    LauncherWebView2Status {
+        supported: true,
+        installed: false,
+        channel: None,
+        detail: Some("Evergreen runtime not detected.".into()),
+    }
+}
+
+#[cfg(not(windows))]
+fn detect_webview2_runtime() -> LauncherWebView2Status {
+    LauncherWebView2Status {
+        supported: false,
+        installed: true,
+        channel: None,
+        detail: Some("WebView2 runtime is only required on Windows.".into()),
+    }
+}
+
+#[cfg(windows)]
+async fn install_webview2_runtime_silent() -> Result<(), String> {
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    const BOOTSTRAPPER_URL: &str = "https://go.microsoft.com/fwlink/p/?LinkId=2124703";
+    let response = reqwest::get(BOOTSTRAPPER_URL)
+        .await
+        .map_err(|e| format!("failed to download WebView2 runtime: {e}"))?;
+    let bytes = response
+        .bytes()
+        .await
+        .map_err(|e| format!("failed to read WebView2 payload: {e}"))?;
+    let timestamp = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis();
+    let path = std::env::temp_dir().join(format!("arw-webview2-{timestamp}.exe"));
+
+    // Write bootstrapper
+    tokio::task::spawn_blocking({
+        let path = path.clone();
+        let data = bytes.to_vec();
+        move || std::fs::write(path, data)
+    })
+    .await
+    .map_err(|e| format!("failed to spawn write task: {e}"))?
+    .map_err(|e| format!("failed to write bootstrapper: {e}"))?;
+
+    // Run installer silently
+    let status = tokio::task::spawn_blocking({
+        let path = path.clone();
+        move || Command::new(&path).arg("/silent").arg("/install").status()
+    })
+    .await
+    .map_err(|e| format!("failed to spawn installer: {e}"))?
+    .map_err(|e| format!("failed to run installer: {e}"))?;
+
+    // Clean up temp file
+    let _ = std::fs::remove_file(&path);
+
+    if !status.success() {
+        return Err(format!(
+            "WebView2 installer exited with status {:?}",
+            status.code()
+        ));
+    }
+
+    Ok(())
+}
+
+#[cfg(not(windows))]
+async fn install_webview2_runtime_silent() -> Result<(), String> {
+    Err("WebView2 installation is only supported on Windows.".into())
 }
 
 fn capture_output(mut cmd: Command, label: &str) -> Result<String, String> {
@@ -686,6 +956,25 @@ mod cmds {
     }
 
     #[tauri::command]
+    pub fn open_settings_window<R: tauri::Runtime>(app: tauri::AppHandle<R>) -> Result<(), String> {
+        let label = "settings";
+        if app.get_webview_window(label).is_none() {
+            tauri::WebviewWindowBuilder::new(
+                &app,
+                label,
+                tauri::WebviewUrl::App("settings.html".into()),
+            )
+            .title("Agent Hub (ARW) — Launcher Settings")
+            .inner_size(900.0, 720.0)
+            .build()
+            .map_err(|e| e.to_string())?;
+        } else if let Some(w) = app.get_webview_window(label) {
+            let _ = w.set_focus();
+        }
+        Ok(())
+    }
+
+    #[tauri::command]
     pub fn open_hub_window<R: tauri::Runtime>(app: tauri::AppHandle<R>) -> Result<(), String> {
         let label = "hub";
         if app.get_webview_window(label).is_none() {
@@ -983,6 +1272,68 @@ mod cmds {
         } else {
             mgr.disable().map_err(|e| e.to_string())
         }
+    }
+
+    #[tauri::command]
+    pub async fn get_launcher_settings<R: tauri::Runtime>(
+        app: tauri::AppHandle<R>,
+    ) -> Result<LauncherSettingsBundle, String> {
+        let settings = load_launcher_settings(Some(&app));
+        Ok(LauncherSettingsBundle {
+            settings,
+            webview2: detect_webview2_runtime(),
+            logs_dir: launcher_logs_dir_string(true),
+        })
+    }
+
+    #[tauri::command]
+    pub async fn save_launcher_settings<R: tauri::Runtime>(
+        app: tauri::AppHandle<R>,
+        payload: LauncherSettingsPayload,
+    ) -> Result<LauncherSettingsBundle, String> {
+        let mut settings = payload.settings;
+        if settings.default_port == 0 {
+            settings.default_port = default_port();
+        }
+        write_launcher_settings(&app, &settings)?;
+        let bundle = LauncherSettingsBundle {
+            settings: load_launcher_settings(Some(&app)),
+            webview2: detect_webview2_runtime(),
+            logs_dir: launcher_logs_dir_string(true),
+        };
+        let timestamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|d| d.as_secs_f64())
+            .unwrap_or_default();
+        let _ = app.emit(
+            "launcher://settings-updated",
+            json!({
+                "settings": bundle.settings,
+                "webview2": bundle.webview2,
+                "logsDir": bundle.logs_dir,
+                "timestamp": timestamp
+            }),
+        );
+        Ok(bundle)
+    }
+
+    #[tauri::command]
+    pub async fn install_webview2_runtime<R: tauri::Runtime>(
+        app: tauri::AppHandle<R>,
+    ) -> Result<LauncherWebView2Status, String> {
+        install_webview2_runtime_silent().await?;
+        let status = detect_webview2_runtime();
+        let _ = app.emit(
+            "launcher://webview2-updated",
+            json!({
+                "status": status,
+                "timestamp": SystemTime::now()
+                    .duration_since(UNIX_EPOCH)
+                    .map(|d| d.as_secs_f64())
+                    .unwrap_or_default()
+            }),
+        );
+        Ok(status)
     }
 
     #[tauri::command]
@@ -1496,6 +1847,7 @@ mod cmds {
                 open_logs_window,
                 open_models_window,
                 open_connections_window,
+                open_settings_window,
                 open_hub_window,
                 open_chat_window,
                 open_training_window,
@@ -1528,6 +1880,9 @@ mod cmds {
                 launcher_recent_service_logs,
                 launcher_autostart_status,
                 set_launcher_autostart,
+                get_launcher_settings,
+                save_launcher_settings,
+                install_webview2_runtime,
                 open_url,
                 open_path,
                 open_in_editor

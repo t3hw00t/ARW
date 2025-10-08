@@ -15,6 +15,11 @@ pid_file="${ARW_PID_FILE:-}"
 service_only=0
 launcher_only=0
 launcher_build_failed=0
+settings_port=""
+setting_autostart=""
+setting_notify=""
+setting_base_override=""
+launcher_settings_loaded=0
 
 launcher_config_dir() {
   local base=""
@@ -126,6 +131,80 @@ PY
   echo "[start] Warning: python3 and jq unavailable; launcher prefs not updated. Export ARW_ADMIN_TOKEN manually in the Control Room." >&2
 }
 
+load_launcher_settings() {
+  settings_port=""
+  setting_autostart=""
+  setting_notify=""
+  setting_base_override=""
+  local dir="$(launcher_config_dir)"
+  [[ -n "$dir" ]] || return 1
+  local prefs="$dir/prefs-launcher.json"
+  [[ -s "$prefs" ]] || return 1
+  local output=""
+  if command -v python3 >/dev/null 2>&1; then
+    output="$(python3 - "$prefs" <<'PY' 2>/dev/null
+import json, sys
+from pathlib import Path
+path = Path(sys.argv[1])
+try:
+    data = json.loads(path.read_text())
+except Exception:
+    sys.exit(0)
+if not isinstance(data, dict):
+    sys.exit(0)
+port = data.get('port')
+if isinstance(port, int):
+    print(f"port={port}")
+else:
+    try:
+        print(f"port={int(port)}")
+    except Exception:
+        pass
+auto = data.get('autostart')
+if isinstance(auto, bool):
+    print(f"autostart={1 if auto else 0}")
+notify = data.get('notifyOnStatus')
+if isinstance(notify, bool):
+    print(f"notify={1 if notify else 0}")
+base = data.get('baseOverride')
+if isinstance(base, str):
+    base = base.strip()
+    if base:
+        print(f"base={base}")
+PY
+)"
+  elif command -v jq >/dev/null 2>&1; then
+    output="$(jq -r '
+      def emit($k; $v): if $v == null then empty else "\($k)=\($v)" end;
+      . as $root |
+      (emit("port"; (if ($root.port|type) == "number" then ($root.port|floor) else null end))),
+      (emit("autostart"; (if ($root.autostart|type) == "boolean" then (if $root.autostart then 1 else 0 end) else null end))),
+      (emit("notify"; (if ($root.notifyOnStatus|type) == "boolean" then (if $root.notifyOnStatus then 1 else 0 end) else null end))),
+      (emit("base"; (if ($root.baseOverride|type) == "string" then ($root.baseOverride|gsub("^\\s+|\\s+$";"")) else null end)))
+    ' "$prefs" 2>/dev/null)"
+  else
+    return 1
+  fi
+  [[ -n "$output" ]] || return 1
+  while IFS='=' read -r key value; do
+    case "$key" in
+      port)
+        [[ -n "$value" ]] && settings_port="$value"
+        ;;
+      autostart)
+        setting_autostart="$value"
+        ;;
+      notify)
+        setting_notify="$value"
+        ;;
+      base)
+        setting_base_override="$value"
+        ;;
+    esac
+  done <<<"$output"
+  return 0
+}
+
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --port)
@@ -134,6 +213,10 @@ while [[ $# -gt 0 ]]; do
       shift 2
       ;;
     --debug)
+      debug=1
+      shift
+      ;;
+    --launcher-debug)
       debug=1
       shift
       ;;
@@ -178,6 +261,7 @@ while [[ $# -gt 0 ]]; do
 Usage: $0 [options]
   --port N                      Override HTTP port (default 8091)
   --debug                       Export ARW_DEBUG=1
+  --launcher-debug              Alias for --debug
   --docs-url URL                Export ARW_DOCS_URL
   --admin-token TOKEN           Export ARW_ADMIN_TOKEN
   --timeout-secs N              Export ARW_HTTP_TIMEOUT_SECS (default 20)
@@ -197,13 +281,21 @@ USAGE
   esac
 done
 
+if load_launcher_settings; then
+  launcher_settings_loaded=1
+fi
+
 if [[ $service_only -eq 1 && $launcher_only -eq 1 ]]; then
   echo "[start] --service-only and --launcher-only cannot be combined" >&2
   exit 1
 fi
 
 if [[ $port_set -eq 0 ]]; then
-  port=8091
+  if [[ -n "$settings_port" && "$settings_port" =~ ^[0-9]+$ && $settings_port -ge 1 && $settings_port -le 65535 ]]; then
+    port="$settings_port"
+  else
+    port=8091
+  fi
 fi
 
 export ARW_PORT="$port"
@@ -357,6 +449,29 @@ if [[ $launcher_only -eq 1 || $service_only -eq 0 ]]; then
   ensure_launcher || true
 fi
 
+if [[ $launcher_settings_loaded -eq 1 ]]; then
+  summary_parts=("port $port")
+  if [[ "$setting_autostart" == "1" ]]; then
+    summary_parts+=("autostart on")
+  elif [[ "$setting_autostart" == "0" ]]; then
+    summary_parts+=("autostart off")
+  fi
+  if [[ "$setting_notify" == "1" ]]; then
+    summary_parts+=("notifications on")
+  elif [[ "$setting_notify" == "0" ]]; then
+    summary_parts+=("notifications off")
+  fi
+  summary_text="${summary_parts[0]}"
+  for item in "${summary_parts[@]:1}"; do
+    summary_text+=", $item"
+  done
+  echo "[start] Launcher settings → $summary_text"
+  if [[ -n "$setting_base_override" ]]; then
+    echo "[start] Default base override → $setting_base_override"
+  fi
+  echo "[start] Adjust via Control Room → Launcher Settings."
+fi
+
 if [[ $service_only -eq 1 ]]; then
   echo "[start] Starting service only on http://127.0.0.1:$ARW_PORT"
   if [[ -n "${ARW_LOG_FILE:-}" ]]; then
@@ -388,7 +503,19 @@ else
     exec "$0" --service-only "$@"
   fi
   if [[ $launcher_only -eq 0 ]]; then
-    export ARW_AUTOSTART=1
+    if [[ ${ARW_AUTOSTART+x} ]]; then
+      :
+    elif [[ $launcher_settings_loaded -eq 1 ]]; then
+      if [[ "$setting_autostart" == "1" ]]; then
+        export ARW_AUTOSTART=1
+      elif [[ "$setting_autostart" == "0" ]]; then
+        unset ARW_AUTOSTART || true
+      else
+        export ARW_AUTOSTART=1
+      fi
+    else
+      export ARW_AUTOSTART=1
+    fi
   fi
   echo "[start] Launching $launcher (port $ARW_PORT)"
   "$launcher" &

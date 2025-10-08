@@ -153,31 +153,53 @@ cargo build --release -p arw-server
 cargo build --release -p arw-launcher   # optional desktop surfaces
 ```
 
+> **Linux launcher requirement:** The Tauri launcher needs WebKitGTK 4.1 + libsoup3. Run `bash scripts/install-tauri-deps.sh` (Ubuntu 24.04+, Fedora, Arch) or use the headless/browser flow if your distro lacks those packages (e.g., Ubuntu 22.04, Debian 12 stable).
+
 If you prefer the bundled helper (build + package, docs optional), run:
 
 - Windows: `powershell -ExecutionPolicy Bypass -File scripts/setup.ps1`
 - Linux / macOS: `bash scripts/setup.sh`
 - Add `-Minimal` / `--minimal` to build only `arw-server`, `arw-cli`, and the launcher without packaging docs on the first run.
+- Build/test helpers fall back to `cargo test --workspace --locked` when `cargo-nextest` is missing and print install instructions (`cargo install --locked cargo-nextest`) for faster runs.
 - Prefer a portable build with no compilation? Grab the latest release archive from [GitHub Releases](https://github.com/t3hw00t/ARW/releases), then run `bin/arw-server` (service) and optionally `bin/arw-launcher`.
 - Portable bundle helper: run `./first-run.sh` (Linux/macOS) or `.\first-run.ps1` (Windows) from the extracted archive to generate an admin token, save it under `state/admin-token.txt`, and start the unified server on `http://127.0.0.1:8091/`. Add `--launcher` / `-Launcher` to open the Control Room, or `--new-token` / `-NewToken` to rotate credentials.
 
 ### 2. Set an admin token & start the unified server
 
-Windows (headless)
+**Headless only**
+
+Windows
 ```powershell
 if (-not $env:ARW_ADMIN_TOKEN) { $env:ARW_ADMIN_TOKEN = [System.Guid]::NewGuid().ToString("N") }
 powershell -ExecutionPolicy Bypass -File scripts/start.ps1 -ServiceOnly -WaitHealth -AdminToken $env:ARW_ADMIN_TOKEN
 ```
 
-Linux / macOS (headless)
+Linux / macOS
 ```bash
 export ARW_ADMIN_TOKEN="${ARW_ADMIN_TOKEN:-$(openssl rand -hex 32)}"
 bash scripts/start.sh --service-only --wait-health --admin-token "$ARW_ADMIN_TOKEN"
 ```
 
+**Control Room + launcher**
+
+Windows
+```powershell
+if (-not $env:ARW_ADMIN_TOKEN) { $env:ARW_ADMIN_TOKEN = [System.Guid]::NewGuid().ToString("N") }
+powershell -ExecutionPolicy Bypass -File scripts/start.ps1 -WaitHealth -AdminToken $env:ARW_ADMIN_TOKEN
+# Add -InstallWebView2 to install the Evergreen runtime automatically when missing.
+```
+
+Linux / macOS
+```bash
+export ARW_ADMIN_TOKEN="${ARW_ADMIN_TOKEN:-$(openssl rand -hex 32)}"
+bash scripts/start.sh --wait-health --admin-token "$ARW_ADMIN_TOKEN"
+```
+
 - Windows installer packages (when available) ship the launcher with `arw-server` + `arw-cli`. See the [Windows install guide](docs/guide/windows_install.md) for MSI links and tray behavior.
 - The start scripts persist the exported token into the launcher preferences when possible so the Control Room unlocks Hub, Chat, and Training automatically. You can still paste or rotate the token manually from **Connection & alerts**.
-- Working without a desktop runtime? Keep the service headless and open `http://127.0.0.1:8091/admin/ui/control/` (Control Room) or `http://127.0.0.1:8091/admin/debug` in any modern browser.
+- On Linux distros without WebKitGTK 4.1 + libsoup3, keep the service headless and open `http://127.0.0.1:8091/admin/ui/control/` (Control Room) or `http://127.0.0.1:8091/admin/debug` in any modern browser instead.
+- Windows start scripts now print a quick summary (service URL, launcher mode, token status) and fall back to headless mode when WebView2 is missing, with guidance to install it.
+- Adjust launcher defaults any time from Control Room → Launcher Settings (autostart behaviour, notifications, WebView2 status, log directory).
 - Use the **Active connection** picker in Control Room → Connection & alerts to flip between the local stack and saved remotes without leaving the hero panel.
 
 ### 3. Optional: enable screenshots tooling

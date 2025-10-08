@@ -21,8 +21,14 @@ else
 fi
 
 if [[ $run_tests -eq 1 ]]; then
-  echo "[build] Running tests (nextest)"
-  cargo nextest run --workspace
+  if command -v cargo-nextest >/dev/null 2>&1; then
+    echo "[build] Running tests (nextest)"
+    cargo nextest run --workspace --locked
+  else
+    echo "[build] cargo-nextest not found; falling back to cargo test."
+    echo "[build] Install it with 'cargo install --locked cargo-nextest' for faster runs."
+    cargo test --workspace --locked
+  fi
 fi
 
 echo "[build] Done."
