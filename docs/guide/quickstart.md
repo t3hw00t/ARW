@@ -103,6 +103,11 @@ powershell -ExecutionPolicy Bypass -File scripts/start.ps1 -WaitHealth
 bash scripts/start.sh --wait-health
 ```
 
+!!! note "Linux desktop launcher"
+    The Tauri launcher is optional on Linux. Install WebKitGTK 4.1 + libsoup3 first, then build it explicitly with:
+    `cargo build -p arw-launcher --features launcher-linux-ui`. Skip that command (or pass `--headless` to the setup
+    script) to stay on the headless/server-only profile.
+
 !!! tip "Linux launcher requirement"
     The Tauri launcher depends on WebKitGTK 4.1 + libsoup3. Run `bash scripts/install-tauri-deps.sh` on Ubuntu 24.04+, Fedora, or Arch. If your distro lacks those packages (e.g., Ubuntu 22.04, Debian 12 stable), stay headless and open `http://127.0.0.1:8091/admin/ui/control/` or `/admin/debug` in a browser.
 

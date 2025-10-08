@@ -1,3 +1,12 @@
+#![cfg_attr(
+    all(target_os = "linux", not(feature = "launcher-linux-ui")),
+    compile_error!(
+        "Linux builds of the ARW launcher require enabling the `launcher-linux-ui` feature. \
+Run `cargo build -p arw-launcher --features launcher-linux-ui` or exclude the launcher crate \
+(`cargo build --workspace --exclude apps/arw-launcher/src-tauri`)."
+    )
+)]
+
 use arw_core::util::env_bool;
 use arw_tauri::{plugin as arw_plugin, ServiceState};
 use tauri::Manager;

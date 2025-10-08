@@ -23,4 +23,11 @@ tauri-plugin-updater = "2"
 tokio = { workspace = true }
 
 [features]
-default = []
+default = ["desktop-launcher"]
+desktop-launcher = []
+launcher-linux-ui = []
+
+[[bin]]
+name = "arw-launcher"
+path = "src/main.rs"
+required-features = ["desktop-launcher"]

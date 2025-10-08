@@ -50,10 +50,10 @@ if (-not $NoBuild) {
     Info "Building (release) for target $Target"
     cargo build --release --locked --target $Target -p arw-server -p arw-cli | Out-Null
     # Try launcher too; ignore failures
-    try { cargo build --release --locked --target $Target -p arw-launcher | Out-Null } catch {}
+    try { cargo build --release --locked --target $Target -p arw-launcher --features launcher-linux-ui | Out-Null } catch {}
   } else {
     Info 'Building workspace (release)'
-    cargo build --workspace --release --locked | Out-Null
+    cargo build --workspace --release --locked --features launcher-linux-ui | Out-Null
   }
 }
 

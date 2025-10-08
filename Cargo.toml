@@ -20,6 +20,26 @@ members = [
   "apps/arw-launcher/src-tauri",
   "vendor/screenshots"
 ]
+default-members = [
+  "crates/arw-protocol",
+  "crates/arw-events",
+  "crates/arw-core",
+  "crates/arw-kernel",
+  "crates/arw-policy",
+  "crates/arw-wasi",
+  "crates/arw-macros",
+  "crates/arw-topics",
+  "crates/arw-heuristics",
+  "crates/arw-memory-core",
+  "crates/arw-runtime",
+  "apps/arw-cli",
+  "crates/arw-otel",
+  "apps/arw-server",
+  "apps/arw-connector",
+  "apps/snappy-bench",
+  "crates/arw-tauri",
+  "vendor/screenshots"
+]
 resolver = "2"
 
 [workspace.package]

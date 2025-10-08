@@ -132,13 +132,13 @@ if ($MaxPerf) {
 
 # Try to build the optional Desktop Launcher (Tauri) best-effort.
 if (-not $Headless) {
-  try {
-    Write-Host "[setup] Attempting optional build: arw-launcher" -ForegroundColor DarkCyan
-    if ($MaxPerf) {
-      & cargo build --profile maxperf --locked -p arw-launcher
-    } else {
-      & cargo build --release --locked -p arw-launcher
-    }
+    try {
+      Write-Host "[setup] Attempting optional build: arw-launcher" -ForegroundColor DarkCyan
+      if ($MaxPerf) {
+        & cargo build --profile maxperf --locked -p arw-launcher --features launcher-linux-ui
+      } else {
+        & cargo build --release --locked -p arw-launcher --features launcher-linux-ui
+      }
   } catch {
     Warn "arw-launcher build skipped (optional): $($_.Exception.Message)"
   }

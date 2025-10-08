@@ -23,9 +23,9 @@ if [[ $nobuild -eq 0 ]]; then
   if [[ -n "$target_triple" ]]; then
     cargo build --release --locked --target "$target_triple" -p arw-server -p arw-cli || true
     # Try launcher too, but don't fail the packaging if it doesn't build
-    cargo build --release --locked --target "$target_triple" -p arw-launcher || true
+    cargo build --release --locked --target "$target_triple" -p arw-launcher --features launcher-linux-ui || true
   else
-    cargo build --workspace --release --locked || true
+    cargo build --workspace --release --locked --features launcher-linux-ui || true
   fi
 fi
 

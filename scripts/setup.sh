@@ -110,7 +110,7 @@ if [[ $minimal -eq 1 ]]; then
   (cd "$ROOT" && cargo build --release --locked -p arw-cli)
   if [[ $build_launcher -eq 1 ]]; then
     info "Building arw-launcher (release)"
-    if (cd "$ROOT" && cargo build --release --locked -p arw-launcher); then
+    if (cd "$ROOT" && cargo build --release --locked -p arw-launcher --features launcher-linux-ui); then
       :
     else
       warn "arw-launcher build failed; continue in headless mode (install WebKitGTK 4.1 + libsoup3 or run with --headless)."
@@ -124,7 +124,7 @@ else
   (cd "$ROOT" && cargo build --workspace --release --locked --exclude arw-launcher)
   if [[ $build_launcher -eq 1 ]]; then
     info "Building arw-launcher (release)"
-    if (cd "$ROOT" && cargo build --release --locked -p arw-launcher); then
+    if (cd "$ROOT" && cargo build --release --locked -p arw-launcher --features launcher-linux-ui); then
       :
     else
       warn "arw-launcher build failed; continue in headless mode (install WebKitGTK 4.1 + libsoup3 or run with --headless)."
