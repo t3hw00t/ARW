@@ -1,4 +1,5 @@
 const updateBaseMeta = () => ARW.applyBaseMeta({ portInputId: 'port', badgeId: 'baseBadge', label: 'Base' });
+const CAN_CAPTURE = !!(ARW.env && ARW.env.isTauri);
 
 document.addEventListener('DOMContentLoaded', async () => {
   await ARW.applyPortFromPrefs('port');
@@ -32,7 +33,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   const captureMenu = document.getElementById('captureMenu');
   const captureToggle = document.getElementById('captureToggle');
   const captureMenuList = document.getElementById('captureMenuList');
-  if (captureMenu && captureToggle && captureMenuList) {
+  if (CAN_CAPTURE && captureMenu && captureToggle && captureMenuList) {
     const closeCaptureMenu = () => {
       captureMenuList.hidden = true;
       captureToggle.setAttribute('aria-expanded', 'false');
@@ -66,6 +67,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         captureToggle.focus();
       }
     });
+  } else if (captureMenu) {
+    captureMenu.hidden = true;
   }
 
   // Compare helpers
@@ -131,7 +134,8 @@ document.addEventListener('DOMContentLoaded', async () => {
       }
     });
   }
-  document.getElementById('capture').addEventListener('click', async ()=>{
+  if (CAN_CAPTURE) {
+    document.getElementById('capture').addEventListener('click', async ()=>{
     try{
       const portForTools = ARW.toolPort();
       const out = await ARW.invoke('run_tool_admin', { id: 'ui.screenshot.capture', input: { scope:'screen', format:'png', downscale:640 }, port: portForTools });
@@ -158,7 +162,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       }catch(e){ console.warn('OCR failed', e); }
     }catch(e){ console.error(e); ARW.toastCaptureError(e, { scope: 'capture screen', lease: 'io:screenshot' }); }
   });
-  document.getElementById('captureWin').addEventListener('click', async ()=>{
+    document.getElementById('captureWin').addEventListener('click', async ()=>{
     try{
       const b = await ARW.invoke('active_window_bounds', { label: null });
       const scope = `region:${b?.x??0},${b?.y??0},${b?.w??0},${b?.h??0}`;
@@ -187,7 +191,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       }catch(e){ console.warn('OCR failed', e); }
     }catch(e){ console.error(e); ARW.toastCaptureError(e, { scope: 'capture window', lease: 'io:screenshot' }); }
   });
-  document.getElementById('captureRegion').addEventListener('click', async ()=>{
+    document.getElementById('captureRegion').addEventListener('click', async ()=>{
     try{
       const out = await ARW.region.captureAndSave();
       if (!out) return;
@@ -209,6 +213,16 @@ document.addEventListener('DOMContentLoaded', async () => {
       }
     }catch(e){ console.error(e); ARW.toast('Capture canceled'); }
   });
+  } else {
+    const composerFoot = document.querySelector('.composer-footer');
+    if (composerFoot) {
+      const note = document.createElement('span');
+      note.className = 'dim';
+      note.textContent = 'Screen capture is available from the desktop launcher.';
+      composerFoot.appendChild(document.createTextNode(' · '));
+      composerFoot.appendChild(note);
+    }
+  }
   document.getElementById('clearA').addEventListener('click', ()=> document.getElementById('cmpAOut').innerHTML='');
   document.getElementById('clearB').addEventListener('click', ()=> document.getElementById('cmpBOut').innerHTML='');
   document.getElementById('btn-diff').addEventListener('click', ()=>{

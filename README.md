@@ -42,7 +42,7 @@ General direction: a unified object graph + a single live event stream (SSE). Ev
 ## Platform Support
 
 - **Linux:** Desktop Launcher targets Ubuntu 24.04 LTS (or newer) and matching distros with WebKitGTK 4.1 + libsoup3 packages. Headless components (`arw-server`, `arw-cli`) often run on older releases but are only validated on the 24.04+ stack. See [Compatibility Notes](docs/guide/compatibility.md) for distro specifics and alternatives such as the Nix dev shell.
-  - Missing WebKitGTK 4.1 on your distro? Run the service headless (`bash scripts/start.sh --service-only --wait-health`) and open the Hub/Chat/Debug panels from a browser at `http://127.0.0.1:8091/admin/...`, or point a Control Room running on another machine via the Active connection picker.
+  - Missing WebKitGTK 4.1 on your distro? Run the service headless (`bash scripts/start.sh --service-only --wait-health`) and open the browser Control Room (Hub, Chat, Training, Diagnostics) at `http://127.0.0.1:8091/admin/ui/control/`. Launcher-only tasks like starting/stopping the service or viewing local logs still require the desktop app or CLI scripts. You can also point a Control Room running on another machine via the Active connection picker.
 - **Windows/macOS:** Supported per the Tauri/WebView requirements; refer to the compatibility guide for current details.
 
 ## Feature Tiers
@@ -173,7 +173,7 @@ bash scripts/start.sh --service-only --wait-health
 
 - Windows installer packages (when available) ship the launcher with `arw-server` + `arw-cli`. See the [Windows install guide](docs/guide/windows_install.md) for MSI links and tray behavior.
 - When you run the launcher (Control Room), open **Connection & alerts** and paste your admin token once; Projects, Training, and Trial reuse it automatically.
-- Working without a desktop runtime? Keep the service headless and open `http://127.0.0.1:8091/admin/debug` (or the Hub/Chat routes) in any modern browser.
+- Working without a desktop runtime? Keep the service headless and open `http://127.0.0.1:8091/admin/ui/control/` (Control Room) or `http://127.0.0.1:8091/admin/debug` in any modern browser.
 - Use the **Active connection** picker in Control Room → Connection & alerts to flip between the local stack and saved remotes without leaving the hero panel.
 
 ### 3. Optional: enable screenshots tooling

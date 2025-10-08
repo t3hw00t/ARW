@@ -16,6 +16,8 @@ const RUNTIME_MODALITY_LABELS = {
   vision: 'Vision',
 };
 
+const CAN_OPEN_LOCAL = !!(ARW.env && ARW.env.isTauri);
+
 const updateBaseMeta = () => ARW.applyBaseMeta({ portInputId: 'port', badgeId: 'baseBadge', label: 'Base' });
 
 document.addEventListener('DOMContentLoaded', async () => {
@@ -2601,8 +2603,10 @@ document.addEventListener('DOMContentLoaded', async () => {
         const actions=document.createElement('div'); actions.className='row';
         if (!it.dir){
           const copyBtn=document.createElement('button'); copyBtn.className='ghost'; copyBtn.textContent='Copy'; copyBtn.title='Copy file contents to clipboard'; copyBtn.addEventListener('click', async ()=>{ try{ const rel=it.rel||''; const data=await getFileMeta(rel); ARW.copy(String(data?.content||'')); }catch(e){ console.error(e); ARW.toast('Copy failed'); } }); actions.appendChild(copyBtn);
-          const openBtn=document.createElement('button'); openBtn.className='ghost'; openBtn.textContent='Open'; openBtn.title='Open with system default'; openBtn.addEventListener('click', async ()=>{ try{ const rel=it.rel||''; const data=await getFileMeta(rel); if(data&&data.abs_path){ await ARW.invoke('open_path',{path:data.abs_path}); } else { ARW.toast('Path unavailable'); } }catch(e){ console.error(e); ARW.toast('Open failed'); } }); actions.appendChild(openBtn);
-          const editOpen=document.createElement('button'); editOpen.className='ghost'; editOpen.textContent='Open in Editor'; editOpen.title='Open in configured editor'; editOpen.addEventListener('click', async ()=>{ try{ const rel=it.rel||''; const data=await getFileMeta(rel); if(data&&data.abs_path){ const eff=(projPrefs&&projPrefs.editorCmd)||((await ARW.getPrefs('launcher'))||{}).editorCmd||null; await ARW.invoke('open_in_editor',{path:data.abs_path, editor_cmd: eff}); } else { ARW.toast('Path unavailable'); } }catch(e){ console.error(e); ARW.toast('Open in Editor failed'); } }); actions.appendChild(editOpen);
+          if (CAN_OPEN_LOCAL) {
+            const openBtn=document.createElement('button'); openBtn.className='ghost'; openBtn.textContent='Open'; openBtn.title='Open with system default'; openBtn.addEventListener('click', async ()=>{ try{ const rel=it.rel||''; const data=await getFileMeta(rel); if(data&&data.abs_path){ await ARW.invoke('open_path',{path:data.abs_path}); } else { ARW.toast('Path unavailable'); } }catch(e){ console.error(e); ARW.toast('Open failed'); } }); actions.appendChild(openBtn);
+            const editOpen=document.createElement('button'); editOpen.className='ghost'; editOpen.textContent='Open in Editor'; editOpen.title='Open in configured editor'; editOpen.addEventListener('click', async ()=>{ try{ const rel=it.rel||''; const data=await getFileMeta(rel); if(data&&data.abs_path){ const eff=(projPrefs&&projPrefs.editorCmd)||((await ARW.getPrefs('launcher'))||{}).editorCmd||null; await ARW.invoke('open_in_editor',{path:data.abs_path, editor_cmd: eff}); } else { ARW.toast('Path unavailable'); } }catch(e){ console.error(e); ARW.toast('Open in Editor failed'); } }); actions.appendChild(editOpen);
+          }
         }
         const left=document.createElement('div'); left.style.display='flex'; left.style.alignItems='center'; left.style.gap='6px'; left.appendChild(nameWrap); row.appendChild(left); row.appendChild(actions); host.appendChild(row);
         if (it.dir && (expanded.has(it.rel||'') || searchExpanded.has(String(it.rel||'')))){
@@ -2674,20 +2678,22 @@ document.addEventListener('DOMContentLoaded', async () => {
             ARW.copy(String(data?.content||''));
           }catch(e){ console.error(e); ARW.toast('Copy failed'); }
         }); actions.appendChild(copyBtn);
-        const openBtn=document.createElement('button'); openBtn.className='ghost'; openBtn.textContent='Open'; openBtn.addEventListener('click', async ()=>{
-          try{
-            const rel = it.rel||'';
-            const data = await getFileMeta(rel);
-            if (data && data.abs_path) { await ARW.invoke('open_path', { path: data.abs_path }); } else { ARW.toast('Path unavailable'); }
-          }catch(e){ console.error(e); ARW.toast('Open failed'); }
-        }); actions.appendChild(openBtn);
-        const editOpen=document.createElement('button'); editOpen.className='ghost'; editOpen.textContent='Open in Editor'; editOpen.addEventListener('click', async ()=>{
-          try{
-            const rel = it.rel||'';
-            const data = await getFileMeta(rel);
-            if (data && data.abs_path) { const eff = (projPrefs&&projPrefs.editorCmd) || ((await ARW.getPrefs('launcher'))||{}).editorCmd || null; await ARW.invoke('open_in_editor', { path: data.abs_path, editor_cmd: eff }); } else { ARW.toast('Path unavailable'); }
-          }catch(e){ console.error(e); ARW.toast('Open in Editor failed'); }
-        }); actions.appendChild(editOpen);
+        if (CAN_OPEN_LOCAL) {
+          const openBtn=document.createElement('button'); openBtn.className='ghost'; openBtn.textContent='Open'; openBtn.addEventListener('click', async ()=>{
+            try{
+              const rel = it.rel||'';
+              const data = await getFileMeta(rel);
+              if (data && data.abs_path) { await ARW.invoke('open_path', { path: data.abs_path }); } else { ARW.toast('Path unavailable'); }
+            }catch(e){ console.error(e); ARW.toast('Open failed'); }
+          }); actions.appendChild(openBtn);
+          const editOpen=document.createElement('button'); editOpen.className='ghost'; editOpen.textContent='Open in Editor'; editOpen.addEventListener('click', async ()=>{
+            try{
+              const rel = it.rel||'';
+              const data = await getFileMeta(rel);
+              if (data && data.abs_path) { const eff = (projPrefs&&projPrefs.editorCmd) || ((await ARW.getPrefs('launcher'))||{}).editorCmd || null; await ARW.invoke('open_in_editor', { path: data.abs_path, editor_cmd: eff }); } else { ARW.toast('Path unavailable'); }
+            }catch(e){ console.error(e); ARW.toast('Open in Editor failed'); }
+          }); actions.appendChild(editOpen);
+        }
       }
       row.appendChild(name); row.appendChild(actions); wrap.appendChild(row);
     });
@@ -2748,8 +2754,13 @@ document.addEventListener('DOMContentLoaded', async () => {
       const editBtn=document.createElement('button'); editBtn.className='ghost'; editBtn.textContent='Edit'; editBtn.title='Edit this file inline';
       const saveBtn=document.createElement('button'); saveBtn.className='primary'; saveBtn.textContent='Save'; saveBtn.title='Save changes'; saveBtn.style.display='none';
       const revertBtn=document.createElement('button'); revertBtn.className='ghost'; revertBtn.textContent='Revert'; revertBtn.title='Revert to last loaded content'; revertBtn.style.display='none';
-      const openEditor=document.createElement('button'); openEditor.className='ghost'; openEditor.textContent='Open in Editor';
-      row.appendChild(editBtn); row.appendChild(saveBtn); row.appendChild(revertBtn); row.appendChild(openEditor); prev.appendChild(row);
+      row.appendChild(editBtn); row.appendChild(saveBtn); row.appendChild(revertBtn);
+      if (CAN_OPEN_LOCAL) {
+        const openEditor=document.createElement('button'); openEditor.className='ghost'; openEditor.textContent='Open in Editor';
+        openEditor.addEventListener('click', async ()=>{ try{ const rel = pathRel||''; const data = await getFileMeta(rel); if (data && data.abs_path) { const eff = (projPrefs&&projPrefs.editorCmd) || ((await ARW.getPrefs('launcher'))||{}).editorCmd || null; await ARW.invoke('open_in_editor', { path: data.abs_path, editor_cmd: eff }); } else { ARW.toast('Path unavailable'); } }catch(e){ console.error(e); ARW.toast('Open in Editor failed'); } });
+        row.appendChild(openEditor);
+      }
+      prev.appendChild(row);
       // Preview and editor
       const pre=document.createElement('pre'); pre.className='mono'; pre.style.maxHeight='140px'; pre.style.overflow='auto'; pre.textContent = String(j.content||'');
       const ta=document.createElement('textarea'); ta.style.width='100%'; ta.style.minHeight='140px'; ta.style.display='none'; ta.value = String(j.content||'');
@@ -2759,7 +2770,6 @@ document.addEventListener('DOMContentLoaded', async () => {
       const pathRel = rel;
       function toggleEditing(on){ pre.style.display = on? 'none':'block'; ta.style.display = on? 'block':'none'; editBtn.style.display = on? 'none':'inline-block'; saveBtn.style.display = on? 'inline-block':'none'; revertBtn.style.display = on? 'inline-block':'none'; }
       editBtn.addEventListener('click', ()=> toggleEditing(true));
-      openEditor.addEventListener('click', async ()=>{ try{ const rel = pathRel||''; const data = await getFileMeta(rel); if (data && data.abs_path) { const eff = (projPrefs&&projPrefs.editorCmd) || ((await ARW.getPrefs('launcher'))||{}).editorCmd || null; await ARW.invoke('open_in_editor', { path: data.abs_path, editor_cmd: eff }); } else { ARW.toast('Path unavailable'); } }catch(e){ console.error(e); ARW.toast('Open in Editor failed'); } });
       revertBtn.addEventListener('click', ()=>{ ta.value = String(j.content||''); toggleEditing(false); });
       saveBtn.addEventListener('click', async ()=>{
         try{

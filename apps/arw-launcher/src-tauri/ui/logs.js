@@ -1,4 +1,5 @@
 const invoke = (cmd, args) => ARW.invoke(cmd, args);
+const IS_DESKTOP = !!(ARW.env && ARW.env.isTauri);
 let lastJson = null;
 let routeStatsSubId = null;
 let probeMetricsSubId = null;
@@ -313,6 +314,25 @@ function downloadCsv(filename, rows){
 function exportRoutesCsv(routes){ const by = routes?.by_path || {}; const rows = [['route','hits','p95','ewma','max']]; Object.entries(by).forEach(([p,s])=> rows.push([p, s.hits||0, s.p95_ms||0, s.ewma_ms||0, s.max_ms||0])); downloadCsv('routes.csv', rows); }
 function exportKindsCsv(ev){ const kinds = ev?.kinds || {}; const rows = [['kind','count']]; Object.entries(kinds).forEach(([k,c])=> rows.push([k,c])); downloadCsv('event_kinds.csv', rows); }
 document.addEventListener('DOMContentLoaded', () => {
+  if (!IS_DESKTOP) {
+    const main = document.querySelector('.logs-main');
+    if (main) {
+      main.innerHTML = '';
+      const card = document.createElement('section');
+      card.className = 'card logs-browser-hint';
+      const heading = document.createElement('h2');
+      heading.textContent = 'Desktop launcher required';
+      const body = document.createElement('p');
+      body.className = 'section-lead';
+      body.textContent = 'Use the desktop launcher or CLI scripts to stream service logs and metrics. This browser view stays read-only for remote access.';
+      card.appendChild(heading);
+      card.appendChild(body);
+      main.appendChild(card);
+    }
+    const status = document.getElementById('stat');
+    if (status) status.textContent = 'Desktop launcher required';
+    return;
+  }
   updateBaseMeta();
   ensureTailPlaceholder();
   document.getElementById('btn-refresh').addEventListener('click', () => fetchRouteStatsSnapshot({ renderNow: true }));

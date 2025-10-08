@@ -255,6 +255,9 @@ pub(crate) mod paths {
     pub const ADMIN_HIERARCHY_ACCEPT: &str = "/admin/hierarchy/accept";
     pub const ADMIN_SELF_MODEL_PROPOSE: &str = "/admin/self_model/propose";
     pub const ADMIN_SELF_MODEL_APPLY: &str = "/admin/self_model/apply";
+    pub const ADMIN_UI_CONTROL_ROOT: &str = "/admin/ui/control";
+    pub const ADMIN_UI_CONTROL_INDEX: &str = "/admin/ui/control/";
+    pub const ADMIN_UI_CONTROL_ASSET: &str = "/admin/ui/control/*path";
     pub const ADMIN_UI_MODELS: &str = "/admin/ui/models";
     pub const ADMIN_UI_AGENTS: &str = "/admin/ui/agents";
     pub const ADMIN_UI_PROJECTS: &str = "/admin/ui/projects";
@@ -801,6 +804,21 @@ pub(crate) fn build_router() -> (Router<AppState>, Vec<String>, Vec<Value>) {
 
 fn register_admin_ui_routes(builder: &mut RouterBuilder) {
     builder.route_get(paths::ADMIN_DEBUG, api::ui::debug_ui, Some(Stability::Beta));
+    builder.route_get(
+        paths::ADMIN_UI_CONTROL_ROOT,
+        api::ui::control_root,
+        Some(Stability::Beta),
+    );
+    builder.route_get(
+        paths::ADMIN_UI_CONTROL_INDEX,
+        api::ui::control_index,
+        Some(Stability::Beta),
+    );
+    builder.route_get(
+        paths::ADMIN_UI_CONTROL_ASSET,
+        api::ui::control_asset,
+        Some(Stability::Beta),
+    );
     builder.route_get(
         paths::ADMIN_UI_MODELS,
         api::ui::models_ui,

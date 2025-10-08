@@ -25,6 +25,12 @@
   } catch {}
 })();
 
+const HAS_TAURI =
+  typeof window !== 'undefined' &&
+  typeof window.__TAURI__ === 'object' &&
+  typeof window.__TAURI__.invoke === 'function';
+const fallbackHandlers = Object.create(null);
+
 function escapeHtml(value) {
   return String(value ?? '')
     .replace(/&/g, '&amp;')
@@ -60,9 +66,23 @@ function normalizeEnum(defs, value, fallbackSlug) {
 }
 
 window.ARW = {
+  env: {
+    isTauri: HAS_TAURI,
+    isBrowser: !HAS_TAURI,
+  },
   _prefsCache: new Map(),
   _prefsTimers: new Map(),
   _ocrCache: new Map(),
+  unsupported(feature) {
+    const label =
+      typeof feature === 'string' && feature.trim().length
+        ? feature.trim()
+        : 'This action';
+    try {
+      this.toast(`${label} requires the desktop launcher.`);
+    } catch {}
+    throw new Error('unsupported_command');
+  },
   runtime: {
     state(value) {
       const def = normalizeEnum(RUNTIME_STATE_DEFS, value, 'unknown');
@@ -600,7 +620,23 @@ window.ARW = {
     return { ok: true, value: parts.join('/') };
   },
   invoke(cmd, args) {
-    return window.__TAURI__.invoke(cmd, args)
+    if (HAS_TAURI) {
+      return window.__TAURI__.invoke(cmd, args);
+    }
+    const handler = fallbackHandlers[cmd];
+    if (!handler) {
+      const err = new Error(`Command ${cmd} not available in browser mode`);
+      return Promise.reject(err);
+    }
+    try {
+      const result = handler.call(this, args || {});
+      if (result && typeof result.then === 'function') {
+        return result;
+      }
+      return Promise.resolve(result);
+    } catch (err) {
+      return Promise.reject(err);
+    }
   },
   // Clipboard helper
   async copy(text){ try{ await navigator.clipboard.writeText(text); this.toast('Copied'); }catch{} },
@@ -4395,6 +4431,169 @@ window.ARW.shortcuts = {
   },
   toggle(){ if (!this._wrap || this._wrap.style.display==='none') this.show(); else this.hide(); }
 };
+
+if (!HAS_TAURI) {
+  const prefsKey = (ns) => `arw:prefs:${ns || 'launcher'}`;
+  const openExternal = (url, target) => {
+    if (!url) return null;
+    try {
+      const win = window.open(url, target || '_blank', target ? '' : 'noopener');
+      if (!win && !target) {
+        window.location.href = url;
+      }
+    } catch {
+      window.location.href = url;
+    }
+    return null;
+  };
+  const openSurface = (page, options = {}) => {
+    const opts = options || {};
+    const base = typeof opts.base === 'string' && opts.base
+      ? opts.base
+      : ARW.base();
+    let href = page;
+    if (base) {
+      const joiner = href.includes('?') ? '&' : '?';
+      href += `${joiner}base=${encodeURIComponent(base)}`;
+    }
+    const target = opts.sameTab ? '_self' : '_blank';
+    return openExternal(href, target);
+  };
+  const authHeaders = (token) => {
+    const value = typeof token === 'string' ? token.trim() : '';
+    if (!value) return {};
+    return {
+      Authorization: `Bearer ${value}`,
+      'X-ARW-Admin': value,
+    };
+  };
+  fallbackHandlers.get_prefs = function({ namespace } = {}) {
+    const key = prefsKey(namespace);
+    try {
+      const raw = localStorage.getItem(key);
+      if (!raw) return {};
+      return JSON.parse(raw);
+    } catch {
+      return {};
+    }
+  };
+  fallbackHandlers.set_prefs = function({ namespace, value } = {}) {
+    const key = prefsKey(namespace);
+    try {
+      if (value === null || value === undefined) {
+        localStorage.removeItem(key);
+      } else {
+        localStorage.setItem(key, JSON.stringify(value));
+      }
+    } catch (err) {
+      console.warn('prefs write failed', err);
+    }
+    return null;
+  };
+  fallbackHandlers.open_url = function({ url, target } = {}) {
+    return openExternal(url, target);
+  };
+  fallbackHandlers.open_hub_window = function({ base, sameTab } = {}) {
+    return openSurface('hub.html', { base, sameTab });
+  };
+  fallbackHandlers.open_chat_window = function({ base, sameTab } = {}) {
+    return openSurface('chat.html', { base, sameTab });
+  };
+  fallbackHandlers.open_training_window = function({ base, sameTab } = {}) {
+    return openSurface('training.html', { base, sameTab });
+  };
+  fallbackHandlers.open_trial_window = function({ base, sameTab } = {}) {
+    return openSurface('trial.html', { base, sameTab });
+  };
+  fallbackHandlers.open_events_window = function({ base, sameTab } = {}) {
+    return openSurface('events.html', { base, sameTab });
+  };
+  fallbackHandlers.open_logs_window = function({ base, sameTab } = {}) {
+    return openSurface('logs.html', { base, sameTab });
+  };
+  fallbackHandlers.open_models_window = function({ base, sameTab } = {}) {
+    return openSurface('models.html', { base, sameTab });
+  };
+  fallbackHandlers.open_connections_window = function({ base, sameTab } = {}) {
+    return openSurface('connections.html', { base, sameTab });
+  };
+  fallbackHandlers.open_events_window_base = function({ base } = {}) {
+    return openSurface('events.html', { base });
+  };
+  fallbackHandlers.open_logs_window_base = function({ base } = {}) {
+    return openSurface('logs.html', { base });
+  };
+  fallbackHandlers.open_models_window_base = function({ base } = {}) {
+    return openSurface('models.html', { base });
+  };
+  fallbackHandlers.open_debug_window = function({ port } = {}) {
+    const base = this.base(port);
+    const url = `${String(base || '').replace(/\/$/, '')}/admin/debug`;
+    return openExternal(url);
+  };
+  fallbackHandlers.start_service = function() {
+    this.unsupported('Starting the local service');
+  };
+  fallbackHandlers.stop_service = function() {
+    this.unsupported('Stopping the local service');
+  };
+  fallbackHandlers.launcher_service_log_path = function() {
+    return null;
+  };
+  fallbackHandlers.launcher_recent_service_logs = function() {
+    return [];
+  };
+  fallbackHandlers.launcher_autostart_status = function() {
+    return false;
+  };
+  fallbackHandlers.set_launcher_autostart = function() {
+    this.unsupported('Launch at login');
+  };
+  fallbackHandlers.open_path = function() {
+    this.unsupported('Opening local files');
+  };
+  fallbackHandlers.open_in_editor = function() {
+    this.unsupported('Opening an editor');
+  };
+  fallbackHandlers.active_window_bounds = function() {
+    this.unsupported('Window capture');
+  };
+  fallbackHandlers.run_tool_admin = function() {
+    this.unsupported('Tool automation');
+  };
+  fallbackHandlers.projects_import = function() {
+    this.unsupported('Project import');
+  };
+  fallbackHandlers.check_service_health = async function({ port } = {}) {
+    const base = this.base(port);
+    const url = `${String(base || '').replace(/\/$/, '')}/healthz`;
+    try {
+      const resp = await fetch(url, { method: 'GET', cache: 'no-store' });
+      return resp.ok;
+    } catch {
+      return false;
+    }
+  };
+  fallbackHandlers.admin_get_json_base = function({ base, path, token } = {}) {
+    const origin = (typeof base === 'string' && base.trim()) || this.base();
+    const headers = authHeaders(token);
+    return this.http.json(origin, path || '/', { headers });
+  };
+  fallbackHandlers.admin_post_json_base = async function({ base, path, body, token } = {}) {
+    const origin = (typeof base === 'string' && base.trim()) || this.base();
+    const headers = Object.assign({ 'Content-Type': 'application/json' }, authHeaders(token));
+    const resp = await this.http.fetch(origin, path || '/', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(body ?? {}),
+    });
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    return resp.json();
+  };
+  fallbackHandlers.run_trials_preflight = function() {
+    throw new Error('Trials preflight unavailable in browser mode');
+  };
+}
 
 // Global shortcuts help wiring
 document.addEventListener('DOMContentLoaded', ()=>{

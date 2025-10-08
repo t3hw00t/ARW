@@ -1,4 +1,5 @@
 const invoke = (cmd, args) => ARW.invoke(cmd, args);
+const IS_DESKTOP = !!(ARW.env && ARW.env.isTauri);
 const getPort = () => ARW.getPortFromInput('port');
 const updateBaseMeta = () => ARW.applyBaseMeta({ portInputId: 'port', badgeId: 'baseBadge', label: 'Base' });
 let baseMeta = null;
@@ -81,6 +82,32 @@ function ensureAdvancedOpen({ focusToken = false, scrollIntoView = false } = {})
       });
     }
   }
+}
+
+function enterBrowserMode() {
+  document.body.classList.add('browser-mode');
+  const callout = document.getElementById('desktopCallout');
+  if (callout) callout.hidden = false;
+  const heroHint = document.querySelector('.status-hint');
+  if (heroHint) {
+    heroHint.textContent = 'Manage the service with CLI scripts or the desktop launcher.';
+  }
+  const markDisabled = (id, hint) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.disabled = true;
+    el.setAttribute('aria-disabled', 'true');
+    if (hint) el.title = hint;
+  };
+  markDisabled('btn-start', 'Available in the desktop launcher');
+  markDisabled('btn-stop', 'Available in the desktop launcher');
+  markDisabled('btn-log-file', 'Available in the desktop launcher');
+  markDisabled('autostart', 'Requires desktop launcher');
+  markDisabled('loginstart', 'Requires desktop launcher');
+  const auto = document.getElementById('autostart');
+  if (auto) auto.checked = false;
+  const login = document.getElementById('loginstart');
+  if (login) login.checked = false;
 }
 
 function applyPrefsDirty(state) {
@@ -805,6 +832,9 @@ async function loadPrefs() {
   miniDownloads();
   health();
   await refreshServiceLogPath();
+  if (!IS_DESKTOP) {
+    enterBrowserMode();
+  }
 }
 
 async function savePrefs() {
@@ -840,18 +870,29 @@ async function health() {
       prefBaseline.adminToken.trim().length > 0;
     if (dot) dot.className = 'dot ' + (ok ? 'ok' : 'bad');
     if (txt) txt.innerText = ok ? 'online' : 'offline';
-    if (startBtn) startBtn.disabled = ok;
-    if (stopBtn) stopBtn.disabled = !ok;
+    if (IS_DESKTOP) {
+      if (startBtn) startBtn.disabled = ok;
+      if (stopBtn) stopBtn.disabled = !ok;
+    } else {
+      if (startBtn) startBtn.disabled = true;
+      if (stopBtn) stopBtn.disabled = true;
+    }
     if (statusLabel) {
       statusLabel.textContent = ok ? 'Service online' : 'Service offline';
       statusLabel.className = ok ? 'ok' : 'bad';
     }
     if (heroHint) {
-      heroHint.textContent = ok
-        ? hasToken
-          ? 'Stack online. Launch a workspace when you are ready.'
-          : 'Stack online. Paste or generate an admin token to unlock Hub, Chat, and Training.'
-        : 'Start the service, then paste or generate an admin token to unlock workspaces.';
+      if (IS_DESKTOP) {
+        heroHint.textContent = ok
+          ? hasToken
+            ? 'Stack online. Launch a workspace when you are ready.'
+            : 'Stack online. Paste or generate an admin token to unlock Hub, Chat, and Training.'
+          : 'Start the service, then paste or generate an admin token to unlock workspaces.';
+      } else {
+        heroHint.textContent = ok
+          ? 'Stack online. Desktop launcher controls are disabled in browser mode.'
+          : 'Start the service with CLI scripts or the desktop launcher.';
+      }
     }
     lastHealthCheck = Date.now();
     if (metaLabel) updateHealthMetaLabel();
@@ -975,6 +1016,9 @@ function miniDownloads() {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
+  if (!IS_DESKTOP) {
+    enterBrowserMode();
+  }
   initStatusBadges();
   bindPrefWatchers();
   setTokenVisibility(false);
@@ -1180,16 +1224,20 @@ document.addEventListener('DOMContentLoaded', () => {
         snapshotPrefsBaseline();
         updateTokenBadge(prefBaseline.adminToken);
         const loginstart = document.getElementById('loginstart').checked;
-        try {
-          await invoke('set_launcher_autostart', { enabled: loginstart });
-        } catch (err) {
-          console.error(err);
-          ARW.toast('Unable to update launch at login');
-          const loginToggle = document.getElementById('loginstart');
-          if (loginToggle) loginToggle.checked = !!previousLoginBaseline;
-          prefBaseline.loginstart = previousLoginBaseline;
-          refreshPrefsDirty();
-          return;
+        if (IS_DESKTOP) {
+          try {
+            await invoke('set_launcher_autostart', { enabled: loginstart });
+          } catch (err) {
+            console.error(err);
+            ARW.toast('Unable to update launch at login');
+            const loginToggle = document.getElementById('loginstart');
+            if (loginToggle) loginToggle.checked = !!previousLoginBaseline;
+            prefBaseline.loginstart = previousLoginBaseline;
+            refreshPrefsDirty();
+            return;
+          }
+        } else {
+          prefBaseline.loginstart = false;
         }
         const tokenChanged = previousTokenBaseline !== prefBaseline.adminToken;
         if (tokenChanged) {

@@ -45,6 +45,6 @@ cat <<'NOTE'
 Note: If you use Nix, 'nix develop' in this repo already provides these libs.
 If WebKitGTK 4.1 packages are unavailable on your distro, you can still run the Control Room in a browser:
   1) Start the service only: bash scripts/start.sh --service-only --wait-health
-  2) Open http://127.0.0.1:8091/admin/debug (or the Hub/Chat routes) in a modern browser.
+  2) Open http://127.0.0.1:8091/admin/ui/control/ (or /admin/debug) in a modern browser.
 Saved connections let you aim the desktop launcher from another machine that has the required runtime.
 NOTE
