@@ -59,7 +59,8 @@ persist_launcher_prefs() {
   local token="$1"
   local port_value="$2"
   [[ -z "$token" && -z "$port_value" ]] && return 0
-  local dir; dir="$(launcher_config_dir)"
+  local dir
+  dir="$(launcher_config_dir)"
   [[ -n "$dir" ]] || return 0
   mkdir -p "$dir" || return 0
   local prefs="$dir/prefs-launcher.json"
@@ -136,7 +137,8 @@ load_launcher_settings() {
   setting_autostart=""
   setting_notify=""
   setting_base_override=""
-  local dir="$(launcher_config_dir)"
+  local dir
+  dir="$(launcher_config_dir)"
   [[ -n "$dir" ]] || return 1
   local prefs="$dir/prefs-launcher.json"
   [[ -s "$prefs" ]] || return 1
@@ -203,6 +205,35 @@ PY
     esac
   done <<<"$output"
   return 0
+}
+
+trim_token() {
+  printf '%s' "$1" | tr -d '\r\n'
+}
+
+generate_admin_token() {
+  if command -v openssl >/dev/null 2>&1; then
+    openssl rand -hex 32 && return 0
+  fi
+  if command -v python3 >/dev/null 2>&1; then
+    python3 - <<'PY'
+import secrets
+print(secrets.token_hex(32))
+PY
+    return 0
+  fi
+  if command -v python >/dev/null 2>&1; then
+    python - <<'PY'
+import secrets
+print(secrets.token_hex(32))
+PY
+    return 0
+  fi
+  if command -v uuidgen >/dev/null 2>&1; then
+    uuidgen | tr -d '[:space:]-' | cut -c1-32
+    return 0
+  fi
+  return 1
 }
 
 while [[ $# -gt 0 ]]; do
@@ -290,6 +321,37 @@ if [[ $service_only -eq 1 && $launcher_only -eq 1 ]]; then
   exit 1
 fi
 
+DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT="$(cd "$DIR/.." && pwd)"
+
+ensure_admin_token() {
+  local state_dir="${ARW_STATE_DIR:-$ROOT/state}"
+  local token_file="$state_dir/admin-token.txt"
+  mkdir -p "$state_dir" || return 1
+  if [[ -s "$token_file" ]]; then
+    local token
+    token="$(trim_token "$(cat "$token_file")")"
+    if [[ -n "$token" ]]; then
+      export ARW_ADMIN_TOKEN="$token"
+      admin_token="$token"
+      echo "[start] Reusing admin token from $token_file"
+      return 0
+    fi
+  fi
+  local token=""
+  if ! token="$(generate_admin_token)"; then
+    echo "[start] Unable to generate an admin token automatically. Set ARW_ADMIN_TOKEN or use --admin-token." >&2
+    return 1
+  fi
+  token="$(trim_token "$token")"
+  printf '%s\n' "$token" >"$token_file"
+  chmod 600 "$token_file" 2>/dev/null || true
+  export ARW_ADMIN_TOKEN="$token"
+  admin_token="$token"
+  echo "[start] Generated admin token and saved to $token_file"
+  return 0
+}
+
 if [[ $port_set -eq 0 ]]; then
   if [[ -n "$settings_port" && "$settings_port" =~ ^[0-9]+$ && $settings_port -ge 1 && $settings_port -le 65535 ]]; then
     port="$settings_port"
@@ -300,12 +362,34 @@ fi
 
 export ARW_PORT="$port"
 export ARW_HTTP_TIMEOUT_SECS="$timeout_secs"
-[[ $debug -eq 1 ]] && export ARW_DEBUG=1 || true
-[[ -n "$docs_url" ]] && export ARW_DOCS_URL="$docs_url" || true
-[[ -n "$admin_token" ]] && export ARW_ADMIN_TOKEN="$admin_token" || true
+if [[ $debug -eq 1 ]]; then
+  export ARW_DEBUG=1
+fi
+if [[ -n "$docs_url" ]]; then
+  export ARW_DOCS_URL="$docs_url"
+fi
+if [[ -n "$admin_token" ]]; then
+  export ARW_ADMIN_TOKEN="$admin_token"
+fi
 # Hardened defaults unless caller overrides
 export ARW_EGRESS_PROXY_ENABLE="${ARW_EGRESS_PROXY_ENABLE:-1}"
 export ARW_DNS_GUARD_ENABLE="${ARW_DNS_GUARD_ENABLE:-1}"
+
+if [[ $launcher_only -eq 0 ]]; then
+  if [[ -z "${ARW_ADMIN_TOKEN:-}" ]]; then
+    ensure_admin_token || exit 1
+  else
+    # Ensure the saved token exists for future runs
+    saved_state_dir="${ARW_STATE_DIR:-$ROOT/state}"
+    saved_token_file="$saved_state_dir/admin-token.txt"
+    if [[ ! -s "$saved_token_file" ]]; then
+      mkdir -p "$saved_state_dir" || true
+      printf '%s\n' "$(trim_token "${ARW_ADMIN_TOKEN}")" >"$saved_token_file" 2>/dev/null || true
+      chmod 600 "$saved_token_file" 2>/dev/null || true
+      echo "[start] Saved admin token to $saved_token_file"
+    fi
+  fi
+fi
 
 persist_token="${ARW_ADMIN_TOKEN:-}"
 persist_port=""
@@ -315,9 +399,6 @@ fi
 if [[ -n "$persist_token" || -n "$persist_port" ]]; then
   persist_launcher_prefs "$persist_token" "$persist_port"
 fi
-
-DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-ROOT="$(cd "$DIR/.." && pwd)"
 
 exe="arw-server"
 launcher_exe="arw-launcher"
@@ -346,6 +427,7 @@ check_launcher_deps() {
   echo "[start] Warning: WebKitGTK 4.1 + libsoup3 development packages were not detected. The launcher build may fail. Run scripts/install-tauri-deps.sh or review docs/guide/compatibility.md." >&2
 }
 
+# shellcheck disable=SC2012
 if [[ $use_dist -eq 1 ]]; then
   base=$(ls -td "$ROOT"/dist/arw-* 2>/dev/null | head -n1 || true)
   if [[ -z "$base" ]]; then

@@ -139,64 +139,59 @@ The details that make ARW practical in real workflows.
 
 > **Heads up:** The unified server and launcher are Rust/Tauri binaries. The first run compiles them, which can take several minutes and requires a full Rust toolchain. Subsequent starts are near-instant.
 
-### 1. Build the binaries
+### Option 1 — Portable bundle (no build step)
 
-Windows
-```powershell
-cargo build --release -p arw-server
-cargo build --release -p arw-launcher   # optional desktop surfaces
-```
+1. Download the latest release archive from [GitHub Releases](https://github.com/t3hw00t/ARW/releases).
+2. Extract it and run the bundled first-run helper:
+   - Linux / macOS: `./first-run.sh`
+   - Windows: `.\first-run.ps1`
+3. The helper generates (or reuses) `state/admin-token.txt`, starts `arw-server`, and tells you where the Control Room and Debug UI live. Append `--launcher` / `-Launcher` to open the desktop Control Room when the launcher binary is present, or `--new-token` / `-NewToken` to rotate credentials.
 
-Linux / macOS
-```bash
-cargo build --release -p arw-server
-cargo build --release -p arw-launcher   # optional desktop surfaces
-```
+This path skips the Rust toolchain entirely—ideal when you only need a portable bundle or want to smoke-test the stack on a clean machine.
 
-> **Linux launcher requirement:** The Tauri launcher needs WebKitGTK 4.1 + libsoup3. Run `bash scripts/install-tauri-deps.sh` (Ubuntu 24.04+, Fedora, Arch) or use the headless/browser flow if your distro lacks those packages (e.g., Ubuntu 22.04, Debian 12 stable).
+### Option 2 — Build from source (Rust toolchain)
 
-If you prefer the bundled helper (build + package, docs optional), run:
+> **Heads up:** The first build compiles `arw-server` (and optionally the launcher). Expect a multi-minute compile on cold toolchains; subsequent runs reuse cached artifacts.
 
-- Windows: `powershell -ExecutionPolicy Bypass -File scripts/setup.ps1`
-- Linux / macOS: `bash scripts/setup.sh`
-- Add `-Minimal` / `--minimal` to build only `arw-server`, `arw-cli`, and the launcher without packaging docs on the first run.
-- Build/test helpers fall back to `cargo test --workspace --locked` when `cargo-nextest` is missing and print install instructions (`cargo install --locked cargo-nextest`) for faster runs.
-- Prefer a portable build with no compilation? Grab the latest release archive from [GitHub Releases](https://github.com/t3hw00t/ARW/releases), then run `bin/arw-server` (service) and optionally `bin/arw-launcher`.
-- Portable bundle helper: run `./first-run.sh` (Linux/macOS) or `.\first-run.ps1` (Windows) from the extracted archive to generate an admin token, save it under `state/admin-token.txt`, and start the unified server on `http://127.0.0.1:8091/`. Add `--launcher` / `-Launcher` to open the Control Room, or `--new-token` / `-NewToken` to rotate credentials.
+- Linux / macOS  
+  `bash scripts/setup.sh --headless`
 
-### 2. Set an admin token & start the unified server
+- Windows  
+  `powershell -ExecutionPolicy Bypass -File scripts\setup.ps1 -Headless`
+
+The `--headless`/`-Headless` switch skips the Tauri launcher build so the install completes even when WebKitGTK 4.1 + libsoup3 (Linux) or WebView2 (Windows) isn’t ready yet. Drop the flag when you want the desktop Control Room compiled locally. Add `--minimal` / `-Minimal` to build only `arw-server` and `arw-cli` without docs or packaging, and `--run-tests` / `-RunTests` when you want to execute the workspace test suite as part of setup.
+
+When the launcher dependencies are present, the scripts build it automatically. Missing prerequisites produce warnings and fall back to the headless profile instead of failing mid-run.
+
+### 2. Start the unified server
 
 **Headless only**
 
 Windows
 ```powershell
-if (-not $env:ARW_ADMIN_TOKEN) { $env:ARW_ADMIN_TOKEN = [System.Guid]::NewGuid().ToString("N") }
-powershell -ExecutionPolicy Bypass -File scripts/start.ps1 -ServiceOnly -WaitHealth -AdminToken $env:ARW_ADMIN_TOKEN
+powershell -ExecutionPolicy Bypass -File scripts/start.ps1 -ServiceOnly -WaitHealth
 ```
 
 Linux / macOS
 ```bash
-export ARW_ADMIN_TOKEN="${ARW_ADMIN_TOKEN:-$(openssl rand -hex 32)}"
-bash scripts/start.sh --service-only --wait-health --admin-token "$ARW_ADMIN_TOKEN"
+bash scripts/start.sh --service-only --wait-health
 ```
 
 **Control Room + launcher**
 
 Windows
 ```powershell
-if (-not $env:ARW_ADMIN_TOKEN) { $env:ARW_ADMIN_TOKEN = [System.Guid]::NewGuid().ToString("N") }
-powershell -ExecutionPolicy Bypass -File scripts/start.ps1 -WaitHealth -AdminToken $env:ARW_ADMIN_TOKEN
+powershell -ExecutionPolicy Bypass -File scripts/start.ps1 -WaitHealth
 # Add -InstallWebView2 to install the Evergreen runtime automatically when missing.
 ```
 
 Linux / macOS
 ```bash
-export ARW_ADMIN_TOKEN="${ARW_ADMIN_TOKEN:-$(openssl rand -hex 32)}"
-bash scripts/start.sh --wait-health --admin-token "$ARW_ADMIN_TOKEN"
+bash scripts/start.sh --wait-health
 ```
 
 - Windows installer packages (when available) ship the launcher with `arw-server` + `arw-cli`. See the [Windows install guide](docs/guide/windows_install.md) for MSI links and tray behavior.
-- The start scripts persist the exported token into the launcher preferences when possible so the Control Room unlocks Hub, Chat, and Training automatically. You can still paste or rotate the token manually from **Connection & alerts**.
+- `scripts/start.sh` / `scripts/start.ps1` reuse `state/admin-token.txt` (or generate a new token when none exists) and persist it to launcher preferences automatically. Pass `--admin-token` / `-AdminToken` when you need to supply your own credential.
 - On Linux distros without WebKitGTK 4.1 + libsoup3, keep the service headless and open `http://127.0.0.1:8091/admin/ui/control/` (Control Room) or `http://127.0.0.1:8091/admin/debug` in any modern browser instead.
 - Windows start scripts now print a quick summary (service URL, launcher mode, token status) and fall back to headless mode when WebView2 is missing, with guidance to install it.
 - Adjust launcher defaults any time from Control Room → Launcher Settings (autostart behaviour, notifications, WebView2 status, log directory).

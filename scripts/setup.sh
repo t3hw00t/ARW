@@ -12,12 +12,14 @@ yes_flag=0
 run_tests=0
 no_docs=0
 minimal=0
+headless=0
 while [[ $# -gt 0 ]]; do
   case "$1" in
     -y|--yes) yes_flag=1; shift;;
     --no-docs) no_docs=1; shift;;
     --run-tests) run_tests=1; shift;;
     --minimal) minimal=1; no_docs=1; shift;;
+    --headless) headless=1; shift;;
     *) echo "Unknown option: $1"; exit 1;;
   esac
 done
@@ -27,20 +29,29 @@ info(){ echo -e "\033[36m[setup]\033[0m $*"; }
 warn(){ WARNINGS+=("$*"); }
 pause(){ [[ $yes_flag -eq 1 ]] || read -rp "$*" _; }
 
+launcher_runtime_ready=1
 check_launcher_runtime() {
   if [[ "${OSTYPE:-}" != linux* ]]; then
-    return
+    return 0
   fi
   if ! command -v pkg-config >/dev/null 2>&1; then
     warn "pkg-config not found; unable to verify WebKitGTK 4.1 + libsoup3 for the launcher. If the build fails, run scripts/install-tauri-deps.sh or see docs/guide/compatibility.md."
-    return
+    launcher_runtime_ready=0
+    return 0
   fi
   if pkg-config --exists webkit2gtk-4.1 javascriptcoregtk-4.1 libsoup-3.0 >/dev/null 2>&1; then
     info "WebKitGTK 4.1 + libsoup3 detected (launcher build ready)."
+    launcher_runtime_ready=1
   else
     warn "WebKitGTK 4.1 + libsoup3 development packages not detected. Run scripts/install-tauri-deps.sh or review docs/guide/compatibility.md before rebuilding the launcher."
+    launcher_runtime_ready=0
   fi
 }
+
+build_launcher=1
+if [[ $headless -eq 1 ]]; then
+  build_launcher=0
+fi
 
 title "Prerequisites"
 if ! command -v cargo >/dev/null 2>&1; then
@@ -51,6 +62,9 @@ fi
 
 if [[ $minimal -eq 1 ]]; then
   info "Minimal mode enabled: skipping docs toolchain, docgen, and packaging."
+fi
+if [[ $headless -eq 1 ]]; then
+  info "Headless mode enabled: launcher build will be skipped."
 fi
 
 mkdocs_ok=0
@@ -81,17 +95,44 @@ if [[ $no_docs -eq 0 && $mkdocs_ok -eq 0 ]]; then
     warn "python3 not found; skipping docs site build"
   fi
 fi
-check_launcher_runtime
+if [[ $build_launcher -eq 1 ]]; then
+  check_launcher_runtime
+  if [[ $launcher_runtime_ready -eq 0 ]]; then
+    warn "Launcher dependencies missing; continuing in headless mode."
+    build_launcher=0
+  fi
+fi
 title "Build workspace (release)"
 if [[ $minimal -eq 1 ]]; then
   info "Building arw-server (release)"
   (cd "$ROOT" && cargo build --release --locked -p arw-server)
   info "Building arw-cli (release)"
   (cd "$ROOT" && cargo build --release --locked -p arw-cli)
-  info "Building arw-launcher (release)"
-  (cd "$ROOT" && cargo build --release --locked -p arw-launcher)
+  if [[ $build_launcher -eq 1 ]]; then
+    info "Building arw-launcher (release)"
+    if (cd "$ROOT" && cargo build --release --locked -p arw-launcher); then
+      :
+    else
+      warn "arw-launcher build failed; continue in headless mode (install WebKitGTK 4.1 + libsoup3 or run with --headless)."
+      build_launcher=0
+    fi
+  else
+    info "Skipping arw-launcher build."
+  fi
 else
-  (cd "$ROOT" && cargo build --workspace --release --locked)
+  info "Building workspace (release, excluding launcher)"
+  (cd "$ROOT" && cargo build --workspace --release --locked --exclude arw-launcher)
+  if [[ $build_launcher -eq 1 ]]; then
+    info "Building arw-launcher (release)"
+    if (cd "$ROOT" && cargo build --release --locked -p arw-launcher); then
+      :
+    else
+      warn "arw-launcher build failed; continue in headless mode (install WebKitGTK 4.1 + libsoup3 or run with --headless)."
+      build_launcher=0
+    fi
+  else
+    info "Skipping arw-launcher build."
+  fi
 fi
 printf 'DIR target\n' >> "$INSTALL_LOG"
 

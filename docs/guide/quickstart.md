@@ -24,7 +24,33 @@ Run the unified ARW server locally in minutes. The architecture centres on the `
 !!! note
     The first launch compiles `arw-server` (and the optional launcher). Expect a multi-minute build on initial setup; subsequent runs reuse the cached binaries.
 
-## Build and Test
+## Launch Paths
+
+### Option 1 — Portable bundle (fastest)
+
+1. Download the latest release archive from [GitHub Releases](https://github.com/t3hw00t/ARW/releases).
+2. Extract it and run the bundled helper:
+   - Linux / macOS: `./first-run.sh`
+   - Windows: `.\first-run.ps1`
+3. The helper generates (or reuses) `state/admin-token.txt`, starts `arw-server`, and prints the Control Room/Debug URLs. Append `--launcher` / `-Launcher` to launch the desktop Control Room when the launcher binary is present, or `--new-token` / `-NewToken` to rotate credentials on demand.
+
+This path skips the Rust toolchain—perfect for quick evaluations or air-gapped installs that prefer prebuilt artifacts.
+
+### Option 2 — Build from source (Rust toolchain)
+
+> The first build compiles `arw-server` and, when requested, the Tauri launcher. Expect a multi-minute compile on cold toolchains; subsequent runs reuse the cached artifacts.
+
+- Linux / macOS  
+  `bash scripts/setup.sh --headless`
+
+- Windows  
+  `powershell -ExecutionPolicy Bypass -File scripts\setup.ps1 -Headless`
+
+Use `--headless` / `-Headless` to skip the launcher build when WebKitGTK 4.1 + libsoup3 (Linux) or WebView2 (Windows) isn’t available yet. Drop the flag to compile the desktop Control Room once the prerequisites are installed. Add `--minimal` / `-Minimal` to build just the core binaries without packaging or docs, and `--run-tests` / `-RunTests` when you want the workspace test suite as part of setup.
+
+## Build and Test (optional)
+
+Use the standalone build/test helpers when you want finer-grained control or CI-style runs.
 
 === "Windows"
 ```powershell
@@ -38,36 +64,11 @@ bash scripts/build.sh
 bash scripts/test.sh
 ```
 
-> The helpers fall back to `cargo test --workspace --locked` when `cargo-nextest` is missing and explain how to install it for faster runs.
+The helpers fall back to `cargo test --workspace --locked` when `cargo-nextest` is missing and explain how to install it for faster runs.
 
-Need a slimmer first run? Add `--minimal` (`-Minimal` on Windows) to `scripts/setup.*` to build just `arw-server`, `arw-cli`, and the launcher without generating docs or packaging release archives. You can still call `docgen` or `package` later when you need the extras.
+## Admin Token Handling
 
-## Set an Admin Token
-
-Generate a secret and export it so the launcher scripts **and** your tooling reuse the same token.
-
-=== "Linux / macOS"
-```bash
-export ARW_ADMIN_TOKEN="${ARW_ADMIN_TOKEN:-$(openssl rand -hex 32)}"
-```
-
-> Tip: If `openssl` is unavailable, run:
-> ```bash
-> python - <<'PY'
-> import secrets
-> print(secrets.token_hex(32))
-> PY
-> ```
-> Copy the printed value into `ARW_ADMIN_TOKEN`.
-
-=== "Windows"
-```powershell
-$env:ARW_ADMIN_TOKEN = [System.Guid]::NewGuid().ToString("N")
-```
-
-Keeping the variable in your shell ensures subsequent `curl` calls send `Authorization: Bearer $ARW_ADMIN_TOKEN` without extra copy/paste.
-
-When you launch the desktop Control Room later, the start scripts copy the token into the launcher’s preferences automatically. Use the **Test** button beside the token field to confirm the service accepts it before you jump into Hub or Training (or paste the token manually if you started the server by another path).
+`scripts/start.sh` and `scripts/start.ps1` reuse `state/admin-token.txt` (or generate a new token automatically) and persist it to launcher preferences, so you rarely need to export `ARW_ADMIN_TOKEN` manually. Pass `--admin-token` / `-AdminToken` when you need to supply your own credential, or edit the Control Room → Connection & alerts panel to rotate it later.
 
 ## Run the Unified Server
 
@@ -78,13 +79,13 @@ The unified server streams events and state over HTTP/SSE; choose the headless p
 === "Windows"
 ```powershell
 # Headless server (8091 by default)
-powershell -ExecutionPolicy Bypass -File scripts/start.ps1 -ServiceOnly -WaitHealth -AdminToken $env:ARW_ADMIN_TOKEN
+powershell -ExecutionPolicy Bypass -File scripts/start.ps1 -ServiceOnly -WaitHealth
 ```
 
 === "Linux / macOS"
 ```bash
 # Headless server (8091 by default)
-bash scripts/start.sh --service-only --wait-health --admin-token "$ARW_ADMIN_TOKEN"
+bash scripts/start.sh --service-only --wait-health
 ```
 
 **Control Room + launcher** — start the service and the desktop UI together.
@@ -92,14 +93,14 @@ bash scripts/start.sh --service-only --wait-health --admin-token "$ARW_ADMIN_TOK
 === "Windows"
 ```powershell
 # Service + launcher (8091 by default)
-powershell -ExecutionPolicy Bypass -File scripts/start.ps1 -WaitHealth -AdminToken $env:ARW_ADMIN_TOKEN
+powershell -ExecutionPolicy Bypass -File scripts/start.ps1 -WaitHealth
 # Append -InstallWebView2 to auto-install the Evergreen runtime when missing.
 ```
 
 === "Linux / macOS"
 ```bash
 # Service + launcher (8091 by default)
-bash scripts/start.sh --wait-health --admin-token "$ARW_ADMIN_TOKEN"
+bash scripts/start.sh --wait-health
 ```
 
 !!! tip "Linux launcher requirement"

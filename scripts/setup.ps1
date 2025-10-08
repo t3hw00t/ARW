@@ -4,6 +4,7 @@ param(
   [switch]$RunTests,
   [switch]$NoDocs,
   [switch]$Minimal,
+  [switch]$Headless,
   [switch]$MaxPerf,
   [switch]$StrictReleaseGate,
   [switch]$SkipReleaseGate,
@@ -21,6 +22,9 @@ function Pause($m){ if(-not $Yes){ Read-Host $m | Out-Null } }
 if ($Minimal) {
   Info 'Minimal mode enabled: skipping docs and release packaging.'
   $NoDocs = $true
+}
+if ($Headless) {
+  Info 'Headless mode enabled: launcher build will be skipped.'
 }
 
 Title 'Prerequisites'
@@ -127,15 +131,19 @@ if ($MaxPerf) {
 }
 
 # Try to build the optional Desktop Launcher (Tauri) best-effort.
-try {
-  Write-Host "[setup] Attempting optional build: arw-launcher" -ForegroundColor DarkCyan
-  if ($MaxPerf) {
-    & cargo build --profile maxperf --locked -p arw-launcher
-  } else {
-    & cargo build --release --locked -p arw-launcher
+if (-not $Headless) {
+  try {
+    Write-Host "[setup] Attempting optional build: arw-launcher" -ForegroundColor DarkCyan
+    if ($MaxPerf) {
+      & cargo build --profile maxperf --locked -p arw-launcher
+    } else {
+      & cargo build --release --locked -p arw-launcher
+    }
+  } catch {
+    Warn "arw-launcher build skipped (optional): $($_.Exception.Message)"
   }
-} catch {
-  Warn "arw-launcher build skipped (optional): $($_.Exception.Message)"
+} else {
+  Info 'Skipping arw-launcher build (headless).'
 }
 
 Add-Content $installLog 'DIR target'

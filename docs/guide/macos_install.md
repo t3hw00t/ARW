@@ -21,15 +21,16 @@ This guide walks through installing Agent Hub (ARW) on macOS with both the unifi
 
 ```bash
 # Clone the repository, then from the repo root:
-bash scripts/setup.sh
-bash scripts/start.sh --wait-health --admin-token "$(openssl rand -hex 32)"
+bash scripts/setup.sh --headless
+bash scripts/start.sh --wait-health
 ```
 
-- Use `bash scripts/setup.sh --minimal` if you only need the core binaries (`arw-server`, `arw-cli`, `arw-launcher`) and want to skip doc generation and packaging on the first run.
+- Use `bash scripts/setup.sh --minimal` if you only need the core binaries (`arw-server`, `arw-cli`, `arw-launcher`) and want to skip doc generation and packaging on the first run. Drop `--headless` once you’re ready to build the desktop Control Room locally (WebKit is bundled with macOS).
+
 - Prefer to stay headless? Append `--service-only` to `scripts/start.sh` and open `http://127.0.0.1:8091/admin/ui/control/` in Safari/Chrome instead of launching the desktop Control Room.
 
 - `scripts/setup.sh` compiles `arw-server` (headless) and the Tauri launcher. The first build can take several minutes on a cold toolchain.
-- `scripts/start.sh` launches the service, waits for `/healthz`, and then opens the Control Room if the launcher is available. Pass `--service-only` to skip the launcher.
+- `scripts/start.sh` reuses `state/admin-token.txt` (or generates a token automatically), launches the service, waits for `/healthz`, and then opens the Control Room if the launcher is available. Pass `--service-only` to skip the launcher, or `--admin-token` when you need to supply a specific credential.
 - The script exports `ARW_EGRESS_PROXY_ENABLE=1` and `ARW_DNS_GUARD_ENABLE=1` by default. Override them if you need a fully offline profile.
 - Prefer to skip compiling? Download the latest macOS portable `.zip` from [GitHub Releases](https://github.com/t3hw00t/ARW/releases), extract, and run `bin/arw-server` / `bin/arw-launcher`.
 

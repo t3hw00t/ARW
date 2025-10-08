@@ -181,15 +181,6 @@ if (-not $DryRun) {
   Dry 'Would set ARW_DNS_GUARD_ENABLE=1 (default)'
 }
 
-$persistToken = $env:ARW_ADMIN_TOKEN
-if (-not [string]::IsNullOrWhiteSpace($persistToken) -or $portWasSpecified) {
-  if ($portWasSpecified) {
-    Update-LauncherPrefs -Token $persistToken -Port $Port
-  } else {
-    Update-LauncherPrefs -Token $persistToken
-  }
-}
-
 $windowStyle = [System.Diagnostics.ProcessWindowStyle]::Minimized
 if ($HideWindow) {
   $windowStyle = [System.Diagnostics.ProcessWindowStyle]::Hidden
@@ -198,6 +189,82 @@ if ($HideWindow) {
 }
 
 $root = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
+$stateDir = if ($env:ARW_STATE_DIR -and -not [string]::IsNullOrWhiteSpace($env:ARW_STATE_DIR)) {
+  $env:ARW_STATE_DIR
+} else {
+  Join-Path $root 'state'
+}
+$tokenFile = Join-Path $stateDir 'admin-token.txt'
+
+function New-AdminToken {
+  $bytes = New-Object byte[] 32
+  [System.Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($bytes)
+  return ([System.Convert]::ToHexString($bytes)).ToLowerInvariant()
+}
+
+if ($startService) {
+  if ($DryRun) {
+    if ([string]::IsNullOrWhiteSpace($env:ARW_ADMIN_TOKEN)) {
+      Dry ("Would generate admin token and save it to $tokenFile")
+      $env:ARW_ADMIN_TOKEN = '<generated>'
+    } else {
+      Dry ("Would ensure admin token is saved to $tokenFile")
+    }
+  } else {
+    try {
+      if (-not (Test-Path $stateDir)) {
+        New-Item -ItemType Directory -Path $stateDir -Force | Out-Null
+      }
+    } catch {
+      Write-Error ("Unable to create state directory $stateDir: " + $_.Exception.Message)
+      exit 1
+    }
+
+    if ([string]::IsNullOrWhiteSpace($env:ARW_ADMIN_TOKEN)) {
+      $loadedToken = $null
+      if (Test-Path $tokenFile) {
+        try { $loadedToken = (Get-Content $tokenFile -Raw).Trim() } catch { $loadedToken = $null }
+      }
+      if ($loadedToken) {
+        $env:ARW_ADMIN_TOKEN = $loadedToken
+        Info "Reusing admin token from $tokenFile"
+      } else {
+        try {
+          $env:ARW_ADMIN_TOKEN = New-AdminToken
+          Set-Content -Path $tokenFile -Value $env:ARW_ADMIN_TOKEN -Encoding ascii
+          Info "Generated admin token and saved to $tokenFile"
+        } catch {
+          Write-Error ("Unable to generate an admin token automatically. Set ARW_ADMIN_TOKEN or pass -AdminToken. Details: " + $_.Exception.Message)
+          exit 1
+        }
+      }
+    } else {
+      if (-not (Test-Path $tokenFile)) {
+        try {
+          Set-Content -Path $tokenFile -Value $env:ARW_ADMIN_TOKEN -Encoding ascii
+          Info "Saved admin token to $tokenFile"
+        } catch {
+          Write-Warning ("Unable to write admin token to $tokenFile: " + $_.Exception.Message)
+        }
+      }
+    }
+  }
+}
+
+$persistToken = $env:ARW_ADMIN_TOKEN
+if ($DryRun) {
+  if (-not [string]::IsNullOrWhiteSpace($persistToken) -or $portWasSpecified) {
+    Dry 'Would persist admin token/port to launcher preferences'
+  }
+} else {
+  if (-not [string]::IsNullOrWhiteSpace($persistToken) -or $portWasSpecified) {
+    if ($portWasSpecified) {
+      Update-LauncherPrefs -Token $persistToken -Port $Port
+    } else {
+      Update-LauncherPrefs -Token $persistToken
+    }
+  }
+}
 $exe = 'arw-server.exe'
 $launcherExe = 'arw-launcher.exe'
 $svc = if ($UseDist) {
