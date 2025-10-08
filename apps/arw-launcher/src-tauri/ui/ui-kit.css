@@ -65,6 +65,97 @@ input:focus, select:focus, textarea:focus{ outline: none; border-color: var(--co
 .toast-wrap{ position:fixed; right:16px; bottom:16px; display:flex; flex-direction:column; gap:8px; z-index: 9999 }
 .toast{ background: #0f172a; color:#fff; padding:8px 12px; border-radius:10px; opacity:.95; box-shadow: var(--shadow-3) }
 
+/* Modal */
+.modal-overlay{
+  position:fixed;
+  inset:0;
+  background: rgba(15, 23, 42, 0.55);
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  z-index: 10000;
+  padding: var(--sp4);
+  backdrop-filter: blur(6px);
+}
+.modal-overlay[hidden]{ display:none; }
+.modal-dialog{
+  max-width: min(520px, 100%);
+  width:100%;
+  border-radius: 14px;
+  background: linear-gradient(180deg, #ffffff, #f7f8fb);
+  border:1px solid rgba(148,163,184,0.35);
+  box-shadow: 0 32px 60px rgba(15,23,42,0.22), 0 0 0 1px rgba(255,255,255,0.6) inset;
+  color: var(--color-ink);
+  display:flex;
+  flex-direction:column;
+}
+.modal-dialog header{
+  padding: var(--sp4) var(--sp5) var(--sp3);
+  display:flex;
+  flex-direction:column;
+  gap:6px;
+}
+.modal-dialog header h2{
+  margin:0;
+  font-size:1.15rem;
+}
+.modal-dialog header p{
+  margin:0;
+  color: var(--color-muted);
+  font-size:0.92rem;
+}
+.modal-body{
+  padding: 0 var(--sp5);
+  display:grid;
+  gap: var(--sp3);
+}
+.modal-body-text{
+  margin:0;
+  font-size:0.95rem;
+  color: var(--color-muted);
+  line-height:1.5;
+}
+.modal-footer{
+  margin-top: var(--sp4);
+  padding: var(--sp4) var(--sp5);
+  display:flex;
+  flex-wrap:wrap;
+  justify-content:flex-end;
+  gap: var(--sp2);
+  background: linear-gradient(180deg,#f7f9fd,#edf1f8);
+  border-top:1px solid rgba(148,163,184,0.3);
+  border-bottom-left-radius: 14px;
+  border-bottom-right-radius: 14px;
+}
+.modal-field{
+  display:flex;
+  flex-direction:column;
+  gap:6px;
+}
+.modal-field label{
+  font-weight:600;
+  display:flex;
+  flex-direction:column;
+  gap:4px;
+}
+.modal-field small{
+  font-size:0.82rem;
+  color: var(--color-muted);
+}
+.modal-field.has-error input,
+.modal-field.has-error textarea,
+.modal-field.has-error select{
+  border-color: rgba(var(--status-bad-rgb), 0.6);
+  box-shadow: 0 0 0 3px rgba(var(--status-bad-rgb), 0.15);
+}
+.field-error{
+  color: var(--status-bad);
+  font-size:0.82rem;
+}
+.modal-footer button{
+  min-width: 120px;
+}
+
 /* Density toggle (compact spacing) */
 body.compact{ --sp2:6px; --sp3:10px; --sp4:12px; --sp5:18px }
 
@@ -79,6 +170,23 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   .card{ background: linear-gradient(180deg,#12161f,#0f141a); border-color: var(--color-line); box-shadow: 0 12px 30px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.04) }
   button{ color:#e5e7eb; border-color:#39404a; box-shadow: 0 1px 0 rgba(255,255,255,0.06) inset, 0 8px 18px rgba(0,0,0,0.35); background-image: linear-gradient(180deg,#1a202b,#131822), var(--noise) }
   button.primary{ background-image: linear-gradient(180deg, var(--color-brand-copper-dark), #6f3e1d), var(--noise) }
+  .modal-overlay{
+    background: rgba(2, 6, 23, 0.75);
+    backdrop-filter: blur(8px);
+  }
+  .modal-dialog{
+    background: linear-gradient(180deg,#111827,#0f172a);
+    border-color: rgba(148,163,184,0.25);
+    box-shadow: 0 32px 70px rgba(0,0,0,0.55), 0 0 0 1px rgba(255,255,255,0.05) inset;
+    color:#e5e7eb;
+  }
+  .modal-dialog header p{
+    color: rgba(203,213,225,0.85);
+  }
+  .modal-footer{
+    background: linear-gradient(180deg,#1f2937,#111827);
+    border-top-color: rgba(148,163,184,0.25);
+  }
 }
 
 /* High contrast preferences */
@@ -107,6 +215,15 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
     opacity: 1;
     box-shadow: none;
   }
+  .modal-dialog{
+    background: #ffffff;
+    border: 2px solid var(--color-ink);
+    box-shadow: none;
+  }
+  .modal-footer{
+    background: #ffffff;
+    border-top-color: var(--color-ink);
+  }
 }
 
 @media (forced-colors: active){
@@ -121,7 +238,8 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   .badge,
   .pill,
   .card,
-  .toast{
+  .toast,
+  .modal-dialog{
     forced-color-adjust: none;
     border: 1px solid ButtonText;
   }
@@ -148,7 +266,12 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
     background: CanvasText;
     color: Canvas;
   }
+  .modal-footer{
+    background: ButtonFace;
+    border-top: 1px solid ButtonText;
+  }
   button:focus-visible,
+  .modal-dialog button:focus-visible,
   a:focus-visible,
   input:focus-visible,
   select:focus-visible,

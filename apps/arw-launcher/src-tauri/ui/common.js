@@ -119,6 +119,390 @@ window.ARW = {
       node.classList.add(state);
     },
   },
+  modal: {
+    _overlay: null,
+    _active: null,
+    _ensureOverlay() {
+      if (this._overlay && document.body.contains(this._overlay)) {
+        return this._overlay;
+      }
+      const overlay = document.createElement('div');
+      overlay.className = 'modal-overlay';
+      overlay.hidden = true;
+      overlay.setAttribute('data-arw-modal', 'overlay');
+      document.body.appendChild(overlay);
+      this._overlay = overlay;
+      return overlay;
+    },
+    close(result = null) {
+      if (this._active && typeof this._active.close === 'function') {
+        this._active.close(result);
+      }
+    },
+    async form(rawOptions = {}) {
+      const options = Object.assign(
+        {
+          title: 'Confirm',
+          description: '',
+          body: null,
+          fields: [],
+          submitLabel: 'Save',
+          cancelLabel: 'Cancel',
+          focusField: null,
+          destructive: false,
+          hideCancel: false,
+        },
+        rawOptions || {},
+      );
+      const overlay = this._ensureOverlay();
+      return new Promise((resolve) => {
+        const modal = this;
+        if (modal._active && typeof modal._active.close === 'function') {
+          try {
+            modal._active.close(null);
+          } catch {}
+        }
+
+        const uid = `arw-modal-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+        const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+        overlay.innerHTML = '';
+        overlay.hidden = false;
+
+        const dialog = document.createElement('div');
+        dialog.className = 'modal-dialog';
+        dialog.tabIndex = -1;
+        dialog.setAttribute('role', 'dialog');
+        dialog.setAttribute('aria-modal', 'true');
+        overlay.appendChild(dialog);
+
+        const header = document.createElement('header');
+        const heading = document.createElement('h2');
+        heading.id = `${uid}-title`;
+        heading.textContent = options.title;
+        header.appendChild(heading);
+        if (options.description) {
+          const desc = document.createElement('p');
+          desc.id = `${uid}-desc`;
+          desc.textContent = options.description;
+          header.appendChild(desc);
+          dialog.setAttribute('aria-describedby', desc.id);
+        }
+        dialog.setAttribute('aria-labelledby', heading.id);
+        dialog.appendChild(header);
+
+        const form = document.createElement('form');
+        form.noValidate = true;
+        const body = document.createElement('div');
+        body.className = 'modal-body';
+        if (options.body) {
+          const info = document.createElement('p');
+          info.className = 'modal-body-text';
+          if (typeof options.body === 'string') {
+            info.textContent = options.body;
+          } else if (options.body instanceof Node) {
+            info.appendChild(options.body);
+          }
+          body.appendChild(info);
+        }
+
+        const generalError = document.createElement('div');
+        generalError.className = 'field-error';
+        generalError.id = `${uid}-general-error`;
+        generalError.hidden = true;
+        generalError.setAttribute('aria-live', 'polite');
+
+        const inputs = new Map();
+        const fields = Array.isArray(options.fields) ? options.fields : [];
+        for (const field of fields) {
+          if (!field || !field.name) continue;
+          const fieldId = `${uid}-${field.name}`;
+          const wrap = document.createElement('div');
+          wrap.className = 'modal-field';
+
+          const label = document.createElement('label');
+          label.setAttribute('for', fieldId);
+          label.textContent = field.label || field.name;
+          wrap.appendChild(label);
+
+          let control;
+          if (field.type === 'textarea') {
+            control = document.createElement('textarea');
+            control.rows = field.rows || 3;
+          } else {
+            control = document.createElement('input');
+            control.type = field.type || 'text';
+          }
+
+          control.id = fieldId;
+          control.name = field.name;
+          if (field.value != null) {
+            control.value = String(field.value);
+          } else if (field.defaultValue != null) {
+            control.value = String(field.defaultValue);
+          }
+          if (field.placeholder) control.placeholder = field.placeholder;
+          if (field.autocomplete) control.autocomplete = field.autocomplete;
+          if (field.required) control.required = true;
+          if (field.disabled) control.disabled = true;
+          if (field.maxlength) control.maxLength = field.maxlength;
+          if (field.pattern) control.pattern = field.pattern;
+          if (field.inputmode) control.setAttribute('inputmode', field.inputmode);
+          if (field.spellcheck === false) control.spellcheck = false;
+          if (field.rows) control.rows = field.rows;
+          wrap.appendChild(control);
+
+          const describedBy = [];
+          if (field.hint) {
+            const hint = document.createElement('small');
+            hint.id = `${fieldId}-hint`;
+            hint.textContent = field.hint;
+            wrap.appendChild(hint);
+            describedBy.push(hint.id);
+          }
+
+          const error = document.createElement('div');
+          error.className = 'field-error';
+          error.id = `${fieldId}-error`;
+          error.hidden = true;
+          error.setAttribute('aria-live', 'polite');
+          wrap.appendChild(error);
+          describedBy.push(error.id);
+          control.setAttribute('aria-describedby', describedBy.join(' '));
+
+          control.addEventListener('input', () => {
+            wrap.classList.remove('has-error');
+            control.removeAttribute('aria-invalid');
+            error.textContent = '';
+            error.hidden = true;
+            generalError.textContent = '';
+            generalError.hidden = true;
+          });
+          if (field.autoSelect) {
+            control.addEventListener('focus', () => {
+              try {
+                control.select();
+              } catch {}
+            });
+          }
+
+          inputs.set(field.name, { control, wrap, error, field });
+          body.appendChild(wrap);
+        }
+
+        body.appendChild(generalError);
+        form.appendChild(body);
+
+        const footer = document.createElement('div');
+        footer.className = 'modal-footer';
+
+        const cancelBtn = document.createElement('button');
+        cancelBtn.type = 'button';
+        cancelBtn.className = 'ghost';
+        cancelBtn.textContent = options.cancelLabel || 'Cancel';
+        if (!options.hideCancel) {
+          footer.appendChild(cancelBtn);
+        }
+
+        const submitBtn = document.createElement('button');
+        submitBtn.type = 'submit';
+        submitBtn.className = options.primary === false ? 'ghost' : 'primary';
+        if (options.destructive) {
+          submitBtn.classList.add('bad');
+        }
+        submitBtn.textContent = options.submitLabel || 'Save';
+        footer.appendChild(submitBtn);
+
+        form.appendChild(footer);
+        dialog.appendChild(form);
+
+        const focusablesSelector = 'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
+        const getFocusables = () =>
+          Array.from(dialog.querySelectorAll(focusablesSelector)).filter((el) => {
+            if (el.hasAttribute('disabled')) return false;
+            if (el.getAttribute('aria-hidden') === 'true') return false;
+            const rect = el.getBoundingClientRect();
+            return rect.width > 0 || rect.height > 0;
+          });
+
+        let closed = false;
+        const close = (result) => {
+          if (closed) return;
+          closed = true;
+          dialog.removeEventListener('keydown', handleKeydown);
+          overlay.removeEventListener('mousedown', handlePointerDown);
+          overlay.hidden = true;
+          overlay.innerHTML = '';
+          modal._active = null;
+          if (previous && typeof previous.focus === 'function') {
+            setTimeout(() => {
+              try {
+                previous.focus();
+              } catch {}
+            }, 0);
+          }
+          resolve(result);
+        };
+
+        const showErrors = (errors = {}) => {
+          const err = errors && typeof errors === 'object' ? errors : {};
+          const fieldNames = Object.keys(err).filter((key) => key !== '_');
+          let focused = false;
+          inputs.forEach((entry, name) => {
+            const message = err[name];
+            if (message) {
+              entry.wrap.classList.add('has-error');
+              entry.error.textContent = message;
+              entry.error.hidden = false;
+              entry.control.setAttribute('aria-invalid', 'true');
+              if (!focused) {
+                focused = true;
+                queueMicrotask(() => {
+                  try {
+                    entry.control.focus();
+                  } catch {}
+                });
+              }
+            } else {
+              entry.wrap.classList.remove('has-error');
+              entry.error.textContent = '';
+              entry.error.hidden = true;
+              entry.control.removeAttribute('aria-invalid');
+            }
+          });
+          if (err._) {
+            generalError.textContent = err._;
+            generalError.hidden = false;
+            if (!focused) {
+              queueMicrotask(() => {
+                try {
+                  submitBtn.focus();
+                } catch {}
+              });
+            }
+          } else {
+            generalError.textContent = '';
+            generalError.hidden = true;
+          }
+          return fieldNames.length > 0 || Boolean(err._);
+        };
+
+        const handleSubmit = async (event) => {
+          event.preventDefault();
+          const rawValues = {};
+          inputs.forEach((entry, name) => {
+            const raw = entry.control.value != null ? String(entry.control.value) : '';
+            rawValues[name] = entry.field && entry.field.trim === false ? raw : raw.trim();
+          });
+          showErrors({});
+          let values = { ...rawValues };
+          let errors = {};
+          try {
+            if (typeof options.validate === 'function') {
+              const result = await options.validate({ ...rawValues });
+              if (result && typeof result === 'object') {
+                if (result.values && typeof result.values === 'object') {
+                  values = result.values;
+                }
+                if (result.errors && typeof result.errors === 'object') {
+                  errors = result.errors;
+                }
+              }
+            }
+          } catch (err) {
+            console.error(err);
+            errors = Object.assign({}, errors, {
+              _: err && typeof err.message === 'string' ? err.message : 'Unable to submit',
+            });
+          }
+          if (showErrors(errors)) {
+            return;
+          }
+          close(values);
+        };
+
+        const handlePointerDown = (event) => {
+          if (event.target === overlay) {
+            event.preventDefault();
+            close(null);
+          }
+        };
+
+        const handleKeydown = (event) => {
+          if (event.key === 'Escape') {
+            event.preventDefault();
+            close(null);
+            return;
+          }
+          if (event.key === 'Tab') {
+            const focusables = getFocusables();
+            if (!focusables.length) {
+              event.preventDefault();
+              return;
+            }
+            const current = document.activeElement;
+            let index = focusables.indexOf(current);
+            if (index === -1) {
+              index = 0;
+            }
+            if (event.shiftKey) {
+              if (index === 0) {
+                event.preventDefault();
+                focusables[focusables.length - 1].focus();
+              }
+            } else if (index === focusables.length - 1) {
+              event.preventDefault();
+              focusables[0].focus();
+            }
+          }
+        };
+
+        form.addEventListener('submit', handleSubmit);
+        if (!options.hideCancel) {
+          cancelBtn.addEventListener('click', (event) => {
+            event.preventDefault();
+            close(null);
+          });
+        }
+        overlay.addEventListener('mousedown', handlePointerDown);
+        dialog.addEventListener('keydown', handleKeydown);
+
+        modal._active = { close };
+
+        const focusCandidates = [];
+        if (options.focusField && inputs.has(options.focusField)) {
+          focusCandidates.push(inputs.get(options.focusField).control);
+        }
+        inputs.forEach((entry) => {
+          focusCandidates.push(entry.control);
+        });
+        if (!options.hideCancel) {
+          focusCandidates.push(cancelBtn);
+        }
+        focusCandidates.push(submitBtn);
+        const target = focusCandidates.find((el) => el && !el.hasAttribute('disabled'));
+        if (target && typeof target.focus === 'function') {
+          setTimeout(() => {
+            try {
+              target.focus();
+            } catch {}
+          }, 0);
+        }
+      });
+    },
+    async confirm(options = {}) {
+      const result = await this.form(
+        Object.assign(
+          {
+            fields: [],
+            submitLabel: options.confirmLabel || options.submitLabel || 'Confirm',
+            cancelLabel: options.cancelLabel || 'Cancel',
+          },
+          options || {},
+        ),
+      );
+      return result != null;
+    },
+  },
   util: {
     pageId(){
       try{
@@ -336,22 +720,79 @@ window.ARW = {
   },
   async saveToProjectPrompt(path){
     try{
-      const projInput = prompt('Project name'); if (!projInput) return null;
-      const projCheck = this.validateProjectName(projInput);
-      if (!projCheck.ok){ this.toast(projCheck.error); return null; }
-      const proj = projCheck.value;
-      const baseName = (path||'').split(/[\\/]/).pop() || 'capture.png';
-      let destInput = prompt('Destination path inside project', 'images/'+baseName);
-      if (destInput == null) return null;
-      destInput = String(destInput).trim();
-      if (!destInput) destInput = 'images/'+baseName;
-      const destCheck = this.validateProjectRelPath(destInput);
-      if (!destCheck.ok){ this.toast(destCheck.error); return null; }
-      const dest = destCheck.value;
-      const out = await this.invoke('projects_import', { proj, dest, src_path: path, mode: 'copy', port: this.getPortFromInput('port') });
-      this.toast('Saved to '+proj+': '+dest);
-      return { proj, dest };
-    }catch(e){ console.error(e); this.toast('Import failed'); return null; }
+      let initialProject = '';
+      try{
+        const hubPrefs = await this.getPrefs('ui:hub');
+        if (hubPrefs && typeof hubPrefs.lastProject === 'string') {
+          initialProject = String(hubPrefs.lastProject).trim();
+        }
+      }catch{}
+      const baseName = (path || '').split(/[\\/]/).pop() || 'capture.png';
+      const defaults = {
+        project: initialProject,
+        dest: `images/${baseName}`,
+      };
+      const result = await this.modal.form({
+        title: 'Save to project',
+        description: 'Copy the file into a project workspace and make it available to agents.',
+        submitLabel: 'Save',
+        focusField: 'project',
+        fields: [
+          {
+            name: 'project',
+            label: 'Project',
+            value: defaults.project,
+            placeholder: 'Enter project name',
+            required: true,
+            autocomplete: 'off',
+            hint: 'Use letters, numbers, spaces, . or -',
+          },
+          {
+            name: 'dest',
+            label: 'Destination path',
+            value: defaults.dest,
+            placeholder: 'images/screenshot.png',
+            required: true,
+            autocomplete: 'off',
+            hint: 'Relative to the project root (no leading /)',
+          },
+        ],
+        validate: (values) => {
+          const errors = {};
+          let projectResult = this.validateProjectName(values.project);
+          let destResult = this.validateProjectRelPath(values.dest);
+          if (!projectResult.ok) errors.project = projectResult.error;
+          if (!destResult.ok) errors.dest = destResult.error;
+          const validValues = {
+            project: projectResult.ok ? projectResult.value : values.project,
+            dest: destResult.ok ? destResult.value : values.dest,
+          };
+          return { values: validValues, errors };
+        },
+      });
+      if (!result) return null;
+      const proj = result.project;
+      const dest = result.dest;
+      try{
+        await this.invoke('projects_import', {
+          proj,
+          dest,
+          src_path: path,
+          mode: 'copy',
+          port: this.getPortFromInput('port'),
+        });
+        this.toast(`Saved to ${proj}: ${dest}`);
+        return { proj, dest };
+      }catch(err){
+        console.error(err);
+        const message = err && typeof err === 'string' ? err : err?.message;
+        this.toast(message ? `Import failed: ${message}` : 'Import failed');
+      }
+    }catch(e){
+      console.error(e);
+      this.toast('Import failed');
+    }
+    return null;
   },
   _bestAltForPath(path, fallback){
     const record = path ? this._ocrCache.get(path) : null;
@@ -1517,11 +1958,26 @@ window.ARW = {
         };
         const promptReviewer = async () => {
           const current = approvalsState.reviewer || '';
-          const input = window.prompt('Reviewer (stored for audit trail):', current);
-          if (input === null) {
+          const result = await ARW.modal.form({
+            title: 'Set reviewer',
+            description: 'Identify who is approving or denying this action.',
+            submitLabel: 'Save reviewer',
+            focusField: 'reviewer',
+            fields: [
+              {
+                name: 'reviewer',
+                label: 'Reviewer',
+                value: current,
+                placeholder: 'Name or handle',
+                autocomplete: 'off',
+                hint: 'Leave blank to clear the reviewer.',
+              },
+            ],
+          });
+          if (!result) {
             return approvalsState.reviewer;
           }
-          const trimmed = input.trim();
+          const trimmed = String(result.reviewer || '').trim();
           if (!trimmed) {
             approvalsState.reviewer = null;
             await setReviewerPref(null);
@@ -1737,38 +2193,62 @@ window.ARW = {
             approveBtn.type = 'button';
             approveBtn.className = 'primary btn-small';
             approveBtn.textContent = 'Approve';
-            approveBtn.addEventListener('click', async (ev) => {
-              ev.preventDefault();
-              ev.stopPropagation();
-              const confirmMsg = `Approve ${item.action_kind || 'action'}${item.project ? ` in ${item.project}` : ''}?`;
-              if (!window.confirm(confirmMsg)) return;
-              const reviewer = approvalsState.reviewer || await ensureReviewer();
-              if (!reviewer) {
-                ARW.toast('Reviewer required');
-                return;
-              }
+          approveBtn.addEventListener('click', async (ev) => {
+            ev.preventDefault();
+            ev.stopPropagation();
+            const confirmMsg = `Approve ${item.action_kind || 'action'}${item.project ? ` in ${item.project}` : ''}?`;
+            const confirmed = await ARW.modal.confirm({
+              title: 'Approve action',
+              body: confirmMsg,
+              submitLabel: 'Approve',
+              cancelLabel: 'Cancel',
+            });
+            if (!confirmed) return;
+            const reviewer = approvalsState.reviewer || await ensureReviewer();
+            if (!reviewer) {
+              ARW.toast('Reviewer required');
+              return;
+            }
               await runDecision('approve', { decided_by: reviewer });
-            });
+          });
 
-            const denyBtn = document.createElement('button');
-            denyBtn.type = 'button';
-            denyBtn.className = 'ghost btn-small';
-            denyBtn.textContent = 'Deny';
-            denyBtn.addEventListener('click', async (ev) => {
-              ev.preventDefault();
-              ev.stopPropagation();
-              const reason = window.prompt('Enter a reason (optional):');
-              if (reason === null) return;
-              const reviewer = approvalsState.reviewer || await ensureReviewer();
-              if (!reviewer) {
-                ARW.toast('Reviewer required');
-                return;
-              }
-              const trimmedReason = reason.trim();
-              const payload = { decided_by: reviewer };
-              if (trimmedReason) payload.reason = trimmedReason;
-              await runDecision('deny', payload);
+          const denyBtn = document.createElement('button');
+          denyBtn.type = 'button';
+          denyBtn.className = 'ghost btn-small';
+          denyBtn.textContent = 'Deny';
+          denyBtn.addEventListener('click', async (ev) => {
+            ev.preventDefault();
+            ev.stopPropagation();
+            const contextLine = `${item.action_kind || 'action'}${item.project ? ` in ${item.project}` : ''}`;
+            const denyModal = await ARW.modal.form({
+              title: 'Deny action',
+              body: `Deny ${contextLine}? Capture a reason for teammates (optional).`,
+              submitLabel: 'Deny action',
+              cancelLabel: 'Cancel',
+              focusField: 'reason',
+              destructive: true,
+              fields: [
+                {
+                  name: 'reason',
+                  label: 'Reason',
+                  type: 'textarea',
+                  rows: 3,
+                  hint: 'Shared via the audit trail. Leave blank to deny without a note.',
+                  trim: true,
+                },
+              ],
             });
+            if (!denyModal) return;
+            const reviewer = approvalsState.reviewer || await ensureReviewer();
+            if (!reviewer) {
+              ARW.toast('Reviewer required');
+              return;
+            }
+            const trimmedReason = String(denyModal.reason || '').trim();
+            const payload = { decided_by: reviewer };
+            if (trimmedReason) payload.reason = trimmedReason;
+            await runDecision('deny', payload);
+          });
 
             actionsRow.append(approveBtn, denyBtn);
             card.appendChild(actionsRow);
@@ -3271,8 +3751,33 @@ window.ARW.sse.subscribe('state.read.model.patch', ({ env }) => {
       { id:'prefs:set-editor', label:'Set preferred editor…', hint:'pref', run: async ()=>{
           try{
             const cur = ((await ARW.getPrefs('launcher'))||{}).editorCmd || '';
-            const next = prompt('Editor command (use {path} placeholder)', cur || 'code --goto {path}');
-            if (next != null){ const p = (await ARW.getPrefs('launcher'))||{}; p.editorCmd = String(next).trim(); await ARW.setPrefs('launcher', p); ARW.toast('Editor set'); }
+            const result = await ARW.modal.form({
+              title: 'Preferred editor command',
+              description: 'Provide a shell command. Use {path} where the file path should be inserted.',
+              submitLabel: 'Save command',
+              focusField: 'command',
+              fields: [
+                {
+                  name: 'command',
+                  label: 'Command',
+                  value: cur || 'code --goto {path}',
+                  autocomplete: 'off',
+                  hint: 'Example: code --goto {path}',
+                  trim: true,
+                },
+              ],
+            });
+            if (!result) return;
+            const next = String(result.command || '').trim();
+            const prefs = (await ARW.getPrefs('launcher')) || {};
+            if (next) {
+              prefs.editorCmd = next;
+              ARW.toast('Editor set');
+            } else {
+              delete prefs.editorCmd;
+              ARW.toast('Editor cleared');
+            }
+            await ARW.setPrefs('launcher', prefs);
           }catch(e){ console.error(e); ARW.toast('Failed to save'); }
         }
       },

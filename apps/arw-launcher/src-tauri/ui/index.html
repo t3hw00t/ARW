@@ -28,7 +28,7 @@
                 <small id="svc-text">unknown</small>
               </span>
             </span>
-            <p class="status-hint">Start the service to unlock workspaces and live telemetry.</p>
+            <p class="status-hint">Start the service and paste an admin token to unlock workspaces.</p>
           </div>
         </div>
         <details class="hero-preferences" data-role="advanced">
@@ -68,9 +68,9 @@
               </label>
             </div>
             <div class="pref-field">
-              <label for="admintok">Admin token</label>
-              <input id="admintok" type="password" autocomplete="off" placeholder="Paste token (optional)"/>
-              <p class="field-note">Needed for Projects, Training, Trial, and other admin APIs. Stored locally. Launcher applies this token when it starts the service; restart after saving to rotate credentials.</p>
+              <label for="admintok">Admin token <small class="dim">(required for Hub, Chat, Training)</small></label>
+              <input id="admintok" type="password" autocomplete="off" placeholder="Paste admin token"/>
+              <p class="field-note">Set this once to unlock Project Hub, Chat, Training Park, and other admin APIs. Stored locally; restart the service after saving to rotate credentials.</p>
             </div>
           </div>
         </details>
@@ -80,6 +80,13 @@
             <span id="prefsStatus" class="dim" data-state="clean" role="status" aria-live="polite">All changes saved</span>
           </div>
           <span id="statusBadges" class="badges"></span>
+        </div>
+        <div id="tokenCallout" class="hero-callout" role="alert" hidden>
+          <span class="hero-callout-icon" aria-hidden="true">!</span>
+          <span>
+            <strong>Secure setup required.</strong>
+            Paste an admin token to unlock Project Hub, Chat, Training, and other admin surfaces.
+          </span>
         </div>
       </section>
       <div class="launcher-grid">

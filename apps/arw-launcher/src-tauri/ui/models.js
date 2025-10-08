@@ -1391,7 +1391,13 @@ async function removeScope(id){
   const target = String(id || '').trim();
   if (!target) return;
   const label = scopeLabel(currentEgressScopes.find((s) => (s.id || '') === target) || { id: target });
-  const confirmed = window.confirm(`Remove scope '${label}'?`);
+  const confirmed = await ARW.modal.confirm({
+    title: 'Remove scope',
+    body: `Remove scope '${label}'?`,
+    submitLabel: 'Remove',
+    cancelLabel: 'Cancel',
+    destructive: true,
+  });
   if (!confirmed) return;
   const scopes = currentEgressScopes
     .filter((s) => (s.id || '') !== target)

@@ -190,7 +190,12 @@
     });
 
     const approvalsReviewer = document.getElementById('btn-approvals-reviewer');
-    if (approvalsReviewer) approvalsReviewer.addEventListener('click', () => requestApprovalReviewerChange());
+    if (approvalsReviewer) {
+      approvalsReviewer.addEventListener('click', (event) => {
+        event?.preventDefault?.();
+        requestApprovalReviewerChange().catch((err) => console.error('change reviewer failed', err));
+      });
+    }
 
     const approvalsOpenDebug = document.getElementById('btn-approvals-open-debug');
     if (approvalsOpenDebug) approvalsOpenDebug.addEventListener('click', openApprovalsInDebug);
@@ -1531,7 +1536,7 @@ async function refreshApprovalsLane(auto = false){
     } catch {}
   }
 
-  function ensureAutonomyOperator() {
+  async function ensureAutonomyOperator() {
     const cached = STATE.autonomy?.operator;
     if (cached && String(cached).trim()) return String(cached).trim();
     const stored = getStoredAutonomyOperator();
@@ -1539,20 +1544,67 @@ async function refreshApprovalsLane(auto = false){
       STATE.autonomy.operator = stored.trim();
       return stored.trim();
     }
-    const input = prompt('Operator name for autonomy actions?');
-    if (!input) return null;
-    const trimmed = input.trim();
+    const result = await ARW.modal.form({
+      title: 'Set autonomy operator',
+      description: 'Identify who is issuing autonomy controls. This name is recorded for audit trails.',
+      submitLabel: 'Save operator',
+      cancelLabel: 'Cancel',
+      focusField: 'operator',
+      fields: [
+        {
+          name: 'operator',
+          label: 'Operator',
+          autocomplete: 'off',
+          trim: true,
+          required: true,
+          hint: 'Use a name or handle that teammates recognize.',
+        },
+      ],
+      validate: (values) => {
+        const errors = {};
+        const trimmed = String(values.operator || '').trim();
+        if (!trimmed) errors.operator = 'Operator name is required';
+        return { values: { operator: trimmed }, errors };
+      },
+    });
+    if (!result) return null;
+    const trimmed = String(result.operator || '').trim();
     if (!trimmed) return null;
     STATE.autonomy.operator = trimmed;
     rememberAutonomyOperator(trimmed);
     return trimmed;
   }
 
-  function promptAutonomyReason(defaultText) {
-    const input = prompt('Reason for autonomy action?', defaultText);
-    if (input === null) return null;
-    const trimmed = input.trim();
-    return trimmed || defaultText;
+  async function promptAutonomyReason(defaultText) {
+    const result = await ARW.modal.form({
+      title: 'Autonomy reason',
+      description: 'Provide context for this autonomy action.',
+      submitLabel: 'Apply reason',
+      cancelLabel: 'Cancel',
+      focusField: 'reason',
+      fields: [
+        {
+          name: 'reason',
+          label: 'Reason',
+          type: 'textarea',
+          rows: 3,
+          value: defaultText || '',
+          hint: defaultText ? `Leave blank to keep “${defaultText}”.` : 'Reason is required.',
+          trim: true,
+        },
+      ],
+      validate: (values) => {
+        const errors = {};
+        const trimmed = String(values.reason || '').trim();
+        if (!trimmed && !defaultText) {
+          errors.reason = 'Reason is required';
+        }
+        return { values: { reason: trimmed }, errors };
+      },
+    });
+    if (!result) return null;
+    const trimmed = String(result.reason || '').trim();
+    return trimmed || defaultText || '';
   }
 
   async function pauseAutonomy() {
@@ -1565,12 +1617,12 @@ async function refreshApprovalsLane(auto = false){
       ARW.toast('No autonomy lane configured');
       return;
     }
-    const operator = ensureAutonomyOperator();
+    const operator = await ensureAutonomyOperator();
     if (!operator) {
       ARW.toast('Operator required');
       return;
     }
-    const reason = promptAutonomyReason('Kill switch from Trial Control Center');
+    const reason = await promptAutonomyReason('Kill switch from Trial Control Center');
     if (reason === null) return;
     markAutonomyBusy(true);
     try {
@@ -1601,12 +1653,12 @@ async function refreshApprovalsLane(auto = false){
       ARW.toast('No autonomy lane configured');
       return;
     }
-    const operator = ensureAutonomyOperator();
+    const operator = await ensureAutonomyOperator();
     if (!operator) {
       ARW.toast('Operator required');
       return;
     }
-    const reason = promptAutonomyReason('Resume guided operations');
+    const reason = await promptAutonomyReason('Resume guided operations');
     if (reason === null) return;
     markAutonomyBusy(true);
     try {
@@ -1637,14 +1689,19 @@ async function refreshApprovalsLane(auto = false){
       ARW.toast('No autonomy lane configured');
       return;
     }
-    const operator = ensureAutonomyOperator();
+    const operator = await ensureAutonomyOperator();
     if (!operator) {
       ARW.toast('Operator required');
       return;
     }
-    const reason = promptAutonomyReason('Emergency stop (kill switch)');
+    const reason = await promptAutonomyReason('Emergency stop (kill switch)');
     if (reason === null) return;
-    const confirmStop = confirm('Immediately pause and flush all autonomy jobs?');
+    const confirmStop = await ARW.modal.confirm({
+      title: 'Emergency stop',
+      body: 'Immediately pause and flush all autonomy jobs?',
+      submitLabel: 'Stop autonomy',
+      cancelLabel: 'Cancel',
+    });
     if (!confirmStop) return;
     markAutonomyBusy(true);
     const stopBtn = document.getElementById('btn-autonomy-stop');
@@ -2591,16 +2648,35 @@ function renderLists(){
       ARW.toast('Start the server first');
       return;
     }
-    const reviewer = ensureApprovalReviewer();
+    const reviewer = await ensureApprovalReviewer();
     if (!reviewer) {
       ARW.toast('Reviewer required');
       return;
     }
     let reason = null;
     if (action === 'deny') {
-      const input = prompt('Reason to hold?', 'Needs teammate approval');
-      if (input === null) return;
-      reason = input.trim();
+      const defaultReason = 'Needs teammate approval';
+      const result = await ARW.modal.form({
+        title: 'Hold action',
+        body: 'Provide a reason for placing this action on hold.',
+        submitLabel: 'Hold action',
+        cancelLabel: 'Cancel',
+        focusField: 'reason',
+        fields: [
+          {
+            name: 'reason',
+            label: 'Reason',
+            type: 'textarea',
+            rows: 3,
+            value: defaultReason,
+            hint: `Leave blank to keep “${defaultReason}”.`,
+            trim: true,
+          },
+        ],
+      });
+      if (!result) return;
+      const trimmed = String(result.reason || '').trim();
+      reason = trimmed || defaultReason;
     }
     const buttons = [approveBtn, holdBtn].filter(Boolean);
     buttons.forEach(btn => {
@@ -2632,11 +2708,28 @@ function renderLists(){
     }
   }
 
-  function requestApprovalReviewerChange(){
+  async function requestApprovalReviewerChange(){
     const current = STATE.approvals?.reviewer || '';
-    const input = prompt('Reviewer name (shown on the audit log)?', current);
-    if (input === null) return;
-    const trimmed = input.trim();
+    const result = await ARW.modal.form({
+      title: 'Set reviewer',
+      description: 'Reviewer names are recorded alongside approval decisions.',
+      submitLabel: 'Save reviewer',
+      cancelLabel: 'Cancel',
+      focusField: 'reviewer',
+      fields: [
+        {
+          name: 'reviewer',
+          label: 'Reviewer',
+          value: current,
+          placeholder: 'Name or handle',
+          hint: 'Leave blank to clear the reviewer.',
+          autocomplete: 'off',
+          trim: true,
+        },
+      ],
+    });
+    if (!result) return;
+    const trimmed = String(result.reviewer || '').trim();
     if (!trimmed) {
       STATE.approvals.reviewer = null;
       rememberApprovalReviewer('');
@@ -2649,7 +2742,7 @@ function renderLists(){
     renderApprovalsLane();
   }
 
-  function ensureApprovalReviewer(){
+  async function ensureApprovalReviewer(){
     const cached = STATE.approvals?.reviewer;
     if (cached && cached.trim()) return cached.trim();
     const stored = getStoredApprovalReviewer();
@@ -2658,9 +2751,31 @@ function renderLists(){
       renderApprovalsLane();
       return stored;
     }
-    const input = prompt('Reviewer name (shown on the audit log)?');
-    if (input === null) return null;
-    const trimmed = input.trim();
+    const result = await ARW.modal.form({
+      title: 'Set reviewer',
+      description: 'Reviewer names are recorded alongside approval decisions.',
+      submitLabel: 'Save reviewer',
+      cancelLabel: 'Cancel',
+      focusField: 'reviewer',
+      fields: [
+        {
+          name: 'reviewer',
+          label: 'Reviewer',
+          placeholder: 'Name or handle',
+          autocomplete: 'off',
+          trim: true,
+          required: true,
+        },
+      ],
+      validate: (values) => {
+        const errors = {};
+        const trimmed = String(values.reviewer || '').trim();
+        if (!trimmed) errors.reviewer = 'Reviewer name is required';
+        return { values: { reviewer: trimmed }, errors };
+      },
+    });
+    if (!result) return null;
+    const trimmed = String(result.reviewer || '').trim();
     if (!trimmed) return null;
     STATE.approvals.reviewer = trimmed;
     rememberApprovalReviewer(trimmed);

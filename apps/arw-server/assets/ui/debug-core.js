@@ -56,7 +56,7 @@ async function refreshMemory(){
 async function quickApply(){
   let kind = document.getElementById('memKind').value;
   let bodyTxt = document.getElementById('memBody').value;
-  let value; try{ value = JSON.parse(bodyTxt); }catch(e){ alert('Invalid JSON'); return; }
+  let value; try{ value = JSON.parse(bodyTxt); }catch(e){ showToast('Invalid JSON'); return; }
   await req('POST', '/admin/memory/apply', { lane: kind, value }, 'out', 'rt-main');
   await refreshMemory();
 }
@@ -65,7 +65,7 @@ async function quickApply(){
 async function runTool(){
   const id = document.getElementById('toolId').value;
   let bodyTxt = document.getElementById('toolBody').value;
-  let input; try{ input = JSON.parse(bodyTxt); }catch(e){ alert('Invalid JSON'); return; }
+  let input; try{ input = JSON.parse(bodyTxt); }catch(e){ showToast('Invalid JSON'); return; }
   const tb=document.getElementById('toolsBadge'); if(tb){ tb.className='badge warn'; tb.innerHTML='<span class=\"dot\"></span> Tools: active'; }
   await req('POST', '/tools/run', { id, input }, 'toolOut', 'rt-tool');
   if(tb){ tb.className='badge ok'; tb.innerHTML='<span class=\"dot\"></span> Tools: done'; setTimeout(()=>{ tb.className='badge warn'; tb.innerHTML='<span class=\"dot\"></span> Tools: idle'; }, 1200); }
@@ -129,4 +129,3 @@ document.addEventListener('DOMContentLoaded', ()=>{
   const cb=document.getElementById('shortcutsToggle'); if(cb){ cb.checked = Shortcuts.enabled; cb.addEventListener('change', ()=> Shortcuts.setEnabled(cb.checked)); }
   document.getElementById('openShortcuts')?.addEventListener('click', ()=> Shortcuts.showHelp());
 });
-

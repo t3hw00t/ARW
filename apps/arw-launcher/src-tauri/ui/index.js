@@ -129,6 +129,15 @@ function connectSse({ replay = 0, resume = true } = {}) {
   ARW.sse.connect(base, opts, resume);
 }
 
+function syncTokenCallout(tokenValue, { pending = false } = {}) {
+  const callout = document.getElementById('tokenCallout');
+  if (!callout) return;
+  const hasToken = typeof tokenValue === 'string' && tokenValue.trim().length > 0;
+  const show = pending || !hasToken;
+  callout.hidden = !show;
+  callout.setAttribute('aria-hidden', show ? 'false' : 'true');
+}
+
 function updateTokenBadge(tokenValue, { pending = false } = {}) {
   const wrap = document.getElementById('statusBadges');
   if (!wrap) return;
@@ -143,6 +152,7 @@ function updateTokenBadge(tokenValue, { pending = false } = {}) {
     badge.className = 'badge warn';
     badge.textContent = 'Admin token: unsaved';
     badge.setAttribute('aria-label', 'Admin token has unsaved changes');
+    syncTokenCallout(tokenValue, { pending: true });
     return;
   }
   const hasToken =
@@ -153,6 +163,7 @@ function updateTokenBadge(tokenValue, { pending = false } = {}) {
     'aria-label',
     hasToken ? 'Admin token saved' : 'Admin token not set',
   );
+  syncTokenCallout(tokenValue, { pending: false });
 }
 
 async function refreshServiceLogPath({ toastOnError = false } = {}) {
@@ -247,9 +258,9 @@ async function health() {
     if (heroHint) {
       heroHint.textContent = ok
         ? hasToken
-          ? 'Stack is ready. Open a workspace to dive in.'
-          : 'Stack is ready. Set an admin token to secure admin-only surfaces.'
-        : 'Start the service to unlock workspaces and live telemetry.';
+          ? 'Stack online. Launch a workspace when you are ready.'
+          : 'Stack online. Paste your admin token to unlock Hub, Chat, and Training.'
+        : 'Start the service, then paste your admin token to unlock workspaces.';
     }
     lastHealthCheck = Date.now();
     if (metaLabel) updateHealthMetaLabel();
@@ -266,7 +277,7 @@ async function health() {
       statusLabel.className = 'bad';
     }
     if (heroHint) {
-      heroHint.textContent = 'Health check failed. Verify the port and try again.';
+      heroHint.textContent = 'Health check failed. Confirm the port, restart the service, then paste your admin token.';
     }
     lastHealthCheck = Date.now();
     if (metaLabel) updateHealthMetaLabel();
@@ -440,7 +451,12 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         const tokenChanged = previousTokenBaseline !== prefBaseline.adminToken;
         if (tokenChanged) {
-          const restart = window.confirm('Admin token updated. Restart the local service now to apply the new credentials?');
+          const restart = await ARW.modal.confirm({
+            title: 'Restart required',
+            body: 'Admin token updated. Restart the local service now to apply the new credentials?',
+            submitLabel: 'Restart now',
+            cancelLabel: 'Later',
+          });
           if (restart) {
             try {
               await invoke('stop_service', { port: effectivePort() });

@@ -7,6 +7,91 @@
   <link rel="stylesheet" href="/admin/ui/assets/pages.css"/>
   <link rel="stylesheet" href="/admin/ui/assets/debug.css"/>
   <meta name="viewport" content="width=device-width,initial-scale=1">
+  <style>
+    .dbg-modal-overlay{
+      position:fixed;
+      inset:0;
+      background:rgba(15,23,42,0.45);
+      display:none;
+      align-items:center;
+      justify-content:center;
+      padding:24px;
+      z-index:9999;
+      backdrop-filter:blur(6px);
+    }
+    .dbg-modal-overlay.open{ display:flex; }
+    .dbg-modal{
+      width:min(440px, calc(100vw - 32px));
+      background:var(--surface-modal, var(--surface-raised, #ffffff));
+      color:var(--color-ink, #0f172a);
+      border-radius:14px;
+      box-shadow:0 28px 64px rgba(15,23,42,0.35), 0 0 0 1px rgba(255,255,255,0.4) inset;
+      padding:24px;
+      display:flex;
+      flex-direction:column;
+      gap:16px;
+    }
+    body.dark .dbg-modal,
+    body[data-theme="dark"] .dbg-modal,
+    html[data-theme="dark"] .dbg-modal{
+      background:rgba(15,23,42,0.92);
+      color:rgba(226,232,240,0.95);
+      box-shadow:0 32px 72px rgba(2,6,23,0.6), 0 0 0 1px rgba(255,255,255,0.08) inset;
+    }
+    .dbg-modal h2{
+      margin:0;
+      font-size:1.15rem;
+    }
+    .dbg-modal p{
+      margin:0;
+      font-size:0.95rem;
+      color:rgba(71,85,105,0.9);
+    }
+    body.dark .dbg-modal p,
+    body[data-theme="dark"] .dbg-modal p,
+    html[data-theme="dark"] .dbg-modal p{
+      color:rgba(203,213,225,0.85);
+    }
+    .dbg-modal-input{
+      display:flex;
+      flex-direction:column;
+      gap:8px;
+    }
+    .dbg-modal-input input,
+    .dbg-modal-input textarea{
+      width:100%;
+      font:inherit;
+      padding:10px 12px;
+      border-radius:10px;
+      border:1px solid rgba(148,163,184,0.45);
+      background:rgba(255,255,255,0.95);
+      box-shadow:0 1px 0 rgba(255,255,255,0.9) inset;
+    }
+    body.dark .dbg-modal-input input,
+    body.dark .dbg-modal-input textarea,
+    body[data-theme="dark"] .dbg-modal-input input,
+    body[data-theme="dark"] .dbg-modal-input textarea,
+    html[data-theme="dark"] .dbg-modal-input input,
+    html[data-theme="dark"] .dbg-modal-input textarea{
+      background:rgba(15,23,42,0.85);
+      border-color:rgba(148,163,184,0.3);
+      color:rgba(226,232,240,0.95);
+    }
+    .dbg-modal-actions{
+      display:flex;
+      justify-content:flex-end;
+      gap:12px;
+    }
+    .dbg-modal-actions .danger{
+      background:var(--status-bad, #d14358);
+      border-color:var(--status-bad, #d14358);
+      color:#fff;
+    }
+    .dbg-modal-error{
+      font-size:0.85rem;
+      color:var(--status-bad, #d14358);
+    }
+  </style>
   </head>
 <body>
   <header>
@@ -560,6 +645,221 @@ document.getElementById('port').textContent = location.host;
 let lastCurl = null;
 let __adminOk = false;
 let __adminHeader = '';
+
+const debugModal = (() => {
+  let overlay = null;
+  let dialog = null;
+  let titleEl = null;
+  let messageEl = null;
+  let errorEl = null;
+  let inputWrap = null;
+  let inputEl = null;
+  let textareaEl = null;
+  let okBtn = null;
+  let cancelBtn = null;
+  function ensure() {
+    if (overlay) return;
+    overlay = document.createElement('div');
+    overlay.className = 'dbg-modal-overlay';
+    overlay.setAttribute('aria-hidden', 'true');
+    overlay.innerHTML = `
+      <div class="dbg-modal" role="dialog" aria-modal="true" aria-labelledby="dbgModalTitle" aria-describedby="dbgModalMessage">
+        <h2 id="dbgModalTitle" class="dbg-modal-title"></h2>
+        <p id="dbgModalMessage" class="dbg-modal-message"></p>
+        <div id="dbgModalError" class="dbg-modal-error" aria-live="polite"></div>
+        <div class="dbg-modal-input">
+          <input id="dbgModalInput" type="text" autocomplete="off">
+          <textarea id="dbgModalTextarea" rows="3"></textarea>
+        </div>
+        <div class="dbg-modal-actions">
+          <button type="button" class="ghost dbg-modal-cancel">Cancel</button>
+          <button type="button" class="primary dbg-modal-ok">OK</button>
+        </div>
+      </div>`;
+    document.body.appendChild(overlay);
+    dialog = overlay.querySelector('.dbg-modal');
+    titleEl = overlay.querySelector('.dbg-modal-title');
+    messageEl = overlay.querySelector('.dbg-modal-message');
+    errorEl = overlay.querySelector('.dbg-modal-error');
+    inputWrap = overlay.querySelector('.dbg-modal-input');
+    inputEl = overlay.querySelector('#dbgModalInput');
+    textareaEl = overlay.querySelector('#dbgModalTextarea');
+    cancelBtn = overlay.querySelector('.dbg-modal-cancel');
+    okBtn = overlay.querySelector('.dbg-modal-ok');
+  }
+  function open(options) {
+    ensure();
+    const settings = Object.assign({ mode: 'confirm' }, options || {});
+    return new Promise((resolve) => {
+      let resolved = false;
+      let activeField = null;
+      const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+      overlay.classList.add('open');
+      overlay.setAttribute('aria-hidden', 'false');
+      titleEl.textContent = settings.title || (settings.mode === 'prompt' ? 'Input required' : 'Confirm action');
+      messageEl.textContent = settings.message || '';
+      errorEl.textContent = '';
+      const cancelLabel = settings.cancelLabel === null ? null : (settings.cancelLabel || 'Cancel');
+      if (cancelLabel === null) {
+        cancelBtn.style.display = 'none';
+      } else {
+        cancelBtn.style.display = 'inline-flex';
+        cancelBtn.textContent = cancelLabel;
+      }
+      const okLabel = settings.okLabel || (settings.mode === 'prompt' ? 'Save' : 'Confirm');
+      okBtn.textContent = okLabel;
+      if (settings.destructive) {
+        okBtn.classList.add('danger');
+      } else {
+        okBtn.classList.remove('danger');
+      }
+      if (settings.mode === 'prompt') {
+        inputWrap.style.display = 'flex';
+        const useTextarea = settings.multiline === true;
+        inputEl.style.display = useTextarea ? 'none' : 'block';
+        textareaEl.style.display = useTextarea ? 'block' : 'none';
+        activeField = useTextarea ? textareaEl : inputEl;
+        if (useTextarea) {
+          textareaEl.rows = settings.rows ? settings.rows : 3;
+        }
+        const defaultValue = settings.defaultValue != null ? settings.defaultValue : '';
+        inputEl.value = useTextarea ? '' : defaultValue;
+        textareaEl.value = useTextarea ? defaultValue : '';
+        activeField.value = useTextarea ? textareaEl.value : inputEl.value;
+        if (!useTextarea) {
+          inputEl.setAttribute('type', settings.inputType || 'text');
+        }
+        inputEl.placeholder = useTextarea ? '' : (settings.placeholder || '');
+        textareaEl.placeholder = useTextarea ? (settings.placeholder || '') : '';
+      } else {
+        inputWrap.style.display = 'none';
+        activeField = null;
+        inputEl.value = '';
+        textareaEl.value = '';
+        inputEl.placeholder = '';
+        textareaEl.placeholder = '';
+      }
+      const onFieldKeydown = (event) => {
+        if (event.key !== 'Enter') return;
+        if (settings.multiline === true && !(event.ctrlKey || event.metaKey)) {
+          return;
+        }
+        event.preventDefault();
+        onOk();
+      };
+      if (activeField) {
+        activeField.addEventListener('keydown', onFieldKeydown);
+      }
+      const cleanup = () => {
+        overlay.classList.remove('open');
+        overlay.setAttribute('aria-hidden', 'true');
+        cancelBtn.removeEventListener('click', onCancel);
+        okBtn.removeEventListener('click', onOk);
+        overlay.removeEventListener('keydown', onKeyDown, true);
+        if (activeField) {
+          activeField.removeEventListener('keydown', onFieldKeydown);
+        }
+        if (activeField) {
+          activeField.blur();
+        }
+        if (previous && typeof previous.focus === 'function') {
+          setTimeout(() => previous.focus(), 0);
+        }
+      };
+      const focusables = () => {
+        const elements = [];
+        if (activeField) elements.push(activeField);
+        if (cancelLabel !== null) elements.push(cancelBtn);
+        elements.push(okBtn);
+        return elements.filter(Boolean);
+      };
+      const close = (value) => {
+        if (resolved) return;
+        resolved = true;
+        cleanup();
+        resolve(value);
+      };
+      const showError = (msg) => {
+        errorEl.textContent = msg || '';
+      };
+      const onCancel = () => close(null);
+      const onOk = () => {
+        if (settings.mode === 'prompt') {
+          let fieldValue = activeField ? activeField.value : '';
+          if (settings.trim) {
+            fieldValue = fieldValue.trim();
+          }
+          if (typeof settings.validate === 'function') {
+            const validationResult = settings.validate(fieldValue);
+            if (validationResult) {
+              showError(validationResult);
+              if (activeField) {
+                setTimeout(() => {
+                  activeField.focus();
+                  if (typeof activeField.select === 'function') activeField.select();
+                }, 0);
+              }
+              return;
+            }
+          }
+          close(fieldValue);
+        } else {
+          close(true);
+        }
+      };
+      const onKeyDown = (event) => {
+        if (event.key === 'Escape') {
+          event.preventDefault();
+          close(null);
+          return;
+        }
+        if (event.key === 'Tab') {
+          const els = focusables();
+          if (!els.length) return;
+          const active = document.activeElement;
+          let idx = els.indexOf(active);
+          if (event.shiftKey) {
+            idx = idx <= 0 ? els.length - 1 : idx - 1;
+          } else {
+            idx = idx === els.length - 1 || idx < 0 ? 0 : idx + 1;
+          }
+          event.preventDefault();
+          const target = els[idx];
+          if (target) target.focus();
+        }
+      };
+      cancelBtn.addEventListener('click', onCancel);
+      okBtn.addEventListener('click', onOk);
+      overlay.addEventListener('keydown', onKeyDown, true);
+      const focusTarget = () => {
+        if (activeField) {
+          activeField.focus();
+          if (typeof activeField.select === 'function') activeField.select();
+        } else if (cancelLabel === null) {
+          okBtn.focus();
+        } else {
+          cancelBtn.focus();
+        }
+      };
+      requestAnimationFrame(focusTarget);
+    });
+  }
+  return {
+    async confirm(message, opts = {}) {
+      const result = await open(Object.assign({}, opts, { mode: 'confirm', message }));
+      return result === true;
+    },
+    async prompt(message, opts = {}) {
+      const result = await open(Object.assign({}, opts, { mode: 'prompt', message }));
+      return typeof result === 'string' ? result : null;
+    },
+  };
+})();
+const confirmDialog = (message, options) => debugModal.confirm(message, options);
+const promptDialog = (message, options) => debugModal.prompt(message, options);
+window.debugModal = debugModal;
+window.confirmDialog = confirmDialog;
+window.promptDialog = promptDialog;
 function mkcurl(method, url, body){
   const parts = ["curl -sS", "-X", method, `'${url}'`];
   if (body != null){ parts.push("-H", `'Content-Type: application/json'`); parts.push("-d", `'${JSON.stringify(body)}'`); }
@@ -610,7 +910,7 @@ async function refreshMemory(){
 async function quickApply(){
   let kind = document.getElementById('memKind').value;
   let bodyTxt = document.getElementById('memBody').value;
-  let value; try{ value = JSON.parse(bodyTxt); }catch(e){ alert('Invalid JSON'); return; }
+  let value; try{ value = JSON.parse(bodyTxt); }catch(e){ showToast('Invalid JSON'); return; }
   await req('POST', '/admin/memory/apply', { lane: kind, value }, 'out', 'rt-main');
   await refreshMemory();
 }
@@ -619,7 +919,7 @@ async function quickApply(){
 async function runTool(){
   const id = document.getElementById('toolId').value;
   let bodyTxt = document.getElementById('toolBody').value;
-  let input; try{ input = JSON.parse(bodyTxt); }catch(e){ alert('Invalid JSON'); return; }
+  let input; try{ input = JSON.parse(bodyTxt); }catch(e){ showToast('Invalid JSON'); return; }
   const tb=document.getElementById('toolsBadge'); if(tb){ tb.className='badge warn'; tb.innerHTML='<span class=\"dot\"></span> Tools: active'; }
   await req('POST', '/tools/run', { id, input }, 'toolOut', 'rt-tool');
   if(tb){ tb.className='badge ok'; tb.innerHTML='<span class=\"dot\"></span> Tools: done'; setTimeout(()=>{ tb.className='badge warn'; tb.innerHTML='<span class=\"dot\"></span> Tools: idle'; }, 1200); }
@@ -1711,7 +2011,13 @@ async function modelsRowSetDefault(id){ try{
   window.__modelsRM = window.__modelsRM || { items: [], default: null }; window.__modelsRM.default = id; modelsRender(); showToast('Default set: ' + id);
 }catch{ showToast('Set default failed'); }}
 async function modelsRowDelete(id){ try{
-  if(!confirm('Delete model entry ' + id + '?')) return;
+  const confirmed = await confirmDialog('Delete model entry ' + id + '?', {
+    title: 'Delete model',
+    okLabel: 'Delete',
+    cancelLabel: 'Cancel',
+    destructive: true,
+  });
+  if(!confirmed) return;
   await fetch(base + '/admin/models/delete', { method:'POST', headers:{ 'Content-Type':'application/json','X-ARW-Admin': __adminHeader || '' }, body: JSON.stringify({id}) });
   window.__modelsRM = window.__modelsRM || { items: [], default: null };
   if(Array.isArray(window.__modelsRM.items)){
@@ -1735,9 +2041,28 @@ async function modelsRowDownload(id){ try{
   const prov = item?.provider || (document.getElementById('mProv')?.value || 'local');
   const defUrl = item?.url || (document.getElementById('mUrl')?.value || '');
   const defSha = item?.sha256 || (document.getElementById('mSha')?.value || '');
-  const url = prompt('Download URL for ' + id + ':', defUrl);
-  if(!url) return;
-  const sha = prompt('SHA-256 (required):', defSha);
+  const urlRaw = await promptDialog('Download URL for ' + id, {
+    title: 'Download model',
+    defaultValue: defUrl,
+    placeholder: 'https://example.com/model.bin',
+    okLabel: 'Continue',
+    cancelLabel: 'Cancel',
+    trim: true,
+    validate: (value) => value && value.trim() ? null : 'URL is required',
+  });
+  if(urlRaw == null) return;
+  const url = urlRaw.trim();
+  if(!url){ showToast('URL required'); return; }
+  const shaRaw = await promptDialog('SHA-256 (required)', {
+    title: 'Verify download',
+    defaultValue: defSha,
+    okLabel: 'Download',
+    cancelLabel: 'Cancel',
+    trim: true,
+    validate: (value) => value && value.trim() ? null : 'SHA-256 required',
+  });
+  if(shaRaw == null) return;
+  const sha = shaRaw.trim();
   if(!sha){ showToast('SHA-256 required'); return; }
   const body = { id, url, provider: prov, sha256: sha };
   const r = await fetch(base + '/admin/models/download', { method:'POST', headers:{ 'Content-Type':'application/json','X-ARW-Admin': __adminHeader || '' }, body: JSON.stringify(body) });
@@ -2418,7 +2743,17 @@ async function rwFetch(){ try{
 async function rwAct(id, action){
   if(!id) return;
   let note = '';
-  try{ note = prompt(`${action} note?`, '') || ''; }catch{}
+  try{
+    const value = await promptDialog(`${action} note?`, {
+      title: `Research ${action}`,
+      defaultValue: '',
+      okLabel: action === 'approve' ? 'Approve' : 'Archive',
+      cancelLabel: 'Skip',
+      multiline: true,
+      rows: 3,
+    });
+    note = value == null ? '' : value.trim();
+  }catch{}
   try{
     const r = await fetch(`${base}/research_watcher/${encodeURIComponent(id)}/${action}`, { method:'POST', headers: adminHeaders(true), body: JSON.stringify({ note }) });
     if(r.ok){ showToast(`research ${action}`); rwFetch(); }

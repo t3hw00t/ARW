@@ -459,22 +459,42 @@ document.addEventListener('DOMContentLoaded', async () => {
         ? `${remaining}/${max} restarts left${resetHint ? ` (resets ${resetHint})` : ''}`
         : 'Restart budget not reported';
       const defaultPreset = runtimePresetCache.get(runtimeId) || descriptor.profile || '';
-      let presetValue = runtimePresetCache.get(runtimeId);
-      const presetPrompt = window.prompt(
-        `Optional preset label for ${name} (leave blank to reuse current behavior):`,
-        defaultPreset || ''
-      );
-      if (presetPrompt === null) return;
-      const trimmedPreset = String(presetPrompt || '').trim();
-      if (trimmedPreset) {
-        presetValue = trimmedPreset;
-        runtimePresetCache.set(runtimeId, trimmedPreset);
+      const presetResult = await ARW.modal.form({
+        title: `Restart ${name}`,
+        body: `${summary}\n${budgetLine}`,
+        submitLabel: 'Continue',
+        cancelLabel: 'Cancel',
+        focusField: 'preset',
+        fields: [
+          {
+            name: 'preset',
+            label: 'Preset label (optional)',
+            value: defaultPreset,
+            placeholder: 'e.g. high-throughput',
+            hint: 'Leave blank to reuse current behavior.',
+            autocomplete: 'off',
+            trim: true,
+          },
+        ],
+      });
+      if (!presetResult) return;
+      const presetValue = String(presetResult.preset || '').trim();
+      if (presetValue) {
+        runtimePresetCache.set(runtimeId, presetValue);
       } else {
-        presetValue = '';
+        runtimePresetCache.delete(runtimeId);
       }
-      const presetLine = presetValue ? `Preset: ${presetValue}\n` : '';
-      const confirmMsg = `Request a restart for ${name}?\n\n${summary}\n${budgetLine}.\n${presetLine}`.trim();
-      if (!window.confirm(confirmMsg)) return;
+      const presetLine = presetValue ? `Preset: ${presetValue}` : '';
+      const confirmMsg = [`Request a restart for ${name}?`, summary, budgetLine, presetLine]
+        .filter(Boolean)
+        .join('\n');
+      const confirmed = await ARW.modal.confirm({
+        title: 'Confirm restart',
+        body: confirmMsg,
+        submitLabel: 'Restart runtime',
+        cancelLabel: 'Cancel',
+      });
+      if (!confirmed) return;
 
       runtimePending.add(runtimeId);
       renderRuntimeSupervisor();
@@ -2382,9 +2402,52 @@ document.addEventListener('DOMContentLoaded', async () => {
     const n = (elProjName?.value||'').trim(); if (!n) return;
     try{
       const resp = await fetchRaw('/projects', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ name:n }) });
-      if (!resp.ok) throw new Error('HTTP '+resp.status);
-      await refreshProjectsSnapshot(); setProj(n); ARW.toast('Project created');
-    }catch(e){ console.error(e); ARW.toast('Create failed'); }
+      if (!resp.ok) {
+        let body = '';
+        try {
+          body = await resp.text();
+        } catch {}
+        const trimmed = (body || '').trim();
+        let extracted = '';
+        if (trimmed) {
+          try {
+            const parsed = JSON.parse(trimmed);
+            if (parsed && typeof parsed === 'object') {
+              extracted = parsed.error || parsed.message || parsed.detail || '';
+            } else if (typeof parsed === 'string') {
+              extracted = parsed;
+            }
+          } catch {
+            extracted = trimmed;
+          }
+        }
+        if (extracted && extracted.length > 180) {
+          extracted = `${extracted.slice(0, 177)}…`;
+        }
+        let message;
+        if (resp.status === 401 || resp.status === 403) {
+          message = extracted ? `Create failed: ${extracted}` : 'Create failed: admin token required';
+        } else if (extracted) {
+          message = `Create failed: ${extracted}`;
+        } else {
+          message = `Create failed (${resp.status})`;
+        }
+        const err = new Error(message);
+        err.status = resp.status;
+        err.detail = trimmed;
+        throw err;
+      }
+      await refreshProjectsSnapshot();
+      await setProj(n);
+      if (elProjName) elProjName.value = '';
+      setStat('Project created');
+      ARW.toast(`Project created: ${n}`);
+    }catch(e){
+      console.error(e);
+      const message = e && e.message ? e.message : 'Create failed';
+      setStat(message);
+      ARW.toast(message);
+    }
   }
   async function loadNotes(skipFetch=false){
     if (!curProj || !elNotes){
@@ -2642,8 +2705,21 @@ document.addEventListener('DOMContentLoaded', async () => {
           let dest = currentPath ? (currentPath.replace(/\/$/, '') + '/' + f.name) : f.name;
           let exists = false;
           try{ const r = await fetchRaw(`/state/projects/${encodeURIComponent(curProj)}/file?path=${encodeURIComponent(dest)}`); exists = r.ok; }catch{}
-          if (exists){ const ow = confirm('Overwrite '+dest+'?'); if (!ow){ const m=f.name.match(/^(.*?)(\.[^.]*)?$/); const baseN=m?m[1]:f.name; const ext=m?m[2]||'':''; dest = (currentPath? currentPath+'/' : '') + baseN + ' (copy)' + ext; } }
-          if (f.size > 10*1024*1024){ alert('File too large (max 10 MiB)'); continue; }
+          if (exists){
+            const overwrite = await ARW.modal.confirm({
+              title: 'Overwrite file?',
+              body: `${dest} already exists. Overwrite it?`,
+              submitLabel: 'Overwrite',
+              cancelLabel: 'Create copy',
+            });
+            if (!overwrite){
+              const m=f.name.match(/^(.*?)(\.[^.]*)?$/);
+              const baseN=m?m[1]:f.name;
+              const ext=m?m[2]||'':'';
+              dest = (currentPath? currentPath+'/' : '') + baseN + ' (copy)' + ext;
+            }
+          }
+          if (f.size > 10*1024*1024){ ARW.toast('File too large (max 10 MiB)'); continue; }
           let body = {};
           if ((f.type||'').startsWith('text/') || f.size < 256*1024){ const t = await f.text(); body = { content: t, prev_sha256: null }; }
           else {
@@ -2794,7 +2870,40 @@ document.addEventListener('DOMContentLoaded', async () => {
   const btnProjPrefs = document.getElementById('btnProjPrefs');
   if (btnProjPrefs) btnProjPrefs.addEventListener('click', async ()=>{
     if (!curProj) return;
-    try{ const ns='ui:proj:'+curProj; const cur=await ARW.getPrefs(ns)||{}; const prev=cur.editorCmd||''; const next = prompt('Project editor command (use {path} placeholder)', prev||''); if (next != null){ cur.editorCmd = String(next).trim(); await ARW.setPrefs(ns, cur); projPrefs = cur; if (elProjPrefsBadge) elProjPrefsBadge.style.display = (cur.editorCmd? 'inline-flex':'none'); ARW.toast('Project prefs saved'); } }
+    try{
+      const ns='ui:proj:'+curProj;
+      const cur=await ARW.getPrefs(ns)||{};
+      const prev=cur.editorCmd||'';
+      const result = await ARW.modal.form({
+        title: `Editor command for ${curProj}`,
+        description: 'Override the command used when opening files from this project. Use {path} as a placeholder.',
+        submitLabel: 'Save command',
+        cancelLabel: 'Cancel',
+        focusField: 'command',
+        fields: [
+          {
+            name: 'command',
+            label: 'Command',
+            value: prev || '',
+            placeholder: 'code --goto {path}',
+            hint: 'Leave blank to inherit the global editor preference.',
+            autocomplete: 'off',
+            trim: true,
+          },
+        ],
+      });
+      if (!result) return;
+      const next = String(result.command || '').trim();
+      if (next) {
+        cur.editorCmd = next;
+      } else {
+        delete cur.editorCmd;
+      }
+      await ARW.setPrefs(ns, cur);
+      projPrefs = cur;
+      if (elProjPrefsBadge) elProjPrefsBadge.style.display = (cur.editorCmd? 'inline-flex':'none');
+      ARW.toast(next ? 'Project editor set' : 'Project editor cleared');
+    }
     catch(e){ console.error(e); ARW.toast('Save failed'); }
   });
   const idProjectsRead = ARW.read.subscribe('projects', (model) => {
