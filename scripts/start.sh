@@ -88,7 +88,42 @@ if port:
 
 path.write_text(json.dumps(data, indent=2) + "\n")
 PY
+    return 0
   fi
+
+  if command -v jq >/dev/null 2>&1; then
+    local tmp tmp_out
+    tmp="$(mktemp "${TMPDIR:-/tmp}/arw-launcher-prefs.XXXXXX")"
+    tmp_out="${tmp}.out"
+    if [[ -s "$prefs" ]]; then
+      if ! jq 'if type=="object" then . else {} end' "$prefs" >"$tmp" 2>/dev/null; then
+        printf '{}' >"$tmp"
+      fi
+    else
+      printf '{}' >"$tmp"
+    fi
+    local filter='.'
+    local -a jq_args
+    jq_args=(--sort-keys)
+    if [[ -n "$token" ]]; then
+      jq_args+=(--arg token "$token")
+      filter="$filter | .adminToken = \$token"
+    fi
+    if [[ -n "$port_value" ]]; then
+      jq_args+=(--arg port "$port_value")
+      filter="$filter | .port = (if (\$port | tonumber? // null) != null then (\$port | tonumber) else \$port end)"
+    fi
+    if jq "${jq_args[@]}" "$filter" "$tmp" >"$tmp_out" 2>/dev/null; then
+      mv "$tmp_out" "$prefs"
+    else
+      echo "[start] Warning: unable to persist launcher prefs via jq fallback" >&2
+      rm -f "$tmp_out"
+    fi
+    rm -f "$tmp"
+    return 0
+  fi
+
+  echo "[start] Warning: python3 and jq unavailable; launcher prefs not updated. Export ARW_ADMIN_TOKEN manually in the Control Room." >&2
 }
 
 while [[ $# -gt 0 ]]; do

@@ -159,20 +159,22 @@ If you prefer the bundled helper (build + package, docs optional), run:
 - Linux / macOS: `bash scripts/setup.sh`
 - Prefer a portable build with no compilation? Grab the latest release archive from [GitHub Releases](https://github.com/t3hw00t/ARW/releases), then run `bin/arw-server` (service) and optionally `bin/arw-launcher`.
 
-### 2. Start the unified server
+### 2. Set an admin token & start the unified server
 
 Windows (headless)
 ```powershell
-powershell -ExecutionPolicy Bypass -File scripts/start.ps1 -ServiceOnly -WaitHealth
+if (-not $env:ARW_ADMIN_TOKEN) { $env:ARW_ADMIN_TOKEN = [System.Guid]::NewGuid().ToString("N") }
+powershell -ExecutionPolicy Bypass -File scripts/start.ps1 -ServiceOnly -WaitHealth -AdminToken $env:ARW_ADMIN_TOKEN
 ```
 
 Linux / macOS (headless)
 ```bash
-bash scripts/start.sh --service-only --wait-health
+export ARW_ADMIN_TOKEN="${ARW_ADMIN_TOKEN:-$(openssl rand -hex 32)}"
+bash scripts/start.sh --service-only --wait-health --admin-token "$ARW_ADMIN_TOKEN"
 ```
 
 - Windows installer packages (when available) ship the launcher with `arw-server` + `arw-cli`. See the [Windows install guide](docs/guide/windows_install.md) for MSI links and tray behavior.
-- When you run the launcher (Control Room), open **Connection & alerts** and paste your admin token once; Projects, Training, and Trial reuse it automatically.
+- The start scripts persist the exported token into the launcher preferences when possible so the Control Room unlocks Hub, Chat, and Training automatically. You can still paste or rotate the token manually from **Connection & alerts**.
 - Working without a desktop runtime? Keep the service headless and open `http://127.0.0.1:8091/admin/ui/control/` (Control Room) or `http://127.0.0.1:8091/admin/debug` in any modern browser.
 - Use the **Active connection** picker in Control Room → Connection & alerts to flip between the local stack and saved remotes without leaving the hero panel.
 

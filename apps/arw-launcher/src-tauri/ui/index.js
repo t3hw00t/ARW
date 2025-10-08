@@ -32,6 +32,73 @@ let tokenStatusState = { state: 'missing', message: '', token: '', context: 'sav
 let connectionsList = [];
 let tokenCalloutPrimed = false;
 
+function detectPreferredRestartShell() {
+  try {
+    const nav = window.navigator || {};
+    const platform = String(nav.platform || '').toLowerCase();
+    const ua = String(nav.userAgent || '').toLowerCase();
+    if (platform.includes('win') || ua.includes('windows')) {
+      return 'powershell';
+    }
+  } catch {}
+  return 'bash';
+}
+
+function alternateRestartShell(shell) {
+  return shell === 'powershell' ? 'bash' : 'powershell';
+}
+
+function restartShellLabel(shell) {
+  return shell === 'powershell' ? 'PowerShell' : 'bash';
+}
+
+function quoteForBashEnv(value) {
+  const str = String(value ?? '');
+  if (!str) return "''";
+  const escape = "'\"'\"'";
+  return "'" + str.split("'").join(escape) + "'";
+}
+
+function quoteForPowerShellEnv(value) {
+  const str = String(value ?? '');
+  return "'" + str.replace(/'/g, "''") + "'";
+}
+
+function buildRestartCommand(token, shell) {
+  const trimmed = String(token ?? '').trim();
+  if (!trimmed) return '';
+  if (shell === 'powershell') {
+    const assign = `$env:ARW_ADMIN_TOKEN = ${quoteForPowerShellEnv(trimmed)}`;
+    const start = 'powershell -ExecutionPolicy Bypass -File scripts\\start.ps1 -ServiceOnly -WaitHealth -AdminToken $env:ARW_ADMIN_TOKEN';
+    return `${assign}\n${start}`;
+  }
+  const assign = `export ARW_ADMIN_TOKEN=${quoteForBashEnv(trimmed)}`;
+  const start = 'bash scripts/start.sh --service-only --wait-health --admin-token "$ARW_ADMIN_TOKEN"';
+  return `${assign}\n${start}`;
+}
+
+async function copyRestartCommandToClipboard(token, event) {
+  const trimmed = String(token ?? '').trim();
+  if (!trimmed) {
+    ARW.toast('Set an admin token first');
+    return;
+  }
+  const preferred = detectPreferredRestartShell();
+  const shell = event && event.shiftKey ? alternateRestartShell(preferred) : preferred;
+  const command = buildRestartCommand(trimmed, shell);
+  if (!command) {
+    ARW.toast('Unable to build restart command');
+    return;
+  }
+  try {
+    await navigator.clipboard.writeText(command);
+    ARW.toast(`Restart command copied (${restartShellLabel(shell)})`);
+  } catch (err) {
+    console.error(err);
+    ARW.toast('Copy failed');
+  }
+}
+
 function shouldOpenAdvancedPrefs() {
   const portEl = document.getElementById('port');
   const auto = document.getElementById('autostart');
@@ -708,6 +775,30 @@ function initControlButtons() {
   controlButtonsInitialized = true;
 }
 
+function syncRestartButtonState() {
+  const button = document.getElementById('btn-token-restart');
+  if (!button) return;
+  const input = tokenInputEl();
+  const tokenValue = input ? String(input.value || '').trim() : '';
+  const enabled = tokenValue.length > 0;
+  button.disabled = !enabled;
+  if (enabled) {
+    button.removeAttribute('aria-disabled');
+  } else {
+    button.setAttribute('aria-disabled', 'true');
+  }
+  const preferred = detectPreferredRestartShell();
+  const alt = alternateRestartShell(preferred);
+  const preferredLabel = restartShellLabel(preferred);
+  const altLabel = restartShellLabel(alt);
+  const hint = enabled
+    ? `Copy restart command (${preferredLabel}; Shift for ${altLabel})`
+    : 'Set an admin token to copy a restart command';
+  button.title = hint;
+  button.setAttribute('data-preferred-shell', preferred);
+  button.setAttribute('data-alt-shell', alt);
+}
+
 function updateWorkspaceAvailability() {
   initControlButtons();
   const hint = document.getElementById('workspaceHint');
@@ -765,6 +856,8 @@ function updateWorkspaceAvailability() {
       el.title = defaultTitle;
     }
   });
+
+  syncRestartButtonState();
 
   let gateMessage = '';
   if (!serviceOnline) {
@@ -1070,6 +1163,14 @@ document.addEventListener('DOMContentLoaded', () => {
       } catch {
         ARW.toast('Copy failed');
       }
+    });
+  }
+  const tokenRestart = document.getElementById('btn-token-restart');
+  if (tokenRestart) {
+    tokenRestart.addEventListener('click', async (event) => {
+      const input = tokenInputEl();
+      const value = input ? String(input.value || '').trim() : '';
+      await copyRestartCommandToClipboard(value, event);
     });
   }
   const tokenCalloutBtn = document.getElementById('btn-token-callout');

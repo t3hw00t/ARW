@@ -23,14 +23,16 @@ This guide covers running ARW on Windows with the desktop launcher and the headl
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts\setup.ps1
-powershell -ExecutionPolicy Bypass -File scripts\start.ps1 -ServiceOnly -WaitHealth
+if (-not $env:ARW_ADMIN_TOKEN) { $env:ARW_ADMIN_TOKEN = [System.Guid]::NewGuid().ToString("N") }
+powershell -ExecutionPolicy Bypass -File scripts\start.ps1 -ServiceOnly -WaitHealth -AdminToken $env:ARW_ADMIN_TOKEN
 ```
+
 - Packaging now tolerates missing Git remotes or offline hosts and surfaces a warning instead of failing. Set `ARW_STRICT_RELEASE_GATE=1` (or pass `-StrictReleaseGate`) if you need the setup to stop on open release blockers; CI environments continue to enforce the gate by default.
 - The start script launches the service in the background and, if present, the desktop launcher.
+- When Python or `jq` are available, `scripts\start.ps1` and `scripts\start.sh` persist the exported admin token into the launcher preferences so Hub/Chat/Training unlock automatically. You can still rotate the token from the Control Room later.
 - If the launcher isn’t built yet, the script attempts a `cargo build -p arw-launcher`.
 - If WebView2 is missing, you’ll see a friendly warning and the launcher may prompt to install it.
-- Service console: starts minimized by default to dodge antivirus heuristics; use `-HideWindow` to keep it fully hidden like
-  previous versions.
+- Service console: starts minimized by default to dodge antivirus heuristics; use `-HideWindow` to keep it fully hidden like previous versions.
 - Want to skip the toolchain entirely? Grab the latest portable `.zip` (and MSI when available) from [GitHub Releases](https://github.com/t3hw00t/ARW/releases), extract, and run `bin\arw-launcher.exe` / `bin\arw-server.exe`.
 
 ## Install WebView2 (if needed)
