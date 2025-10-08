@@ -1251,7 +1251,9 @@ function persistDismissed() {
     prefs.dismissedJobs = ids;
     prefs.logicUnitHistory = logicUnitHistory;
     prefs.governorHistory = governorHistory.map((entry) => entry.hints);
-    ARW.setPrefs('launcher', prefs);
+    void ARW.setPrefs('launcher', prefs).catch((err) => {
+      console.error('persist dismissed jobs failed', err);
+    });
   } catch {}
 }
 
@@ -1364,7 +1366,9 @@ function persistHistory() {
     const prefs = { ...(ARW._prefsCache.get('launcher') || {}) };
     prefs.logicUnitHistory = logicUnitHistory;
     prefs.governorHistory = governorHistory.map((entry) => entry.hints);
-    ARW.setPrefs('launcher', prefs);
+    void ARW.setPrefs('launcher', prefs).catch((err) => {
+      console.error('persist training history failed', err);
+    });
   } catch {}
 }
 

@@ -946,18 +946,47 @@ window.ARW = {
   },
   async setPrefs(ns, value) {
     // Update cache immediately
-    try{
-      if (value && typeof value === 'object') this._prefsCache.set(ns, { ...value }); else this._prefsCache.set(ns, value);
-    }catch{}
-    // Debounce disk write (250ms per-namespace)
+    try {
+      if (value && typeof value === 'object' && !Array.isArray(value)) {
+        this._prefsCache.set(ns, { ...value });
+      } else {
+        this._prefsCache.set(ns, value);
+      }
+    } catch {}
     const key = ns || 'launcher';
-    if (this._prefsTimers.has(key)) clearTimeout(this._prefsTimers.get(key));
-    const timer = setTimeout(async () => {
-      try{ const val = this._prefsCache.get(key) || {}; await this.invoke('set_prefs', { namespace: key, value: val }); }catch{}
-      finally{ this._prefsTimers.delete(key); }
-    }, 250);
-    this._prefsTimers.set(key, timer);
-    return Promise.resolve();
+    let entry = this._prefsTimers.get(key);
+    if (entry) {
+      clearTimeout(entry.timer);
+    } else {
+      entry = { timer: null, resolvers: [], rejecters: [] };
+    }
+    return new Promise((resolve, reject) => {
+      entry.resolvers.push(resolve);
+      entry.rejecters.push(reject);
+      entry.timer = setTimeout(async () => {
+        const pendingResolvers = entry.resolvers.slice();
+        const pendingRejecters = entry.rejecters.slice();
+        entry.resolvers.length = 0;
+        entry.rejecters.length = 0;
+        try {
+          let payload = this._prefsCache.get(key);
+          if (payload && typeof payload === 'object' && !Array.isArray(payload)) {
+            payload = { ...payload };
+          }
+          await this.invoke('set_prefs', { namespace: key, value: payload ?? {} });
+          for (const fn of pendingResolvers) {
+            try { fn(); } catch {}
+          }
+        } catch (err) {
+          for (const fn of pendingRejecters) {
+            try { fn(err); } catch {}
+          }
+        } finally {
+          this._prefsTimers.delete(key);
+        }
+      }, 250);
+      this._prefsTimers.set(key, entry);
+    });
   },
   normalizeBase(base) {
     const raw = (base ?? '').toString().trim();

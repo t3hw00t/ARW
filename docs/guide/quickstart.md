@@ -63,8 +63,7 @@ $env:ARW_ADMIN_TOKEN = [System.Guid]::NewGuid().ToString("N")
 
 Keeping the variable in your shell ensures subsequent `curl` calls send `Authorization: Bearer $ARW_ADMIN_TOKEN` without extra copy/paste.
 
-When you launch the desktop Control Room later, open **Connection & alerts** and paste the same token there so admin-only surfaces stay authorized.
-Use the **Test** button beside the token field to confirm the service accepts it before you jump into Hub or Training.
+When you launch the desktop Control Room later, the start scripts copy the token into the launcher’s preferences automatically. Use the **Test** button beside the token field to confirm the service accepts it before you jump into Hub or Training (or paste the token manually if you started the server by another path).
 
 ## Run the Unified Server (Headless)
 

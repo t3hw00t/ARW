@@ -16,6 +16,81 @@ service_only=0
 launcher_only=0
 launcher_build_failed=0
 
+launcher_config_dir() {
+  local base=""
+  local append_suffix=1
+  case "${OSTYPE:-}" in
+    darwin*)
+      if [[ -n "${ARW_CONFIG_HOME:-}" ]]; then
+        base="$ARW_CONFIG_HOME"
+        append_suffix=0
+      elif [[ -n "${XDG_CONFIG_HOME:-}" ]]; then
+        base="$XDG_CONFIG_HOME"
+      else
+        base="$HOME/Library/Application Support"
+      fi
+      ;;
+    *)
+      if [[ -n "${ARW_CONFIG_HOME:-}" ]]; then
+        base="$ARW_CONFIG_HOME"
+        append_suffix=0
+      elif [[ -n "${XDG_CONFIG_HOME:-}" ]]; then
+        base="$XDG_CONFIG_HOME"
+      else
+        base="$HOME/.config"
+      fi
+      ;;
+  esac
+  # shellcheck disable=SC2001
+  base="$(printf '%s' "${base%/}" | sed 's:/*$::')"
+  if [[ $append_suffix -eq 1 ]]; then
+    printf '%s/arw' "$base"
+  else
+    printf '%s' "$base"
+  fi
+}
+
+persist_launcher_prefs() {
+  local token="$1"
+  local port_value="$2"
+  [[ -z "$token" && -z "$port_value" ]] && return 0
+  local dir; dir="$(launcher_config_dir)"
+  [[ -n "$dir" ]] || return 0
+  mkdir -p "$dir" || return 0
+  local prefs="$dir/prefs-launcher.json"
+  if command -v python3 >/dev/null 2>&1; then
+    ARW_LAUNCHER_PREFS_PATH="$prefs" \
+    ARW_LAUNCHER_PREFS_TOKEN="$token" \
+    ARW_LAUNCHER_PREFS_PORT="$port_value" \
+    python3 <<'PY' || return 0
+import json, os, pathlib
+
+path = pathlib.Path(os.environ["ARW_LAUNCHER_PREFS_PATH"])
+token = os.environ.get("ARW_LAUNCHER_PREFS_TOKEN") or ""
+port = os.environ.get("ARW_LAUNCHER_PREFS_PORT") or ""
+
+data = {}
+if path.exists():
+    try:
+        data = json.loads(path.read_text())
+    except Exception:
+        data = {}
+if not isinstance(data, dict):
+    data = {}
+
+if token:
+    data["adminToken"] = token
+if port:
+    try:
+        data["port"] = int(port)
+    except Exception:
+        data["port"] = port
+
+path.write_text(json.dumps(data, indent=2) + "\n")
+PY
+  fi
+}
+
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --port)
@@ -104,6 +179,15 @@ export ARW_HTTP_TIMEOUT_SECS="$timeout_secs"
 # Hardened defaults unless caller overrides
 export ARW_EGRESS_PROXY_ENABLE="${ARW_EGRESS_PROXY_ENABLE:-1}"
 export ARW_DNS_GUARD_ENABLE="${ARW_DNS_GUARD_ENABLE:-1}"
+
+persist_token="${ARW_ADMIN_TOKEN:-}"
+persist_port=""
+if [[ $port_set -eq 1 ]]; then
+  persist_port="$port"
+fi
+if [[ -n "$persist_token" || -n "$persist_port" ]]; then
+  persist_launcher_prefs "$persist_token" "$persist_port"
+fi
 
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "$DIR/.." && pwd)"

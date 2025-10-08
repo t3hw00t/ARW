@@ -23,6 +23,67 @@ if ($ServiceOnly -and $LauncherOnly) {
   exit 1
 }
 
+function Get-LauncherConfigDir {
+  if ($env:ARW_CONFIG_HOME -and -not [string]::IsNullOrWhiteSpace($env:ARW_CONFIG_HOME)) {
+    return $env:ARW_CONFIG_HOME.TrimEnd('\')
+  }
+  if ($env:XDG_CONFIG_HOME -and -not [string]::IsNullOrWhiteSpace($env:XDG_CONFIG_HOME)) {
+    return (Join-Path $env:XDG_CONFIG_HOME 'arw')
+  }
+  $appData = [Environment]::GetFolderPath('ApplicationData')
+  if ([string]::IsNullOrWhiteSpace($appData)) { return $null }
+  return (Join-Path $appData 'arw\config')
+}
+
+function ConvertTo-LauncherHashtable {
+  param([Parameter(Mandatory = $true)][object]$InputObject)
+  if ($null -eq $InputObject) { return @{} }
+  if ($InputObject -is [System.Collections.IDictionary]) {
+    $table = @{}
+    foreach ($key in $InputObject.Keys) { $table[$key] = $InputObject[$key] }
+    return $table
+  }
+  $table = @{}
+  foreach ($prop in ($InputObject | Get-Member -MemberType NoteProperty -ErrorAction SilentlyContinue)) {
+    $name = $prop.Name
+    $table[$name] = $InputObject.$name
+  }
+  return $table
+}
+
+function Update-LauncherPrefs {
+  param(
+    [string]$Token,
+    [Nullable[int]]$Port
+  )
+  if ([string]::IsNullOrWhiteSpace($Token) -and -not $Port.HasValue) { return }
+  $configDir = Get-LauncherConfigDir
+  if (-not $configDir) { return }
+  if (-not (Test-Path $configDir)) {
+    try { New-Item -ItemType Directory -Path $configDir -Force | Out-Null } catch { return }
+  }
+  $prefsPath = Join-Path $configDir 'prefs-launcher.json'
+  $data = @{}
+  if (Test-Path $prefsPath) {
+    try {
+      $raw = Get-Content $prefsPath -Raw
+      if (-not [string]::IsNullOrWhiteSpace($raw)) {
+        $parsed = $raw | ConvertFrom-Json
+        $data = ConvertTo-LauncherHashtable -InputObject $parsed
+      }
+    } catch {
+      $data = @{}
+    }
+  }
+  if (-not ($data -is [System.Collections.IDictionary])) { $data = @{} }
+  if (-not [string]::IsNullOrWhiteSpace($Token)) { $data['adminToken'] = $Token }
+  if ($Port.HasValue) { $data['port'] = [int]$Port.Value }
+  try {
+    $json = $data | ConvertTo-Json -Depth 8
+    Set-Content -Path $prefsPath -Value $json -Encoding UTF8
+  } catch {}
+}
+
 # Compatibility: PowerShell 5 vs 7 for Invoke-WebRequest
 $script:IwrArgs = @{}
 try { if ($PSVersionTable.PSVersion.Major -lt 6) { $script:IwrArgs = @{ UseBasicParsing = $true } } } catch {}
@@ -52,6 +113,15 @@ if (-not $DryRun) {
 } else {
   Dry 'Would set ARW_EGRESS_PROXY_ENABLE=1 (default)'
   Dry 'Would set ARW_DNS_GUARD_ENABLE=1 (default)'
+}
+
+$persistToken = $env:ARW_ADMIN_TOKEN
+if (-not [string]::IsNullOrWhiteSpace($persistToken) -or $portWasSpecified) {
+  if ($portWasSpecified) {
+    Update-LauncherPrefs -Token $persistToken -Port $Port
+  } else {
+    Update-LauncherPrefs -Token $persistToken
+  }
 }
 
 $windowStyle = [System.Diagnostics.ProcessWindowStyle]::Minimized
