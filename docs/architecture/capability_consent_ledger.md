@@ -3,7 +3,7 @@ title: Capability & Consent Ledger
 ---
 
 # Capability & Consent Ledger
-Updated: 2025-09-25
+Updated: 2025-10-09
 Type: Explanation
 
 Purpose

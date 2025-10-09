@@ -10,7 +10,7 @@ This checklist helps validate ARW startup on Windows after changes to `scripts/s
     The interactive launcher workflow boots `arw-server` on port 8091. For headless validation use `scripts/start.ps1 -ServiceOnly`
     or set `ARW_NO_LAUNCHER=1`.
 
-Updated: 2025-10-01
+Updated: 2025-10-09
 Type: Reference
 
 ## Quick pre-reqs

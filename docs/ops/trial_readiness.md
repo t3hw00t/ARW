@@ -4,7 +4,7 @@ title: Trial Readiness Plan
 
 # Trial Readiness Plan
 
-Updated: 2025-10-05
+Updated: 2025-10-09
 Type: Playbook (quick guide)
 
 Use this short guide to decide when Agent Hub feels good enough for **the two of us** to run a focused trial. Keep [the facilitator checklist](trial_facilitator_checklist.md) and [onboarding note](trials/onboarding_email_template.md) nearby—the scope stays intentionally small so we can iterate quickly before inviting anyone else.

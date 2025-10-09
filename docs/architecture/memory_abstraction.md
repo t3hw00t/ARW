@@ -3,7 +3,7 @@ title: Memory Abstraction Layer
 ---
 
 # Memory Abstraction Layer
-Updated: 2025-10-07
+Updated: 2025-10-09
 Type: Explanation
 
 Microsummary: The Memory Abstraction Layer (MAL) is the canonical schema and lifecycle for all memories (ephemeral, episodic, semantic, profile) in ARW. The new Memory Overlay Service builds on MAL to provide hybrid retrieval, explainable packing, and model-agnostic context delivery.

@@ -3,7 +3,7 @@ title: Context Telemetry Checklist
 ---
 
 # Context Telemetry Checklist
-Updated: 2025-10-05
+Updated: 2025-10-09
 Type: How‑to
 
 Use this checklist whenever you touch the context assembly loop, coverage heuristics, or the dashboards that depend on them. It keeps the `context.coverage` and `context.recall.risk` streams healthy and ensures downstream read-models expose slot budgets and counts for UI meters.

@@ -3,7 +3,7 @@ title: Performance Presets
 ---
 
 # Performance Presets
-Updated: 2025-09-26
+Updated: 2025-10-09
 Type: How‑to
 
 ARW ships with built‑in performance presets to adapt resource usage to your machine without hand‑tuning dozens of knobs.

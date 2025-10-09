@@ -4,7 +4,7 @@ title: Experiments (A/B) & Goldens
 
 # Experiments (A/B) & Goldens
 
-Updated: 2025-09-25
+Updated: 2025-10-09
 Type: How‑to
 
 This guide covers running A/B experiments against project “goldens”, applying winners, and the core knobs you can tune without code.

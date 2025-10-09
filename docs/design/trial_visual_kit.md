@@ -4,7 +4,7 @@ title: Trial Visual Kit
 
 # Trial Visual Kit
 
-Updated: 2025-10-05
+Updated: 2025-10-09
 Type: Design brief
 
 This brief keeps UI, docs, and training materials aligned while we polish the trial experience.

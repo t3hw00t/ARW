@@ -4,7 +4,7 @@ title: Trial Runbook
 
 # Trial Runbook
 
-Updated: 2025-10-06
+Updated: 2025-10-09
 Type: Checklist (quick reference)
 
 This runbook keeps our two-person trial routine lightweight. Use it with the Trial Readiness Plan, facilitator checklist, and quickstart note so we stay in sync without extra meetings.

@@ -6,7 +6,7 @@ title: Interface Deprecations
 
 # Interface Deprecations
 
-Updated: 2025-10-02
+Updated: 2025-10-09
 Status: Stable
 Type: Reference
 

@@ -4,7 +4,7 @@ title: Prometheus Recording Rules — ARW
 
 # Prometheus Recording Rules — ARW
 
-Updated: 2025-09-25
+Updated: 2025-10-09
 Type: How‑to
 
 Recording rules precompute common expressions so dashboards and alerts can use short, stable series names. GPU-related rules rely on the upcoming GPU telemetry pack; keep or remove them based on whether the `arw_gpu_*` metrics are present in your deployment.

@@ -3,7 +3,7 @@ title: CLI Guide
 ---
 
 # CLI Guide
-Updated: 2025-10-07
+Updated: 2025-10-09
 Type: How‑to
 
 Goal-oriented tasks using the `arw-cli` binary. This guide shows common commands with copy‑pasteable examples and flags you’re likely to want.

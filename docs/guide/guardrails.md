@@ -6,7 +6,7 @@ title: Guardrails Checks
 
 The `guardrails.check` tool performs lightweight content checks locally and can delegate to an HTTP Guardrails service when available (e.g., a NeMo Guardrails server behind a simple `/check` endpoint).
 
-Updated: 2025-10-05
+Updated: 2025-10-09
 Type: How‑to
 
 ## Run a Check

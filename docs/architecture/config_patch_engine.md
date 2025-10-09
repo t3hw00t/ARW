@@ -3,7 +3,7 @@ title: Config Plane & Patch Engine
 ---
 
 # Config Plane & Patch Engine
-Updated: 2025-10-01
+Updated: 2025-10-09
 Type: Explanation
 
 Purpose

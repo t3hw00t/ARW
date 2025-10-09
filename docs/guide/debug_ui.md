@@ -4,7 +4,7 @@ title: Debug UI Overview
 
 # Debug UI Overview
 
-Updated: 2025-10-04
+Updated: 2025-10-09
 Type: How‑to
 
 The Debug UI (served by the Tauri Launcher or via `/admin`) is a lightweight control panel for ARW. It exposes a live event stream, useful admin actions, and compact insight panels. This page highlights two high‑leverage areas you’ll likely use often: Context Assembly and Experiments.

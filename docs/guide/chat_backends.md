@@ -9,7 +9,7 @@ The ARW debug Chat UI can use simple synthetic replies (echo/reverse/time) or ca
 
 > **Managed runtimes**: The upcoming runtime manager can download and launch llama.cpp/ONNX/vLLM bundles automatically (CPU, CUDA, ROCm, Metal, DirectML, CoreML, Vulkan) and expose health via `/state/runtimes`. Preview bundle catalogs now live in `configs/runtime/bundles.*.json`; inspect them locally with `arw-cli runtime bundles list` or remotely with `arw-cli runtime bundles list --remote` / `GET /state/runtime/bundles` (add `--json` for scripting). Until the supervisor ships with installers, the env variables below continue to work for manual setup.
 
-Updated: 2025-10-07
+Updated: 2025-10-09
 Type: How‑to
 
 ## Synthetic (Default)

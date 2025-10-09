@@ -4,7 +4,7 @@ title: Clients
 
 # Clients
 <a href="https://www.npmjs.com/package/@arw/client"><img alt="npm" src="https://img.shields.io/npm/v/%40arw%2Fclient?label=%40arw%2Fclient"></a>
-Updated: 2025-10-04
+Updated: 2025-10-09
 Type: Reference
 
 This repo includes a minimal TypeScript client for `arw-server`. It focuses on the unified API: `/actions`, `/events`, `/state/*`, and `/about`.

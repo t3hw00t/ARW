@@ -3,7 +3,7 @@ title: Reverse Proxy
 ---
 
 # Reverse Proxy
-Updated: 2025-10-05
+Updated: 2025-10-09
 Type: How‑to
 
 Run `arw-server` behind a TLS-terminating reverse proxy for production exposure. Use the helper scripts for quick starts, or reference the snippets below when integrating with existing infrastructure.

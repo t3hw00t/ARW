@@ -4,7 +4,7 @@ title: Trial Facilitator Checklist
 
 # Trial Facilitator Checklist
 
-Updated: 2025-09-25
+Updated: 2025-10-09
 Type: One-pager
 
 Use this sheet to launch and run our two-person trial. Tick items as you go; if an item feels heavy for the two of us, make a quick note and move on.

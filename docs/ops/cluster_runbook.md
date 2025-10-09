@@ -4,7 +4,7 @@ title: Cluster Runbook
 
 # Cluster Runbook
 
-Updated: 2025-10-07
+Updated: 2025-10-09
 Type: Runbook
 
 This runbook walks through bringing remote workers into an Agent Hub (ARW) installation and operating the preview federation stack. It assumes you already run the unified server (`arw-server`) locally and want to offload work or invite peers under policy control.

@@ -4,7 +4,7 @@ title: Docker
 
 # Docker
 
-Updated: 2025-09-25
+Updated: 2025-10-09
 Type: How‑to
 
 Run the unified ARW server in a container. This guide covers local build/run, Docker Compose, and pulling prebuilt images from GHCR.

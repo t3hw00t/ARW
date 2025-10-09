@@ -3,7 +3,7 @@ title: Screenshots
 ---
 
 # Screenshots
-Updated: 2025-10-02
+Updated: 2025-10-09
 Status: Capture + annotate shipping behind optional features; OCR optional (build‑time)
 Type: How‑to
 

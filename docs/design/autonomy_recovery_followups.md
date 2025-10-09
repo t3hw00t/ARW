@@ -4,7 +4,7 @@ title: Autonomy Recovery Follow-ups
 
 # Autonomy Recovery Follow-ups
 
-Updated: 2025-10-02
+Updated: 2025-10-09
 Type: Implementation record
 Status: Completed
 

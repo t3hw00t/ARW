@@ -3,8 +3,8 @@ title: Gating Config
 ---
 
 # Gating Config
-Updated: 2025-10-06
-Generated: 2025-10-05 23:14 UTC
+Updated: 2025-10-09
+Generated: 2025-10-09 13:32 UTC
 Type: Reference
 
 Immutable gating policy boots from `configs/gating.toml` or the `ARW_GATING_FILE` override. It layers with hierarchy defaults, runtime capsules, and leases so denies remain traceable and auditable. Keys support trailing `*` wildcards.

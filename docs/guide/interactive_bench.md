@@ -3,7 +3,7 @@ title: Interactive Performance Bench
 ---
 
 # Interactive Performance Bench
-Updated: 2025-09-25
+Updated: 2025-10-09
 Type: How‑to
 
 Status: **Ready.** The unified bench lives at `apps/snappy-bench` and ships as a

@@ -3,7 +3,7 @@ title: Observability (OTel)
 ---
 
 # Observability (OTel)
-Updated: 2025-10-05
+Updated: 2025-10-09
 Type: Explanation
 
 Map the episode timeline to trace semantics and expose correlated metrics/logs.

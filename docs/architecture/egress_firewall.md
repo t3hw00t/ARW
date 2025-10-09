@@ -5,7 +5,7 @@ title: Egress Firewall
 # Egress Firewall
 { .topic-trio style="--exp:.5; --complex:.6; --complicated:.7" data-exp=".5" data-complex=".6" data-complicated=".7" }
 
-Updated: 2025-10-04
+Updated: 2025-10-09
 Type: Explanation
 
 This plan adds a lightweight, enforceable egress gateway backed by project policy, with DNS guardrails, filesystem scoping, and leased sensor access. It keeps the fast local path fast and is maintainable by one person per cluster.
