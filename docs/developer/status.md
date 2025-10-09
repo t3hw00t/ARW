@@ -8,7 +8,7 @@ Type: Reference
 
 <!-- GENERATED FILE: scripts/docgen_core.py; do not edit by hand -->
 
-Generated: 2025-10-09 12:19 UTC
+Generated: 2025-10-09 17:24 UTC
 
 ## Libraries
 - **arw-core**: 0.1.4 — [crates/arw-core/Cargo.toml](https://github.com/t3hw00t/ARW/blob/main/crates/arw-core/Cargo.toml)

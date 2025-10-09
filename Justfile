@@ -442,3 +442,21 @@ egress-proxy-on port='9080':
 
 egress-proxy-off:
   just egress-set '{"proxy_enable":false}'
+# Dependency lockfiles for pip
+requirements-lock:
+  if command -v pip-compile >/dev/null 2>&1; then \
+    pip-compile --generate-hashes --output-file requirements/docs.txt requirements/docs.in; \
+    pip-compile --generate-hashes --output-file requirements/interfaces.txt requirements/interfaces.in; \
+  elif command -v python3 >/dev/null 2>&1 && python3 -m piptools --help >/dev/null 2>&1; then \
+    python3 -m piptools compile --generate-hashes --output-file requirements/docs.txt requirements/docs.in; \
+    python3 -m piptools compile --generate-hashes --output-file requirements/interfaces.txt requirements/interfaces.in; \
+  elif command -v python >/dev/null 2>&1 && python -m piptools --help >/dev/null 2>&1; then \
+    python -m piptools compile --generate-hashes --output-file requirements/docs.txt requirements/docs.in; \
+    python -m piptools compile --generate-hashes --output-file requirements/interfaces.txt requirements/interfaces.in; \
+  elif command -v py >/dev/null 2>&1 && py -3 -m piptools --help >/dev/null 2>&1; then \
+    py -3 -m piptools compile --generate-hashes --output-file requirements/docs.txt requirements/docs.in; \
+    py -3 -m piptools compile --generate-hashes --output-file requirements/interfaces.txt requirements/interfaces.in; \
+  else \
+    echo "error: pip-tools is not installed. Install it with \"python -m pip install pip-tools\" (add --break-system-packages on Debian/Ubuntu) and re-run." >&2; \
+    exit 1; \
+  fi

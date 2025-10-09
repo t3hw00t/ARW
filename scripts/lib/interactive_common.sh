@@ -75,6 +75,17 @@ ic_path_add_local_bin() {
   esac
 }
 
+ic_sha256() { # $1=file -> echo sha256 or empty
+  local file="$1"
+  if command -v sha256sum >/dev/null 2>&1; then
+    sha256sum "$file" | awk '{print $1}'
+  elif command -v shasum >/dev/null 2>&1; then
+    shasum -a 256 "$file" | awk '{print $1}'
+  else
+    echo ""
+  fi
+}
+
 ic_detect_os() {
   case "$(uname -s)" in
     Linux*) echo linux;;
@@ -215,15 +226,62 @@ ic_ensure_rust() {
   ic_log_dir_rel ".arw/rust"
   export PATH="$CARGO_HOME/bin:$PATH"
   if command -v cargo >/dev/null 2>&1; then return 0; fi
-  ic_warn "Rust toolchain not found. Attempting rustup install (project-local)."
-  if command -v curl >/dev/null 2>&1; then
-    curl https://sh.rustup.rs -sSf | sh -s -- -y --no-modify-path
-  elif command -v wget >/dev/null 2>&1; then
-    wget -qO- https://sh.rustup.rs | sh -s -- -y --no-modify-path
-  else
-    ic_err "Neither curl nor wget found; cannot install rustup automatically."
+  ic_warn "Rust toolchain not found. Bootstrapping rustup (project-local, verified download)."
+  local rustup_version="1.27.0"
+  local os arch target
+  os=$(ic_detect_os)
+  arch=$(uname -m)
+  case "$os:$arch" in
+    linux:x86_64) target="x86_64-unknown-linux-gnu";;
+    linux:aarch64|linux:arm64) target="aarch64-unknown-linux-gnu";;
+    macos:x86_64) target="x86_64-apple-darwin";;
+    macos:arm64) target="aarch64-apple-darwin";;
+    *) ic_err "Unsupported platform for rustup bootstrap ($os/$arch). Install Rust manually."; return 1;;
+  esac
+  local base="https://static.rust-lang.org/rustup/archive/${rustup_version}/${target}"
+  local tmpdir; tmpdir=$(mktemp -d 2>/dev/null || mktemp -d -t arw-rustup)
+  if [[ -z "$tmpdir" ]]; then
+    ic_err "Unable to create temporary directory for rustup download."
     return 1
   fi
+  local rustup_bin="$tmpdir/rustup-init"
+  local rustup_sha="$tmpdir/rustup-init.sha256"
+  if ! ic_fetch "${base}/rustup-init" "$rustup_bin"; then
+    ic_err "Failed to download rustup-init from ${base}"
+    rm -rf "$tmpdir"
+    return 1
+  fi
+  if ! ic_fetch "${base}/rustup-init.sha256" "$rustup_sha"; then
+    ic_err "Failed to download rustup-init.sha256 from ${base}"
+    rm -rf "$tmpdir"
+    return 1
+  fi
+  local expected actual
+  expected=$(awk '{print $1}' "$rustup_sha" | tr -d '\r')
+  if [[ -z "$expected" ]]; then
+    ic_err "Unable to parse rustup checksum."
+    rm -rf "$tmpdir"
+    return 1
+  fi
+  actual=$(ic_sha256 "$rustup_bin")
+  if [[ -z "$actual" ]]; then
+    ic_err "Unable to compute SHA-256 for rustup-init (need sha256sum or shasum)."
+    rm -rf "$tmpdir"
+    return 1
+  fi
+  if [[ "$actual" != "$expected" ]]; then
+    ic_err "rustup-init checksum mismatch (expected $expected, got $actual)."
+    rm -rf "$tmpdir"
+    return 1
+  fi
+  chmod +x "$rustup_bin" || true
+  if ! "$rustup_bin" -y --no-modify-path --profile minimal >/dev/null 2>&1; then
+    ic_err "rustup-init execution failed."
+    rm -rf "$tmpdir"
+    return 1
+  fi
+  rm -rf "$tmpdir"
+  ic_info "Installed rustup ${rustup_version} (${target}) [sha256: $actual]"
   export PATH="$CARGO_HOME/bin:$PATH"
   command -v cargo >/dev/null 2>&1 || return 1
 }
@@ -247,27 +305,44 @@ ic_ensure_jq() {
   out="$(ic_local_bin_dir)/jq"
   if [[ "$os" == linux && "$arch" == x86_64 ]]; then
     url="https://github.com/jqlang/jq/releases/download/jq-1.6/jq-linux64"
+    expected="af986793a515d500ab2d35f8d2aecd656e764504b789b66d7e1a0b727a124c44"
   elif [[ "$os" == linux && "$arch" == aarch64 ]]; then
     url="https://github.com/jqlang/jq/releases/download/jq-1.7.1/jq-linux-arm64"
+    expected="4dd2d8a0661df0b22f1bb9a1f9830f06b6f3b8f7d91211a1ef5d7c4f06a8b4a5"
   elif [[ "$os" == macos && "$arch" == arm64 ]]; then
     url="https://github.com/jqlang/jq/releases/download/jq-1.7.1/jq-macos-arm64"
+    expected="0bbe619e663e0de2c550be2fe0d240d076799d6f8a652b70fa04aea8a8362e8a"
   elif [[ "$os" == macos && "$arch" == x86_64 ]]; then
     url="https://github.com/jqlang/jq/releases/download/jq-1.7.1/jq-macos-amd64"
+    expected="4155822bbf5ea90f5c79cf254665975eb4274d426d0709770c21774de5407443"
   else
     url=""
   fi
   if [[ -n "$url" ]]; then
-    ic_info "Downloading jq to local bin ($out)"
-    if command -v curl >/dev/null 2>&1; then curl -L "$url" -o "$out"; elif command -v wget >/dev/null 2>&1; then wget -O "$out" "$url"; else ic_err "Need curl/wget to fetch jq"; return 1; fi
-    chmod +x "$out" || true
-    # Print checksum for manual verification
-    if command -v sha256sum >/dev/null 2>&1; then
-      local sum; sum=$(sha256sum "$out" | awk '{print $1}')
-      ic_info "jq sha256: $sum (verify at: https://github.com/jqlang/jq/releases)"
-    elif command -v shasum >/dev/null 2>&1; then
-      local sum; sum=$(shasum -a 256 "$out" | awk '{print $1}')
-      ic_info "jq sha256: $sum (verify at: https://github.com/jqlang/jq/releases)"
+    if [[ -z "$expected" ]]; then
+      ic_warn "No checksum available for jq on $os/$arch; aborting download"
+      return 1
     fi
+    ic_info "Downloading jq to local bin ($out)"
+    if ! ic_fetch "$url" "$out"; then
+      ic_err "Failed to download jq binary"
+      rm -f "$out"
+      return 1
+    fi
+    local actual
+    actual=$(ic_sha256 "$out")
+    if [[ -z "$actual" ]]; then
+      ic_err "Unable to compute jq checksum (need sha256sum or shasum)"
+      rm -f "$out"
+      return 1
+    fi
+    if [[ "$actual" != "$expected" ]]; then
+      ic_err "jq checksum mismatch (expected $expected, got $actual)"
+      rm -f "$out"
+      return 1
+    fi
+    chmod +x "$out" || true
+    ic_info "jq verified (sha256: $actual)"
     command -v jq >/dev/null 2>&1 && return 0
   fi
   ic_warn "jq install failed; docs generation may be limited"
@@ -288,7 +363,12 @@ ic_ensure_mkdocs_venv() {
   # shellcheck disable=SC1090
   . "$venv/bin/activate"
   pip install --upgrade pip || true
-  pip install mkdocs mkdocs-material mkdocs-git-revision-date-localized-plugin || return 1
+  local req="$root/requirements/docs.txt"
+  if [[ ! -f "$req" ]]; then
+    ic_err "requirements/docs.txt not found; cannot install MkDocs dependencies"
+    return 1
+  fi
+  pip install --require-hashes -r "$req" || return 1
   ic_log_dir_rel ".venv"
   return 0
 }
@@ -358,9 +438,13 @@ ic_nats_bin() {
 ic_fetch() { # $1=url $2=out
   local url="$1" out="$2"
   if command -v curl >/dev/null 2>&1; then
-    curl -L "$url" -o "$out"
+    local opts=(-fL --silent --show-error --retry 3 --retry-delay 1 --retry-connrefused)
+    if [[ "$url" == https://* ]]; then
+      opts+=(--proto '=https' --proto-redir '=https')
+    fi
+    curl "${opts[@]}" "$url" -o "$out"
   elif command -v wget >/dev/null 2>&1; then
-    wget -O "$out" "$url"
+    wget --quiet -O "$out" "$url"
   else
     return 1
   fi
@@ -378,21 +462,61 @@ ic_nats_install() { # [$1=version]
   if [[ "$m" == aarch64 || "$m" == arm64 ]]; then arch=arm64; else arch=amd64; fi
   asset="nats-server-v${ver}-${os}-${arch}.${ext}"
   url="https://github.com/nats-io/nats-server/releases/download/v${ver}/${asset}"
+  local fallback_digest=""
+  case "$arch" in
+    amd64) fallback_digest="sha256:2f61081ca0f249c700304c99dc067b89a95adea40ed2f5c69d7a7dd2fe6f3dcf";;
+    arm64) fallback_digest="sha256:61322136f4d8a9232e2cdb8ae5b736415bc201b07500855ee8aa49afeaaf326d";;
+  esac
   outdir="$(ic_root)/.arw/nats"
-  mkdir -p "$outdir/tmp" && ic_log_dir_rel ".arw/nats"
-  tmp="$outdir/tmp/$asset"
+  local tmpdir="$outdir/tmp"
+  mkdir -p "$tmpdir" && ic_log_dir_rel ".arw/nats"
+  tmp="$tmpdir/$asset"
+  local sums_file="$tmpdir/SHA256SUMS"
   ic_info "Fetching $asset"
   if ! ic_fetch "$url" "$tmp"; then
     ic_warn "Download failed: $url"
-    ic_info "Fallback suggestion: docker run -p 4222:4222 nats:latest"
+    if [[ -n "$fallback_digest" ]]; then
+      ic_info "Fallback suggestion: docker run --rm -p 4222:4222 nats@${fallback_digest}"
+    else
+      ic_info "Fallback suggestion: docker run --rm -p 4222:4222 nats:${ver}"
+    fi
     return 1
   fi
-  if [[ "$ext" == tar.gz ]]; then
-    tar -xzf "$tmp" -C "$outdir/tmp" || { ic_err "tar extraction failed"; return 1; }
-  else
-    if command -v unzip >/dev/null 2>&1; then unzip -q -o "$tmp" -d "$outdir/tmp"; else ic_err "unzip not found"; return 1; fi
+  local sums_url="https://github.com/nats-io/nats-server/releases/download/v${ver}/SHA256SUMS"
+  if ! ic_fetch "$sums_url" "$sums_file"; then
+    ic_warn "Download failed: $sums_url"
+    if [[ -n "$fallback_digest" ]]; then
+      ic_info "Fallback suggestion: docker run --rm -p 4222:4222 nats@${fallback_digest}"
+    else
+      ic_info "Fallback suggestion: docker run --rm -p 4222:4222 nats:${ver}"
+    fi
+    return 1
   fi
-  bin=$(find "$outdir/tmp" -type f -name 'nats-server*' | head -n1 || true)
+  local expected actual
+  expected=$(awk -v asset="$asset" '$2 == asset {print $1}' "$sums_file")
+  if [[ -z "$expected" ]]; then
+    ic_err "Checksum entry for $asset not found in SHA256SUMS"
+    rm -rf "$tmpdir"
+    return 1
+  fi
+  actual=$(ic_sha256 "$tmp")
+  if [[ -z "$actual" ]]; then
+    ic_err "Unable to compute SHA-256 for $asset (need sha256sum or shasum)"
+    rm -rf "$tmpdir"
+    return 1
+  fi
+  if [[ "$actual" != "$expected" ]]; then
+    ic_err "Checksum mismatch for $asset (expected $expected, got $actual)"
+    rm -rf "$tmpdir"
+    return 1
+  fi
+  ic_info "Verified $asset (sha256: $actual)"
+  if [[ "$ext" == tar.gz ]]; then
+    tar -xzf "$tmp" -C "$tmpdir" || { ic_err "tar extraction failed"; rm -rf "$tmpdir"; return 1; }
+  else
+    if command -v unzip >/dev/null 2>&1; then unzip -q -o "$tmp" -d "$tmpdir"; else ic_err "unzip not found"; rm -rf "$tmpdir"; return 1; fi
+  fi
+  bin=$(find "$tmpdir" -type f -name 'nats-server*' | head -n1 || true)
   if [[ -z "$bin" ]]; then ic_err "nats-server binary not found in archive"; return 1; fi
   if [[ "$os" == windows ]]; then
     cp "$bin" "$outdir/nats-server.exe"
@@ -400,14 +524,8 @@ ic_nats_install() { # [$1=version]
     cp "$bin" "$outdir/nats-server" && chmod +x "$outdir/nats-server"
   fi
   ic_info "Installed nats-server to $outdir"
-  # Print checksum
-  if command -v sha256sum >/dev/null 2>&1; then
-    local sum; sum=$(sha256sum "$tmp" | awk '{print $1}')
-    ic_info "archive sha256: $sum"
-  elif command -v shasum >/dev/null 2>&1; then
-    local sum; sum=$(shasum -a 256 "$tmp" | awk '{print $1}')
-    ic_info "archive sha256: $sum"
-  fi
+  ic_info "archive sha256: $actual"
+  rm -rf "$tmpdir"
 }
 ic_nats_start() { # [$1=url]
   local url="${1:-nats://127.0.0.1:4222}"

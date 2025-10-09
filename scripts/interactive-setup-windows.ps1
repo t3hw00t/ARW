@@ -128,12 +128,20 @@ function Install-MkDocs {
   if (-not $py) { $py = Get-Command python3 -ErrorAction SilentlyContinue }
   if (-not $py) { Warn 'python not found'; return }
   $venv = Join-Path $root '.venv'
+  $requirements = Join-Path $root 'requirements\docs.txt'
+  if (-not (Test-Path $requirements)) {
+    Warn 'requirements\docs.txt not found; cannot install MkDocs dependencies'
+    return
+  }
   if ($script:SetupDryRun) {
     Info "[dryrun] Would create venv at $venv and install mkdocs + plugins"
   } else {
     & $py.Path -m venv $venv | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw "venv creation failed" }
     & "$venv\Scripts\python.exe" -m pip install --upgrade pip | Out-Null
-    & "$venv\Scripts\python.exe" -m pip install mkdocs mkdocs-material mkdocs-git-revision-date-localized-plugin | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw "pip upgrade failed" }
+    & "$venv\Scripts\python.exe" -m pip install --require-hashes -r $requirements
+    if ($LASTEXITCODE -ne 0) { throw "MkDocs install failed" }
     if (Test-Path "$venv\Scripts\mkdocs.exe") { $env:Path = "$($venv)\Scripts;" + $env:Path; Info 'MkDocs installed in local venv' } else { Warn 'MkDocs install may have failed' }
     Write-InstallLogDir '.venv'
   }
@@ -216,18 +224,36 @@ function Install-Rustup {
   if (Get-Command cargo -ErrorAction SilentlyContinue) { Info 'Rust already installed'; return }
   Section 'Install Rust (rustup)'
   $rustup = Join-Path $localBin 'rustup-init.exe'
+  $version = '1.27.0'
+  $arch = [System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture
+  switch ($arch) {
+    'X64'   { $target = 'x86_64-pc-windows-msvc' }
+    'Arm64' { $target = 'aarch64-pc-windows-msvc' }
+    default { Warn "Unsupported Windows architecture '$arch' for rustup bootstrap"; return }
+  }
+  $base = "https://static.rust-lang.org/rustup/archive/$version/$target"
   if ($script:SetupDryRun) {
-    Info ("[dryrun] Would download rustup-init.exe to " + $rustup)
+    Info ("[dryrun] Would download rustup-init.exe from $base to $rustup")
     Info '[dryrun] Would set RUSTUP_HOME/CARGO_HOME under .arw\rust and install toolchain'
-  } else {
+    return
+  }
   try {
-    Invoke-WebRequest @IwrArgs 'https://win.rustup.rs/' -OutFile $rustup
+    $shaPath = Join-Path $localBin 'rustup-init.exe.sha256'
+    Invoke-WebRequest @IwrArgs ($base + '/rustup-init.exe') -OutFile $rustup
+    Invoke-WebRequest @IwrArgs ($base + '/rustup-init.exe.sha256') -OutFile $shaPath
+    $expected = (Get-Content $shaPath | ForEach-Object { ($_ -split ' ')[0].Trim() } | Where-Object { $_ }) | Select-Object -First 1
+    if (-not $expected) { throw "Unable to read rustup checksum" }
+    $actual = (Get-FileHash -Path $rustup -Algorithm SHA256).Hash.ToLower()
+    if ($actual -ne $expected.ToLower()) { throw "Checksum mismatch (expected $expected got $actual)" }
+    Remove-Item $shaPath -ErrorAction SilentlyContinue
     $env:RUSTUP_HOME = (Join-Path $root '.arw\rust\rustup')
     $env:CARGO_HOME  = (Join-Path $root '.arw\rust\cargo')
     & $rustup -y --default-toolchain stable --no-modify-path | Out-Null
     if (-not ($env:Path -split ';' | Where-Object { $_ -eq $localRustCargoBin })) { $env:Path = "$localRustCargoBin;" + $env:Path }
-    Info 'Rust installed (restart shell if cargo not found)'
-  } catch { Warn 'Rustup install failed' }
+    Info ("Rust installed via rustup $version ($target) [sha256: $actual]")
+  } catch {
+    Warn ("Rustup install failed: " + $_.Exception.Message)
+    Remove-Item $rustup -ErrorAction SilentlyContinue
   }
 }
 
@@ -248,14 +274,23 @@ function Install-Jq {
   if (Get-Command jq -ErrorAction SilentlyContinue) { Info 'jq already installed'; return }
   if (Get-Command winget -ErrorAction SilentlyContinue) { winget install -e --id jqlang.jq --silent; return }
   $jq = Join-Path $localBin 'jq.exe'
+  $jqUrl = 'https://github.com/jqlang/jq/releases/download/jq-1.7.1/jq-windows-amd64.exe'
+  $jqExpected = '7451fbbf37feffb9bf262bd97c54f0da558c63f0748e64152dd87b0a07b6d6ab'
   if ($script:SetupDryRun) {
     Info ("[dryrun] Would download jq.exe to " + $jq)
   } else {
   try {
-    Invoke-WebRequest @IwrArgs 'https://github.com/jqlang/jq/releases/download/jq-1.7.1/jq-windows-amd64.exe' -OutFile $jq
-    Info "Downloaded jq to $jq"
-    try { $h = Get-FileHash -Path $jq -Algorithm SHA256; Info ("jq sha256: " + $h.Hash) } catch {}
-  } catch { Warn 'jq download failed' }
+    Invoke-WebRequest @IwrArgs $jqUrl -OutFile $jq
+    $actual = (Get-FileHash -Path $jq -Algorithm SHA256).Hash.ToLower()
+    if ($actual -ne $jqExpected) {
+      Remove-Item $jq -ErrorAction SilentlyContinue
+      throw "Checksum mismatch for jq.exe (expected $jqExpected got $actual)"
+    }
+    Info "Downloaded jq to $jq (sha256: $actual)"
+  } catch {
+    Remove-Item $jq -ErrorAction SilentlyContinue
+    Warn ("jq download failed: " + $_.Exception.Message)
+  }
   }
 }
 
@@ -267,19 +302,32 @@ function Install-NatsLocal {
   $arch = if ($env:PROCESSOR_ARCHITECTURE -match 'ARM') { 'arm64' } else { 'amd64' }
   $asset = "nats-server-v$ver-$os-$arch.zip"
   $url = "https://github.com/nats-io/nats-server/releases/download/v$ver/$asset"
+  $shaUrl = "https://github.com/nats-io/nats-server/releases/download/v$ver/SHA256SUMS"
+  $dockerDigest = if ($arch -eq 'arm64') { 'sha256:61322136f4d8a9232e2cdb8ae5b736415bc201b07500855ee8aa49afeaaf326d' } else { 'sha256:2f61081ca0f249c700304c99dc067b89a95adea40ed2f5c69d7a7dd2fe6f3dcf' }
   $dir = Join-Path $root '.arw\nats'
   New-Item -ItemType Directory -Force (Join-Path $dir 'tmp') | Out-Null
   $zip = Join-Path (Join-Path $dir 'tmp') $asset
+  $sumsPath = Join-Path (Join-Path $dir 'tmp') 'SHA256SUMS'
   try {
     Invoke-WebRequest @IwrArgs $url -OutFile $zip
+    Invoke-WebRequest @IwrArgs $shaUrl -OutFile $sumsPath
+    $expected = (Get-Content $sumsPath | Where-Object { $_ -match "$asset`$" } | ForEach-Object { ($_ -split ' ')[0].Trim() }) | Select-Object -First 1
+    if (-not $expected) { throw "Checksum entry for $asset not found" }
+    $actual = (Get-FileHash -Path $zip -Algorithm SHA256).Hash.ToLower()
+    if ($actual -ne $expected.ToLower()) { throw "Checksum mismatch for $asset (expected $expected got $actual)" }
+    Info "Verified $asset (sha256: $actual)"
   } catch {
-    Warn "Download failed: $url"; Write-Host "Fallback: docker run -p 4222:4222 nats:latest"; return
+    Warn ("Download/verify failed: " + $_.Exception.Message)
+    Write-Host ("Fallback: docker run -p 4222:4222 nats@$dockerDigest")
+    Remove-Item $zip,$sumsPath -ErrorAction SilentlyContinue
+    return
   }
   try {
     Expand-Archive -Path $zip -DestinationPath (Join-Path $dir 'tmp') -Force
     $exe = Get-ChildItem -Path (Join-Path $dir 'tmp') -Recurse -Filter 'nats-server.exe' | Select-Object -First 1
     if ($exe) { Copy-Item $exe.FullName -Destination (Join-Path $dir 'nats-server.exe') -Force; Info "Installed nats-server to $dir" } else { Warn 'nats-server.exe not found in archive' }
   } catch { Warn 'Extraction failed' }
+  Remove-Item $zip,$sumsPath -ErrorAction SilentlyContinue
 }
 
 function Dependencies-Menu {
@@ -306,7 +354,7 @@ function Dependencies-Menu {
       '5' { Install-Nextest }
       '6' { Install-NatsLocal }
       '7' { Configure-Proxies }
-      '8' { Write-Host "NATS options: winget/choco (if available), WSL: install or run nats-server in your Linux distro, Docker (fallback): docker run -p 4222:4222 nats:latest, Manual: https://github.com/nats-io/nats-server/releases"; Read-Host 'Continue' | Out-Null }
+      '8' { Write-Host "NATS options: winget/choco (if available), WSL: install or run nats-server in your Linux distro, Docker (fallback): docker run -p 4222:4222 nats:2.10.19, Manual: https://github.com/nats-io/nats-server/releases"; Read-Host 'Continue' | Out-Null }
       '9' { Install-WSL-Elevated }
       '0' { break }
       default { }

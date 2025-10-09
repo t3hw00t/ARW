@@ -150,6 +150,11 @@ else
     filtered=""
     while IFS= read -r line; do
       file="${line%%:*}"
+      if [[ "$file" =~ ^[A-Za-z]$ && "$line" == [A-Za-z]:/* ]]; then
+        drive_prefix="${line:0:2}"
+        rest="${line:2}"
+        file="${drive_prefix}${rest%%:*}"
+      fi
       norm="${file//\\//}"
       case "$norm" in
         */apps/arw-server/src/capsule_guard.rs|*/scripts/docs_check.sh|*/CHANGELOG.md|*/scripts/check_legacy_surface.sh)

@@ -82,7 +82,7 @@ jobs:
         with:
           node-version: 20
       - name: Install Spectral CLI
-        run: npm install --no-save @stoplight/spectral-cli
+        run: npm install --no-save @stoplight/spectral-cli@6.15.0
       - name: Lint specs
         run: |
           npx spectral lint -r quality/openapi-spectral.yaml spec/openapi.yaml
@@ -149,7 +149,7 @@ jobs:
           }
       - name: Spectral lint (generated OpenAPI)
         run: |
-          npm install --no-save @stoplight/spectral-cli
+          npm install --no-save @stoplight/spectral-cli@6.15.0
           npx spectral lint -r quality/openapi-spectral.yaml /tmp/ifc-gen/openapi.yaml
           if [ -s /tmp/ifc-gen/openapi.annot.yaml ]; then npx spectral lint -r quality/openapi-spectral.yaml /tmp/ifc-gen/openapi.annot.yaml; fi
       - name: Diff curated vs annotated (informational)
@@ -213,7 +213,7 @@ PY
         if: steps.prep.outputs.base_openapi
         run: |
           # oasdiff v3 uses subcommands; 'breaking' exits non-zero for errors at or above the given level
-          docker run --rm -v /tmp/ifc:/tmp -w /tmp tufin/oasdiff:latest \
+          docker run --rm -v /tmp/ifc:/tmp -w /tmp tufin/oasdiff@sha256:8b23c42a708e47ce70ae69a037452c7125e86f7ca28ac3bc8b89e21b958caa34 \
             breaking /tmp/base.yaml /tmp/rev.yaml -f markdown -o ERR \
             > /tmp/ifc/openapi-diff.md || (echo '::error::Breaking changes in OpenAPI'; cat /tmp/ifc/openapi-diff.md; exit 1)
       - name: Install AsyncAPI diff
@@ -224,7 +224,7 @@ PY
       - name: Diff AsyncAPI
         if: steps.prep.outputs.base_asyncapi
         run: |
-          npm install --no-save @asyncapi/diff
+          npm install --no-save @asyncapi/diff@0.5.0
           npx @asyncapi/diff /tmp/ifc/a_base.yaml /tmp/ifc/a_rev.yaml --markdown > /tmp/ifc/asyncapi-diff.md || true
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: always()
@@ -250,7 +250,7 @@ PY
         with:
           node-version: 20
       - name: Install AsyncAPI diff
-        run: npm install --no-save @asyncapi/diff
+        run: npm install --no-save @asyncapi/diff@0.5.0
       - name: Generate release notes
         env:
           BASE_REF: ${{ github.base_ref || 'origin/main' }}
@@ -273,7 +273,7 @@ PY
         with:
           node-version: 20
       - name: Install Prism
-        run: npm install --no-save @stoplight/prism-cli
+        run: npm install --no-save @stoplight/prism-cli@5.14.2
       - name: Start Prism (background)
         run: |
           npx prism mock spec/openapi.yaml -h 127.0.0.1 -p 4010 &

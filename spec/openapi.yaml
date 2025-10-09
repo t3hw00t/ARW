@@ -3802,6 +3802,7 @@ components:
           items: {}
     ModelsConcurrencySnapshot:
       type: object
+      description: Concurrency limits reported to callers.
       required:
       - configured_max
       - available_permits
@@ -3833,6 +3834,7 @@ components:
           minimum: 0
     ModelsInflightEntry:
       type: object
+      description: Snapshot of inflight model downloads keyed by checksum.
       required:
       - sha256
       - primary
@@ -3852,6 +3854,7 @@ components:
           type: string
     ModelsJobDestination:
       type: object
+      description: Destination metadata for a model download job.
       required:
       - host
       - port
@@ -3867,6 +3870,7 @@ components:
           type: string
     ModelsJobSnapshot:
       type: object
+      description: Snapshot of an active download job.
       required:
       - model_id
       - job_id
@@ -3891,6 +3895,7 @@ components:
           type: string
     ModelsMetricsResponse:
       type: object
+      description: Complete payload returned by the metrics endpoint.
       required:
       - started
       - queued
@@ -3978,6 +3983,7 @@ components:
           minimum: 0
     ModelsRuntimeConfig:
       type: object
+      description: Runtime tuning knobs applied to download jobs.
       required:
       - send_retries
       - stream_retries

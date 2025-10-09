@@ -23,8 +23,8 @@ jobs:
           tool: nextest
           version: ${{ env.NEXTEST_VERSION }}
       - name: Build tests
-        run: cargo nextest run --no-run
+        run: cargo nextest run --locked --no-run
       - name: Run tests (CI profile)
         env:
           RUST_BACKTRACE: 1
-        run: cargo nextest run --profile ci --workspace
+        run: cargo nextest run --locked --profile ci --workspace

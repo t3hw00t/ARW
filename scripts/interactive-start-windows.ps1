@@ -897,20 +897,31 @@ function Wsl-Install-Nats {
   if ($arch -match 'aarch64|arm64') { $a = 'arm64' } else { $a = 'amd64' }
   $asset = "nats-server-v$ver-linux-$a.tar.gz"
   $url = "https://github.com/nats-io/nats-server/releases/download/v$ver/$asset"
+  $shaUrl = "https://github.com/nats-io/nats-server/releases/download/v$ver/SHA256SUMS"
+  $dockerDigest = if ($a -eq 'arm64') { 'sha256:61322136f4d8a9232e2cdb8ae5b736415bc201b07500855ee8aa49afeaaf326d' } else { 'sha256:2f61081ca0f249c700304c99dc067b89a95adea40ed2f5c69d7a7dd2fe6f3dcf' }
   $cmd = @"
 set -e
 mkdir -p ~/.arw/nats/tmp ~/.arw/logs ~/.arw/run
 cd ~/.arw/nats/tmp
-if command -v curl >/dev/null 2>&1; then curl -L "$url" -o "$asset"; elif command -v wget >/dev/null 2>&1; then wget -O "$asset" "$url"; else echo 'need curl or wget' && exit 1; fi
+if command -v curl >/dev/null 2>&1; then curl -fsSL "$url" -o "$asset"; elif command -v wget >/dev/null 2>&1; then wget -O "$asset" "$url"; else echo 'need curl or wget' && exit 1; fi
+if command -v curl >/dev/null 2>&1; then curl -fsSL "$shaUrl" -o SHA256SUMS; elif command -v wget >/dev/null 2>&1; then wget -O SHA256SUMS "$shaUrl"; else echo 'need curl or wget' && exit 1; fi
+expected=\$(awk -v asset="$asset" '\$2 == asset {print \$1}' SHA256SUMS)
+if [ -z "\$expected" ]; then echo "Checksum entry for $asset not found"; exit 1; fi
+if ! command -v sha256sum >/dev/null 2>&1; then echo "sha256sum not available in WSL distro"; exit 1; fi
+actual=\$(sha256sum "$asset" | awk '{print \$1}')
+if [ "\$actual" != "\$expected" ]; then echo "Checksum mismatch for $asset (expected \$expected got \$actual)"; exit 1; fi
+echo "Verified $asset (sha256: \$actual)"
 tar -xzf "$asset"
 f=
 f=$(find . -type f -name nats-server | head -n1)
 if [ -z "$f" ]; then echo 'nats-server not found in archive'; exit 1; fi
 cp "$f" ~/.arw/nats/nats-server
 chmod +x ~/.arw/nats/nats-server
+rm -f "$asset" SHA256SUMS
 "@
   Wsl-Run $d $cmd
   Info "Installed nats-server inside WSL:$d at ~/.arw/nats/nats-server"
+  Info ("Fallback container option: docker run --rm -p 4222:4222 nats@$dockerDigest")
 }
 
 function Wsl-Start-Nats {

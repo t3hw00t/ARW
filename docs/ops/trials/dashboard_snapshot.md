@@ -1,6 +1,7 @@
 # Dashboard Snapshot Tips
 
-Updated: 2025-10-02
+Updated: 2025-10-05
+Type: How‑to
 
 When you save a screenshot or export from the Trial Control Center, double-check these cues:
 

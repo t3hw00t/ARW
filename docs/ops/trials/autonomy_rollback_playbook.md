@@ -4,7 +4,7 @@ title: Autonomy Rollback Playbook
 
 # Autonomy Rollback Playbook
 
-Updated: 2025-10-01
+Updated: 2025-10-02
 Type: Runbook
 Status: Active
 

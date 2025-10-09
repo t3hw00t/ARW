@@ -1,6 +1,7 @@
 # Trial Daily Log — {{DATE}}
 
-Updated: 2025-10-02
+Updated: 2025-10-05
+Type: How‑to
 
 ## Snapshot
 - Pilot: 

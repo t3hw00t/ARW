@@ -64,8 +64,14 @@ install_mkdocs() {
   ic_section "Install MkDocs (optional)"
   if command -v python3 >/dev/null 2>&1; then
     python3 -m pip install --user --upgrade pip || true
-    python3 -m pip install --user mkdocs mkdocs-material mkdocs-git-revision-date-localized-plugin || true
-    command -v mkdocs >/dev/null 2>&1 && ic_info "MkDocs installed." || ic_warn "MkDocs install may have failed"
+    local req="$ROOT/requirements/docs.txt"
+    if [[ ! -f "$req" ]]; then
+      ic_warn "requirements/docs.txt not found; cannot install MkDocs dependencies"
+    elif python3 -m pip install --user --require-hashes -r "$req"; then
+      command -v mkdocs >/dev/null 2>&1 && ic_info "MkDocs installed." || ic_warn "MkDocs install may have failed"
+    else
+      ic_warn "MkDocs install failed; see output above"
+    fi
   else
     ic_warn "python3 not found; cannot install MkDocs"
   fi
@@ -179,7 +185,7 @@ nats_guidance() {
   echo "  NATS powers clustering and the connector."
   echo "  Quick start options:"
   echo "   - Homebrew: brew install nats-server"
-  echo "   - Docker: docker run -p 4222:4222 nats:latest"
+  echo "   - Docker: docker run -p 4222:4222 nats:2.10.19"
   echo "   - Manual: https://github.com/nats-io/nats-server/releases"
   if [[ "${ARW_ALLOW_SYSTEM_PKGS:-0}" == "1" ]]; then
     ic_info "Attempting: brew install nats-server"

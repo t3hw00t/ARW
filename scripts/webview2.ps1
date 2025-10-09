@@ -26,8 +26,15 @@ function Install-WebView2Runtime {
     $iwrArgs = @{}
     try { if ($PSVersionTable.PSVersion.Major -lt 6) { $iwrArgs = @{ UseBasicParsing = $true } } } catch {}
     Invoke-WebRequest @iwrArgs -Uri $url -OutFile $tmp
+    $sig = Get-AuthenticodeSignature -FilePath $tmp
+    if ($sig.Status -ne 'Valid') { throw "Authenticode signature invalid: $($sig.Status)" }
+    $subject = $sig.SignerCertificate.Subject
+    if ($null -eq $subject -or ($subject -notlike '*Microsoft*')) {
+      throw "Unexpected signer certificate: $subject"
+    }
   } catch {
     Write-Warning "Failed to download WebView2 bootstrapper: $($_.Exception.Message)"
+    Remove-Item -Path $tmp -ErrorAction SilentlyContinue
     return $false
   }
   Write-Host "[webview2] Running bootstrapper..." -ForegroundColor DarkCyan
@@ -39,8 +46,10 @@ function Install-WebView2Runtime {
     }
   } catch {
     Write-Warning "WebView2 bootstrapper failed: $($_.Exception.Message)"
+    Remove-Item -Path $tmp -ErrorAction SilentlyContinue
     return $false
   }
+  Remove-Item -Path $tmp -ErrorAction SilentlyContinue
   return (Test-WebView2Runtime)
 }
 

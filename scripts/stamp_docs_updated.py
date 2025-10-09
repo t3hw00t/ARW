@@ -38,7 +38,15 @@ def find_h1(lines):
             return i
     return -1
 
+SKIP_UPDATED = {
+    os.path.join('docs', 'reference', 'gating_config.md'),
+}
+
+
 def process(path: str) -> bool:
+    rel = os.path.relpath(path, ROOT).replace("\\", "/")
+    if rel in SKIP_UPDATED:
+        return False
     try:
         with open(path, 'r', encoding='utf-8') as f:
             text = f.read()
@@ -95,4 +103,3 @@ def main():
 
 if __name__ == '__main__':
     sys.exit(main() or 0)
-

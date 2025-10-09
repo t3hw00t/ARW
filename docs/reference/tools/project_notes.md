@@ -3,7 +3,7 @@ title: Project Notes Tools
 ---
 
 # Project Notes Tools
-Updated: 2025-10-03
+Updated: 2025-10-02
 Status: Enabled (`project.notes.append`)
 Type: Reference
 

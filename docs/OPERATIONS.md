@@ -1,6 +1,7 @@
 # ARW Server Operations Guide
 
-Updated: 2025-09-27
+Updated: 2025-09-28
+Type: Explanation
 
 This document summarizes the operational knobs and endpoints added for stability, crash recovery, and observability.
 
