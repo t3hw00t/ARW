@@ -36,11 +36,11 @@ features = ["randr"]
 [target."cfg(target_os = \"macos\")".dependencies.core-graphics]
 version = "0.24"
 
-[target."cfg(target_os = \"windows\")".dependencies.rustc-hash]
-version = "2.1"
-
 [target."cfg(target_os = \"windows\")".dependencies.widestring]
 version = "1.0"
+
+[target."cfg(target_os = \"windows\")".dependencies.rustc-hash]
+version = "2.1"
 
 [target."cfg(target_os = \"windows\")".dependencies.windows]
 version = "0.61"

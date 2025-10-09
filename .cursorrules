@@ -1,6 +1,7 @@
 # Assisted, Iterative Coding Rules (mirror of docs/ai/ASSISTED_DEV_GUIDE.md)
 
 - Always propose a PLAN (files, changes, risks, tests, docs) before code. When the harness treats a change as a trivial ease-of-use edit, call that out in your response and follow the lightweight exception in docs/ai/ASSISTED_DEV_GUIDE.md.
+- When the execution harness explicitly grants a lighter flow or pre-approved permissions, treat that as the governing instruction and state the assumption in your response.
 - Implement the smallest DIFF once the PLAN is approved/self‑reviewed.
 - Run fmt, clippy -D warnings, and tests; summarize results.
 - Update rustdoc and docs; add examples where useful.

@@ -6,9 +6,9 @@ use rustc_hash::FxHasher;
 use std::{hash::Hasher, mem, ops::Deref, ptr};
 use widestring::U16CString;
 use windows::{
-    core::PCWSTR,
+    core::{BOOL, PCWSTR},
     Win32::{
-        Foundation::{BOOL, LPARAM, RECT},
+        Foundation::{LPARAM, RECT},
         Graphics::Gdi::{
             CreateCompatibleBitmap, CreateCompatibleDC, CreateDCW, DeleteDC, DeleteObject,
             EnumDisplayMonitors, GetDIBits, GetMonitorInfoW, GetObjectW, SelectObject,
@@ -56,12 +56,7 @@ fn get_monitor_info_exw_from_id(id: u32) -> Result<MONITORINFOEXW> {
     let monitor_info_exws: *mut Vec<MONITORINFOEXW> = Box::into_raw(Box::default());
 
     unsafe {
-        EnumDisplayMonitors(
-            HDC::default(),
-            None,
-            Some(monitor_enum_proc),
-            LPARAM(monitor_info_exws as isize),
-        )
+        EnumDisplayMonitors(None, None, Some(monitor_enum_proc), LPARAM(monitor_info_exws as isize))
         .ok()?;
     };
 
@@ -120,23 +115,29 @@ fn capture(display_id: u32, x: i32, y: i32, width: i32, height: i32) -> Result<R
                 None,
             )
         },
-        |dcw| unsafe { DeleteDC(dcw) }
+        |dcw| unsafe {
+            let _ = DeleteDC(dcw);
+        }
     );
 
     let compatible_dc_drop_box = drop_box!(
         HDC,
-        unsafe { CreateCompatibleDC(*dcw_drop_box) },
-        |compatible_dc| unsafe { DeleteDC(compatible_dc) }
+        unsafe { CreateCompatibleDC(Some(*dcw_drop_box)) },
+        |compatible_dc| unsafe {
+            let _ = DeleteDC(compatible_dc);
+        }
     );
 
     let h_bitmap_drop_box = drop_box!(
         HBITMAP,
         unsafe { CreateCompatibleBitmap(*dcw_drop_box, width, height) },
-        |h_bitmap| unsafe { DeleteObject(h_bitmap) }
+        |h_bitmap: HBITMAP| unsafe {
+            let _ = DeleteObject(h_bitmap.into());
+        }
     );
 
     unsafe {
-        SelectObject(*compatible_dc_drop_box, *h_bitmap_drop_box);
+        SelectObject(*compatible_dc_drop_box, (*h_bitmap_drop_box).into());
         SetStretchBltMode(*dcw_drop_box, STRETCH_HALFTONE);
     };
 
@@ -147,7 +148,7 @@ fn capture(display_id: u32, x: i32, y: i32, width: i32, height: i32) -> Result<R
             0,
             width,
             height,
-            *dcw_drop_box,
+            Some(*dcw_drop_box),
             x,
             y,
             width,
@@ -199,7 +200,7 @@ fn capture(display_id: u32, x: i32, y: i32, width: i32, height: i32) -> Result<R
     unsafe {
         // Get the BITMAP from the HBITMAP.
         GetObjectW(
-            *h_bitmap_drop_box,
+            (*h_bitmap_drop_box).into(),
             mem::size_of::<BITMAP>() as i32,
             Some(bitmap_ptr),
         );

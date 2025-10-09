@@ -4,6 +4,8 @@ Type: Reference
 
 Microsummary: High‑level map of this workspace for fast orientation. Stable headings for retrieval.
 
+Need a workflow primer? Start with [Agent Onboarding](AGENT_ONBOARDING.md) before diving into the sections below.
+
 Top‑level
 - `crates/` — Rust workspace crates (core services, libraries).
 - `apps/` — App surfaces (service/CLI/launchers).

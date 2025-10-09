@@ -4,9 +4,9 @@ use rustc_hash::FxHasher;
 use std::{hash::Hasher, mem, ops::Deref, ptr};
 use widestring::U16CString;
 use windows::{
-    core::PCWSTR,
+    core::{BOOL, PCWSTR},
     Win32::{
-        Foundation::{BOOL, LPARAM, POINT, RECT, TRUE},
+        Foundation::{LPARAM, POINT, RECT, TRUE},
         Graphics::Gdi::{
             CreateDCW, DeleteDC, EnumDisplayMonitors, EnumDisplaySettingsExW, GetDeviceCaps,
             GetMonitorInfoW, MonitorFromPoint, DESKTOPHORZRES, DEVMODEW,
@@ -64,12 +64,6 @@ impl DisplayInfo {
             is_primary: dw_flags == 1u32,
         }
     }
-}
-
-fn fxhash32(bytes: &[u8]) -> u32 {
-    let mut hasher = FxHasher::default();
-    hasher.write(bytes);
-    hasher.finish() as u32
 }
 
 fn get_rotation_frequency(sz_device: *const u16) -> Result<(f32, f32)> {
@@ -141,12 +135,7 @@ pub fn get_all() -> Result<Vec<DisplayInfo>> {
     let h_monitors_mut_ptr: *mut Vec<HMONITOR> = Box::into_raw(Box::default());
 
     unsafe {
-        EnumDisplayMonitors(
-            None,
-            None,
-            Some(monitor_enum_proc),
-            LPARAM(h_monitors_mut_ptr as isize),
-        )
+        EnumDisplayMonitors(None, None, Some(monitor_enum_proc), LPARAM(h_monitors_mut_ptr as isize))
         .ok()?;
     };
 
@@ -173,6 +162,12 @@ pub fn get_from_point(x: i32, y: i32) -> Result<DisplayInfo> {
     let monitor_info_exw = get_monitor_info_exw(h_monitor)?;
 
     Ok(DisplayInfo::new(h_monitor, &monitor_info_exw))
+}
+
+fn fxhash32(bytes: &[u8]) -> u32 {
+    let mut hasher = FxHasher::default();
+    hasher.write(bytes);
+    hasher.finish() as u32
 }
 
 extern "system" fn monitor_enum_proc(

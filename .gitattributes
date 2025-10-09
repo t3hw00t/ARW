@@ -19,3 +19,4 @@
 *.eot -text
 *.pdf -text
 
+.arw/tasks.json linguist-generated export-ignore

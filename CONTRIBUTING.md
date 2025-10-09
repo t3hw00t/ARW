@@ -18,6 +18,7 @@ Workflow
 Prerequisites
 - Rust 1.90+ (latest stable via `rustup`)
 - Install `cargo-nextest`: `cargo install cargo-nextest`
+- Bash-compatible shell for the `just` and `.sh` helpers (Git for Windows, WSL, or another POSIX layer); PowerShell equivalents live alongside each script when you cannot install Bash.
 
 Commands
 ```bash

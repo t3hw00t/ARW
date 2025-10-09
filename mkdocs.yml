@@ -263,6 +263,7 @@ nav:
           - Change Plan Template: ai/CHANGE_PLAN_TEMPLATE.md
   - AI:
       - Assistants Index: ai/ai_index.md
+      - Agent Onboarding: ai/AGENT_ONBOARDING.md
       - Contracts: ai/ai_contracts.md
       - Prompts Policy: ai/ai_prompts.md
   - Release notes:

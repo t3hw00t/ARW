@@ -12,3 +12,4 @@ Microsummary: Map of repo for AI/code models: purpose, key files, how to run, li
   - Docs: `docs/` (MkDocs Material); site config: `mkdocs.yml`.
   - Schemas: `spec/schemas/`; OpenAPI preview: `docs/static/openapi.json`.
 - Limits: default‑deny for write/shell/network; assume no internet; prefer explicit permissions.
+- Shells: most automation expects Bash; on Windows use Git Bash/WSL or the paired `*.ps1` scripts when Bash is unavailable.

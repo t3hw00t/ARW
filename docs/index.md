@@ -11,6 +11,8 @@ In plain terms: Agent Hub (ARW) lets you run your own team of AI “helpers” o
 Updated: 2025-09-24
 Type: Explanation
 
+Assistant quickstart: [Agent Onboarding](ai/AGENT_ONBOARDING.md)
+
 ## At a Glance
 
 | Surface / Pack | Status | Notes |

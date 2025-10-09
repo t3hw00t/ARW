@@ -21,6 +21,17 @@ Lightweight path (ease-of-use)
 - Spell out the assumption in your response: call out that the lightweight path was used, list skipped checks, and justify why it is safe.
 - If the change grows beyond a micro-edit at any point, fall back to the full loop above.
 
+Harness alignment
+- Treat execution-harness permissions (e.g., baseline workspace writes, shell access) as explicit approvals; do not block on requesting authorization that the harness already grants or forbids.
+- When harness policy prevents a required check (tests, docs build), note the skipped item and rationale in the response instead of forcing the run.
+- If harness instructions contradict this guide, follow the harness and document the deviation so reviewers understand the context.
+
+Micro change checklist
+- Confirm the edit scope stays within the lightweight limits (≤ 20 lines, single file, no behavior changes).
+- Explicitly list any skipped checks (fmt, clippy, tests, docs) and why the skip is safe.
+- Call out security/privacy impact (typically “none”) and any follow-up the reviewer should schedule.
+- Link to or restate the source of the harness approval so future agents can validate the shortcut.
+
 Guardrails
 - Stay within the declared scope; no opportunistic refactors.
 - Preserve public interfaces unless the issue marks "breaking: yes".
