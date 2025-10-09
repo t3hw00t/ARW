@@ -31,7 +31,8 @@ Run the unified ARW server locally in minutes. The architecture centres on the `
 1. Download the latest release archive from [GitHub Releases](https://github.com/t3hw00t/ARW/releases).
 2. Extract it and run the bundled helper:
    - Linux / macOS: `./first-run.sh`
-   - Windows: `.\first-run.ps1`
+   - Windows: `pwsh -ExecutionPolicy Bypass -File .\first-run.ps1`
+     (use `Unblock-File .\first-run.ps1` first if Windows marks the download as blocked)
 3. The helper generates (or reuses) `state/admin-token.txt`, starts `arw-server`, and prints the Control Room/Debug URLs. Append `--launcher` / `-Launcher` to launch the desktop Control Room when the launcher binary is present, or `--new-token` / `-NewToken` to rotate credentials on demand.
 
 This path skips the Rust toolchain—perfect for quick evaluations or air-gapped installs that prefer prebuilt artifacts.
@@ -239,7 +240,7 @@ Generate the secret with any equivalent tool if `openssl` is unavailable.
 
 ## Portable Mode
 
-- Extracted release bundle? Run `./first-run.sh` (Linux/macOS) or `.\first-run.ps1` (Windows) from the archive root to generate/reuse an admin token (`state/admin-token.txt`) and start the unified server on `http://127.0.0.1:8091/`. Add `--launcher` / `-Launcher` to open the Control Room or `--new-token` / `-NewToken` to rotate credentials.
+- Extracted release bundle? Run `./first-run.sh` (Linux/macOS) or `pwsh -ExecutionPolicy Bypass -File .\first-run.ps1` (Windows) from the archive root to generate/reuse an admin token (`state/admin-token.txt`) and start the unified server on `http://127.0.0.1:8091/`. If SmartScreen blocks the script, right-click -> **Properties** -> **Unblock** or run `Unblock-File .\first-run.ps1` once. Add `--launcher` / `-Launcher` to open the Control Room or `--new-token` / `-NewToken` to rotate credentials.
 - Set `ARW_STATE_DIR` to relocate state (defaults to `./state`).
 - Combine with `ARW_PORTABLE=1` in launchers or scripts to keep all files beside the binaries for USB-style deployment.
 

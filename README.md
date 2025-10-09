@@ -144,7 +144,7 @@ The details that make ARW practical in real workflows.
 1. Download the latest release archive from [GitHub Releases](https://github.com/t3hw00t/ARW/releases).
 2. Extract it and run the bundled first-run helper:
    - Linux / macOS: `./first-run.sh`
-   - Windows: `.\first-run.ps1`
+   - Windows: `pwsh -ExecutionPolicy Bypass -File .\first-run.ps1` (if SmartScreen blocks the script, right-click -> **Properties** -> **Unblock** or run `Unblock-File .\first-run.ps1` once)
 3. The helper generates (or reuses) `state/admin-token.txt`, starts `arw-server`, and tells you where the Control Room and Debug UI live. Append `--launcher` / `-Launcher` to open the desktop Control Room when the launcher binary is present, or `--new-token` / `-NewToken` to rotate credentials.
 
 This path skips the Rust toolchain entirely—ideal when you only need a portable bundle or want to smoke-test the stack on a clean machine.

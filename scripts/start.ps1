@@ -75,7 +75,8 @@ function Update-LauncherPrefs {
     [string]$Token,
     [Nullable[int]]$Port
   )
-  if ([string]::IsNullOrWhiteSpace($Token) -and -not $Port.HasValue) { return }
+  $hasPort = $Port -ne $null
+  if ([string]::IsNullOrWhiteSpace($Token) -and -not $hasPort) { return }
   $configDir = Get-LauncherConfigDir
   if (-not $configDir) { return }
   if (-not (Test-Path $configDir)) {
@@ -96,7 +97,7 @@ function Update-LauncherPrefs {
   }
   if (-not ($data -is [System.Collections.IDictionary])) { $data = @{} }
   if (-not [string]::IsNullOrWhiteSpace($Token)) { $data['adminToken'] = $Token }
-  if ($Port.HasValue) { $data['port'] = [int]$Port.Value }
+  if ($hasPort) { $data['port'] = [int]$Port }
   try {
     $json = $data | ConvertTo-Json -Depth 8
     Set-Content -Path $prefsPath -Value $json -Encoding UTF8
@@ -202,6 +203,9 @@ function New-AdminToken {
   return ([System.Convert]::ToHexString($bytes)).ToLowerInvariant()
 }
 
+$startService = $true
+$startLauncher = $true
+
 if ($startService) {
   if ($DryRun) {
     if ([string]::IsNullOrWhiteSpace($env:ARW_ADMIN_TOKEN)) {
@@ -216,7 +220,7 @@ if ($startService) {
         New-Item -ItemType Directory -Path $stateDir -Force | Out-Null
       }
     } catch {
-      Write-Error ("Unable to create state directory $stateDir: " + $_.Exception.Message)
+      Write-Error ("Unable to create state directory ${stateDir}: " + $_.Exception.Message)
       exit 1
     }
 
@@ -244,7 +248,7 @@ if ($startService) {
           Set-Content -Path $tokenFile -Value $env:ARW_ADMIN_TOKEN -Encoding ascii
           Info "Saved admin token to $tokenFile"
         } catch {
-          Write-Warning ("Unable to write admin token to $tokenFile: " + $_.Exception.Message)
+          Write-Warning ("Unable to write admin token to ${tokenFile}: " + $_.Exception.Message)
         }
       }
     }
@@ -275,8 +279,6 @@ $launcher = if ($UseDist) {
   if ($zipBase) { Join-Path $zipBase.FullName (Join-Path 'bin' $launcherExe) } else { $null }
 } else { Join-Path (Join-Path $root 'target\release') $launcherExe }
 
-$startService = $true
-$startLauncher = $true
 if ($ServiceOnly) {
   $startLauncher = $false
   if (-not $DryRun) {
@@ -419,7 +421,7 @@ function Wait-For-Health($port, $timeoutSecs) {
     } catch {}
     Start-Sleep -Milliseconds 500
   }
-  if ($ok) { Info ("Health OK after " + $attempts + " checks → $base/healthz") } else { Write-Warning ("Health not reachable within $timeoutSecs seconds → $base/healthz") }
+  if ($ok) { Info ("Health OK after " + $attempts + " checks -> $base/healthz") } else { Write-Warning ("Health not reachable within $timeoutSecs seconds -> $base/healthz") }
 }
 
 function Start-ServiceBinary([string]$message) {
@@ -491,24 +493,32 @@ if ($startService) {
 if ($startLauncher) {
   Add-SummaryLine 'Control Room launching via desktop launcher.'
 } elseif ($startService) {
-  Add-SummaryLine ("Headless mode: open Control Room in your browser → {0}/admin/ui/control/" -f $serviceBase)
+  Add-SummaryLine ("Headless mode: open Control Room in your browser -> {0}/admin/ui/control/" -f $serviceBase)
 }
 if ($launcherSettings) {
   $summaryPieces = @()
   $summaryPieces += "port $Port"
   if ($settingAutostartService -ne $null) {
-    $summaryPieces += "autostart " + ($settingAutostartService ? 'on' : 'off')
+    if ($settingAutostartService) {
+      $summaryPieces += 'autostart on'
+    } else {
+      $summaryPieces += 'autostart off'
+    }
   }
   if ($settingNotifyOnStatus -ne $null) {
-    $summaryPieces += "notifications " + ($settingNotifyOnStatus ? 'on' : 'off')
+    if ($settingNotifyOnStatus) {
+      $summaryPieces += 'notifications on'
+    } else {
+      $summaryPieces += 'notifications off'
+    }
   }
-  Add-SummaryLine ("Launcher defaults → {0}" -f ($summaryPieces -join ', '))
+  Add-SummaryLine ("Launcher defaults -> {0}" -f ($summaryPieces -join ', '))
   if ($settingBaseOverride) {
-    Add-SummaryLine ("Default base override → {0}" -f $settingBaseOverride)
+    Add-SummaryLine ("Default base override -> {0}" -f $settingBaseOverride)
   }
-  Add-SummaryLine 'Adjust via Control Room → Launcher Settings.'
+  Add-SummaryLine 'Adjust via Control Room -> Launcher Settings.'
 } else {
-  Add-SummaryLine 'Launcher settings: use Control Room → Launcher Settings to adjust defaults.'
+  Add-SummaryLine 'Launcher settings: use Control Room -> Launcher Settings to adjust defaults.'
 }
 if ($env:ARW_ADMIN_TOKEN -and -not [string]::IsNullOrWhiteSpace($env:ARW_ADMIN_TOKEN)) {
   Add-SummaryLine 'Admin token detected via ARW_ADMIN_TOKEN.'

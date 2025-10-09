@@ -202,20 +202,14 @@ pub(crate) async fn control_root(headers: HeaderMap) -> impl IntoResponse {
     Redirect::temporary("/admin/ui/control/").into_response()
 }
 
-pub(crate) async fn control_index(headers: HeaderMap) -> impl IntoResponse {
-    if let Err(r) = crate::responses::require_admin(&headers).await {
-        return *r;
-    }
+pub(crate) async fn control_index(_headers: HeaderMap) -> impl IntoResponse {
     (common_headers(), Html(CONTROL_INDEX_HTML)).into_response()
 }
 
 pub(crate) async fn control_asset(
     Path(path): Path<String>,
-    headers: HeaderMap,
+    _headers: HeaderMap,
 ) -> impl IntoResponse {
-    if let Err(r) = crate::responses::require_admin(&headers).await {
-        return *r;
-    }
     let normalized = path.trim_start_matches('/');
     if let Some((mime, bytes)) = control_asset_for_path(normalized) {
         (asset_headers(mime), bytes).into_response()

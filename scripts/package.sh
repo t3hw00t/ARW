@@ -119,9 +119,11 @@ Usage
 - API:         http://127.0.0.1:8091/healthz
 - CLI sanity:  bin/arw-cli$exe
 - Launcher:    bin/arw-launcher$exe (tray + windows UI)
+- First run:   ./first-run.sh (Linux/macOS) | pwsh -ExecutionPolicy Bypass -File .\\first-run.ps1 (Windows)
 
 Notes
 - To force portable mode: export ARW_PORTABLE=1
+- If Windows blocks scripts from the zip, run: Unblock-File .\\first-run.ps1
 EOF
 
 mkdir -p "$dist"

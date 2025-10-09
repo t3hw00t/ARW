@@ -26,7 +26,7 @@ powershell -ExecutionPolicy Bypass -File scripts\setup.ps1 -Headless
 powershell -ExecutionPolicy Bypass -File scripts\start.ps1 -ServiceOnly -WaitHealth
 ```
 
-- Prefer a leaner install? Append `-Minimal` to `scripts\setup.ps1` to skip doc packaging and build just the core binaries (`arw-server`, `arw-cli`, `arw-launcher`). Drop `-Headless` once WebView2 is present and you want the desktop Control Room compiled locally.
+- Prefer a leaner install? Append `-Minimal` to `scripts\setup.ps1` to skip doc packaging and keep only the core binaries. Running with both `-Minimal` and `-Headless` stays on the server-only profile; drop `-Headless` once WebView2 is present and you want the desktop Control Room compiled locally.
 - Want the Control Room/tray to launch too? Re-run `scripts\start.ps1` without `-ServiceOnly`; the script starts the service and launcher together (WebView2 required).
 - Need WebView2? Add `-InstallWebView2` to the start command for a silent Evergreen install when the runtime is missing.
 - Need a completely fresh rebuild? Append `-Clean` to `scripts\setup.ps1` to clear existing artifacts before compiling. By default the script reuses incremental build caches for faster reruns.
@@ -57,7 +57,7 @@ powershell -ExecutionPolicy Bypass -File scripts\start.ps1 -ServiceOnly -UseDist
 This creates `dist/arw-<version>-windows-<arch>.zip` with:
 - `bin/` — `arw-server.exe`, `arw-cli.exe`, optional `arw-launcher.exe`
 - `docs/` and configs
-- After extracting a release bundle, run `.\first-run.ps1` from the archive root to generate/reuse an admin token (`state\admin-token.txt`) and start the unified server headless on `http://127.0.0.1:8091/`. Use the optional `-Launcher` switch when you want the Control Room tray app (WebView2 required), or `-NewToken` to rotate credentials on demand.
+- After extracting a release bundle, run `pwsh -ExecutionPolicy Bypass -File .\first-run.ps1` from the archive root to generate/reuse an admin token (`state\admin-token.txt`) and start the unified server headless on `http://127.0.0.1:8091/`. If Windows flags the download, right-click the script -> **Properties** -> **Unblock** or run `Unblock-File .\first-run.ps1` once. Use the optional `-Launcher` switch when you want the Control Room tray app (WebView2 required), or `-NewToken` to rotate credentials on demand.
 
 ## Launcher details
 
