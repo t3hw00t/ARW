@@ -33,14 +33,18 @@ Assistant quickstart → [Agent Onboarding](docs/ai/AGENT_ONBOARDING.md)
 - Clone the repo and install Rust 1.90+ via `rustup`.
 - For a packaged install, download the latest release archive from GitHub Releases and run `scripts/first-run.{sh,ps1}`.
 - For source builds, run `scripts/dev.{sh,ps1} setup` (defaults to headless + non-interactive `-Yes`) or follow docs/guide/quickstart.md; pass `--with-launcher` / `-WithLauncher` when desktop UI prerequisites are ready.
+- Prefer an all-in-one toolchain bootstrap? Install [mise](https://mise.jdx.dev) and run `mise install` to pin Rust 1.90, Python 3.12, Node.js 18, jq, and ripgrep; `mise run verify` and `mise run verify:fast` wrap the guardrail helpers.
 
 ## Build & Test
 - Unified helper: `scripts/dev.{sh,ps1}` wraps the common workflow (e.g., `scripts/dev.ps1 build`, `scripts/dev.ps1 verify`).
+- Guardrail sweep: `scripts/dev.sh verify` (pass `--fast` to focus on fmt/clippy/tests and skip docs or launcher UI checks until later).
 - Build: `scripts/build.sh` (Linux/macOS) or `scripts/build.ps1` (Windows). Both default to a headless build that skips the Tauri launcher; add `--with-launcher` / `-WithLauncher` or set `ARW_BUILD_LAUNCHER=1` when you need the desktop UI (requires WebKitGTK 4.1 + libsoup3 on Linux or WebView2 on Windows). `make build` / `just build` follow the same headless default, with `make build-launcher` / `just build-launcher` opting into the full workspace build.
 - Format: `cargo fmt --all`
 - Lint: `cargo clippy --workspace --all-targets -- -D warnings`
 - Tests: `cargo nextest run` or `scripts/test.{sh,ps1}`
-- Docs: `mkdocs build --strict`, `scripts/dev.{sh,ps1} docs`, or `just docs-build` (requires Bash). Windows without Bash: `pwsh -ExecutionPolicy Bypass -File scripts\docgen.ps1` followed by `mkdocs build --strict`.
+- Docs: `mkdocs build --strict`, `scripts/dev.{sh,ps1} docs`, or `just docs-build` (requires Bash). Windows without Bash: `pwsh -ExecutionPolicy Bypass -File scripts\docgen.ps1` followed by `mkdocs build --strict`. Prefer task wrappers? Use `mise run docs:check` or `mise run docs:check:fast`.
+- Docs toolchain: `mise run bootstrap:docs` (or `bash scripts/bootstrap_docs.sh`) installs the pinned MkDocs/Material stack. Generate an offline wheel bundle with `mise run docs:cache:build` (archive lands in `dist/docs-wheels.tar.gz`), then reuse it via `mise run bootstrap:docs -- --wheel-dir <path>`.
+- Release attachments include `docs-wheels.tar.gz`; download and extract to reuse with `scripts/bootstrap_docs.sh --wheel-dir <dir>` when mirroring the published bundle.
 
 ## Repository Layout
 - `crates/` - Core Rust libraries (protocol, kernel, policy, runtime, etc.).

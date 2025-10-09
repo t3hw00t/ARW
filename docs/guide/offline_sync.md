@@ -4,7 +4,7 @@ title: Offline & Sync
 
 # Offline & Sync
 
-Updated: 2025-09-16
+Updated: 2025-10-09
 Type: How‑to
 
 Local‑first
@@ -15,5 +15,8 @@ Sync boundaries
 
 Conflicts
 - Last‑writer‑wins only for non‑critical state; 3‑way merges for notes/config.
+
+- Docs bootstrap
+  - Releases include `docs-wheels.tar.gz`; extract and run `scripts/bootstrap_docs.sh --wheel-dir <dir>` to hydrate MkDocs offline (or use `mise run bootstrap:docs -- --wheel-dir <dir>`).
 
 See also: Artifacts & Provenance, Naming & IDs.

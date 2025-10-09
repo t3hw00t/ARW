@@ -22,6 +22,7 @@ This runbook captures the end-to-end process for cutting an Agent Hub (ARW) rele
 3. **Docs & notes** – finalize `CHANGELOG.md`, release notes, and update docs for any breaking or preview changes.
 4. **Dependency audit** – ensure `cargo deny` or equivalent checks have already run in CI; resolve any `deny.toml` ignores you can remove.
 5. **Installer status** – confirm Windows/Linux installers or bundles referenced in docs have matching versions queued.
+6. **mise installer hash** – run `just mise-hash` (or `bash scripts/update_mise_hash.sh`) and update `MISE_INSTALL_SHA256` in `.github/workflows/ci.yml` if the upstream installer changed.
 
 > Tip: when iterating on documentation, run `just docs-check` early to catch broken links and heading regressions.
 
@@ -74,6 +75,7 @@ To cross-package, invoke `scripts/package.sh --target <triple>` or run through `
 - Ensures release blockers are closed.
 - Builds `arw-server`, `arw-cli`, and (best effort) `arw-launcher`.
 - Emits `dist/arw-<version>-<os>-<arch>.zip` with binaries, docs, and default configs.
+- Copies `dist/docs-wheels.tar.gz` into `tools/` inside each portable archive when the offline bundle exists (keep the release asset so downstream agents can bootstrap docs tooling without PyPI).
 
 If you already built the artifacts, use `--no-build` to package without rebuilding.
 

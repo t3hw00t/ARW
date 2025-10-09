@@ -131,6 +131,18 @@ docs-build: docgen
 docs-check:
   bash scripts/docs_check.sh
 
+docs-check-fast:
+  DOCS_CHECK_FAST=1 bash scripts/docs_check.sh
+
+bootstrap-docs *args:
+  bash scripts/bootstrap_docs.sh {{args}}
+
+docs-cache *args:
+  bash scripts/build_docs_wheels.sh {{args}}
+
+mise-hash *args:
+  bash scripts/update_mise_hash.sh {{args}}
+
 legacy-check:
   bash scripts/check_legacy_surface.sh
 

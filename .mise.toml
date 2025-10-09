@@ -1,0 +1,30 @@
+[tools]
+node = "18.20"
+python = "3.12"
+rust = "1.90"
+jq = "1.7"
+ripgrep = "13.0.0"
+
+[tasks.verify]
+description = "Run fmt → clippy → tests → docs guardrail sequence."
+run = "bash scripts/dev.sh verify"
+
+[tasks."verify:fast"]
+description = "Run the fast guardrail (fmt → clippy → tests only)."
+run = "bash scripts/dev.sh verify --fast"
+
+[tasks."bootstrap:docs"]
+description = "Install pinned MkDocs/doc tooling into the active Python."
+run = "bash scripts/bootstrap_docs.sh"
+
+[tasks."docs:check"]
+description = "Run full docs lint (mkdocs + sweeps)."
+run = "bash scripts/docs_check.sh"
+
+[tasks."docs:check:fast"]
+description = "Run lightweight docs lint (skips mkdocs + heavy sweeps)."
+run = "DOCS_CHECK_FAST=1 bash scripts/docs_check.sh"
+
+[tasks."docs:cache:build"]
+description = "Download MkDocs/doc wheels for offline installs."
+run = "bash scripts/build_docs_wheels.sh --archive dist/docs-wheels.tar.gz"

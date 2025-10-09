@@ -83,8 +83,34 @@ jobs:
           name: ${{ matrix.target }}-dist
           path: target/dist/*
 
+  docs-wheel-cache:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5
+
+      - name: Setup Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.12'
+
+      - name: Install pip-tools
+        run: python -m pip install --upgrade pip
+
+      - name: Build docs wheels archive
+        run: bash scripts/build_docs_wheels.sh --archive dist/docs-wheels.tar.gz
+
+      - name: Upload docs wheels
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: docs-wheels
+          path: dist/docs-wheels.tar.gz
+
   release:
-    needs: [release-gate, build-installers]
+    needs: [release-gate, build-installers, docs-wheel-cache]
     runs-on: ubuntu-latest
     environment:
       name: releases

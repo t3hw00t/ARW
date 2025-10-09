@@ -21,6 +21,7 @@ Run the unified ARW server locally in minutes. The architecture centres on the `
 
 > ARW tracks the latest stable Rust release; run `rustup update` regularly to avoid toolchain drift.
 
+Need a single command that brings in Rust, Python, Node.js, jq, and ripgrep? Install [mise](https://mise.jdx.dev) and run `mise install`; once the toolchain is hydrated you can call `mise run verify`, `mise run verify:fast`, or `mise run bootstrap:docs` as shorthand for the guardrail helpers below.
 !!! note
     The first launch compiles `arw-server` (and the optional launcher). Expect a multi-minute build on initial setup; subsequent runs reuse the cached binaries.
 
@@ -99,6 +100,10 @@ DOCS_CHECK_FAST=1 bash scripts/docs_check.sh
 ```
 
 Drop the environment variable (or omit `--fast`) to restore the full validation, including mkdocs build and deep legacy sweeps, before publishing.
+
+Guardrail sweep (fmt → clippy → tests → docs) lives behind `bash scripts/dev.sh verify`; append `--fast` when you only need the Rust/test coverage and will address docs or launcher UI checks later in the workflow.
+Prefer the new task wrappers? `mise run verify` mirrors the full suite, and `mise run verify:fast` maps to the lean option. `mise run docs:check` and `mise run docs:check:fast` wrap the docs lint commands. Run `mise run bootstrap:docs` (or `bash scripts/bootstrap_docs.sh`) whenever you need the pinned MkDocs/Material stack installed.
+Working offline? `mise run docs:cache:build` creates `dist/docs-wheels.tar.gz` with all pinned MkDocs wheels. Release bundles ship the same archive—download it, extract on the air-gapped host, and run `mise run bootstrap:docs -- --wheel-dir <extracted-dir>`.
 
 ## Admin Token Handling
 

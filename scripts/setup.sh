@@ -219,17 +219,21 @@ if [[ $run_tests -eq 1 ]]; then
 fi
 
 if [[ $minimal -eq 0 ]]; then
-  title "Generate workspace status page"
-  if command -v jq >/dev/null 2>&1; then
-    bash "$DIR/docgen.sh" || warn "docgen failed"
+  if [[ "${ARW_DOCGEN_SKIP_BUILDS:-0}" == 1 ]]; then
+    info "Skipping docgen and packaging (ARW_DOCGEN_SKIP_BUILDS=1)."
   else
-    warn "jq not found; skipping docgen page generation (install: apt-get install jq | brew install jq)"
-  fi
+    title "Generate workspace status page"
+    if command -v jq >/dev/null 2>&1; then
+      bash "$DIR/docgen.sh" || warn "docgen failed"
+    else
+      warn "jq not found; skipping docgen page generation (install: apt-get install jq | brew install jq)"
+    fi
 
-  title "Package portable bundle"
-  bash "$DIR/package.sh" --no-build
-  printf 'DIR dist\n' >> "$INSTALL_LOG"
-  [[ -d "$ROOT/site" ]] && echo 'DIR site' >> "$INSTALL_LOG"
+    title "Package portable bundle"
+    bash "$DIR/package.sh" --no-build
+    printf 'DIR dist\n' >> "$INSTALL_LOG"
+    [[ -d "$ROOT/site" ]] && echo 'DIR site' >> "$INSTALL_LOG"
+  fi
 fi
 if [[ ${#WARNINGS[@]} -gt 0 ]]; then
   title "Warnings"

@@ -13,11 +13,13 @@ Top‑level
 - `spec/` — Machine‑readable specs (JSON Schemas, etc.).
 - `examples/` — Minimal, runnable usage examples.
 - `scripts/` — Setup/start helpers (PowerShell/Bash).
+- `.mise.toml` — Pinned toolchain + task shortcuts (`mise install`, `mise run verify`, etc.).
 - `configs/`, `deploy/` — Packaging & deployment (Compose/Helm/etc.).
 - `sandbox/` — Scratch area for experiments.
 
 Key concepts from README
-- Local‑first service with Debug UI at `/admin/debug`, state at `/state/*`, SSE events.
+- Local-first service with Debug UI at `/admin/debug`, state at `/state/*`, SSE events.
 - “Commons Kit” recipes and tool schemas; recipe manifest schema in `spec/schemas`.
+- Tooling: `scripts/dev.{sh,ps1}` for guardrails, `scripts/bootstrap_docs.sh` (or `mise run bootstrap:docs`) for MkDocs dependencies, `scripts/build_docs_wheels.sh` (`mise run docs:cache:build`) for offline wheel bundles.
 
 (Use this map as the first chunk for retrieval; keep headings stable.)

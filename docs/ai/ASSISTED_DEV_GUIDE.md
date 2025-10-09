@@ -20,8 +20,10 @@ Exception: when a change qualifies as an "ease-of-use" shortcut in the CLI (e.g.
 3) Run relevant checks (fmt, clippy -D warnings, nextest) when source code changes. For docs-only or textual config updates, call out the skipped checks and why they are safe.
 4) Update docs + microsummaries; create a tight PR with acceptance notes.
 
-Use `scripts/dev.{sh,ps1} verify` to run the standard fmt → clippy → tests → docs sequence; it reports skipped checks so you can note them explicitly.
-Need a lighter docs lint for fast feedback? Run `DOCS_CHECK_FAST=1 bash scripts/docs_check.sh` (or pass `--fast`) to skip the mkdocs build and deep Python sweeps; follow up with the full run before merging when time permits.
+Use `scripts/dev.{sh,ps1} verify` to run the standard fmt → clippy → tests → docs sequence; pass `--fast` when you only need fmt/clippy/tests and plan to handle docs or launcher UI checks separately. The command reports skipped checks so you can note them explicitly. Prefer the task workflow? `mise run verify` and `mise run verify:fast` map to those helpers after `mise install`.
+Need a lighter docs lint for fast feedback? Run `DOCS_CHECK_FAST=1 bash scripts/docs_check.sh` (or pass `--fast`) to skip the mkdocs build and deep Python sweeps; follow up with the full run before merging when time permits. Prefer tasks? `mise run docs:check` and `mise run docs:check:fast` wrap those helpers.
+Missing MkDocs or Python deps? `mise run bootstrap:docs` (or `bash scripts/bootstrap_docs.sh`) installs the pinned stack defined in `requirements/docs.txt`.
+Need offline installs? Run `mise run docs:cache:build` ahead of time (or grab the `docs-wheels.tar.gz` asset from releases) and point `bootstrap_docs.sh` at the extracted wheel directory with `--wheel-dir`.
 
 Lightweight path (ease-of-use)
 - Use only when the execution harness or reviewer explicitly treats the work as a trivial shortcut (typo fix, single-line docs tweak, metadata bump).

@@ -8,3 +8,4 @@ configs/runtime/runtimes.toml
 scripts/__pycache__/
 site/
 target/
+cache/

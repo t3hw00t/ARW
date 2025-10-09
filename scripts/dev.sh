@@ -32,7 +32,7 @@ Commands:
   test-fast        Alias for cargo nextest run --workspace.
   docs             Regenerate docs (docgen + mkdocs build --strict when available).
   docs-check       Run docs checks (docgen + docs_check.sh if bash available).
-  verify           Run fmt → clippy → tests → docs guardrail sequence.
+  verify           Run fmt → clippy → tests → docs guardrail sequence (pass --fast to skip docs/UI).
   hooks            Install git hooks (delegates to scripts/hooks/install_hooks.sh).
   status           Generate workspace status page (docgen).
 
@@ -70,7 +70,44 @@ ensure_tool() {
 
 run_verify() {
   local ok=0
+  local fast=0
+  local skip_docs=0
+  local skip_ui=0
+  local skip_docs_python=0
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --fast)
+        fast=1
+        skip_docs=1
+        skip_ui=1
+        skip_docs_python=1
+        shift
+        ;;
+      --skip-docs)
+        skip_docs=1
+        shift
+        ;;
+      --skip-ui)
+        skip_ui=1
+        shift
+        ;;
+      --skip-doc-python)
+        skip_docs_python=1
+        shift
+        ;;
+      *)
+        echo "[verify] Unknown option '$1'" >&2
+        return 2
+        ;;
+    esac
+  done
+
   set +e
+
+  if [[ $fast -eq 1 ]]; then
+    echo "[verify] fast mode enabled (skipping doc sync, docs lint, launcher UI tests)."
+  fi
 
   echo "[verify] cargo fmt --all -- --check"
   if ! cargo fmt --all -- --check; then ok=1; fi
@@ -86,34 +123,42 @@ run_verify() {
     if ! cargo test --workspace --locked; then ok=1; fi
   fi
 
-  if command -v node >/dev/null 2>&1; then
-    echo "[verify] node apps/arw-launcher/src-tauri/ui/read_store.test.js"
-    if ! node "$REPO_ROOT/apps/arw-launcher/src-tauri/ui/read_store.test.js"; then ok=1; fi
+  if [[ $skip_ui -eq 1 ]]; then
+    echo "[verify] skipping launcher UI smoke (requested)"
   else
-    local node_fallback="/c/Program Files/nodejs/node.exe"
-    if [[ -x "$node_fallback" ]]; then
-      echo "[verify] node fallback apps/arw-launcher/src-tauri/ui/read_store.test.js"
-      if ! "$node_fallback" "$REPO_ROOT/apps/arw-launcher/src-tauri/ui/read_store.test.js"; then ok=1; fi
+    if command -v node >/dev/null 2>&1; then
+      echo "[verify] node apps/arw-launcher/src-tauri/ui/read_store.test.js"
+      if ! node "$REPO_ROOT/apps/arw-launcher/src-tauri/ui/read_store.test.js"; then ok=1; fi
     else
-      echo "[verify] skipping node UI tests (node not found)"
+      local node_fallback="/c/Program Files/nodejs/node.exe"
+      if [[ -x "$node_fallback" ]]; then
+        echo "[verify] node fallback apps/arw-launcher/src-tauri/ui/read_store.test.js"
+        if ! "$node_fallback" "$REPO_ROOT/apps/arw-launcher/src-tauri/ui/read_store.test.js"; then ok=1; fi
+      else
+        echo "[verify] skipping node UI tests (node not found)"
+      fi
     fi
   fi
 
   PYTHON="$(command -v python3 || command -v python || true)"
   if [[ -n "$PYTHON" ]]; then
-    if "$PYTHON" - <<'PY' >/dev/null 2>&1
+    if [[ $skip_docs_python -eq 1 ]]; then
+      echo "[verify] skipping doc sync checks (requested)"
+    else
+      if "$PYTHON" - <<'PY' >/dev/null 2>&1
 import importlib.util, sys
 sys.exit(0 if importlib.util.find_spec("yaml") else 1)
 PY
-    then
-      echo "[verify] python check_operation_docs_sync.py"
-      if ! "$PYTHON" "$REPO_ROOT/scripts/check_operation_docs_sync.py"; then ok=1; fi
-    else
-      echo "[verify] skipping operation docs sync check (PyYAML missing; run 'python3 -m pip install --user --break-system-packages pyyaml')"
-    fi
+      then
+        echo "[verify] python check_operation_docs_sync.py"
+        if ! "$PYTHON" "$REPO_ROOT/scripts/check_operation_docs_sync.py"; then ok=1; fi
+      else
+        echo "[verify] skipping operation docs sync check (PyYAML missing; run 'python3 -m pip install --user --break-system-packages pyyaml')"
+      fi
 
-    echo "[verify] python scripts/gen_topics_doc.py --check"
-    if ! "$PYTHON" "$REPO_ROOT/scripts/gen_topics_doc.py" --check; then ok=1; fi
+      echo "[verify] python scripts/gen_topics_doc.py --check"
+      if ! "$PYTHON" "$REPO_ROOT/scripts/gen_topics_doc.py" --check; then ok=1; fi
+    fi
 
     echo "[verify] python scripts/lint_event_names.py"
     if ! "$PYTHON" "$REPO_ROOT/scripts/lint_event_names.py"; then ok=1; fi
@@ -121,14 +166,18 @@ PY
     echo "[verify] python not found; skipping python-based checks"
   fi
 
-  if [[ -x "$REPO_ROOT/scripts/docs_check.sh" ]]; then
-    echo "[verify] bash scripts/docs_check.sh"
-    if ! bash "$REPO_ROOT/scripts/docs_check.sh"; then ok=1; fi
-  elif command -v mkdocs >/dev/null 2>&1; then
-    echo "[verify] docs_check.sh unavailable; running mkdocs build --strict"
-    if ! mkdocs build --strict -f "$REPO_ROOT/mkdocs.yml"; then ok=1; fi
+  if [[ $skip_docs -eq 1 ]]; then
+    echo "[verify] skipping docs lint (requested)"
   else
-    echo "[verify] skipping docs lint (docs_check.sh & mkdocs missing)"
+    if [[ -x "$REPO_ROOT/scripts/docs_check.sh" ]]; then
+      echo "[verify] bash scripts/docs_check.sh"
+      if ! bash "$REPO_ROOT/scripts/docs_check.sh"; then ok=1; fi
+    elif command -v mkdocs >/dev/null 2>&1; then
+      echo "[verify] docs_check.sh unavailable; running mkdocs build --strict"
+      if ! mkdocs build --strict -f "$REPO_ROOT/mkdocs.yml"; then ok=1; fi
+    else
+      echo "[verify] skipping docs lint (docs_check.sh & mkdocs missing)"
+    fi
   fi
 
   set -e
@@ -224,7 +273,7 @@ case "$command" in
     fi
     ;;
   verify)
-    run_verify
+    run_verify "$@"
     ;;
   hooks)
     bash "$SCRIPT_DIR/hooks/install_hooks.sh" "$@"

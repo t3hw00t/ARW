@@ -48,6 +48,10 @@ if [[ -z "$PYTHON_BIN" ]]; then
     PYTHON_BIN="$(command -v python)"
   fi
 fi
+if [[ -z "$PYTHON_BIN" ]]; then
+  warn "python not found; skipping Python-based docs checks. Install via mise or run 'bash scripts/bootstrap_docs.sh' after adding Python."
+  warnings=$((warnings+1))
+fi
 
 if [[ "$skip_mkdocs" != "1" ]]; then
   info "Building docs with mkdocs --strict to catch nav issues"
@@ -57,6 +61,7 @@ if [[ "$skip_mkdocs" != "1" ]]; then
     mkdocs build --strict -f "$mkdocs_yml" >/dev/null
   else
     warn "mkdocs not found; skipping build check"
+    warn "Install docs toolchain via 'mise run bootstrap:docs' or 'bash scripts/bootstrap_docs.sh'."
     warnings=$((warnings+1))
   fi
 else

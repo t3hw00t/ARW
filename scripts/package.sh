@@ -94,6 +94,10 @@ cp -r "$root_dir/docs" "$out/docs"
 if [[ -d "$root_dir/site" ]]; then
   cp -r "$root_dir/site" "$out/docs-site"
 fi
+if [[ -f "$root_dir/dist/docs-wheels.tar.gz" ]]; then
+  mkdir -p "$out/tools"
+  cp "$root_dir/dist/docs-wheels.tar.gz" "$out/tools/docs-wheels.tar.gz"
+fi
 if [[ -f "$root_dir/scripts/first-run.sh" ]]; then
   cp "$root_dir/scripts/first-run.sh" "$out/first-run.sh"
   chmod +x "$out/first-run.sh" 2>/dev/null || true
