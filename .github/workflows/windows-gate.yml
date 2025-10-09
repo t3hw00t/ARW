@@ -6,6 +6,9 @@ on:
     branches: [ main, master ]
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   pssa:
     name: psscriptanalyzer (${{ matrix.os }})
@@ -16,7 +19,7 @@ jobs:
         os: [windows-latest, windows-2022]
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5
       - name: Install PSScriptAnalyzer
         shell: pwsh
         run: |

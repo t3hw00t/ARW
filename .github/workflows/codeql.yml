@@ -8,6 +8,9 @@ on:
   schedule:
     - cron: '0 3 * * 1'
 
+permissions:
+  contents: read
+
 jobs:
   analyze:
     name: Analyze (CodeQL)
@@ -22,7 +25,7 @@ jobs:
       security-events: write
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5
       - name: Install Tauri (WebKitGTK) deps (Linux)
         run: |
           sudo apt-get update
@@ -37,16 +40,16 @@ jobs:
           sudo apt-get install -y libwebkit2gtk-4.1-dev || \
           sudo apt-get install -y libwebkit2gtk-4.0-dev
       - name: Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@5d458579430fc14a04a08a1e7d3694f545e91ce6 # stable
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@v3
+        uses: github/codeql-action/init@b97083e1835df46b2227bae5c4fc6e43569531c1 # v3
         with:
           languages: rust
       - name: Build (workspace)
         run: |
           cargo build --workspace --locked
       - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@v3
+        uses: github/codeql-action/analyze@b97083e1835df46b2227bae5c4fc6e43569531c1 # v3
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true

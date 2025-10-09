@@ -1,24 +1,35 @@
 name: TS Client Publish
 
 on:
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'Type publish to confirm npm release'
+        required: false
+        default: ''
   push:
     tags:
       - 'ts-client-v*'
 
+permissions:
+  contents: read
+  actions: write
+
 jobs:
   build-publish:
-    if: ${{ github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/ts-client-v') }}
+    if: ${{ (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/ts-client-v')) || (github.event_name == 'workflow_dispatch' && github.event.inputs.confirm == 'publish') }}
     runs-on: ubuntu-latest
+    environment:
+      name: npm-publish
     defaults:
       run:
         working-directory: clients/typescript
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: '20'
           registry-url: 'https://registry.npmjs.org'
@@ -39,7 +50,7 @@ jobs:
         run: npm pack
 
       - name: Upload package artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: arw-client-npm-pack
           path: clients/typescript/*.tgz
