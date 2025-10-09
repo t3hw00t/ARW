@@ -35,6 +35,7 @@ Assistant quickstart → [Agent Onboarding](docs/ai/AGENT_ONBOARDING.md)
 - For source builds, follow docs/guide/quickstart.md or run `scripts/setup.{sh,ps1}`; use `--headless` to skip the launcher when platform prerequisites are missing.
 
 ## Build & Test
+ - Build: `scripts/build.sh` (Linux/macOS) or `scripts/build.ps1` (Windows). Both default to a headless build that skips the Tauri launcher; add `--with-launcher` / `-WithLauncher` or set `ARW_BUILD_LAUNCHER=1` when you need the desktop UI (requires WebKitGTK 4.1 + libsoup3 on Linux or WebView2 on Windows). `make build` / `just build` follow the same headless default, with `make build-launcher` / `just build-launcher` opting into the full workspace build.
 - Format: `cargo fmt --all`
 - Lint: `cargo clippy --workspace --all-targets -- -D warnings`
 - Tests: `cargo nextest run` or `scripts/test.{sh,ps1}`
@@ -65,4 +66,3 @@ Assistant quickstart → [Agent Onboarding](docs/ai/AGENT_ONBOARDING.md)
 - Issues and discussions live on GitHub.
 - Automation dashboards and task tracking sit under .arw/ (large generated files are excluded from releases).
 - For status badges, CI pipelines, and deployment artifacts, see the badges at the top of this README.
-

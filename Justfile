@@ -6,10 +6,15 @@ clean *args:
 
 # Build
 build:
-  cargo build --workspace --release --locked
+  if command -v cargo >/dev/null; then cargo build --workspace --release --locked --exclude arw-launcher; else "$HOME/.cargo/bin/cargo" build --workspace --release --locked --exclude arw-launcher; fi
 
 dev-build:
-  cargo build --workspace
+  if command -v cargo >/dev/null; then cargo build --workspace --exclude arw-launcher; else "$HOME/.cargo/bin/cargo" build --workspace --exclude arw-launcher; fi
+
+# Build including launcher (requires platform deps)
+build-launcher:
+  if command -v cargo >/dev/null; then cargo build --workspace --release --locked --exclude arw-launcher; else "$HOME/.cargo/bin/cargo" build --workspace --release --locked --exclude arw-launcher; fi
+  if uname -s | grep -q '^Linux'; then if command -v cargo >/dev/null; then cargo build -p arw-launcher --release --locked --features launcher-linux-ui; else "$HOME/.cargo/bin/cargo" build -p arw-launcher --release --locked --features launcher-linux-ui; fi; else if command -v cargo >/dev/null; then cargo build -p arw-launcher --release --locked; else "$HOME/.cargo/bin/cargo" build -p arw-launcher --release --locked; fi; fi
 
 # Tauri apps
 tauri-launcher-build:

@@ -23,6 +23,9 @@ Prerequisites
 - Python 3.11+ with `pip` (used by documentation and spec utilities invoked by `just verify`).
 - MkDocs Material: `pip install mkdocs-material` (or run `scripts/docgen.{sh,ps1}` which will prompt if missing).
 
+Build scripts default to a headless profile that skips the Tauri launcher. Pass `--with-launcher` / `-WithLauncher` (or export `ARW_BUILD_LAUNCHER=1`) when you specifically need the desktop UI and have the platform dependencies installed.
+The Makefile and Justfile mirror this behavior: `make build` / `just build` run headless by default, while `make build-launcher` or `just build-launcher` opt into compiling the desktop UI.
+
 Commands
 ```bash
 cargo fmt --all -- --check

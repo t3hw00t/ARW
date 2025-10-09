@@ -65,6 +65,10 @@ bash scripts/build.sh
 bash scripts/test.sh
 ```
 
+The build helpers default to a headless profile that skips the Tauri launcher. Add `-WithLauncher` / `--with-launcher` (or set `ARW_BUILD_LAUNCHER=1`) when you specifically need the desktop UI and have installed the platform dependencies (WebKitGTK 4.1 + libsoup3 on Linux, WebView2 on Windows).
+
+Prefer `make build` / `just build` when you want the same headless defaults in common automation. Use `make build-launcher` or `just build-launcher` to opt into compiling the desktop UI alongside the server.
+
 The helpers fall back to `cargo test --workspace --locked` when `cargo-nextest` is missing and explain how to install it for faster runs.
 
 ## Admin Token Handling

@@ -1,10 +1,13 @@
-.PHONY: build dev-build fmt lint lint-events test package docgen docs-build start clean clean-venv
+.PHONY: build dev-build build-launcher fmt lint lint-events test package docgen docs-build start clean clean-venv
 
 build:
-	cargo build --workspace --release --locked
+	cargo build --workspace --release --locked --exclude arw-launcher
 
 dev-build:
-	cargo build --workspace
+	cargo build --workspace --exclude arw-launcher
+
+build-launcher:
+	cargo build --workspace --release --locked
 
 fmt:
 	cargo fmt --all

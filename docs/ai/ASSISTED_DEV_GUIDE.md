@@ -4,6 +4,10 @@ Type: Reference
 
 Microsummary: Small, safe changes with a written PLAN → minimal DIFF → tests → docs. Default‑deny risky edits. Stable.
 
+Harness precedence
+- Follow the execution harness or user instructions when they conflict with this guide; note the deviation in your response so the next agent has the same context.
+- Lightweight exceptions granted by the harness (e.g., trivial edits that explicitly skip planning) are valid—call them out when you use them.
+
 Purpose
 - Make small, safe changes that keep ARW coherent and testable.
 - Default‑deny risky edits (security, network, filesystem) unless explicitly in scope.
