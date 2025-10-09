@@ -105,5 +105,4 @@ impl HashGuardState {
             .map(|entry| entry.followers.iter().cloned().collect())
             .unwrap_or_default()
     }
-
 }

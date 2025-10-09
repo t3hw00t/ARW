@@ -5,6 +5,7 @@ const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
 const assert = require('assert');
+const { URL, URLSearchParams } = require('url');
 
 function makeNode(tag = 'div') {
   const node = {
@@ -180,6 +181,8 @@ const windowObj = {
 
 windowObj.window = windowObj;
 windowObj.globalThis = windowObj;
+windowObj.URL = URL;
+windowObj.URLSearchParams = URLSearchParams;
 
 vm.createContext(windowObj);
 const code = fs.readFileSync(path.join(__dirname, 'common.js'), 'utf8');

@@ -34,12 +34,12 @@ pub use self::types::{
 
 pub use self::hash_guard::HashGuardRole;
 
+pub use self::config::DownloadTuning;
 use self::downloads::{DestInfo, DownloadHandle, DownloadsState};
 use self::hash_guard::HashGuardState;
 use self::model_metrics::MetricsState;
 use self::preflight::{PreflightError, PreflightInfo};
 use self::storage::ManifestHashIndex;
-pub use self::config::DownloadTuning;
 
 const DEFAULT_CONCURRENCY: u64 = 2;
 const METRIC_MANIFEST_INDEX_REBUILDS: &str = "models.manifest_index.rebuilds";
@@ -283,10 +283,8 @@ impl ModelStore {
         let inflight = self.inflight_snapshot();
         let concurrency = self.concurrency_snapshot().await;
         let jobs = self.downloads.job_snapshot().await;
-        let runtime = ModelsRuntimeConfig::from_tuning(
-            config::download_tuning(),
-            Self::preflight_enabled(),
-        );
+        let runtime =
+            ModelsRuntimeConfig::from_tuning(config::download_tuning(), Self::preflight_enabled());
         ModelsMetricsResponse::from_parts(counters, inflight, concurrency, jobs, runtime)
     }
 
@@ -2366,7 +2364,6 @@ fn duration_to_millis(duration: Duration) -> u64 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test_support;
     use tokio::sync::broadcast::error::TryRecvError;
 
     fn dummy_download_handle(label: &str) -> DownloadHandle {

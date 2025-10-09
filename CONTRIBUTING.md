@@ -14,6 +14,7 @@ Workflow
 4. Keep commits focused and messages descriptive.
 5. Keep interfaces and events consistent with the Feature Matrix and naming policy.
 6. During the restructure, keep `docs/RESTRUCTURE.md` up to date for any changes to the triad API (`/actions`, `/events`, `/state`), kernel schemas/behavior, runtime/policy, or migration status.
+7. Prefer `scripts/dev.{sh,ps1}` for common tasks (`setup`, `build`, `verify`) so automation stays consistent across environments.
 
 Prerequisites
 - Rust 1.90+ (latest stable via `rustup`)
@@ -32,6 +33,7 @@ cargo fmt --all -- --check
 cargo clippy --workspace --all-targets -- -D warnings
 scripts/test.ps1   # or ./scripts/test.sh
 scripts/docgen.ps1 # or ./scripts/docgen.sh
+scripts/dev.ps1 verify  # cross-platform guardrail run (fmt → clippy → tests → docs)
 just docs-check    # quick docs lint (links/headings), optional
 just docs-type-stamp  # insert Type: badges based on path
 just docs-stamp       # stamp Updated: dates from git history
@@ -88,7 +90,7 @@ Docs lint checklist
 - Ensure page is included in `mkdocs.yml` nav.
 - Run `just docs-check` and ensure `mkdocs build --strict` passes.
 - Use `just docs-type-stamp` and `just docs-stamp` to keep badges and dates consistent.
-- Install repo hooks to automate checks: `just hooks-install` (runs format, clippy, tests, spec checks, and docs build when docs change).
+- Install repo hooks to automate checks: `just hooks-install` (or `scripts/dev.ps1 hooks` on Windows) to run format, clippy, tests, spec checks, and docs build when docs change.
 
 PR acceptance checklist
 - User‑visible docs updated when behavior changes

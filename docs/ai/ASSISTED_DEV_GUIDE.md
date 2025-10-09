@@ -1,5 +1,5 @@
 # Assisted, Iterative Coding – Working Agreement
-Updated: 2025-09-22
+Updated: 2025-10-09
 Type: Reference
 
 Microsummary: Small, safe changes with a written PLAN → minimal DIFF → tests → docs. Default‑deny risky edits. Stable.
@@ -18,6 +18,8 @@ Exception: when a change qualifies as an "ease-of-use" shortcut in the CLI (e.g.
 2) Get ACK on the PLAN (or self-review if solo), then implement minimal DIFF.
 3) Run relevant checks (fmt, clippy -D warnings, nextest) when source code changes. For docs-only or textual config updates, call out the skipped checks and why they are safe.
 4) Update docs + microsummaries; create a tight PR with acceptance notes.
+
+Use `scripts/dev.{sh,ps1} verify` to run the standard fmt → clippy → tests → docs sequence; it reports skipped checks so you can note them explicitly.
 
 Lightweight path (ease-of-use)
 - Use only when the execution harness or reviewer explicitly treats the work as a trivial shortcut (typo fix, single-line docs tweak, metadata bump).

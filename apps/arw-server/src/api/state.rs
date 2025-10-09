@@ -18,26 +18,31 @@ use utoipa::{IntoParams, ToSchema};
 
 pub mod beliefs;
 pub mod intents;
+pub mod misc;
 pub mod observations;
 pub mod snapshots;
-pub mod misc;
 pub mod tasks;
 
+#[allow(unused_imports)]
 pub use beliefs::{__path_state_beliefs, state_beliefs};
+#[allow(unused_imports)]
 pub use intents::{__path_state_intents, state_intents};
-pub use observations::{__path_state_observations, state_observations};
 #[allow(unused_imports)]
 pub use misc::{
     __path_state_contributions, __path_state_guardrails_metrics, __path_state_identity,
-    __path_state_policy_capsules, __path_state_world, __path_state_world_select, state_contributions,
-    state_guardrails_metrics, state_identity, state_policy_capsules, state_world, state_world_select,
+    __path_state_policy_capsules, __path_state_world, __path_state_world_select,
+    state_contributions, state_guardrails_metrics, state_identity, state_policy_capsules,
+    state_world, state_world_select,
 };
+#[allow(unused_imports)]
+pub use observations::{__path_state_observations, state_observations};
 #[allow(unused_imports)]
 pub use snapshots::{
     __path_state_crashlog, __path_state_screenshots, __path_state_service_health,
     __path_state_service_status, state_crashlog, state_screenshots, state_service_health,
     state_service_status,
 };
+#[allow(unused_imports)]
 pub use tasks::{__path_state_tasks, state_tasks};
 
 #[derive(Debug, Default, Deserialize, IntoParams)]
@@ -757,22 +762,26 @@ pub async fn state_egress(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::observations::StateObservationsQuery;
+    use super::*;
     use arw_policy::PolicyEngine;
-    use arw_topics;
     use axum::{
-        body::to_bytes,
+        body::Body,
         extract::Query,
         http::{header, HeaderMap, HeaderValue, StatusCode},
     };
     use chrono::{DateTime, Duration, SecondsFormat, Utc};
+    use http_body_util::BodyExt;
     use serde_json::{json, Value};
     use std::collections::HashMap;
     use std::sync::Arc;
     use tempfile::tempdir;
 
-    async fn build_state(
+    async fn body_bytes(body: Body) -> bytes::Bytes {
+        BodyExt::collect(body).await.expect("body bytes").to_bytes()
+    }
+
+    pub(crate) async fn build_state(
         path: &std::path::Path,
         env_guard: &mut crate::test_support::env::EnvGuard,
     ) -> AppState {
@@ -858,7 +867,7 @@ mod tests {
                 .and_then(|v| v.to_str().ok()),
             Some("\"state-actions-v1\"")
         );
-        let bytes = to_bytes(body, usize::MAX).await.expect("body bytes");
+        let bytes = body_bytes(body).await;
         let value: Value = serde_json::from_slice(&bytes).expect("json");
         assert_eq!(value["version"].as_u64(), Some(1));
         let items = value["items"].as_array().expect("items array");
@@ -966,7 +975,7 @@ mod tests {
             .into_response();
         let (parts, body) = response.into_parts();
         assert_eq!(parts.status, StatusCode::OK);
-        let bytes = to_bytes(body, usize::MAX).await.expect("body");
+        let bytes = body_bytes(body).await;
         let value: Value = serde_json::from_slice(&bytes).expect("json");
         let items = value["items"].as_array().cloned().unwrap_or_default();
         assert_eq!(items.len(), 1);
@@ -1052,7 +1061,7 @@ mod tests {
             .into_response();
         let (parts, body) = response.into_parts();
         assert_eq!(parts.status, StatusCode::OK);
-        let bytes = to_bytes(body, usize::MAX).await.expect("body bytes");
+        let bytes = body_bytes(body).await;
         let value: Value = serde_json::from_slice(&bytes).expect("json");
         assert_eq!(value["items"].as_array().map(|a| a.len()), Some(1));
         assert_eq!(value["items"][0]["payload"]["seq"].as_i64(), Some(3));
@@ -1067,7 +1076,7 @@ mod tests {
             .into_response();
         let (parts, body) = response.into_parts();
         assert_eq!(parts.status, StatusCode::OK);
-        let bytes = to_bytes(body, usize::MAX).await.expect("body bytes");
+        let bytes = body_bytes(body).await;
         let value: Value = serde_json::from_slice(&bytes).expect("json");
         assert_eq!(value["items"].as_array().map(|a| a.len()), Some(2));
         assert_eq!(value["items"][0]["payload"]["seq"].as_i64(), Some(1));
@@ -1116,7 +1125,7 @@ mod tests {
             .into_response();
         let (parts, body) = response.into_parts();
         assert_eq!(parts.status, StatusCode::OK);
-        let bytes = to_bytes(body, usize::MAX).await.expect("body bytes");
+        let bytes = body_bytes(body).await;
         let value: Value = serde_json::from_slice(&bytes).expect("json");
         let items = value["items"].as_array().cloned().unwrap_or_default();
         assert_eq!(items.len(), 1);
@@ -1141,7 +1150,7 @@ mod tests {
             .into_response();
         let (parts, body) = response.into_parts();
         assert_eq!(parts.status, StatusCode::BAD_REQUEST);
-        let bytes = to_bytes(body, usize::MAX).await.expect("body bytes");
+        let bytes = body_bytes(body).await;
         let value: Value = serde_json::from_slice(&bytes).expect("json");
         assert_eq!(value["title"].as_str(), Some("Invalid `since` value"));
 
@@ -1232,7 +1241,7 @@ mod tests {
             .into_response();
         assert_eq!(response.status(), StatusCode::OK);
         let (_, body) = response.into_parts();
-        let bytes = to_bytes(body, usize::MAX).await.expect("body bytes");
+        let bytes = body_bytes(body).await;
         let payload: Value = serde_json::from_slice(&bytes).expect("json body");
         let items = payload["items"].as_array().expect("items array");
         assert_eq!(items.len(), 1);
@@ -1359,7 +1368,7 @@ mod tests {
         .into_response();
         let (parts, body) = response.into_parts();
         assert_eq!(parts.status, StatusCode::OK);
-        let bytes = to_bytes(body, usize::MAX).await.expect("body bytes");
+        let bytes = body_bytes(body).await;
         let value: Value = serde_json::from_slice(&bytes).expect("json");
         assert!(value["version"].as_u64().unwrap_or_default() > 0);
         let items = value["items"].as_array().expect("items array");
@@ -1500,7 +1509,7 @@ mod tests {
             .into_response();
         assert_eq!(response.status(), StatusCode::OK);
         let (_, body) = response.into_parts();
-        let bytes = to_bytes(body, usize::MAX).await.expect("body");
+        let bytes = body_bytes(body).await;
         let value: Value = serde_json::from_slice(&bytes).expect("json");
         let items = value["items"].as_array().expect("items array");
         assert_eq!(items.len(), 1);
@@ -1569,7 +1578,7 @@ mod tests {
             .into_response();
         assert_eq!(response.status(), StatusCode::OK);
         let (_, body) = response.into_parts();
-        let bytes = to_bytes(body, usize::MAX).await.expect("body");
+        let bytes = body_bytes(body).await;
         let value: Value = serde_json::from_slice(&bytes).expect("json");
         let items = value["items"].as_array().expect("items array");
         assert_eq!(items.len(), 1);
@@ -1588,7 +1597,7 @@ mod tests {
             .into_response();
         assert_eq!(response_exact.status(), StatusCode::OK);
         let (_, body) = response_exact.into_parts();
-        let bytes = to_bytes(body, usize::MAX).await.expect("body");
+        let bytes = body_bytes(body).await;
         let value: Value = serde_json::from_slice(&bytes).expect("json");
         let items = value["items"].as_array().expect("items array");
         assert_eq!(items.len(), 1);
@@ -1639,7 +1648,7 @@ mod tests {
         assert_eq!(response.status(), StatusCode::OK);
         let (parts, body) = response.into_parts();
         assert!(parts.headers.get(header::ETAG).is_some());
-        let bytes = to_bytes(body, usize::MAX).await.expect("body");
+        let bytes = body_bytes(body).await;
         let value: Value = serde_json::from_slice(&bytes).expect("json");
         assert_eq!(value["version"].as_u64().unwrap_or_default(), 2);
         assert_eq!(value["episode"]["id"].as_str(), Some(corr));

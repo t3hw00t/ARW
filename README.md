@@ -32,14 +32,15 @@ Assistant quickstart → [Agent Onboarding](docs/ai/AGENT_ONBOARDING.md)
 ## Getting Started
 - Clone the repo and install Rust 1.90+ via `rustup`.
 - For a packaged install, download the latest release archive from GitHub Releases and run `scripts/first-run.{sh,ps1}`.
-- For source builds, follow docs/guide/quickstart.md or run `scripts/setup.{sh,ps1}`; use `--headless` to skip the launcher when platform prerequisites are missing.
+- For source builds, run `scripts/dev.{sh,ps1} setup` (defaults to headless + non-interactive `-Yes`) or follow docs/guide/quickstart.md; pass `--with-launcher` / `-WithLauncher` when desktop UI prerequisites are ready.
 
 ## Build & Test
- - Build: `scripts/build.sh` (Linux/macOS) or `scripts/build.ps1` (Windows). Both default to a headless build that skips the Tauri launcher; add `--with-launcher` / `-WithLauncher` or set `ARW_BUILD_LAUNCHER=1` when you need the desktop UI (requires WebKitGTK 4.1 + libsoup3 on Linux or WebView2 on Windows). `make build` / `just build` follow the same headless default, with `make build-launcher` / `just build-launcher` opting into the full workspace build.
+- Unified helper: `scripts/dev.{sh,ps1}` wraps the common workflow (e.g., `scripts/dev.ps1 build`, `scripts/dev.ps1 verify`).
+- Build: `scripts/build.sh` (Linux/macOS) or `scripts/build.ps1` (Windows). Both default to a headless build that skips the Tauri launcher; add `--with-launcher` / `-WithLauncher` or set `ARW_BUILD_LAUNCHER=1` when you need the desktop UI (requires WebKitGTK 4.1 + libsoup3 on Linux or WebView2 on Windows). `make build` / `just build` follow the same headless default, with `make build-launcher` / `just build-launcher` opting into the full workspace build.
 - Format: `cargo fmt --all`
 - Lint: `cargo clippy --workspace --all-targets -- -D warnings`
 - Tests: `cargo nextest run` or `scripts/test.{sh,ps1}`
-- Docs: `mkdocs build --strict` or `just docs-build` (requires Bash). Windows without Bash: `powershell -ExecutionPolicy Bypass -File scripts\docgen.ps1` followed by `mkdocs build --strict`.
+- Docs: `mkdocs build --strict`, `scripts/dev.{sh,ps1} docs`, or `just docs-build` (requires Bash). Windows without Bash: `pwsh -ExecutionPolicy Bypass -File scripts\docgen.ps1` followed by `mkdocs build --strict`.
 
 ## Repository Layout
 - `crates/` - Core Rust libraries (protocol, kernel, policy, runtime, etc.).

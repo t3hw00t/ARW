@@ -4,7 +4,7 @@ title: Quickstart
 
 # Quickstart
 
-Updated: 2025-09-24
+Updated: 2025-10-09
 Type: Tutorial
 
 Run the unified ARW server locally in minutes. The architecture centres on the `/actions` → `/events` → `/state/*` triad; enable `ARW_DEBUG=1` to serve the browser debug panels.
@@ -41,6 +41,11 @@ This path skips the Rust toolchain—perfect for quick evaluations or air-gapped
 
 > The first build compiles `arw-server` and, when requested, the Tauri launcher. Expect a multi-minute compile on cold toolchains; subsequent runs reuse the cached artifacts.
 
+- Cross-platform helper  
+  - Linux / macOS: `bash scripts/dev.sh setup`  
+  - Windows: `pwsh -NoLogo -NoProfile -File scripts\dev.ps1 setup`  
+  These invocations auto-accept prompts (`-Yes`) and default to headless builds unless you pass `--with-launcher` / `-WithLauncher`.
+
 - Linux / macOS  
   `bash scripts/setup.sh --headless`
 
@@ -51,7 +56,7 @@ Use `--headless` / `-Headless` to skip the launcher build when WebKitGTK 4.1 +
 
 ## Build and Test (optional)
 
-Use the standalone build/test helpers when you want finer-grained control or CI-style runs.
+Use the standalone build/test helpers when you want finer-grained control or CI-style runs. The `scripts/dev.{sh,ps1}` helper wraps them (e.g., `scripts/dev.sh build`, `scripts/dev.ps1 verify`) with safe defaults.
 
 === "Windows"
 ```powershell

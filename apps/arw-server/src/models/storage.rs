@@ -62,277 +62,6 @@ impl ManifestHashRefs {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::super::{CasGcRequest, ModelStore};
-    use super::*;
-    use arw_events;
-    use serde_json::json;
-    use tempfile::tempdir;
-
-    #[tokio::test]
-    async fn hashes_page_groups_and_filters_providers() {
-        let bus = arw_events::Bus::new_with_replay(8, 8);
-        let store = ModelStore::new(bus, None);
-        let items = vec![
-            json!({
-                "id": "m-primary",
-                "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-                "bytes": 10,
-                "provider": "alpha",
-                "path": "/models/alpha.bin"
-            }),
-            json!({
-                "id": "m-follower",
-                "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-                "provider": "beta"
-            }),
-            json!({
-                "id": "m-two",
-                "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-                "bytes": 7,
-                "provider": "alpha",
-                "path": "/models/alpha-two.bin"
-            }),
-        ];
-        store.replace_items(items).await;
-
-        let page = store.hashes_page(10, 0, None, None, None, None).await;
-        assert_eq!(page.total, 2);
-        assert_eq!(page.count, 2);
-        assert_eq!(page.limit, 10);
-        assert_eq!(page.offset, 0);
-        assert_eq!(page.page, 1);
-        assert_eq!(page.pages, 1);
-        assert!(page.prev_offset.is_none());
-        assert!(page.next_offset.is_none());
-        assert_eq!(page.last_offset, 0);
-
-        let first = &page.items[0];
-        assert_eq!(
-            first.sha256,
-            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-        );
-        assert_eq!(first.bytes, 10);
-        assert_eq!(first.path, "/models/alpha.bin");
-        assert_eq!(first.providers, vec!["alpha", "beta"]);
-        assert_eq!(first.models, vec!["m-follower", "m-primary"]);
-
-        let filtered = store
-            .hashes_page(10, 0, Some("beta".into()), None, None, None)
-            .await;
-        assert_eq!(filtered.total, 1);
-        assert_eq!(filtered.count, 1);
-        assert_eq!(filtered.page, 1);
-        assert_eq!(filtered.pages, 1);
-        assert!(filtered.prev_offset.is_none());
-        assert!(filtered.next_offset.is_none());
-        assert_eq!(filtered.last_offset, 0);
-        assert_eq!(filtered.items[0].sha256, first.sha256);
-    }
-
-    #[tokio::test]
-    async fn hashes_page_filters_by_model_id() {
-        let bus = arw_events::Bus::new_with_replay(8, 8);
-        let store = ModelStore::new(bus, None);
-        let items = vec![
-            json!({
-                "id": "first-model",
-                "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-                "bytes": 12,
-                "provider": "alpha",
-                "path": "/models/a.bin"
-            }),
-            json!({
-                "id": "second-model",
-                "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-                "bytes": 9,
-                "provider": "alpha",
-                "path": "/models/b.bin"
-            }),
-            json!({
-                "id": "follower",
-                "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-                "provider": "beta"
-            }),
-        ];
-        store.replace_items(items).await;
-
-        let filtered = store
-            .hashes_page(10, 0, None, Some("follower".into()), None, None)
-            .await;
-        assert_eq!(filtered.total, 1);
-        assert_eq!(filtered.items.len(), 1);
-        assert_eq!(filtered.page, 1);
-        assert_eq!(filtered.pages, 1);
-        assert!(filtered.prev_offset.is_none());
-        assert!(filtered.next_offset.is_none());
-        assert_eq!(filtered.last_offset, 0);
-        let entry = &filtered.items[0];
-        assert_eq!(entry.models, vec!["first-model", "follower"]);
-    }
-
-    #[tokio::test]
-    async fn hashes_page_reports_offsets() {
-        let bus = arw_events::Bus::new_with_replay(8, 8);
-        let store = ModelStore::new(bus, None);
-        let mut items = Vec::new();
-        for i in 0..103 {
-            let sha = format!("{:064x}", i + 1);
-            items.push(json!({
-                "id": format!("model-{i}"),
-                "sha256": sha,
-                "bytes": 1 + i as u64,
-                "provider": "local",
-                "path": format!("/models/model-{i}.bin"),
-            }));
-        }
-        store.replace_items(items).await;
-
-        let page1 = store
-            .hashes_page(25, 0, None, None, Some("sha256".into()), Some("asc".into()))
-            .await;
-        assert_eq!(page1.count, 25);
-        assert_eq!(page1.page, 1);
-        assert_eq!(page1.pages, 5);
-        assert_eq!(page1.prev_offset, None);
-        assert_eq!(page1.next_offset, Some(25));
-        assert_eq!(page1.last_offset, 100);
-
-        let page2 = store
-            .hashes_page(
-                25,
-                page1.next_offset.expect("next offset"),
-                None,
-                None,
-                Some("sha256".into()),
-                Some("asc".into()),
-            )
-            .await;
-        assert_eq!(page2.offset, 25);
-        assert_eq!(page2.page, 2);
-        assert_eq!(page2.prev_offset, Some(0));
-        assert_eq!(page2.next_offset, Some(50));
-
-        let page_last = store
-            .hashes_page(
-                25,
-                9999,
-                None,
-                None,
-                Some("sha256".into()),
-                Some("asc".into()),
-            )
-            .await;
-        assert_eq!(page_last.offset, 100);
-        assert_eq!(page_last.count, 3);
-        assert_eq!(page_last.page, 5);
-        assert_eq!(page_last.pages, 5);
-        assert_eq!(page_last.prev_offset, Some(75));
-        assert_eq!(page_last.next_offset, None);
-        assert_eq!(page_last.last_offset, 100);
-    }
-
-    #[tokio::test]
-    async fn manifest_hash_index_invalidates_on_mutation() {
-        let bus = arw_events::Bus::new_with_replay(8, 8);
-        let store = ModelStore::new(bus, None);
-        store
-            .replace_items(vec![
-                json!({
-                    "id": "keep",
-                    "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-                    "bytes": 4,
-                    "provider": "alpha",
-                    "path": "/models/keep.bin"
-                }),
-                json!({
-                    "id": "drop",
-                    "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-                    "bytes": 8,
-                    "provider": "beta",
-                    "path": "/models/drop.bin"
-                }),
-            ])
-            .await;
-
-        let first = store.manifest_hash_index().await;
-        assert_eq!(first.len(), 2);
-        drop(first);
-
-        let removed = store.remove_model("drop").await;
-        assert!(removed, "expected model removal to succeed");
-
-        let second = store.manifest_hash_index().await;
-        assert_eq!(second.len(), 1);
-        assert!(
-            second.contains_key("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
-        );
-        assert!(!second
-            .contains_key("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"));
-    }
-
-    #[tokio::test]
-    async fn cas_gc_verbose_reports_deleted_entries() {
-        let tmp = tempdir().expect("tempdir");
-        let _ctx = crate::test_support::begin_state_env(tmp.path());
-
-        let bus = arw_events::Bus::new_with_replay(8, 8);
-        let store = ModelStore::new(bus, None);
-
-        let keep_hash = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
-        let stale_hash = "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc";
-
-        store
-            .replace_items(vec![json!({
-                "id": "keep-model",
-                "sha256": keep_hash,
-                "bytes": 4,
-                "provider": "alpha",
-                "path": format!("/models/{keep_hash}"),
-            })])
-            .await;
-
-        let keep_path = store.cas_blob_path(keep_hash);
-        let stale_path = store.cas_blob_path(stale_hash);
-        if let Some(parent) = keep_path.parent() {
-            tokio::fs::create_dir_all(parent)
-                .await
-                .expect("create cas dir");
-        }
-
-        tokio::fs::write(&keep_path, b"keep")
-            .await
-            .expect("write keep blob");
-        tokio::fs::write(&stale_path, b"stale-bytes")
-            .await
-            .expect("write stale blob");
-
-        let payload = store
-            .cas_gc(CasGcRequest {
-                ttl_hours: Some(0),
-                verbose: Some(true),
-            })
-            .await
-            .expect("gc response");
-
-        assert_eq!(payload.get("scanned").and_then(Value::as_u64), Some(2));
-        assert_eq!(payload.get("deleted").and_then(Value::as_u64), Some(1));
-        assert_eq!(payload.get("kept").and_then(Value::as_u64), Some(1));
-
-        let deleted_items = payload
-            .get("deleted_items")
-            .and_then(Value::as_array)
-            .expect("deleted items array");
-        assert_eq!(deleted_items.len(), 1);
-
-        tokio::fs::metadata(&keep_path)
-            .await
-            .expect("keep blob still present");
-        assert!(tokio::fs::metadata(&stale_path).await.is_err());
-    }
-}
-
 impl ModelStore {
     pub(super) fn models_dir(&self) -> PathBuf {
         super::util::state_dir().join("models")
@@ -617,5 +346,275 @@ impl ModelStore {
             pages,
             last_offset: max_offset,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::super::{CasGcRequest, ModelStore};
+    use super::*;
+    use serde_json::json;
+    use tempfile::tempdir;
+
+    #[tokio::test]
+    async fn hashes_page_groups_and_filters_providers() {
+        let bus = arw_events::Bus::new_with_replay(8, 8);
+        let store = ModelStore::new(bus, None);
+        let items = vec![
+            json!({
+                "id": "m-primary",
+                "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "bytes": 10,
+                "provider": "alpha",
+                "path": "/models/alpha.bin"
+            }),
+            json!({
+                "id": "m-follower",
+                "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "provider": "beta"
+            }),
+            json!({
+                "id": "m-two",
+                "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                "bytes": 7,
+                "provider": "alpha",
+                "path": "/models/alpha-two.bin"
+            }),
+        ];
+        store.replace_items(items).await;
+
+        let page = store.hashes_page(10, 0, None, None, None, None).await;
+        assert_eq!(page.total, 2);
+        assert_eq!(page.count, 2);
+        assert_eq!(page.limit, 10);
+        assert_eq!(page.offset, 0);
+        assert_eq!(page.page, 1);
+        assert_eq!(page.pages, 1);
+        assert!(page.prev_offset.is_none());
+        assert!(page.next_offset.is_none());
+        assert_eq!(page.last_offset, 0);
+
+        let first = &page.items[0];
+        assert_eq!(
+            first.sha256,
+            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        );
+        assert_eq!(first.bytes, 10);
+        assert_eq!(first.path, "/models/alpha.bin");
+        assert_eq!(first.providers, vec!["alpha", "beta"]);
+        assert_eq!(first.models, vec!["m-follower", "m-primary"]);
+
+        let filtered = store
+            .hashes_page(10, 0, Some("beta".into()), None, None, None)
+            .await;
+        assert_eq!(filtered.total, 1);
+        assert_eq!(filtered.count, 1);
+        assert_eq!(filtered.page, 1);
+        assert_eq!(filtered.pages, 1);
+        assert!(filtered.prev_offset.is_none());
+        assert!(filtered.next_offset.is_none());
+        assert_eq!(filtered.last_offset, 0);
+        assert_eq!(filtered.items[0].sha256, first.sha256);
+    }
+
+    #[tokio::test]
+    async fn hashes_page_filters_by_model_id() {
+        let bus = arw_events::Bus::new_with_replay(8, 8);
+        let store = ModelStore::new(bus, None);
+        let items = vec![
+            json!({
+                "id": "first-model",
+                "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "bytes": 12,
+                "provider": "alpha",
+                "path": "/models/a.bin"
+            }),
+            json!({
+                "id": "second-model",
+                "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                "bytes": 9,
+                "provider": "alpha",
+                "path": "/models/b.bin"
+            }),
+            json!({
+                "id": "follower",
+                "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "provider": "beta"
+            }),
+        ];
+        store.replace_items(items).await;
+
+        let filtered = store
+            .hashes_page(10, 0, None, Some("follower".into()), None, None)
+            .await;
+        assert_eq!(filtered.total, 1);
+        assert_eq!(filtered.items.len(), 1);
+        assert_eq!(filtered.page, 1);
+        assert_eq!(filtered.pages, 1);
+        assert!(filtered.prev_offset.is_none());
+        assert!(filtered.next_offset.is_none());
+        assert_eq!(filtered.last_offset, 0);
+        let entry = &filtered.items[0];
+        assert_eq!(entry.models, vec!["first-model", "follower"]);
+    }
+
+    #[tokio::test]
+    async fn hashes_page_reports_offsets() {
+        let bus = arw_events::Bus::new_with_replay(8, 8);
+        let store = ModelStore::new(bus, None);
+        let mut items = Vec::new();
+        for i in 0..103 {
+            let sha = format!("{:064x}", i + 1);
+            items.push(json!({
+                "id": format!("model-{i}"),
+                "sha256": sha,
+                "bytes": 1 + i as u64,
+                "provider": "local",
+                "path": format!("/models/model-{i}.bin"),
+            }));
+        }
+        store.replace_items(items).await;
+
+        let page1 = store
+            .hashes_page(25, 0, None, None, Some("sha256".into()), Some("asc".into()))
+            .await;
+        assert_eq!(page1.count, 25);
+        assert_eq!(page1.page, 1);
+        assert_eq!(page1.pages, 5);
+        assert_eq!(page1.prev_offset, None);
+        assert_eq!(page1.next_offset, Some(25));
+        assert_eq!(page1.last_offset, 100);
+
+        let page2 = store
+            .hashes_page(
+                25,
+                page1.next_offset.expect("next offset"),
+                None,
+                None,
+                Some("sha256".into()),
+                Some("asc".into()),
+            )
+            .await;
+        assert_eq!(page2.offset, 25);
+        assert_eq!(page2.page, 2);
+        assert_eq!(page2.prev_offset, Some(0));
+        assert_eq!(page2.next_offset, Some(50));
+
+        let page_last = store
+            .hashes_page(
+                25,
+                9999,
+                None,
+                None,
+                Some("sha256".into()),
+                Some("asc".into()),
+            )
+            .await;
+        assert_eq!(page_last.offset, 100);
+        assert_eq!(page_last.count, 3);
+        assert_eq!(page_last.page, 5);
+        assert_eq!(page_last.pages, 5);
+        assert_eq!(page_last.prev_offset, Some(75));
+        assert_eq!(page_last.next_offset, None);
+        assert_eq!(page_last.last_offset, 100);
+    }
+
+    #[tokio::test]
+    async fn manifest_hash_index_invalidates_on_mutation() {
+        let bus = arw_events::Bus::new_with_replay(8, 8);
+        let store = ModelStore::new(bus, None);
+        store
+            .replace_items(vec![
+                json!({
+                    "id": "keep",
+                    "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                    "bytes": 4,
+                    "provider": "alpha",
+                    "path": "/models/keep.bin"
+                }),
+                json!({
+                    "id": "drop",
+                    "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                    "bytes": 8,
+                    "provider": "beta",
+                    "path": "/models/drop.bin"
+                }),
+            ])
+            .await;
+
+        let first = store.manifest_hash_index().await;
+        assert_eq!(first.len(), 2);
+        drop(first);
+
+        let removed = store.remove_model("drop").await;
+        assert!(removed, "expected model removal to succeed");
+
+        let second = store.manifest_hash_index().await;
+        assert_eq!(second.len(), 1);
+        assert!(
+            second.contains_key("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
+        );
+        assert!(!second
+            .contains_key("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"));
+    }
+
+    #[tokio::test]
+    async fn cas_gc_verbose_reports_deleted_entries() {
+        let tmp = tempdir().expect("tempdir");
+        let _ctx = crate::test_support::begin_state_env(tmp.path());
+
+        let bus = arw_events::Bus::new_with_replay(8, 8);
+        let store = ModelStore::new(bus, None);
+
+        let keep_hash = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+        let stale_hash = "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc";
+
+        store
+            .replace_items(vec![json!({
+                "id": "keep-model",
+                "sha256": keep_hash,
+                "bytes": 4,
+                "provider": "alpha",
+                "path": format!("/models/{keep_hash}"),
+            })])
+            .await;
+
+        let keep_path = store.cas_blob_path(keep_hash);
+        let stale_path = store.cas_blob_path(stale_hash);
+        if let Some(parent) = keep_path.parent() {
+            tokio::fs::create_dir_all(parent)
+                .await
+                .expect("create cas dir");
+        }
+
+        tokio::fs::write(&keep_path, b"keep")
+            .await
+            .expect("write keep blob");
+        tokio::fs::write(&stale_path, b"stale-bytes")
+            .await
+            .expect("write stale blob");
+
+        let payload = store
+            .cas_gc(CasGcRequest {
+                ttl_hours: Some(0),
+                verbose: Some(true),
+            })
+            .await
+            .expect("gc response");
+
+        assert_eq!(payload.get("scanned").and_then(Value::as_u64), Some(2));
+        assert_eq!(payload.get("deleted").and_then(Value::as_u64), Some(1));
+        assert_eq!(payload.get("kept").and_then(Value::as_u64), Some(1));
+
+        let deleted_items = payload
+            .get("deleted_items")
+            .and_then(Value::as_array)
+            .expect("deleted items array");
+        assert_eq!(deleted_items.len(), 1);
+
+        tokio::fs::metadata(&keep_path)
+            .await
+            .expect("keep blob still present");
+        assert!(tokio::fs::metadata(&stale_path).await.is_err());
     }
 }

@@ -915,7 +915,7 @@ mod tests {
         assert!(parsed.items.iter().all(|item| {
             item.get("lane").and_then(|v| v.as_str()).unwrap_or("") == "short_term"
         }));
-        assert!(parsed.items.len() >= 1);
+        assert!(!parsed.items.is_empty());
     }
 
     #[tokio::test]

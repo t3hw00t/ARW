@@ -1,16 +1,34 @@
-#!/usr/bin/env bash
-set -euo pipefail
+#!powershell
+Set-StrictMode -Version Latest
+$ErrorActionPreference = 'Stop'
 
-ROOT=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")"/../.. && pwd)
-cd "$ROOT"
+function Write-LfFile {
+  param(
+    [Parameter(Mandatory = $true)][string]$Path,
+    [Parameter(Mandatory = $true)][string]$Content
+  )
+  $lfContent = $Content -replace "`r`n", "`n"
+  $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+  [System.IO.File]::WriteAllText($Path, $lfContent, $utf8NoBom)
+}
 
-if [[ ! -d .git ]]; then
-  echo "[hooks] Not a git repository: $ROOT" >&2
-  exit 1
-fi
+$ScriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
+$RepoRoot = (Resolve-Path (Join-Path $ScriptRoot '..' '..')).Path
+$GitDir = Join-Path $RepoRoot '.git'
 
-mkdir -p .git/hooks
-cat > .git/hooks/pre-commit << 'EOF'
+if (-not (Test-Path $GitDir)) {
+  throw "[hooks] Not a git repository: $RepoRoot"
+}
+
+$HooksDir = Join-Path $GitDir 'hooks'
+if (-not (Test-Path $HooksDir)) {
+  New-Item -ItemType Directory -Path $HooksDir | Out-Null
+}
+
+$PreCommitPath = Join-Path $HooksDir 'pre-commit'
+$PrePushPath = Join-Path $HooksDir 'pre-push'
+
+$preCommitScript = @'
 #!/usr/bin/env bash
 set -euo pipefail
 echo "[pre-commit] cargo fmt --check"
@@ -92,12 +110,9 @@ if git diff --cached --name-only | grep -E '^(docs/|mkdocs.yml)' >/dev/null 2>&1
 else
   echo "[pre-commit] Doc stamp skipped (ARW_SKIP_DOC_STAMP set)"
 fi
-EOF
-chmod +x .git/hooks/pre-commit
-echo "[hooks] Installed .git/hooks/pre-commit"
+'@
 
-# Pre-push: heavy interface checks (OpenAPI sync, optional diffs)
-cat > .git/hooks/pre-push << 'EOF'
+$prePushScript = @'
 #!/usr/bin/env bash
 set -euo pipefail
 echo "[pre-push] OpenAPI codegen sync check"
@@ -192,7 +207,17 @@ if command -v npx >/dev/null 2>&1; then
 else
   echo "[pre-push] npx unavailable; skipping spectral"
 fi
+'@
 
-EOF
-chmod +x .git/hooks/pre-push
-echo "[hooks] Installed .git/hooks/pre-push"
+Write-LfFile -Path $PreCommitPath -Content ($preCommitScript + "`n")
+Write-LfFile -Path $PrePushPath -Content ($prePushScript + "`n")
+
+try {
+  & git config core.fileMode >/dev/null 2>&1 | Out-Null
+  & git update-index --chmod=+x ".git/hooks/pre-commit" ".git/hooks/pre-push" 2>$null | Out-Null
+} catch {
+  # Best-effort; ignore failures (Windows typically ignores executable bits).
+}
+
+Write-Host "[hooks] Installed .git/hooks/pre-commit"
+Write-Host "[hooks] Installed .git/hooks/pre-push"

@@ -40,6 +40,7 @@ pub fn remove_extra_data(
 }
 
 #[cfg(any(target_os = "linux", test))]
+#[allow(dead_code)]
 pub fn png_to_rgba_image(
     filename: &String,
     x: i32,

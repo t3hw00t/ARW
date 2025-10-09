@@ -84,11 +84,16 @@ pub async fn state_observations(
 mod tests {
     use super::*;
     use crate::test_support;
+    use axum::body::Body;
     use axum::extract::Query;
     use axum::http::{header, HeaderMap, StatusCode};
     use chrono::{Duration, SecondsFormat, Utc};
-    use hyper::body::to_bytes;
+    use http_body_util::BodyExt;
     use serde_json::{json, Value};
+
+    async fn collect_body(body: Body) -> bytes::Bytes {
+        BodyExt::collect(body).await.expect("body bytes").to_bytes()
+    }
 
     #[tokio::test]
     async fn state_observations_honors_if_none_match() {
@@ -105,10 +110,9 @@ mod tests {
         };
         crate::state_observer::ingest_for_tests(&envelope).await;
 
-        let first =
-            state_observations(HeaderMap::new(), Query(StateObservationsQuery::default()))
-                .await
-                .into_response();
+        let first = state_observations(HeaderMap::new(), Query(StateObservationsQuery::default()))
+            .await
+            .into_response();
         let etag = first
             .headers()
             .get(header::ETAG)
@@ -117,8 +121,9 @@ mod tests {
 
         let mut headers = HeaderMap::new();
         headers.insert(header::IF_NONE_MATCH, etag);
-        let response =
-            state_observations(headers, Query(StateObservationsQuery::default())).await.into_response();
+        let response = state_observations(headers, Query(StateObservationsQuery::default()))
+            .await
+            .into_response();
         assert_eq!(response.status(), StatusCode::NOT_MODIFIED);
         crate::state_observer::reset_for_tests().await;
     }
@@ -167,7 +172,7 @@ mod tests {
             .into_response();
         let (parts, body) = response.into_parts();
         assert_eq!(parts.status, StatusCode::OK);
-        let bytes = to_bytes(body, usize::MAX).await.expect("body bytes");
+        let bytes = collect_body(body).await;
         let value: Value = serde_json::from_slice(&bytes).expect("json");
         assert_eq!(value["items"].as_array().map(|a| a.len()), Some(1));
         assert_eq!(value["items"][0]["payload"]["seq"].as_i64(), Some(3));
@@ -182,7 +187,7 @@ mod tests {
             .into_response();
         let (parts, body) = response.into_parts();
         assert_eq!(parts.status, StatusCode::OK);
-        let bytes = to_bytes(body, usize::MAX).await.expect("body bytes");
+        let bytes = collect_body(body).await;
         let value: Value = serde_json::from_slice(&bytes).expect("json");
         assert_eq!(value["items"].as_array().map(|a| a.len()), Some(2));
         assert_eq!(value["items"][0]["payload"]["seq"].as_i64(), Some(1));
@@ -231,7 +236,7 @@ mod tests {
             .into_response();
         let (parts, body) = response.into_parts();
         assert_eq!(parts.status, StatusCode::OK);
-        let bytes = to_bytes(body, usize::MAX).await.expect("body bytes");
+        let bytes = collect_body(body).await;
         let value: Value = serde_json::from_slice(&bytes).expect("json");
         let items = value["items"].as_array().cloned().unwrap_or_default();
         assert_eq!(items.len(), 1);
@@ -256,7 +261,7 @@ mod tests {
             .into_response();
         let (parts, body) = response.into_parts();
         assert_eq!(parts.status, StatusCode::BAD_REQUEST);
-        let bytes = to_bytes(body, usize::MAX).await.expect("body bytes");
+        let bytes = collect_body(body).await;
         let value: Value = serde_json::from_slice(&bytes).expect("json");
         assert_eq!(value["title"].as_str(), Some("Invalid `since` value"));
 

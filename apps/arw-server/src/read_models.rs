@@ -335,7 +335,7 @@ pub(crate) fn start_read_models(state: AppState) -> Vec<TaskHandle> {
         let lane_name = (*lane).to_string();
         handles.push(spawn_read_model(
             &state,
-            *id,
+            id,
             Duration::from_millis(2500),
             move |st| {
                 let lane_clone = lane_name.clone();

@@ -9,7 +9,10 @@ use serde_json::json;
 use utoipa::{IntoParams, ToSchema};
 
 use super::numeric_version_from_field;
-use crate::{admin_ok, api::http_utils, identity::IdentitySnapshot, tools::guardrails_metrics_value, world, AppState};
+use crate::{
+    admin_ok, api::http_utils, identity::IdentitySnapshot, tools::guardrails_metrics_value, world,
+    AppState,
+};
 
 /// Guardrails circuit-breaker metrics snapshot.
 #[utoipa::path(
@@ -178,9 +181,7 @@ pub async fn state_contributions(
         .await
         .unwrap_or_default();
     let version = numeric_version_from_field(&items, "id");
-    if let Some(resp) =
-        http_utils::state_version_not_modified(&headers, "contributions", version)
-    {
+    if let Some(resp) = http_utils::state_version_not_modified(&headers, "contributions", version) {
         return resp;
     }
     let mut response = Json(json!({"version": version, "items": items})).into_response();
@@ -193,7 +194,6 @@ mod tests {
     use super::*;
     use crate::{
         api::state::tests::build_state,
-        capsule_guard::CapsuleSnapshot,
         test_support::{begin_state_env, env::guard},
     };
     use arw_events;
@@ -206,7 +206,9 @@ mod tests {
 
     #[tokio::test]
     async fn state_guardrails_metrics_requires_admin() {
-        let response = state_guardrails_metrics(HeaderMap::new()).await.into_response();
+        let response = state_guardrails_metrics(HeaderMap::new())
+            .await
+            .into_response();
         assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
     }
 
@@ -215,13 +217,6 @@ mod tests {
         let temp = tempdir().expect("tempdir");
         let mut ctx = begin_state_env(temp.path());
         let state = build_state(temp.path(), &mut ctx.env).await;
-        state.capsules().install_for_tests(vec![CapsuleSnapshot {
-            id: "demo".into(),
-            status: "active".into(),
-            summary: Some("Demo capsule".into()),
-            ..Default::default()
-        }]);
-
         let response = state_policy_capsules(State(state)).await.into_response();
         assert_eq!(response.status(), StatusCode::OK);
     }
@@ -231,6 +226,9 @@ mod tests {
         let temp = tempdir().expect("tempdir");
         let mut ctx = begin_state_env(temp.path());
         let state = build_state(temp.path(), &mut ctx.env).await;
+        ctx.env.set("ARW_DEBUG", "0");
+        ctx.env.remove("ARW_ADMIN_TOKEN");
+        ctx.env.remove("ARW_ADMIN_TOKEN_SHA256");
         let response = state_identity(HeaderMap::new(), State(state))
             .await
             .into_response();
@@ -255,7 +253,11 @@ mod tests {
         let first = state_world(HeaderMap::new(), Query(WorldQuery { proj: None }))
             .await
             .into_response();
-        let etag = first.headers().get(header::ETAG).cloned().expect("world etag");
+        let etag = first
+            .headers()
+            .get(header::ETAG)
+            .cloned()
+            .expect("world etag");
 
         let mut headers = HeaderMap::new();
         headers.insert(header::IF_NONE_MATCH, etag);
@@ -296,7 +298,9 @@ mod tests {
 
         let mut headers = HeaderMap::new();
         headers.insert(header::IF_NONE_MATCH, etag);
-        let response = state_contributions(headers, State(state)).await.into_response();
+        let response = state_contributions(headers, State(state))
+            .await
+            .into_response();
         assert_eq!(response.status(), StatusCode::NOT_MODIFIED);
     }
 }

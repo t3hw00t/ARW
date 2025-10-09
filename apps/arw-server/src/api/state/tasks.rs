@@ -24,8 +24,7 @@ pub async fn state_tasks(headers: HeaderMap, State(state): State<AppState>) -> i
 mod tests {
     use super::*;
     use crate::{api::state::tests::build_state, test_support::begin_state_env};
-    use axum::http::header;
-    use axum::http::HeaderMap;
+    use axum::http::{header, HeaderMap, StatusCode};
     use tempfile::tempdir;
 
     #[tokio::test]

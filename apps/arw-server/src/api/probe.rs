@@ -286,9 +286,7 @@ fn probe_gpus_best_effort() -> Vec<Value> {
 fn probe_gpus_best_effort() -> Vec<Value> {
     use serde_json::json;
     use std::os::windows::ffi::OsStringExt as _;
-    use windows::Win32::Graphics::Dxgi::{
-        CreateDXGIFactory1, IDXGIFactory1, DXGI_ERROR_NOT_FOUND,
-    };
+    use windows::Win32::Graphics::Dxgi::{CreateDXGIFactory1, IDXGIFactory1};
     unsafe {
         let factory: IDXGIFactory1 = match CreateDXGIFactory1::<IDXGIFactory1>() {
             Ok(f) => f,
@@ -296,32 +294,21 @@ fn probe_gpus_best_effort() -> Vec<Value> {
         };
         let mut out = Vec::new();
         let mut i: u32 = 0;
-        loop {
-            match factory.EnumAdapters1(i) {
-                Ok(adapter) => {
-                    if let Ok(desc) = adapter.GetDesc1() {
-                        let wname = &desc.Description;
-                        let len = wname.iter().position(|&c| c == 0).unwrap_or(wname.len());
-                        let name = std::ffi::OsString::from_wide(&wname[..len])
-                            .to_string_lossy()
-                            .to_string();
-                        out.push(json!({
-                            "name": name,
-                            "vendor_id": format!("0x{:04x}", desc.VendorId),
-                            "device_id": format!("0x{:04x}", desc.DeviceId),
-                            "dedicated_vram": (desc.DedicatedVideoMemory as u64),
-                        }));
-                    }
-                    i += 1;
-                }
-                Err(e) => {
-                    if e.code() == DXGI_ERROR_NOT_FOUND {
-                        break;
-                    } else {
-                        break;
-                    }
-                }
+        while let Ok(adapter) = factory.EnumAdapters1(i) {
+            if let Ok(desc) = adapter.GetDesc1() {
+                let wname = &desc.Description;
+                let len = wname.iter().position(|&c| c == 0).unwrap_or(wname.len());
+                let name = std::ffi::OsString::from_wide(&wname[..len])
+                    .to_string_lossy()
+                    .to_string();
+                out.push(json!({
+                    "name": name,
+                    "vendor_id": format!("0x{:04x}", desc.VendorId),
+                    "device_id": format!("0x{:04x}", desc.DeviceId),
+                    "dedicated_vram": (desc.DedicatedVideoMemory as u64),
+                }));
             }
+            i += 1;
         }
         out
     }
@@ -615,9 +602,9 @@ fn probe_disks_windows() -> Vec<Value> {
     for letter in b'A'..=b'Z' {
         let root = format!("{}:\\", letter as char);
         let p = std::path::Path::new(&root);
-        if std::fs::metadata(&p).is_ok() {
-            let total = fs2::total_space(&p).unwrap_or(0);
-            let avail = fs2::available_space(&p).unwrap_or(0);
+        if std::fs::metadata(p).is_ok() {
+            let total = fs2::total_space(p).unwrap_or(0);
+            let avail = fs2::available_space(p).unwrap_or(0);
             if total > 0 {
                 out.push(json!({"mount": root, "total": total, "available": avail}));
             }
@@ -775,9 +762,8 @@ fn probe_gpu_metrics_best_effort() -> Vec<Value> {
     use std::os::windows::ffi::OsStringExt as _;
     use windows::core::Interface as _;
     use windows::Win32::Graphics::Dxgi::{
-        CreateDXGIFactory1, IDXGIAdapter3, IDXGIFactory1, DXGI_ERROR_NOT_FOUND,
-        DXGI_MEMORY_SEGMENT_GROUP_LOCAL, DXGI_MEMORY_SEGMENT_GROUP_NON_LOCAL,
-        DXGI_QUERY_VIDEO_MEMORY_INFO,
+        CreateDXGIFactory1, IDXGIAdapter3, IDXGIFactory1, DXGI_MEMORY_SEGMENT_GROUP_LOCAL,
+        DXGI_MEMORY_SEGMENT_GROUP_NON_LOCAL, DXGI_QUERY_VIDEO_MEMORY_INFO,
     };
     unsafe {
         let factory: IDXGIFactory1 = match CreateDXGIFactory1::<IDXGIFactory1>() {
@@ -786,57 +772,46 @@ fn probe_gpu_metrics_best_effort() -> Vec<Value> {
         };
         let mut out = Vec::new();
         let mut i: u32 = 0;
-        loop {
-            match factory.EnumAdapters1(i) {
-                Ok(adapter) => {
-                    if let Ok(desc) = adapter.GetDesc1() {
-                        let wname = &desc.Description;
-                        let len = wname.iter().position(|&c| c == 0).unwrap_or(wname.len());
-                        let name = std::ffi::OsString::from_wide(&wname[..len])
-                            .to_string_lossy()
-                            .to_string();
-                        let mut used_local: Option<u64> = None;
-                        if let Ok(adapter3) = adapter.cast::<IDXGIAdapter3>() {
-                            let mut info: DXGI_QUERY_VIDEO_MEMORY_INFO = std::mem::zeroed();
-                            if adapter3
-                                .QueryVideoMemoryInfo(0, DXGI_MEMORY_SEGMENT_GROUP_LOCAL, &mut info)
-                                .is_ok()
-                            {
-                                used_local = Some(info.CurrentUsage as u64);
-                            }
-                            if used_local.is_none() {
-                                let mut info2: DXGI_QUERY_VIDEO_MEMORY_INFO = std::mem::zeroed();
-                                if adapter3
-                                    .QueryVideoMemoryInfo(
-                                        0,
-                                        DXGI_MEMORY_SEGMENT_GROUP_NON_LOCAL,
-                                        &mut info2,
-                                    )
-                                    .is_ok()
-                                {
-                                    used_local = Some(info2.CurrentUsage as u64);
-                                }
-                            }
+        while let Ok(adapter) = factory.EnumAdapters1(i) {
+            if let Ok(desc) = adapter.GetDesc1() {
+                let wname = &desc.Description;
+                let len = wname.iter().position(|&c| c == 0).unwrap_or(wname.len());
+                let name = std::ffi::OsString::from_wide(&wname[..len])
+                    .to_string_lossy()
+                    .to_string();
+                let mut used_local: Option<u64> = None;
+                if let Ok(adapter3) = adapter.cast::<IDXGIAdapter3>() {
+                    let mut info: DXGI_QUERY_VIDEO_MEMORY_INFO = std::mem::zeroed();
+                    if adapter3
+                        .QueryVideoMemoryInfo(0, DXGI_MEMORY_SEGMENT_GROUP_LOCAL, &mut info)
+                        .is_ok()
+                    {
+                        used_local = Some(info.CurrentUsage as u64);
+                    }
+                    if used_local.is_none() {
+                        let mut info2: DXGI_QUERY_VIDEO_MEMORY_INFO = std::mem::zeroed();
+                        if adapter3
+                            .QueryVideoMemoryInfo(
+                                0,
+                                DXGI_MEMORY_SEGMENT_GROUP_NON_LOCAL,
+                                &mut info2,
+                            )
+                            .is_ok()
+                        {
+                            used_local = Some(info2.CurrentUsage as u64);
                         }
-                        out.push(json!({
-                            "index": format!("adapter{}", i),
-                            "vendor": "windows",
-                            "vendor_id": format!("0x{:04x}", desc.VendorId),
-                            "name": name,
-                            "mem_total": (desc.DedicatedVideoMemory as u64),
-                            "mem_used": used_local,
-                        }));
-                    }
-                    i += 1;
-                }
-                Err(e) => {
-                    if e.code() == DXGI_ERROR_NOT_FOUND {
-                        break;
-                    } else {
-                        break;
                     }
                 }
+                out.push(json!({
+                    "index": format!("adapter{}", i),
+                    "vendor": "windows",
+                    "vendor_id": format!("0x{:04x}", desc.VendorId),
+                    "name": name,
+                    "mem_total": (desc.DedicatedVideoMemory as u64),
+                    "mem_used": used_local,
+                }));
             }
+            i += 1;
         }
         out
     }

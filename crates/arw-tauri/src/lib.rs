@@ -90,22 +90,12 @@ impl Default for LauncherWebView2Status {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(default, rename_all = "camelCase")]
 pub struct LauncherSettingsBundle {
     pub settings: LauncherSettings,
     pub webview2: LauncherWebView2Status,
     pub logs_dir: Option<String>,
-}
-
-impl Default for LauncherSettingsBundle {
-    fn default() -> Self {
-        Self {
-            settings: LauncherSettings::default(),
-            webview2: LauncherWebView2Status::default(),
-            logs_dir: None,
-        }
-    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1124,7 +1114,7 @@ mod cmds {
                     match reader.read_line(&mut line) {
                         Ok(0) => break,
                         Ok(_) => {
-                            let trimmed = line.trim_end_matches(&['\r', '\n']).to_string();
+                            let trimmed = line.trim_end_matches(['\r', '\n']).to_string();
                             if trimmed.is_empty() {
                                 continue;
                             }
@@ -1156,7 +1146,7 @@ mod cmds {
                     match reader.read_line(&mut line) {
                         Ok(0) => break,
                         Ok(_) => {
-                            let trimmed = line.trim_end_matches(&['\r', '\n']).to_string();
+                            let trimmed = line.trim_end_matches(['\r', '\n']).to_string();
                             if trimmed.is_empty() {
                                 continue;
                             }

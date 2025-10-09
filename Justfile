@@ -186,7 +186,7 @@ open-debug host='127.0.0.1' port='8091':
   bash scripts/open-url.sh http://{{host}}:{{port}}/admin/debug
 
 hooks-install:
-  bash scripts/hooks/install_hooks.sh
+  {{ if os() == "windows" { "pwsh -NoLogo -NoProfile -File scripts/hooks/install_hooks.ps1" } else { "bash scripts/hooks/install_hooks.sh" } }}
 
 ## Unified server dev runners (default)
 dev port='8091':

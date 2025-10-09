@@ -37,11 +37,16 @@ pub async fn state_intents(headers: HeaderMap) -> impl IntoResponse {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test_support::{begin_state_env, env::guard};
+    use crate::test_support::begin_state_env;
+    use axum::body::Body;
     use axum::http::{header, HeaderMap};
     use chrono::{SecondsFormat, Utc};
-    use hyper::body::to_bytes;
+    use http_body_util::BodyExt;
     use serde_json::{json, Value};
+    async fn collect_body(body: Body) -> bytes::Bytes {
+        BodyExt::collect(body).await.expect("body bytes").to_bytes()
+    }
+
     use tempfile::tempdir;
 
     use crate::api::state::tests::build_state;
@@ -68,10 +73,13 @@ mod tests {
         let (parts, body) = response.into_parts();
         assert_eq!(parts.status, StatusCode::OK);
         assert_eq!(
-            parts.headers().get(header::ETAG).and_then(|v| v.to_str().ok()),
+            parts
+                .headers
+                .get(header::ETAG)
+                .and_then(|v| v.to_str().ok()),
             Some("\"state-intents-v1\"")
         );
-        let bytes = to_bytes(body, usize::MAX).await.expect("body bytes");
+        let bytes = collect_body(body).await;
         let value: Value = serde_json::from_slice(&bytes).expect("json");
         assert_eq!(value["version"].as_u64(), Some(1));
         let items = value["items"].as_array().expect("items array");
@@ -91,10 +99,13 @@ mod tests {
         let (parts, body) = response.into_parts();
         assert_eq!(parts.status, StatusCode::OK);
         assert_eq!(
-            parts.headers().get(header::ETAG).and_then(|v| v.to_str().ok()),
+            parts
+                .headers
+                .get(header::ETAG)
+                .and_then(|v| v.to_str().ok()),
             Some("\"state-intents-v2\"")
         );
-        let bytes = to_bytes(body, usize::MAX).await.expect("body bytes 2");
+        let bytes = collect_body(body).await;
         let value: Value = serde_json::from_slice(&bytes).expect("json 2");
         assert_eq!(value["version"].as_u64(), Some(2));
         let items = value["items"].as_array().expect("items array 2");

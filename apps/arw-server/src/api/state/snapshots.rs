@@ -108,7 +108,10 @@ pub async fn state_service_status(headers: HeaderMap) -> impl IntoResponse {
         .unwrap_or(serde_json::Value::Null);
     let service_health = read_models::cached_read_model("service_health")
         .unwrap_or_else(|| json!({"history": [], "last": null}));
-    let last_health = service_health.get("last").cloned().unwrap_or(serde_json::Value::Null);
+    let last_health = service_health
+        .get("last")
+        .cloned()
+        .unwrap_or(serde_json::Value::Null);
     Json(json!({
         "safe_mode": safe_mode,
         "last_crash": last_crash,

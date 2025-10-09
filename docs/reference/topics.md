@@ -3,7 +3,7 @@ title: Event Topics (Canonical)
 ---
 
 # Event Topics (Canonical)
-Updated: 2025-10-06
+Updated: 2025-10-09
 Type: Reference
 
 Source of truth for event kinds published by the service. Generated from
@@ -157,6 +157,7 @@ Related docs:
 | `probe.hw` | `TOPIC_PROBE_HW` |
 | `probe.metrics` | `TOPIC_PROBE_METRICS` |
 | `catalog.updated` | `TOPIC_CATALOG_UPDATED` |
+| `identity.registry.reloaded` | `TOPIC_IDENTITY_RELOADED` |
 | `config.patch.applied` | `TOPIC_CONFIG_PATCH_APPLIED` |
 | `config.reloaded` | `TOPIC_CONFIG_RELOADED` |
 | `policy.gating.reloaded` | `TOPIC_GATING_RELOADED` |
@@ -241,19 +242,19 @@ Related docs:
 | `tool.cache` | `TOPIC_TOOL_CACHE` |
 | `tool.ran` | `TOPIC_TOOL_RAN` |
 
-## Modular stack
-
-| Topic | Constant |
-|-------|----------|
-| `modular.agent.accepted` | `TOPIC_MODULAR_AGENT_ACCEPTED` |
-| `modular.tool.accepted` | `TOPIC_MODULAR_TOOL_ACCEPTED` |
-
 ## Screenshots
 
 | Topic | Constant |
 |-------|----------|
 | `screenshots.captured` | `TOPIC_SCREENSHOTS_CAPTURED` |
 | `screenshots.ocr.completed` | `TOPIC_SCREENSHOTS_OCR_COMPLETED` |
+
+## Modular stack
+
+| Topic | Constant |
+|-------|----------|
+| `modular.agent.accepted` | `TOPIC_MODULAR_AGENT_ACCEPTED` |
+| `modular.tool.accepted` | `TOPIC_MODULAR_TOOL_ACCEPTED` |
 
 ## Connectors & policy plane
 

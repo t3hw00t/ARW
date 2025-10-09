@@ -276,7 +276,7 @@ fn normalized_path_string(path: &Path) -> String {
         if let Some(stripped) = raw.strip_prefix("//?/") {
             return stripped.to_ascii_lowercase();
         }
-        return raw.to_ascii_lowercase();
+        raw.to_ascii_lowercase()
     }
     #[cfg(not(windows))]
     {

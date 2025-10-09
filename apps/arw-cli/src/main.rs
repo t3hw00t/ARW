@@ -4813,10 +4813,7 @@ fn cmd_runtime_bundles_rollback(args: &RuntimeBundlesRollbackArgs) -> Result<()>
                     "  - {} (saved_at: {}, kind: {}",
                     entry.revision, saved_at, kind
                 );
-                if let Some(summary_label) = entry
-                    .summary
-                    .as_ref()
-                    .and_then(|s| format_history_summary(s))
+                if let Some(summary_label) = entry.summary.as_ref().and_then(format_history_summary)
                 {
                     line.push_str(&format!("; {}", summary_label));
                 }
@@ -6977,8 +6974,8 @@ fn render_cluster_snapshot(snapshot: &CliClusterSnapshot) {
 
     println!();
     println!(
-        "{:<20} {:<10} {:<10} {:<32} {:<6} {:<8} {}",
-        "ID", "Role", "Health", "Last Seen", "Stale", "Models", "Capabilities"
+        "{:<20} {:<10} {:<10} {:<32} {:<6} {:<8} Capabilities",
+        "ID", "Role", "Health", "Last Seen", "Stale", "Models"
     );
 
     let now_raw = Utc::now().timestamp_millis();

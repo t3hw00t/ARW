@@ -999,31 +999,31 @@ window.ARW = {
     const raw = (base ?? '').toString().trim();
     if (!raw) return '';
     const stripTrailing = (val) => val.replace(/\/+$/, '');
-    const parse = (input) => {
-      const url = new URL(input);
-      if (!url || url.origin === 'null') return stripTrailing(input);
+    const ensureScheme = (input) => {
+      const trimmed = stripTrailing(input);
+      if (!trimmed) return '';
+      return /^[a-zA-Z][a-zA-Z0-9+\-.]*:\/\//.test(trimmed)
+        ? trimmed
+        : `http://${trimmed}`;
+    };
+    const candidate = ensureScheme(raw);
+    if (!candidate) return '';
+    try {
+      const url = new URL(candidate);
+      if (!url || url.origin === 'null') {
+        return ensureScheme(raw);
+      }
       const origin = url.origin.toLowerCase();
-      let path = url.pathname || '';
-      path = stripTrailing(path);
+      let path = stripTrailing(url.pathname || '');
       if (path === '/' || path === '') {
         path = '';
       } else if (!path.startsWith('/')) {
         path = `/${path}`;
       }
       return `${origin}${path}`;
-    };
-    const attempts = [raw, `http://${raw}`];
-    for (const attempt of attempts) {
-      try {
-        return parse(attempt);
-      } catch {}
+    } catch {
+      return ensureScheme(raw);
     }
-    const fallback = stripTrailing(raw);
-    if (!fallback) return '';
-    if (/^[a-zA-Z][a-zA-Z0-9+\-.]*:\/\//.test(fallback)) {
-      return fallback;
-    }
-    return `http://${fallback}`;
   },
   isLoopbackHost(host) {
     if (!host) return false;

@@ -56,7 +56,12 @@ fn get_monitor_info_exw_from_id(id: u32) -> Result<MONITORINFOEXW> {
     let monitor_info_exws: *mut Vec<MONITORINFOEXW> = Box::into_raw(Box::default());
 
     unsafe {
-        EnumDisplayMonitors(None, None, Some(monitor_enum_proc), LPARAM(monitor_info_exws as isize))
+        EnumDisplayMonitors(
+            None,
+            None,
+            Some(monitor_enum_proc),
+            LPARAM(monitor_info_exws as isize),
+        )
         .ok()?;
     };
 
