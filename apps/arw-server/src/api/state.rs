@@ -10,22 +10,35 @@ use std::collections::{BTreeMap, BTreeSet};
 use crate::{
     metrics,
     runtime_matrix::{self, RuntimeMatrixEntry},
-    self_model, state_observer, training, world, AppState,
+    self_model, training, AppState,
 };
 use chrono::{DateTime, SecondsFormat, Utc};
 use serde::{Deserialize, Serialize};
 use utoipa::{IntoParams, ToSchema};
 
-#[derive(Debug, Default, Deserialize, ToSchema, IntoParams)]
-#[serde(default)]
-pub struct StateObservationsQuery {
-    /// Limit the number of items returned (most recent first); defaults to all retained observations.
-    pub limit: Option<usize>,
-    /// Restrict results to event kinds matching this prefix (e.g. `actions.`).
-    pub kind_prefix: Option<String>,
-    /// Only include observations emitted after this RFC3339 timestamp.
-    pub since: Option<String>,
-}
+pub mod beliefs;
+pub mod intents;
+pub mod observations;
+pub mod snapshots;
+pub mod misc;
+pub mod tasks;
+
+pub use beliefs::{__path_state_beliefs, state_beliefs};
+pub use intents::{__path_state_intents, state_intents};
+pub use observations::{__path_state_observations, state_observations};
+#[allow(unused_imports)]
+pub use misc::{
+    __path_state_contributions, __path_state_guardrails_metrics, __path_state_identity,
+    __path_state_policy_capsules, __path_state_world, __path_state_world_select, state_contributions,
+    state_guardrails_metrics, state_identity, state_policy_capsules, state_world, state_world_select,
+};
+#[allow(unused_imports)]
+pub use snapshots::{
+    __path_state_crashlog, __path_state_screenshots, __path_state_service_health,
+    __path_state_service_status, state_crashlog, state_screenshots, state_service_health,
+    state_service_status,
+};
+pub use tasks::{__path_state_tasks, state_tasks};
 
 #[derive(Debug, Default, Deserialize, IntoParams)]
 #[serde(default)]
@@ -552,317 +565,6 @@ pub async fn state_route_stats(
     response
 }
 
-/// Background tasks status snapshot.
-#[utoipa::path(
-    get,
-    path = "/state/tasks",
-    tag = "State",
-    responses((status = 200, description = "Background tasks", body = serde_json::Value))
-)]
-pub async fn state_tasks(headers: HeaderMap, State(state): State<AppState>) -> impl IntoResponse {
-    let (version, tasks) = state.metrics().tasks_snapshot_with_version();
-    if let Some(resp) =
-        crate::api::http_utils::state_version_not_modified(&headers, "tasks", version)
-    {
-        return resp;
-    }
-    let mut response = Json(json!({ "version": version, "tasks": tasks })).into_response();
-    crate::api::http_utils::apply_state_version_headers(response.headers_mut(), "tasks", version);
-    response
-}
-
-/// Recent observations from the event bus.
-#[utoipa::path(
-    get,
-    path = "/state/observations",
-    tag = "State",
-    operation_id = "state_observations_doc",
-    description = "Recent observations from the event bus.",
-    params(StateObservationsQuery),
-    responses(
-        (status = 200, description = "Recent observations", body = serde_json::Value),
-        (status = 401, description = "Unauthorized", body = serde_json::Value)
-    )
-)]
-pub async fn state_observations(
-    headers: HeaderMap,
-    Query(params): Query<StateObservationsQuery>,
-) -> impl IntoResponse {
-    if !crate::admin_ok(&headers).await {
-        return (
-            axum::http::StatusCode::UNAUTHORIZED,
-            Json(json!({"type":"about:blank","title":"Unauthorized","status":401})),
-        )
-            .into_response();
-    }
-    let StateObservationsQuery {
-        limit,
-        kind_prefix,
-        since,
-    } = params;
-    let kind_prefix_ref = kind_prefix.as_deref();
-    let since_filter: Option<DateTime<Utc>> = match since {
-        Some(raw) => match DateTime::parse_from_rfc3339(raw.trim()) {
-            Ok(dt) => Some(dt.with_timezone(&Utc)),
-            Err(_) => {
-                return (
-                    StatusCode::BAD_REQUEST,
-                    Json(json!({
-                        "type": "about:blank",
-                        "title": "Invalid `since` value",
-                        "detail": "`since` must be an RFC3339 timestamp (e.g., 2025-10-02T17:15:00Z)",
-                        "status": 400
-                    })),
-                )
-                    .into_response();
-            }
-        },
-        None => None,
-    };
-    let (version, items) =
-        state_observer::observations_snapshot(limit, kind_prefix_ref, since_filter).await;
-    if let Some(resp) =
-        crate::api::http_utils::state_version_not_modified(&headers, "observations", version)
-    {
-        return resp;
-    }
-    let mut response = Json(json!({"version": version, "items": items})).into_response();
-    crate::api::http_utils::apply_state_version_headers(
-        response.headers_mut(),
-        "observations",
-        version,
-    );
-    response
-}
-
-/// Current beliefs snapshot derived from events.
-#[utoipa::path(
-    get,
-    path = "/state/beliefs",
-    tag = "State",
-    operation_id = "state_beliefs_doc",
-    description = "Current beliefs snapshot derived from events.",
-    responses(
-        (status = 200, description = "Beliefs snapshot", body = serde_json::Value),
-        (status = 401, description = "Unauthorized", body = serde_json::Value)
-    )
-)]
-pub async fn state_beliefs(headers: HeaderMap) -> impl IntoResponse {
-    if !crate::admin_ok(&headers).await {
-        return (
-            axum::http::StatusCode::UNAUTHORIZED,
-            Json(json!({"type":"about:blank","title":"Unauthorized","status":401})),
-        )
-            .into_response();
-    }
-    let (version, items) = state_observer::beliefs_snapshot().await;
-    if let Some(resp) =
-        crate::api::http_utils::state_version_not_modified(&headers, "beliefs", version)
-    {
-        return resp;
-    }
-    let mut response = Json(json!({"version": version, "items": items})).into_response();
-    crate::api::http_utils::apply_state_version_headers(response.headers_mut(), "beliefs", version);
-    response
-}
-
-/// Recent intents stream (rolling window) with a monotonic version counter.
-#[utoipa::path(
-    get,
-    path = "/state/intents",
-    tag = "State",
-    operation_id = "state_intents_doc",
-    description = "Recent intents stream (rolling window) with a monotonic version counter.",
-    responses(
-        (status = 200, description = "Recent intents", body = serde_json::Value),
-        (status = 401, description = "Unauthorized", body = serde_json::Value)
-    )
-)]
-pub async fn state_intents(headers: HeaderMap) -> impl IntoResponse {
-    if !crate::admin_ok(&headers).await {
-        return (
-            axum::http::StatusCode::UNAUTHORIZED,
-            Json(json!({"type":"about:blank","title":"Unauthorized","status":401})),
-        )
-            .into_response();
-    }
-    let (version, items) = state_observer::intents_snapshot().await;
-    if let Some(resp) =
-        crate::api::http_utils::state_version_not_modified(&headers, "intents", version)
-    {
-        return resp;
-    }
-    let mut response = Json(json!({"version": version, "items": items})).into_response();
-    crate::api::http_utils::apply_state_version_headers(response.headers_mut(), "intents", version);
-    response
-}
-
-/// Crash log snapshot from state_dir/crash and crash/archive.
-#[utoipa::path(
-    get,
-    path = "/state/crashlog",
-    tag = "State",
-    responses(
-        (status = 200, description = "Crash log", body = serde_json::Value),
-        (status = 401, description = "Unauthorized", body = serde_json::Value)
-    )
-)]
-pub async fn state_crashlog(headers: HeaderMap) -> impl IntoResponse {
-    if !crate::admin_ok(&headers).await {
-        return (
-            axum::http::StatusCode::UNAUTHORIZED,
-            Json(json!({"type":"about:blank","title":"Unauthorized","status":401})),
-        )
-            .into_response();
-    }
-    let value = crate::read_models::crashlog_snapshot().await;
-    Json(value).into_response()
-}
-
-/// Screenshots OCR index snapshot.
-#[utoipa::path(
-    get,
-    path = "/state/screenshots",
-    tag = "State",
-    operation_id = "state_screenshots_doc",
-    description = "Indexed OCR sidecars for captured screenshots, grouped by source path and language.",
-    responses(
-        (status = 200, description = "Screenshots index", body = serde_json::Value),
-        (status = 401, description = "Unauthorized", body = serde_json::Value)
-    )
-)]
-pub async fn state_screenshots(headers: HeaderMap) -> impl IntoResponse {
-    if !crate::admin_ok(&headers).await {
-        return (
-            axum::http::StatusCode::UNAUTHORIZED,
-            Json(json!({"type":"about:blank","title":"Unauthorized","status":401})),
-        )
-            .into_response();
-    }
-    let value = crate::read_models::screenshots_snapshot().await;
-    Json(value).into_response()
-}
-
-/// Aggregated service health (read-model built from service.health events).
-#[utoipa::path(
-    get,
-    path = "/state/service_health",
-    tag = "State",
-    responses(
-        (status = 200, description = "Service health", body = serde_json::Value),
-        (status = 401, description = "Unauthorized", body = serde_json::Value)
-    )
-)]
-pub async fn state_service_health(headers: HeaderMap) -> impl IntoResponse {
-    if !crate::admin_ok(&headers).await {
-        return (
-            axum::http::StatusCode::UNAUTHORIZED,
-            Json(json!({"type":"about:blank","title":"Unauthorized","status":401})),
-        )
-            .into_response();
-    }
-    let value = crate::read_models::cached_read_model("service_health")
-        .unwrap_or_else(|| json!({"history": [], "last": null}));
-    Json(value).into_response()
-}
-
-/// Consolidated service status: safe-mode, last crash, and last health signal.
-#[utoipa::path(
-    get,
-    path = "/state/service_status",
-    tag = "State",
-    responses(
-        (status = 200, description = "Service status", body = serde_json::Value),
-        (status = 401, description = "Unauthorized", body = serde_json::Value)
-    )
-)]
-pub async fn state_service_status(headers: HeaderMap) -> impl IntoResponse {
-    if !crate::admin_ok(&headers).await {
-        return (
-            axum::http::StatusCode::UNAUTHORIZED,
-            Json(json!({"type":"about:blank","title":"Unauthorized","status":401})),
-        )
-            .into_response();
-    }
-    let until_ms = crate::crashguard::safe_mode_until_ms();
-    let safe_mode = if until_ms > 0 {
-        json!({"active": true, "until_ms": until_ms})
-    } else {
-        json!({"active": false})
-    };
-    let crashlog = crate::read_models::cached_read_model("crashlog")
-        .unwrap_or_else(|| json!({"count": 0, "items": []}));
-    let last_crash = crashlog
-        .get("items")
-        .and_then(|v| v.as_array())
-        .and_then(|arr| arr.first())
-        .cloned()
-        .unwrap_or(Value::Null);
-    let service_health = crate::read_models::cached_read_model("service_health")
-        .unwrap_or_else(|| json!({"history": [], "last": null}));
-    let last_health = service_health.get("last").cloned().unwrap_or(Value::Null);
-    Json(json!({
-        "safe_mode": safe_mode,
-        "last_crash": last_crash,
-        "last_health": last_health,
-    }))
-    .into_response()
-}
-
-/// Guardrails circuit-breaker metrics snapshot.
-#[utoipa::path(
-    get,
-    path = "/state/guardrails_metrics",
-    tag = "State",
-    responses(
-        (status = 200, description = "Guardrails metrics", body = serde_json::Value),
-        (status = 401, description = "Unauthorized", body = serde_json::Value)
-    )
-)]
-pub async fn state_guardrails_metrics(headers: HeaderMap) -> impl IntoResponse {
-    if !crate::admin_ok(&headers).await {
-        return (
-            axum::http::StatusCode::UNAUTHORIZED,
-            Json(json!({"type":"about:blank","title":"Unauthorized","status":401})),
-        )
-            .into_response();
-    }
-    Json(crate::tools::guardrails_metrics_value()).into_response()
-}
-
-/// Active policy capsules snapshot.
-#[utoipa::path(
-    get,
-    path = "/state/policy/capsules",
-    tag = "Policy",
-    responses((status = 200, description = "Active capsules", body = serde_json::Value))
-)]
-pub async fn state_policy_capsules(State(state): State<AppState>) -> impl IntoResponse {
-    Json(state.capsules().snapshot().await)
-}
-
-/// Identity registry snapshot.
-#[utoipa::path(
-    get,
-    path = "/state/identity",
-    tag = "State",
-    operation_id = "state_identity",
-    responses(
-        (status = 200, description = "Identity registry snapshot", body = crate::identity::IdentitySnapshot),
-        (status = 401, description = "Unauthorized", body = arw_protocol::ProblemDetails)
-    )
-)]
-pub async fn state_identity(
-    headers: HeaderMap,
-    State(state): State<AppState>,
-) -> impl IntoResponse {
-    if !crate::admin_ok(&headers).await {
-        return crate::responses::unauthorized(None);
-    }
-    let snapshot = state.identity().snapshot().await;
-    Json(snapshot).into_response()
-}
-
 /// Cluster nodes snapshot.
 #[utoipa::path(
     get,
@@ -899,138 +601,6 @@ pub async fn state_cluster(headers: HeaderMap, State(state): State<AppState>) ->
         "ttl_seconds": crate::cluster::SNAPSHOT_TTL_SECONDS,
     }))
     .into_response()
-}
-
-#[derive(Deserialize, utoipa::ToSchema)]
-pub struct WorldQuery {
-    #[serde(default)]
-    pub proj: Option<String>,
-}
-
-/// Project world model snapshot (belief graph view).
-#[utoipa::path(
-    get,
-    path = "/state/world",
-    tag = "State",
-    operation_id = "state_world_doc",
-    description = "Project world model snapshot (belief graph view).",
-    params(("proj" = Option<String>, Query, description = "Project id")),
-    responses(
-        (status = 200, description = "World model", body = serde_json::Value),
-        (status = 401, description = "Unauthorized", body = serde_json::Value)
-    )
-)]
-pub async fn state_world(headers: HeaderMap, Query(q): Query<WorldQuery>) -> impl IntoResponse {
-    if !crate::admin_ok(&headers).await {
-        return (
-            axum::http::StatusCode::UNAUTHORIZED,
-            Json(json!({"type":"about:blank","title":"Unauthorized","status":401})),
-        )
-            .into_response();
-    }
-    let map = world::snapshot_project_map(q.proj.as_deref()).await;
-    let version = map.version;
-    if let Some(resp) =
-        crate::api::http_utils::state_version_not_modified(&headers, "world", version)
-    {
-        return resp;
-    }
-    let body = serde_json::to_value(map).unwrap_or_else(|_| json!({}));
-    let mut response = Json(body).into_response();
-    crate::api::http_utils::apply_state_version_headers(response.headers_mut(), "world", version);
-    response
-}
-
-#[derive(Deserialize, utoipa::ToSchema)]
-pub struct WorldSelectQuery {
-    #[serde(default)]
-    pub proj: Option<String>,
-    #[serde(default)]
-    pub q: Option<String>,
-    #[serde(default)]
-    pub k: Option<usize>,
-    #[serde(default)]
-    pub lambda: Option<f64>,
-}
-
-/// Select top-k claims for a query.
-#[utoipa::path(
-    get,
-    path = "/state/world/select",
-    tag = "State",
-    operation_id = "state_world_select_doc",
-    description = "Select top-k claims for a query.",
-    params(
-        ("proj" = Option<String>, Query, description = "Project id"),
-        ("q" = Option<String>, Query, description = "Query string"),
-        ("k" = Option<usize>, Query, description = "Top K"),
-        ("lambda" = Option<f64>, Query, description = "Diversity weight (0-1)")
-    ),
-    responses(
-        (status = 200, description = "Selected claims", body = serde_json::Value),
-        (status = 401, description = "Unauthorized", body = serde_json::Value)
-    )
-)]
-pub async fn state_world_select(
-    headers: HeaderMap,
-    Query(q): Query<WorldSelectQuery>,
-) -> impl IntoResponse {
-    if !crate::admin_ok(&headers).await {
-        return (
-            axum::http::StatusCode::UNAUTHORIZED,
-            Json(json!({"type":"about:blank","title":"Unauthorized","status":401})),
-        )
-            .into_response();
-    }
-    let query = q.q.unwrap_or_default();
-    let k = q.k.unwrap_or(8);
-    let lambda = q.lambda.unwrap_or(0.5);
-    let items = world::select_top_claims_diverse(q.proj.as_deref(), &query, k, lambda).await;
-    Json(json!({"items": items})).into_response()
-}
-
-/// Kernel contributions snapshot.
-#[utoipa::path(
-    get,
-    path = "/state/contributions",
-    tag = "State",
-    responses(
-        (status = 200, description = "Contributions list", body = serde_json::Value),
-        (status = 501, description = "Kernel disabled", body = serde_json::Value)
-    )
-)]
-pub async fn state_contributions(
-    headers: HeaderMap,
-    State(state): State<AppState>,
-) -> impl IntoResponse {
-    if !crate::admin_ok(&headers).await {
-        return (
-            axum::http::StatusCode::UNAUTHORIZED,
-            Json(json!({"type":"about:blank","title":"Unauthorized","status":401})),
-        )
-            .into_response();
-    }
-    if !state.kernel_enabled() {
-        return crate::responses::kernel_disabled();
-    }
-    let items = state
-        .kernel()
-        .list_contributions_async(200)
-        .await
-        .unwrap_or_default();
-    let version = numeric_version_from_field(&items, "id");
-    if let Some(resp) =
-        crate::api::http_utils::state_version_not_modified(&headers, "contributions", version)
-    {
-        return resp;
-    }
-    let mut response = Json(json!({"version": version, "items": items})).into_response();
-    crate::api::http_utils::apply_state_version_headers(
-        response.headers_mut(),
-        "contributions",
-        version,
-    );
-    response
 }
 
 /// Experiment events snapshot (public read-model).
@@ -1188,6 +758,7 @@ pub async fn state_egress(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use super::observations::StateObservationsQuery;
     use arw_policy::PolicyEngine;
     use arw_topics;
     use axum::{
@@ -1297,96 +868,6 @@ mod tests {
         assert!(item["output"].is_null());
         assert!(item.get("guard").is_none());
         assert!(item.get("posture").is_none());
-    }
-
-    #[tokio::test]
-    async fn state_intents_includes_version() {
-        let temp = tempdir().expect("tempdir");
-        let mut ctx = crate::test_support::begin_state_env(temp.path());
-        crate::state_observer::reset_for_tests().await;
-
-        let _state = build_state(temp.path(), &mut ctx.env).await;
-
-        let env = arw_events::Envelope {
-            time: Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true),
-            kind: "intents.proposed".to_string(),
-            payload: json!({"corr_id": "demo", "goal": "test"}),
-            policy: None,
-            ce: None,
-        };
-
-        crate::state_observer::ingest_for_tests(&env).await;
-
-        let response = state_intents(HeaderMap::new()).await.into_response();
-        let (parts, body) = response.into_parts();
-        assert_eq!(parts.status, StatusCode::OK);
-        assert_eq!(
-            parts
-                .headers
-                .get(header::ETAG)
-                .and_then(|v| v.to_str().ok()),
-            Some("\"state-intents-v1\"")
-        );
-        let bytes = to_bytes(body, usize::MAX).await.expect("body bytes");
-        let value: Value = serde_json::from_slice(&bytes).expect("json");
-        assert_eq!(value["version"].as_u64(), Some(1));
-        let items = value["items"].as_array().expect("items array");
-        assert_eq!(items.len(), 1);
-        assert_eq!(items[0]["kind"].as_str(), Some("intents.proposed"));
-
-        // Ingest another event and ensure version increments.
-        let env2 = arw_events::Envelope {
-            time: Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true),
-            kind: "intents.accepted".to_string(),
-            payload: json!({"corr_id": "demo", "goal": "test"}),
-            policy: None,
-            ce: None,
-        };
-        crate::state_observer::ingest_for_tests(&env2).await;
-
-        let response = state_intents(HeaderMap::new()).await.into_response();
-        let (parts, body) = response.into_parts();
-        assert_eq!(parts.status, StatusCode::OK);
-        assert_eq!(
-            parts
-                .headers
-                .get(header::ETAG)
-                .and_then(|v| v.to_str().ok()),
-            Some("\"state-intents-v2\"")
-        );
-        let bytes = to_bytes(body, usize::MAX).await.expect("body bytes 2");
-        let value: Value = serde_json::from_slice(&bytes).expect("json 2");
-        assert_eq!(value["version"].as_u64(), Some(2));
-        let items = value["items"].as_array().expect("items array 2");
-        assert_eq!(items.len(), 2);
-
-        crate::state_observer::reset_for_tests().await;
-    }
-
-    #[tokio::test]
-    async fn state_intents_honors_if_none_match() {
-        let temp = tempdir().expect("tempdir");
-        let mut ctx = crate::test_support::begin_state_env(temp.path());
-        crate::state_observer::reset_for_tests().await;
-
-        let _state = build_state(temp.path(), &mut ctx.env).await;
-        let env = arw_events::Envelope {
-            time: Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true),
-            kind: "intents.proposed".to_string(),
-            payload: json!({"corr_id": "demo", "goal": "test"}),
-            policy: None,
-            ce: None,
-        };
-        crate::state_observer::ingest_for_tests(&env).await;
-
-        let first = state_intents(HeaderMap::new()).await.into_response();
-        let etag = first.headers().get(header::ETAG).cloned().expect("etag");
-
-        let mut headers = HeaderMap::new();
-        headers.insert(header::IF_NONE_MATCH, etag.clone());
-        let response = state_intents(headers).await.into_response();
-        assert_eq!(response.status(), StatusCode::NOT_MODIFIED);
-        crate::state_observer::reset_for_tests().await;
     }
 
     #[tokio::test]
@@ -1668,98 +1149,6 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn state_beliefs_honors_if_none_match() {
-        let mut env_guard = crate::test_support::env::guard();
-        env_guard.set("ARW_DEBUG", "1");
-        crate::state_observer::reset_for_tests().await;
-
-        let envelope = arw_events::Envelope {
-            time: Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true),
-            kind: "beliefs.updated".to_string(),
-            payload: json!({"claim": "alpha"}),
-            policy: None,
-            ce: None,
-        };
-        crate::state_observer::ingest_for_tests(&envelope).await;
-
-        let first = state_beliefs(HeaderMap::new()).await.into_response();
-        let etag = first
-            .headers()
-            .get(header::ETAG)
-            .cloned()
-            .expect("beliefs etag");
-
-        let mut headers = HeaderMap::new();
-        headers.insert(header::IF_NONE_MATCH, etag);
-        let response = state_beliefs(headers).await.into_response();
-        assert_eq!(response.status(), StatusCode::NOT_MODIFIED);
-        crate::state_observer::reset_for_tests().await;
-    }
-
-    #[tokio::test]
-    async fn state_world_honors_if_none_match() {
-        let mut env_guard = crate::test_support::env::guard();
-        env_guard.set("ARW_DEBUG", "1");
-        crate::world::reset_for_tests().await;
-
-        let env = arw_events::Envelope {
-            time: Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true),
-            kind: arw_topics::TOPIC_PROJECTS_CREATED.to_string(),
-            payload: json!({"name": "demo"}),
-            policy: None,
-            ce: None,
-        };
-        crate::world::ingest_for_tests(&env).await;
-
-        let first = state_world(HeaderMap::new(), Query(WorldQuery { proj: None }))
-            .await
-            .into_response();
-        let etag = first
-            .headers()
-            .get(header::ETAG)
-            .cloned()
-            .expect("world etag");
-
-        let mut headers = HeaderMap::new();
-        headers.insert(header::IF_NONE_MATCH, etag);
-        let response = state_world(headers, Query(WorldQuery { proj: None }))
-            .await
-            .into_response();
-        assert_eq!(response.status(), StatusCode::NOT_MODIFIED);
-
-        crate::world::reset_for_tests().await;
-    }
-
-    #[tokio::test]
-    async fn state_contributions_honors_if_none_match() {
-        let temp = tempdir().expect("tempdir");
-        let mut ctx = crate::test_support::begin_state_env(temp.path());
-        let state = build_state(temp.path(), &mut ctx.env).await;
-
-        state
-            .kernel()
-            .append_contribution_async("local", "test", 1.0, "unit", None, None, None)
-            .await
-            .expect("append contribution");
-
-        let first = state_contributions(HeaderMap::new(), State(state.clone()))
-            .await
-            .into_response();
-        let etag = first
-            .headers()
-            .get(header::ETAG)
-            .cloned()
-            .expect("contributions etag");
-
-        let mut headers = HeaderMap::new();
-        headers.insert(header::IF_NONE_MATCH, etag);
-        let response = state_contributions(headers, State(state))
-            .await
-            .into_response();
-        assert_eq!(response.status(), StatusCode::NOT_MODIFIED);
-    }
-
-    #[tokio::test]
     async fn state_egress_honors_if_none_match() {
         let temp = tempdir().expect("tempdir");
         let mut ctx = crate::test_support::begin_state_env(temp.path());
@@ -1856,31 +1245,6 @@ mod tests {
             scope.get("description").and_then(|v| v.as_str()),
             Some("Trusted scope")
         );
-    }
-
-    #[tokio::test]
-    async fn state_tasks_honors_if_none_match() {
-        let temp = tempdir().expect("tempdir");
-        let mut ctx = crate::test_support::begin_state_env(temp.path());
-        let state = build_state(temp.path(), &mut ctx.env).await;
-
-        let metrics = state.metrics();
-        metrics.task_started("demo");
-        metrics.task_completed("demo");
-
-        let first = state_tasks(HeaderMap::new(), State(state.clone()))
-            .await
-            .into_response();
-        let etag = first
-            .headers()
-            .get(header::ETAG)
-            .cloned()
-            .expect("tasks etag");
-
-        let mut headers = HeaderMap::new();
-        headers.insert(header::IF_NONE_MATCH, etag);
-        let response = state_tasks(headers, State(state)).await.into_response();
-        assert_eq!(response.status(), StatusCode::NOT_MODIFIED);
     }
 
     #[tokio::test]

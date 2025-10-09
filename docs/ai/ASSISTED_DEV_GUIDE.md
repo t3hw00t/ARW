@@ -11,13 +11,19 @@ Purpose
 Loop (every change)
 Exception: when a change qualifies as an "ease-of-use" shortcut in the CLI (e.g., trivial edits that the harness allows without formal planning), you may skip step 1; still call out assumptions in the response.
 1) Propose a PLAN (files to touch, exact changes, risks, test/docs impact).
-2) Get ACK on the PLAN (or self‑review if solo), then implement minimal DIFF.
+2) Get ACK on the PLAN (or self-review if solo), then implement minimal DIFF.
 3) Run checks (fmt, clippy -D warnings, nextest); summarize results.
 4) Update docs + microsummaries; create a tight PR with acceptance notes.
 
+Lightweight path (ease-of-use)
+- Use only when the execution harness or reviewer explicitly treats the work as a trivial shortcut (typo fix, single-line docs tweak, metadata bump).
+- Keep the edit self-contained (<20 lines, single file unless otherwise stated) and avoid behavioral changes or new dependencies.
+- Spell out the assumption in your response: call out that the lightweight path was used, list skipped checks, and justify why it is safe.
+- If the change grows beyond a micro-edit at any point, fall back to the full loop above.
+
 Guardrails
 - Stay within the declared scope; no opportunistic refactors.
-- Preserve public interfaces unless the issue marks “breaking: yes”.
+- Preserve public interfaces unless the issue marks "breaking: yes".
 - Prefer additive changes; keep diffs < ~300 lines when possible.
 - Keep logging/telemetry consistent with existing tracing.
 - Write rustdoc on new items; add examples when possible.

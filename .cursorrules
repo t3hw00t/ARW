@@ -1,6 +1,6 @@
 # Assisted, Iterative Coding Rules (mirror of docs/ai/ASSISTED_DEV_GUIDE.md)
 
-- Always propose a PLAN (files, changes, risks, tests, docs) before code.
+- Always propose a PLAN (files, changes, risks, tests, docs) before code. When the harness treats a change as a trivial ease-of-use edit, call that out in your response and follow the lightweight exception in docs/ai/ASSISTED_DEV_GUIDE.md.
 - Implement the smallest DIFF once the PLAN is approved/self‑reviewed.
 - Run fmt, clippy -D warnings, and tests; summarize results.
 - Update rustdoc and docs; add examples where useful.
@@ -8,5 +8,4 @@
 - Keep diffs focused (<~300 lines) and avoid opportunistic refactors.
 - Keep public APIs stable unless explicitly marked breaking.
 
-See: docs/ai/ASSISTED_DEV_GUIDE.md and docs/ai/PROMPTS/base_system_prompt.md
-
+See: docs/ai/ASSISTED_DEV_GUIDE.md and docs/ai/ai_prompts.md

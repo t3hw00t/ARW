@@ -1,20 +1,17 @@
 use arw_events::Bus;
 use arw_topics as topics;
-use chrono::{DateTime, Utc};
-use fs2::available_space;
+use chrono::Utc;
 use futures_util::StreamExt;
 use reqwest::{header, Client, StatusCode};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Map, Number, Value};
 use sha2::{Digest, Sha256};
-use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex as StdMutex};
 use std::time::{Duration, Instant};
 use tokio::fs;
 use tokio::io::{AsyncReadExt, AsyncWriteExt, BufReader, BufWriter};
-use tokio::sync::{Mutex, Notify, RwLock};
-use tokio::task::JoinHandle;
+use tokio::sync::RwLock;
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, warn};
 
@@ -22,62 +19,34 @@ use crate::{http_timeout, read_models, util};
 use once_cell::sync::OnceCell;
 use utoipa::ToSchema;
 
+mod config;
+mod downloads;
+mod hash_guard;
+mod model_metrics;
+mod preflight;
+mod storage;
+mod types;
+
+pub use self::types::{
+    ModelsConcurrencySnapshot, ModelsInflightEntry, ModelsJobDestination, ModelsJobSnapshot,
+    ModelsMetricsCounters, ModelsMetricsResponse, ModelsRuntimeConfig,
+};
+
+pub use self::hash_guard::HashGuardRole;
+
+use self::downloads::{DestInfo, DownloadHandle, DownloadsState};
+use self::hash_guard::HashGuardState;
+use self::model_metrics::MetricsState;
+use self::preflight::{PreflightError, PreflightInfo};
+use self::storage::ManifestHashIndex;
+pub use self::config::DownloadTuning;
+
 const DEFAULT_CONCURRENCY: u64 = 2;
 const METRIC_MANIFEST_INDEX_REBUILDS: &str = "models.manifest_index.rebuilds";
 const GAUGE_MANIFEST_INDEX_ENTRIES: &str = "models.manifest_index.entries";
 const DOWNLOAD_EVENT_KIND: &str = "models.download.progress";
 const PROGRESS_EMIT_BYTES: u64 = 5 * 1024 * 1024; // 5 MiB
 const PROGRESS_EMIT_INTERVAL: Duration = Duration::from_millis(750);
-
-#[derive(Clone, Copy, Debug)]
-struct DownloadTuning {
-    idle_timeout: Option<Duration>,
-    send_retries: u32,
-    stream_retries: u32,
-    retry_backoff_ms: u64,
-}
-
-impl DownloadTuning {
-    fn from_env() -> Self {
-        let idle_timeout = std::env::var("ARW_DL_IDLE_TIMEOUT_SECS")
-            .ok()
-            .and_then(|s| s.parse::<u64>().ok());
-        let idle_timeout = match idle_timeout {
-            Some(0) => None,
-            Some(secs) => Some(Duration::from_secs(secs)),
-            None => Some(Duration::from_secs(300)),
-        };
-        let send_retries = std::env::var("ARW_DL_SEND_RETRIES")
-            .ok()
-            .and_then(|s| s.parse::<u32>().ok())
-            .unwrap_or(2);
-        let stream_retries = std::env::var("ARW_DL_STREAM_RETRIES")
-            .ok()
-            .and_then(|s| s.parse::<u32>().ok())
-            .unwrap_or(2);
-        let retry_backoff_ms = std::env::var("ARW_DL_RETRY_BACKOFF_MS")
-            .ok()
-            .and_then(|s| s.parse::<u64>().ok())
-            .unwrap_or(500)
-            .clamp(50, 60_000);
-        Self {
-            idle_timeout,
-            send_retries,
-            stream_retries,
-            retry_backoff_ms,
-        }
-    }
-
-    fn idle_timeout_secs(&self) -> Option<u64> {
-        self.idle_timeout.map(|d| d.as_secs())
-    }
-
-    fn backoff_delay(&self, attempt: u32) -> Duration {
-        let step = attempt.max(1);
-        let base = Duration::from_millis(self.retry_backoff_ms);
-        base.checked_mul(step).unwrap_or(base)
-    }
-}
 
 #[derive(Clone, Default)]
 struct ConcurrencyState {
@@ -107,479 +76,6 @@ impl ConcurrencyState {
             .map(|cap| cap.min(self.configured_max))
             .unwrap_or(self.configured_max)
             .max(1)
-    }
-}
-
-#[derive(Clone, Serialize, Deserialize, ToSchema, Default)]
-pub struct ModelsMetricsCounters {
-    pub started: u64,
-    pub queued: u64,
-    pub admitted: u64,
-    pub resumed: u64,
-    pub canceled: u64,
-    pub completed: u64,
-    pub completed_cached: u64,
-    pub errors: u64,
-    pub bytes_total: u64,
-    pub ewma_mbps: Option<f64>,
-    pub preflight_ok: u64,
-    pub preflight_denied: u64,
-    pub preflight_skipped: u64,
-    pub coalesced: u64,
-}
-
-#[derive(Clone, Serialize, Deserialize, ToSchema, Default)]
-pub struct ModelsInflightEntry {
-    pub sha256: String,
-    pub primary: String,
-    #[serde(default)]
-    pub followers: Vec<String>,
-    pub count: u64,
-}
-
-#[derive(Clone, Serialize, Deserialize, ToSchema, Default)]
-pub struct ModelsJobDestination {
-    pub host: String,
-    pub port: u16,
-    pub protocol: String,
-}
-
-#[derive(Clone, Serialize, Deserialize, ToSchema, Default)]
-pub struct ModelsJobSnapshot {
-    pub model_id: String,
-    pub job_id: String,
-    pub url: String,
-    pub corr_id: String,
-    pub dest: ModelsJobDestination,
-    pub started_at: u64,
-}
-
-#[derive(Clone, Serialize, Deserialize, ToSchema, Default)]
-pub struct ModelsConcurrencySnapshot {
-    pub configured_max: u64,
-    pub available_permits: u64,
-    pub held_permits: u64,
-    #[serde(default)]
-    pub hard_cap: Option<u64>,
-    #[serde(default)]
-    pub pending_shrink: Option<u64>,
-}
-
-#[derive(Clone, Serialize, Deserialize, ToSchema, Default)]
-pub struct ModelsRuntimeConfig {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub idle_timeout_secs: Option<u64>,
-    pub send_retries: u32,
-    pub stream_retries: u32,
-    pub retry_backoff_ms: u64,
-    pub preflight_enabled: bool,
-}
-
-#[derive(Clone, Serialize, Deserialize, ToSchema, Default)]
-pub struct ModelsMetricsResponse {
-    pub started: u64,
-    pub queued: u64,
-    pub admitted: u64,
-    pub resumed: u64,
-    pub canceled: u64,
-    pub completed: u64,
-    pub completed_cached: u64,
-    pub errors: u64,
-    pub bytes_total: u64,
-    pub ewma_mbps: Option<f64>,
-    pub preflight_ok: u64,
-    pub preflight_denied: u64,
-    pub preflight_skipped: u64,
-    pub coalesced: u64,
-    #[serde(default)]
-    pub inflight: Vec<ModelsInflightEntry>,
-    pub concurrency: ModelsConcurrencySnapshot,
-    #[serde(default)]
-    pub jobs: Vec<ModelsJobSnapshot>,
-    #[serde(default)]
-    pub runtime: ModelsRuntimeConfig,
-}
-
-impl ModelsMetricsResponse {
-    fn from_parts(
-        counters: ModelsMetricsCounters,
-        inflight: Vec<ModelsInflightEntry>,
-        concurrency: ModelsConcurrencySnapshot,
-        jobs: Vec<ModelsJobSnapshot>,
-        runtime: ModelsRuntimeConfig,
-    ) -> Self {
-        Self {
-            started: counters.started,
-            queued: counters.queued,
-            admitted: counters.admitted,
-            resumed: counters.resumed,
-            canceled: counters.canceled,
-            completed: counters.completed,
-            completed_cached: counters.completed_cached,
-            errors: counters.errors,
-            bytes_total: counters.bytes_total,
-            ewma_mbps: counters.ewma_mbps,
-            preflight_ok: counters.preflight_ok,
-            preflight_denied: counters.preflight_denied,
-            preflight_skipped: counters.preflight_skipped,
-            coalesced: counters.coalesced,
-            inflight,
-            concurrency,
-            jobs,
-            runtime,
-        }
-    }
-}
-
-impl ModelsRuntimeConfig {
-    fn from_tuning(tuning: &DownloadTuning, preflight_enabled: bool) -> Self {
-        Self {
-            idle_timeout_secs: tuning.idle_timeout_secs(),
-            send_retries: tuning.send_retries,
-            stream_retries: tuning.stream_retries,
-            retry_backoff_ms: tuning.retry_backoff_ms,
-            preflight_enabled,
-        }
-    }
-}
-
-#[derive(Clone, Default)]
-struct MetricsState {
-    started: u64,
-    queued: u64,
-    admitted: u64,
-    resumed: u64,
-    canceled: u64,
-    completed: u64,
-    completed_cached: u64,
-    errors: u64,
-    bytes_total: u64,
-    ewma_mbps: Option<f64>,
-    preflight_ok: u64,
-    preflight_denied: u64,
-    preflight_skipped: u64,
-    coalesced: u64,
-}
-
-impl MetricsState {
-    fn snapshot(&self) -> ModelsMetricsCounters {
-        ModelsMetricsCounters {
-            started: self.started,
-            queued: self.queued,
-            admitted: self.admitted,
-            resumed: self.resumed,
-            canceled: self.canceled,
-            completed: self.completed,
-            completed_cached: self.completed_cached,
-            errors: self.errors,
-            bytes_total: self.bytes_total,
-            ewma_mbps: self.ewma_mbps,
-            preflight_ok: self.preflight_ok,
-            preflight_denied: self.preflight_denied,
-            preflight_skipped: self.preflight_skipped,
-            coalesced: self.coalesced,
-        }
-    }
-
-    fn record_started(&mut self) {
-        self.started = self.started.saturating_add(1);
-        self.queued = self.queued.saturating_add(1);
-    }
-
-    fn record_admitted(&mut self) {
-        if self.queued > 0 {
-            self.queued -= 1;
-        }
-        self.admitted = self.admitted.saturating_add(1);
-    }
-
-    fn record_resumed(&mut self) {
-        self.resumed = self.resumed.saturating_add(1);
-    }
-
-    fn record_completed(&mut self, bytes: u64, mbps: Option<f64>, cached: bool) {
-        if cached {
-            self.completed_cached = self.completed_cached.saturating_add(1);
-        } else {
-            self.completed = self.completed.saturating_add(1);
-        }
-        self.bytes_total = self.bytes_total.saturating_add(bytes);
-        if let Some(speed) = mbps {
-            self.ewma_mbps = Some(match self.ewma_mbps {
-                Some(prev) => (prev * 0.6) + (speed * 0.4),
-                None => speed,
-            });
-        }
-    }
-
-    fn record_error(&mut self) {
-        self.errors = self.errors.saturating_add(1);
-    }
-
-    fn record_canceled(&mut self) {
-        self.canceled = self.canceled.saturating_add(1);
-    }
-
-    fn record_preflight_ok(&mut self) {
-        self.preflight_ok = self.preflight_ok.saturating_add(1);
-    }
-
-    fn record_preflight_denied(&mut self) {
-        self.preflight_denied = self.preflight_denied.saturating_add(1);
-    }
-
-    fn record_preflight_skipped(&mut self) {
-        self.preflight_skipped = self.preflight_skipped.saturating_add(1);
-    }
-
-    fn record_coalesced(&mut self) {
-        self.coalesced = self.coalesced.saturating_add(1);
-    }
-}
-
-#[derive(Clone)]
-struct DestInfo {
-    host: String,
-    port: u16,
-    protocol: String,
-}
-
-struct DownloadHandle {
-    cancel: CancellationToken,
-    task: Option<JoinHandle<()>>,
-    job_id: String,
-    url_display: String,
-    corr_id: String,
-    dest: DestInfo,
-    started_at: Instant,
-}
-
-struct DownloadsState {
-    jobs: Mutex<HashMap<String, DownloadHandle>>,
-    notify: Notify,
-}
-
-impl DownloadsState {
-    fn new() -> Self {
-        Self {
-            jobs: Mutex::new(HashMap::new()),
-            notify: Notify::new(),
-        }
-    }
-
-    async fn contains(&self, id: &str) -> bool {
-        self.jobs.lock().await.contains_key(id)
-    }
-
-    async fn active_count(&self) -> usize {
-        self.jobs.lock().await.len()
-    }
-
-    async fn wait_for_slot(&self, max: u64, cancel: &CancellationToken) -> Result<(), ()> {
-        let max = max.max(1);
-        loop {
-            let current = self.active_count().await as u64;
-            if current < max {
-                return Ok(());
-            }
-            tokio::select! {
-                _ = cancel.cancelled() => return Err(()),
-                _ = self.notify.notified() => {}
-            }
-        }
-    }
-
-    async fn wait_until_at_most(&self, limit: u64) {
-        let limit = limit.max(1);
-        loop {
-            let current = self.active_count().await as u64;
-            if current <= limit {
-                return;
-            }
-            self.notify.notified().await;
-        }
-    }
-
-    async fn insert_job(&self, model_id: &str, handle: DownloadHandle) -> Result<(), ()> {
-        let mut jobs = self.jobs.lock().await;
-        if jobs.contains_key(model_id) {
-            return Err(());
-        }
-        jobs.insert(model_id.to_string(), handle);
-        Ok(())
-    }
-
-    async fn remove_job(&self, model_id: &str) -> Option<DownloadHandle> {
-        let mut jobs = self.jobs.lock().await;
-        let removed = jobs.remove(model_id);
-        if removed.is_some() {
-            self.notify.notify_waiters();
-        }
-        removed
-    }
-
-    async fn cancel_job(&self, model_id: &str) -> Option<(String, DestInfo)> {
-        let handle = {
-            let mut jobs = self.jobs.lock().await;
-            jobs.remove(model_id)
-        };
-        if let Some(mut handle) = handle {
-            let corr_id = handle.corr_id.clone();
-            let dest = handle.dest.clone();
-            handle.cancel.cancel();
-            self.notify.notify_waiters();
-            if let Some(task) = handle.task.take() {
-                tokio::spawn(async move {
-                    if let Err(err) = task.await {
-                        warn!("cancelled download join err: {err}");
-                    }
-                });
-            }
-            Some((corr_id, dest))
-        } else {
-            None
-        }
-    }
-
-    async fn job_snapshot(&self) -> Vec<ModelsJobSnapshot> {
-        let jobs = self.jobs.lock().await;
-        jobs.iter()
-            .map(|(model_id, handle)| {
-                let dest = &handle.dest;
-                ModelsJobSnapshot {
-                    model_id: model_id.clone(),
-                    job_id: handle.job_id.clone(),
-                    url: handle.url_display.clone(),
-                    corr_id: handle.corr_id.clone(),
-                    dest: ModelsJobDestination {
-                        host: dest.host.clone(),
-                        port: dest.port,
-                        protocol: dest.protocol.clone(),
-                    },
-                    started_at: handle.started_at.elapsed().as_secs(),
-                }
-            })
-            .collect()
-    }
-}
-
-#[derive(Default)]
-struct HashGuardEntry {
-    primary: String,
-    followers: HashSet<String>,
-}
-
-#[derive(Default)]
-struct HashGuardState {
-    by_sha: HashMap<String, HashGuardEntry>,
-    model_to_sha: HashMap<String, String>,
-}
-
-enum HashGuardRole {
-    Primary,
-    Coalesced { primary: String },
-}
-
-#[derive(Debug, Clone, Default)]
-struct PreflightInfo {
-    content_length: Option<u64>,
-    etag: Option<String>,
-    last_modified: Option<String>,
-}
-
-enum PreflightError {
-    Skip(String),
-    Denied { code: String, message: String },
-}
-
-impl HashGuardState {
-    fn register(&mut self, model_id: &str, sha: &str) -> HashGuardRole {
-        match self.by_sha.get_mut(sha) {
-            Some(entry) => {
-                entry.followers.insert(model_id.to_string());
-                self.model_to_sha
-                    .insert(model_id.to_string(), sha.to_string());
-                HashGuardRole::Coalesced {
-                    primary: entry.primary.clone(),
-                }
-            }
-            None => {
-                let entry = HashGuardEntry {
-                    primary: model_id.to_string(),
-                    followers: HashSet::new(),
-                };
-                self.by_sha.insert(sha.to_string(), entry);
-                self.model_to_sha
-                    .insert(model_id.to_string(), sha.to_string());
-                HashGuardRole::Primary
-            }
-        }
-    }
-
-    fn release_primary(&mut self, model_id: &str) -> Vec<String> {
-        let Some(sha) = self.model_to_sha.remove(model_id) else {
-            return Vec::new();
-        };
-        let Some(entry) = self.by_sha.remove(&sha) else {
-            return Vec::new();
-        };
-        for follower in &entry.followers {
-            self.model_to_sha.remove(follower);
-        }
-        entry.followers.into_iter().collect()
-    }
-
-    fn release_model(&mut self, model_id: &str) {
-        let Some(sha) = self.model_to_sha.remove(model_id) else {
-            return;
-        };
-        let mut remove_entry = false;
-        if let Some(entry) = self.by_sha.get_mut(&sha) {
-            entry.followers.remove(model_id);
-            if entry.primary == model_id {
-                if let Some(next_primary) = entry.followers.iter().next().cloned() {
-                    entry.followers.remove(&next_primary);
-                    entry.primary = next_primary;
-                } else {
-                    remove_entry = true;
-                }
-            }
-        }
-        if remove_entry {
-            self.by_sha.remove(&sha);
-        }
-    }
-
-    fn progress_targets(&self, model_id: &str) -> Vec<String> {
-        let mut targets = vec![model_id.to_string()];
-        if let Some(sha) = self.model_to_sha.get(model_id) {
-            if let Some(entry) = self.by_sha.get(sha) {
-                if entry.primary == model_id {
-                    targets.extend(entry.followers.iter().cloned());
-                }
-            }
-        }
-        targets
-    }
-
-    fn inflight_snapshot(&self) -> Vec<ModelsInflightEntry> {
-        self.by_sha
-            .iter()
-            .map(|(sha, entry)| ModelsInflightEntry {
-                sha256: sha.clone(),
-                primary: entry.primary.clone(),
-                followers: entry.followers.iter().cloned().collect(),
-                count: 1 + entry.followers.len() as u64,
-            })
-            .collect()
-    }
-
-    fn followers_of_primary(&self, model_id: &str) -> Vec<String> {
-        self.by_sha
-            .values()
-            .find(|entry| entry.primary == model_id)
-            .map(|entry| entry.followers.iter().cloned().collect())
-            .unwrap_or_default()
     }
 }
 
@@ -770,7 +266,7 @@ impl ModelStore {
             }
             state.hard_cap = hard_cap.filter(|v| *v > 0);
         }
-        self.downloads.notify.notify_waiters();
+        self.downloads.notify_all();
         let after = {
             let state = self.concurrency.read().await;
             state.configured()
@@ -787,8 +283,10 @@ impl ModelStore {
         let inflight = self.inflight_snapshot();
         let concurrency = self.concurrency_snapshot().await;
         let jobs = self.downloads.job_snapshot().await;
-        let runtime =
-            ModelsRuntimeConfig::from_tuning(Self::download_tuning(), Self::preflight_enabled());
+        let runtime = ModelsRuntimeConfig::from_tuning(
+            config::download_tuning(),
+            Self::preflight_enabled(),
+        );
         ModelsMetricsResponse::from_parts(counters, inflight, concurrency, jobs, runtime)
     }
 
@@ -812,120 +310,8 @@ impl ModelStore {
         sort: Option<String>,
         order: Option<String>,
     ) -> HashPage {
-        let index = self.manifest_hash_index().await;
-        let mut rows: Vec<HashItem> = index
-            .iter()
-            .map(|(sha256, refs)| refs.to_hash_item(sha256))
-            .collect();
-        if let Some(filter) = provider.as_ref() {
-            rows.retain(|row| row.providers.iter().any(|p| p == filter));
-        }
-        if let Some(filter) = model.as_ref() {
-            rows.retain(|row| row.models.iter().any(|m| m == filter));
-        }
-        let sort_key = sort
-            .map(|s| s.to_ascii_lowercase())
-            .unwrap_or_else(|| "bytes".to_string());
-        let desc_default = sort_key == "bytes";
-        let desc = match order.as_deref() {
-            Some("asc") => false,
-            Some("desc") => true,
-            _ => desc_default,
-        };
-        rows.sort_by(|a, b| {
-            let ord = match sort_key.as_str() {
-                "sha256" => a.sha256.cmp(&b.sha256),
-                "path" => a.path.cmp(&b.path),
-                "providers_count" => a.providers.len().cmp(&b.providers.len()),
-                _ => a.bytes.cmp(&b.bytes),
-            };
-            if desc {
-                ord.reverse()
-            } else {
-                ord
-            }
-        });
-        let total = rows.len();
-        let limit = limit.clamp(1, 10_000);
-        let pages = if total == 0 {
-            0
-        } else {
-            ((total - 1) / limit) + 1
-        };
-        let max_offset = if pages == 0 { 0 } else { (pages - 1) * limit };
-        let offset = if total == 0 {
-            0
-        } else {
-            offset.min(max_offset)
-        };
-        let end = offset.saturating_add(limit).min(total);
-        let slice = rows[offset..end].to_vec();
-        let count = end.saturating_sub(offset);
-        let page = if pages == 0 { 0 } else { (offset / limit) + 1 };
-        let prev_offset = if page <= 1 {
-            None
-        } else {
-            Some(offset.saturating_sub(limit))
-        };
-        let next_offset = if page == 0 || page >= pages {
-            None
-        } else {
-            Some(end)
-        };
-        HashPage {
-            items: slice,
-            total,
-            count,
-            limit,
-            offset,
-            prev_offset,
-            next_offset,
-            page,
-            pages,
-            last_offset: max_offset,
-        }
-    }
-
-    async fn manifest_hash_index(&self) -> Arc<ManifestHashIndex> {
-        if let Some(cached) = self.manifest_index.read().await.as_ref().cloned() {
-            return cached;
-        }
-
-        let items_snapshot = {
-            let guard = self.items.read().await;
-            guard.clone()
-        };
-        let built = Arc::new(Self::collect_manifest_hash_index(&items_snapshot));
-        let entries = built.len();
-
-        let mut guard = self.manifest_index.write().await;
-        if let Some(existing) = guard.as_ref() {
-            return existing.clone();
-        }
-        metrics::counter!(METRIC_MANIFEST_INDEX_REBUILDS).increment(1);
-        metrics::gauge!(GAUGE_MANIFEST_INDEX_ENTRIES).set(entries as f64);
-        debug!(entries, "manifest hash index rebuilt");
-        *guard = Some(built.clone());
-        built
-    }
-
-    async fn invalidate_manifest_index(&self) {
-        self.manifest_index.write().await.take();
-    }
-
-    fn collect_manifest_hash_index(items: &[Value]) -> ManifestHashIndex {
-        let mut index = ManifestHashIndex::new();
-        for entry in items {
-            let Some(hash) = entry.get("sha256").and_then(|v| v.as_str()) else {
-                continue;
-            };
-            if hash.len() != 64 {
-                continue;
-            }
-            let bucket = index.entry(hash.to_string()).or_default();
-            bucket.ingest_manifest(entry);
-        }
-        index
+        self.hashes_page_internal(limit, offset, provider, model, sort, order)
+            .await
     }
 
     pub async fn start_download(self: &Arc<Self>, req: DownloadRequest) -> Result<(), String> {
@@ -1068,12 +454,7 @@ impl ModelStore {
         let cancel = CancellationToken::new();
         let max = self.concurrency.read().await.configured();
         if self.downloads.wait_for_slot(max, &cancel).await.is_err() {
-            self.with_metrics(|m| {
-                if m.queued > 0 {
-                    m.queued -= 1;
-                }
-            })
-            .await;
+            self.with_metrics(|m| m.decrement_queue()).await;
             self.release_primary_hash(id);
             return Err("download canceled".into());
         }
@@ -1122,12 +503,7 @@ impl ModelStore {
             finisher.finish_download(model_id, outcome).await;
         });
 
-        {
-            let mut jobs = self.downloads.jobs.lock().await;
-            if let Some(entry) = jobs.get_mut(id) {
-                entry.task = Some(job_handle);
-            }
-        }
+        self.downloads.attach_task(id, job_handle).await;
 
         Ok(())
     }
@@ -1160,87 +536,7 @@ impl ModelStore {
     pub async fn cas_gc(&self, req: CasGcRequest) -> Result<Value, String> {
         let ttl_hours = req.ttl_hours.unwrap_or(24);
         let verbose = req.verbose.unwrap_or(false);
-        let cutoff = chrono::Utc::now() - chrono::Duration::hours(ttl_hours as i64);
-        let manifest_index = self.manifest_hash_index().await;
-        let cas_dir = self.cas_dir();
-        let mut scanned = 0u64;
-        let mut kept = 0u64;
-        let mut deleted = 0u64;
-        let mut deleted_bytes = 0u64;
-        let mut deleted_items = if verbose { Some(Vec::new()) } else { None };
-
-        if let Ok(mut entries) = fs::read_dir(&cas_dir).await {
-            while let Ok(Some(entry)) = entries.next_entry().await {
-                let path = entry.path();
-                if !path.is_file() {
-                    continue;
-                }
-                scanned += 1;
-                let fname = path
-                    .file_name()
-                    .and_then(|s| s.to_str())
-                    .unwrap_or_default()
-                    .to_string();
-                if manifest_index.contains_key(&fname) {
-                    kept += 1;
-                    continue;
-                }
-                let meta = match entry.metadata().await {
-                    Ok(m) => m,
-                    Err(err) => {
-                        warn!("cas gc metadata failed for {:?}: {err}", path);
-                        continue;
-                    }
-                };
-                let (modified, modified_str) = match meta.modified() {
-                    Ok(time) => {
-                        let dt = DateTime::<Utc>::from(time);
-                        (dt, Some(dt.to_rfc3339()))
-                    }
-                    Err(_) => {
-                        let fallback = Utc::now();
-                        (fallback, None)
-                    }
-                };
-                if modified > cutoff {
-                    kept += 1;
-                    continue;
-                }
-                let size = meta.len();
-                if let Err(err) = fs::remove_file(&path).await {
-                    warn!("cas gc remove failed {:?}: {err}", path);
-                    kept += 1;
-                    continue;
-                }
-                deleted += 1;
-                deleted_bytes = deleted_bytes.saturating_add(size);
-                if let Some(ref mut list) = deleted_items {
-                    let rel_path = path.strip_prefix(&cas_dir).unwrap_or(&path).to_path_buf();
-                    list.push(CasGcDeletedItem {
-                        sha256: fname.clone(),
-                        path: rel_path.to_string_lossy().into_owned(),
-                        bytes: size,
-                        last_modified: modified_str,
-                    });
-                }
-            }
-        }
-
-        let mut payload = json!({
-            "scanned": scanned,
-            "kept": kept,
-            "deleted": deleted,
-            "deleted_bytes": deleted_bytes,
-            "ttl_hours": ttl_hours,
-        });
-        if let Some(list) = deleted_items {
-            payload.as_object_mut().expect("payload object").insert(
-                "deleted_items".into(),
-                serde_json::to_value(list).unwrap_or(Value::Null),
-            );
-        }
-        self.bus.publish(topics::TOPIC_MODELS_CAS_GC, &payload);
-        Ok(payload)
+        self.execute_cas_gc(ttl_hours, verbose).await
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -1291,7 +587,7 @@ impl ModelStore {
             }
         }
 
-        let tuning = Self::download_tuning();
+        let tuning = config::download_tuning();
         let if_range_header = if resume_from > 0 {
             Self::load_resume_ifrange(&meta_path).await
         } else {
@@ -1454,9 +750,9 @@ impl ModelStore {
 
         let mut file = BufWriter::new(file_base);
         let mut stream = response.bytes_stream();
-        let reserve_bytes = Self::disk_reserve_bytes();
-        let max_bytes = Self::max_download_bytes();
-        let quota_bytes = Self::quota_bytes();
+        let reserve_bytes = config::disk_reserve_bytes();
+        let max_bytes = config::max_download_bytes();
+        let quota_bytes = config::quota_bytes();
         let cas_usage_bytes = if quota_bytes.is_some() {
             self.cas_usage_bytes().await.unwrap_or(0)
         } else {
@@ -1500,7 +796,7 @@ impl ModelStore {
             }
         }
         if reserve_bytes > 0 {
-            if let Ok(avail) = Self::available_space(self.state_dir()) {
+            if let Ok(avail) = config::available_space_bytes(self.state_dir()) {
                 if avail <= reserve_bytes {
                     let _ = Self::remove_resume_artifacts(&tmp_path, &meta_path).await;
                     return DownloadOutcome::Failed {
@@ -1643,7 +939,7 @@ impl ModelStore {
                 }
             }
             if reserve_bytes > 0 {
-                if let Ok(avail) = Self::available_space(self.state_dir()) {
+                if let Ok(avail) = config::available_space_bytes(self.state_dir()) {
                     if avail <= reserve_bytes {
                         let _ = Self::remove_resume_artifacts(&tmp_path, &meta_path).await;
                         return DownloadOutcome::Failed {
@@ -2269,7 +1565,7 @@ impl ModelStore {
             if let Ok(value) = serde_json::from_slice::<Value>(&bytes) {
                 if let Some(ewma) = value.get("ewma_mbps").and_then(|v| v.as_f64()) {
                     let mut metrics = self.metrics.write().await;
-                    metrics.ewma_mbps = Some(ewma);
+                    metrics.set_ewma_mbps(ewma);
                 }
             }
         }
@@ -2321,8 +1617,8 @@ impl ModelStore {
     }
 
     fn disk_snapshot(&self, downloaded: Option<u64>, total: Option<u64>) -> Option<Value> {
-        let reserve = Self::disk_reserve_bytes();
-        let available = Self::available_space(self.state_dir()).ok();
+        let reserve = config::disk_reserve_bytes();
+        let available = config::available_space_bytes(self.state_dir()).ok();
         let need = match (total, downloaded) {
             (Some(total), Some(done)) => Some(total.saturating_sub(done)),
             (Some(total), None) => Some(total),
@@ -2348,84 +1644,6 @@ impl ModelStore {
         }
 
         Some(Value::Object(map))
-    }
-
-    fn disk_reserve_bytes() -> u64 {
-        static BYTES: OnceCell<u64> = OnceCell::new();
-        *BYTES.get_or_init(|| {
-            std::env::var("ARW_MODELS_DISK_RESERVE_MB")
-                .ok()
-                .and_then(|s| s.parse::<u64>().ok())
-                .unwrap_or(256)
-                .saturating_mul(1024 * 1024)
-        })
-    }
-
-    fn max_download_bytes() -> Option<u64> {
-        static BYTES: OnceCell<Option<u64>> = OnceCell::new();
-        *BYTES.get_or_init(|| {
-            std::env::var("ARW_MODELS_MAX_MB")
-                .ok()
-                .and_then(|s| s.parse::<u64>().ok())
-                .map(|mb| mb.saturating_mul(1024 * 1024))
-                .filter(|b| *b > 0)
-        })
-    }
-
-    fn quota_bytes() -> Option<u64> {
-        static BYTES: OnceCell<Option<u64>> = OnceCell::new();
-        *BYTES.get_or_init(|| {
-            std::env::var("ARW_MODELS_QUOTA_MB")
-                .ok()
-                .and_then(|s| s.parse::<u64>().ok())
-                .map(|mb| mb.saturating_mul(1024 * 1024))
-                .filter(|b| *b > 0)
-        })
-    }
-
-    fn download_tuning() -> &'static DownloadTuning {
-        static TUNING: OnceCell<DownloadTuning> = OnceCell::new();
-        TUNING.get_or_init(DownloadTuning::from_env)
-    }
-
-    fn available_space(path: PathBuf) -> Result<u64, String> {
-        available_space(path).map_err(|e| e.to_string())
-    }
-
-    fn state_dir(&self) -> PathBuf {
-        util::state_dir()
-    }
-
-    async fn cas_usage_bytes(&self) -> Result<u64, String> {
-        let mut total = 0u64;
-        let dir = self.cas_dir();
-        let mut entries = match fs::read_dir(&dir).await {
-            Ok(it) => it,
-            Err(_) => return Ok(0),
-        };
-        while let Ok(Some(entry)) = entries.next_entry().await {
-            if let Ok(meta) = entry.metadata().await {
-                if meta.is_file() {
-                    total = total.saturating_add(meta.len());
-                }
-            }
-        }
-        Ok(total)
-    }
-
-    async fn write_manifest(&self, id: &str, manifest: &Value) -> Result<(), String> {
-        let path = self.manifest_path(id);
-        if let Some(parent) = path.parent() {
-            fs::create_dir_all(parent)
-                .await
-                .map_err(|e| format!("create manifest dir failed: {e}"))?;
-        }
-        fs::write(
-            &path,
-            serde_json::to_vec_pretty(manifest).map_err(|e| e.to_string())?,
-        )
-        .await
-        .map_err(|e| format!("write manifest failed: {e}"))
     }
 
     async fn with_metrics<F>(&self, f: F)
@@ -2530,7 +1748,7 @@ impl ModelStore {
             .and_then(|v| v.to_str().ok())
             .map(|s| s.to_string());
 
-        if let Some(max) = Self::max_download_bytes() {
+        if let Some(max) = config::max_download_bytes() {
             if let Some(len) = content_length {
                 if len > max {
                     return Err(PreflightError::Denied {
@@ -2544,7 +1762,7 @@ impl ModelStore {
             }
         }
 
-        if let Some(quota) = Self::quota_bytes() {
+        if let Some(quota) = config::quota_bytes() {
             if let Some(len) = content_length {
                 let usage = self.cas_usage_bytes().await.unwrap_or(0);
                 if usage.saturating_add(len) > quota {
@@ -2560,8 +1778,8 @@ impl ModelStore {
         }
 
         if let Some(len) = content_length {
-            let reserve = Self::disk_reserve_bytes();
-            match Self::available_space(self.state_dir()) {
+            let reserve = config::disk_reserve_bytes();
+            match config::available_space_bytes(self.state_dir()) {
                 Ok(avail) => {
                     if avail <= reserve || avail.saturating_sub(reserve) < len {
                         return Err(PreflightError::Denied {
@@ -2960,42 +2178,6 @@ impl ModelStore {
         serde_json::from_slice(&bytes).map_err(|e| e.to_string())
     }
 
-    fn models_dir(&self) -> PathBuf {
-        util::state_dir().join("models")
-    }
-
-    fn cas_dir(&self) -> PathBuf {
-        self.models_dir().join("by-hash")
-    }
-
-    pub fn cas_blob_path(&self, hash: &str) -> PathBuf {
-        self.cas_dir().join(hash)
-    }
-
-    fn manifest_path(&self, id: &str) -> PathBuf {
-        self.models_dir().join(format!("{id}.json"))
-    }
-
-    fn models_file(&self) -> PathBuf {
-        self.models_dir().join("models.json")
-    }
-
-    async fn persist_download_metrics(&self, ewma: f64) -> Result<(), String> {
-        let metrics_path = self.models_dir().join("downloads.metrics.json");
-        let body = json!({"ewma_mbps": ewma});
-        if let Some(parent) = metrics_path.parent() {
-            fs::create_dir_all(parent)
-                .await
-                .map_err(|e| format!("metrics dir create failed: {e}"))?;
-        }
-        fs::write(
-            &metrics_path,
-            serde_json::to_vec_pretty(&body).map_err(|e| e.to_string())?,
-        )
-        .await
-        .map_err(|e| format!("persist download metrics failed: {e}"))
-    }
-
     async fn find_model_url(&self, id: &str) -> Option<String> {
         self.items
             .read()
@@ -3185,7 +2367,6 @@ fn duration_to_millis(duration: Duration) -> u64 {
 mod tests {
     use super::*;
     use crate::test_support;
-    use tempfile::tempdir;
     use tokio::sync::broadcast::error::TryRecvError;
 
     fn dummy_download_handle(label: &str) -> DownloadHandle {
@@ -3283,277 +2464,6 @@ mod tests {
         });
 
         assert_eq!(value, expected);
-    }
-
-    #[tokio::test]
-    async fn hashes_page_groups_and_filters_providers() {
-        let bus = arw_events::Bus::new_with_replay(8, 8);
-        let store = ModelStore::new(bus, None);
-        let items = vec![
-            json!({
-                "id": "m-primary",
-                "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-                "bytes": 10,
-                "provider": "alpha",
-                "path": "/models/alpha.bin"
-            }),
-            json!({
-                "id": "m-follower",
-                "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-                "provider": "beta"
-            }),
-            json!({
-                "id": "m-two",
-                "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-                "bytes": 7,
-                "provider": "alpha",
-                "path": "/models/alpha-two.bin"
-            }),
-        ];
-        store.replace_items(items).await;
-
-        let page = store.hashes_page(10, 0, None, None, None, None).await;
-        assert_eq!(page.total, 2);
-        assert_eq!(page.count, 2);
-        assert_eq!(page.limit, 10);
-        assert_eq!(page.offset, 0);
-        assert_eq!(page.page, 1);
-        assert_eq!(page.pages, 1);
-        assert!(page.prev_offset.is_none());
-        assert!(page.next_offset.is_none());
-        assert_eq!(page.last_offset, 0);
-
-        let first = &page.items[0];
-        assert_eq!(
-            first.sha256,
-            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-        );
-        assert_eq!(first.bytes, 10);
-        assert_eq!(first.path, "/models/alpha.bin");
-        assert_eq!(first.providers, vec!["alpha", "beta"]);
-        assert_eq!(first.models, vec!["m-follower", "m-primary"]);
-
-        let filtered = store
-            .hashes_page(10, 0, Some("beta".into()), None, None, None)
-            .await;
-        assert_eq!(filtered.total, 1);
-        assert_eq!(filtered.count, 1);
-        assert_eq!(filtered.page, 1);
-        assert_eq!(filtered.pages, 1);
-        assert!(filtered.prev_offset.is_none());
-        assert!(filtered.next_offset.is_none());
-        assert_eq!(filtered.last_offset, 0);
-        assert_eq!(filtered.items[0].sha256, first.sha256);
-    }
-
-    #[tokio::test]
-    async fn hashes_page_filters_by_model_id() {
-        let bus = arw_events::Bus::new_with_replay(8, 8);
-        let store = ModelStore::new(bus, None);
-        let items = vec![
-            json!({
-                "id": "first-model",
-                "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-                "bytes": 12,
-                "provider": "alpha",
-                "path": "/models/a.bin"
-            }),
-            json!({
-                "id": "second-model",
-                "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-                "bytes": 9,
-                "provider": "alpha",
-                "path": "/models/b.bin"
-            }),
-            json!({
-                "id": "follower",
-                "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-                "provider": "beta"
-            }),
-        ];
-        store.replace_items(items).await;
-
-        let filtered = store
-            .hashes_page(10, 0, None, Some("follower".into()), None, None)
-            .await;
-        assert_eq!(filtered.total, 1);
-        assert_eq!(filtered.items.len(), 1);
-        assert_eq!(filtered.page, 1);
-        assert_eq!(filtered.pages, 1);
-        assert!(filtered.prev_offset.is_none());
-        assert!(filtered.next_offset.is_none());
-        assert_eq!(filtered.last_offset, 0);
-        let entry = &filtered.items[0];
-        assert_eq!(entry.models, vec!["first-model", "follower"]);
-    }
-
-    #[tokio::test]
-    async fn hashes_page_reports_offsets() {
-        let bus = arw_events::Bus::new_with_replay(8, 8);
-        let store = ModelStore::new(bus, None);
-        let mut items = Vec::new();
-        for i in 0..103 {
-            let sha = format!("{:064x}", i + 1);
-            items.push(json!({
-                "id": format!("model-{i}"),
-                "sha256": sha,
-                "bytes": 1 + i as u64,
-                "provider": "local",
-                "path": format!("/models/model-{i}.bin"),
-            }));
-        }
-        store.replace_items(items).await;
-
-        let page1 = store
-            .hashes_page(25, 0, None, None, Some("sha256".into()), Some("asc".into()))
-            .await;
-        assert_eq!(page1.count, 25);
-        assert_eq!(page1.page, 1);
-        assert_eq!(page1.pages, 5);
-        assert_eq!(page1.prev_offset, None);
-        assert_eq!(page1.next_offset, Some(25));
-        assert_eq!(page1.last_offset, 100);
-
-        let page2 = store
-            .hashes_page(
-                25,
-                page1.next_offset.expect("next offset"),
-                None,
-                None,
-                Some("sha256".into()),
-                Some("asc".into()),
-            )
-            .await;
-        assert_eq!(page2.offset, 25);
-        assert_eq!(page2.page, 2);
-        assert_eq!(page2.prev_offset, Some(0));
-        assert_eq!(page2.next_offset, Some(50));
-
-        let page_last = store
-            .hashes_page(
-                25,
-                9999,
-                None,
-                None,
-                Some("sha256".into()),
-                Some("asc".into()),
-            )
-            .await;
-        assert_eq!(page_last.offset, 100);
-        assert_eq!(page_last.count, 3);
-        assert_eq!(page_last.page, 5);
-        assert_eq!(page_last.pages, 5);
-        assert_eq!(page_last.prev_offset, Some(75));
-        assert_eq!(page_last.next_offset, None);
-        assert_eq!(page_last.last_offset, 100);
-    }
-
-    #[tokio::test]
-    async fn manifest_hash_index_invalidates_on_mutation() {
-        let bus = arw_events::Bus::new_with_replay(8, 8);
-        let store = ModelStore::new(bus, None);
-        store
-            .replace_items(vec![
-                json!({
-                    "id": "keep",
-                    "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-                    "bytes": 4,
-                    "provider": "alpha",
-                    "path": "/models/keep.bin"
-                }),
-                json!({
-                    "id": "drop",
-                    "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-                    "bytes": 8,
-                    "provider": "beta",
-                    "path": "/models/drop.bin"
-                }),
-            ])
-            .await;
-
-        let first = store.manifest_hash_index().await;
-        assert_eq!(first.len(), 2);
-        drop(first);
-
-        let removed = store.remove_model("drop").await;
-        assert!(removed, "expected model removal to succeed");
-
-        let second = store.manifest_hash_index().await;
-        assert_eq!(second.len(), 1);
-        assert!(
-            second.contains_key("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
-        );
-        assert!(!second
-            .contains_key("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"));
-    }
-
-    #[tokio::test]
-    async fn cas_gc_verbose_reports_deleted_entries() {
-        let tmp = tempdir().expect("tempdir");
-        let _ctx = test_support::begin_state_env(tmp.path());
-
-        let bus = arw_events::Bus::new_with_replay(8, 8);
-        let store = ModelStore::new(bus, None);
-
-        let keep_hash = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
-        let stale_hash = "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc";
-
-        store
-            .replace_items(vec![json!({
-                "id": "keep-model",
-                "sha256": keep_hash,
-                "bytes": 4,
-                "provider": "alpha",
-                "path": format!("/models/{keep_hash}"),
-            })])
-            .await;
-
-        let keep_path = store.cas_blob_path(keep_hash);
-        let stale_path = store.cas_blob_path(stale_hash);
-        if let Some(parent) = keep_path.parent() {
-            tokio::fs::create_dir_all(parent)
-                .await
-                .expect("create cas dir");
-        }
-
-        tokio::fs::write(&keep_path, b"keep")
-            .await
-            .expect("write keep blob");
-        tokio::fs::write(&stale_path, b"stale-bytes")
-            .await
-            .expect("write stale blob");
-
-        let payload = store
-            .cas_gc(CasGcRequest {
-                ttl_hours: Some(0),
-                verbose: Some(true),
-            })
-            .await
-            .expect("gc response");
-
-        assert_eq!(payload.get("scanned").and_then(Value::as_u64), Some(2));
-        assert_eq!(payload.get("deleted").and_then(Value::as_u64), Some(1));
-        assert_eq!(payload.get("kept").and_then(Value::as_u64), Some(1));
-
-        let deleted_items = payload
-            .get("deleted_items")
-            .and_then(Value::as_array)
-            .expect("deleted items array");
-        assert_eq!(deleted_items.len(), 1);
-        let first = &deleted_items[0];
-        assert_eq!(
-            first.get("sha256").and_then(Value::as_str),
-            Some(stale_hash)
-        );
-        assert_eq!(
-            first.get("bytes").and_then(Value::as_u64),
-            Some(b"stale-bytes".len() as u64)
-        );
-
-        tokio::fs::metadata(&keep_path)
-            .await
-            .expect("keep blob still present");
-        assert!(tokio::fs::metadata(&stale_path).await.is_err());
     }
 
     #[tokio::test]
@@ -3814,63 +2724,11 @@ pub struct HashPage {
     pub last_offset: usize,
 }
 
-#[derive(Clone, Serialize)]
-struct CasGcDeletedItem {
-    sha256: String,
-    path: String,
-    bytes: u64,
+#[derive(Clone, Serialize, ToSchema)]
+pub struct CasGcDeletedItem {
+    pub sha256: String,
+    pub bytes: u64,
+    pub path: String,
     #[serde(skip_serializing_if = "Option::is_none")]
-    last_modified: Option<String>,
-}
-
-type ManifestHashIndex = HashMap<String, ManifestHashRefs>;
-
-#[derive(Clone, Default)]
-struct ManifestHashRefs {
-    bytes: u64,
-    path: Option<String>,
-    providers: HashSet<String>,
-    models: HashSet<String>,
-}
-
-impl ManifestHashRefs {
-    fn ingest_manifest(&mut self, entry: &Value) {
-        if self.bytes == 0 {
-            if let Some(bytes) = entry.get("bytes").and_then(|v| v.as_u64()) {
-                if bytes > 0 {
-                    self.bytes = bytes;
-                }
-            }
-        }
-        if self.path.as_ref().map(|p| p.is_empty()).unwrap_or(true) {
-            if let Some(path) = entry.get("path").and_then(|v| v.as_str()) {
-                if !path.is_empty() {
-                    self.path = Some(path.to_string());
-                }
-            }
-        }
-        let provider = entry
-            .get("provider")
-            .and_then(|v| v.as_str())
-            .filter(|s| !s.is_empty())
-            .unwrap_or("unknown");
-        self.providers.insert(provider.to_string());
-        if let Some(id) = entry.get("id").and_then(|v| v.as_str()) {
-            self.models.insert(id.to_string());
-        }
-    }
-
-    fn to_hash_item(&self, sha256: &str) -> HashItem {
-        let mut providers: Vec<_> = self.providers.iter().cloned().collect();
-        providers.sort();
-        let mut models: Vec<_> = self.models.iter().cloned().collect();
-        models.sort();
-        HashItem {
-            sha256: sha256.to_string(),
-            bytes: self.bytes,
-            path: self.path.clone().unwrap_or_default(),
-            providers,
-            models,
-        }
-    }
+    pub last_modified: Option<String>,
 }
