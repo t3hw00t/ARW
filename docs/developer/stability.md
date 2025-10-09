@@ -21,7 +21,7 @@ We operate with short iteration cycles and track the latest stable Rust toolchai
 - Lint: `cargo clippy --workspace --all-targets -- -D warnings`
 - Build: `cargo build --workspace --locked`
 - Test: `cargo test --workspace --locked`
-- Specs & docs: `just openapi-gen` and `bash scripts/docgen.sh && mkdocs build --strict`
+- Specs & docs: `just openapi-gen` and (`bash scripts/docgen.sh` / `powershell -ExecutionPolicy Bypass -File scripts\docgen.ps1`) followed by `mkdocs build --strict`
 
 ## Desktop Launcher Notes
 - Tauri 2 capabilities live at `apps/arw-launcher/src-tauri/capabilities/main.json`

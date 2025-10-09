@@ -10,9 +10,9 @@ Microsummary: Fast orientation for assistants working in the ARW repo—where to
 - Skim `docs/ai/REPO_MAP.md` for the workspace layout before drilling into large surfaces like `README.md`.
 
 ## Essential Commands
-- Build: `cargo build --workspace` (use `scripts/build.ps1` or `scripts/build.sh` if Bash is unavailable).
-- Tests: `cargo nextest run` or `scripts/test.{ps1,sh}` for shell-specific helpers.
-- Docs: `just docs-build` (requires Bash) or run `mkdocs build --strict` directly when `just` is inaccessible.
+- Build: `scripts/build.ps1` (Windows) or `bash scripts/build.sh` (Linux/macOS). Use `cargo build --workspace` directly when you prefer raw Cargo.
+- Tests: `scripts/test.ps1` / `bash scripts/test.sh`, or `cargo nextest run` if the helper scripts are unavailable.
+- Docs: `mkdocs build --strict` or `just docs-build` (Bash required). On Windows without Bash, pair `mkdocs` with `scripts/docgen.ps1`.
 
 ## Retrieval Tips
 - Prefer concise AI reference pages (`docs/ai/*.md`) before loading long-form guides.

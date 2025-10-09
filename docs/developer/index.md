@@ -23,7 +23,7 @@ cargo nextest run --workspace --locked
 # Regenerate OpenAPI + schemas from annotations (writes spec/*)
 just openapi-gen
 # Full docs/spec refresh (triggers openapi-gen internally)
-scripts/docgen.sh
+scripts/docgen.sh    # Windows: powershell -ExecutionPolicy Bypass -File scripts\docgen.ps1
 ```
 
 ## Design & Standards

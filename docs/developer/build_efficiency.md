@@ -29,7 +29,7 @@ Type: Reference
 
 - `just dev-build` – workspace debug build without `--locked` (fast feedback, matches Rust analyzer behaviour).
 - `just test-fast` – uses `cargo nextest` when available to parallelize test execution and minimize recompilation.
-- `just docgen` – regenerates docs without triggering `mkdocs`; pair with `mkdocs serve` for live previews.
+- `just docgen` – regenerates docs without triggering `mkdocs`; pair with `mkdocs serve` for live previews. On Windows shells without Bash, run `powershell -ExecutionPolicy Bypass -File scripts\docgen.ps1` instead.
 
 ## Targeted Profiles
 
@@ -59,7 +59,7 @@ Override per-crate settings when a crate benefits from extra optimization (e.g.,
 
 ## Doc Generation
 
-- `scripts/docgen.sh` skips optional OpenAPI generation when PyYAML is unavailable—install it into `.venv` to avoid repeated failures.
+- `scripts/docgen.sh` (or `scripts\docgen.ps1`) skips optional OpenAPI generation when PyYAML is unavailable—install it into `.venv` to avoid repeated failures.
 - Use `ls interfaces/system_components.json | entr python3 scripts/gen_system_components.py` to regenerate only the affected reference instead of the full docs suite when editing metadata.
 
 ## Troubleshooting Slow Builds

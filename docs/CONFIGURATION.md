@@ -131,6 +131,7 @@ Notes
   - `ARW_ACCESS_LOG_DIR`: directory for rolled logs (default `${ARW_LOGS_DIR:-./logs}`)
   - `ARW_ACCESS_LOG_PREFIX`: file prefix (default `http-access`)
   - `ARW_ACCESS_LOG_ROTATION`: `daily|hourly|minutely` (default `daily`)
+- Logs live under `ARW_LOGS_DIR` (default `./logs`). Tail them with `just access-tail` on Bash-capable systems or `Get-Content -Path .\logs\http-access* -Wait` in PowerShell.
 - Kernel emits the following metrics (when the `metrics` feature is enabled, on by default via `arw-server`):
   - Gauges: `arw_kernel_pool_available`, `arw_kernel_pool_in_use`, `arw_kernel_pool_total`.
   - Wait telemetry: `arw_kernel_pool_wait_total` (counter) and `arw_kernel_pool_wait_ms` (histogram, milliseconds).

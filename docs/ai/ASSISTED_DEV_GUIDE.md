@@ -12,7 +12,7 @@ Loop (every change)
 Exception: when a change qualifies as an "ease-of-use" shortcut in the CLI (e.g., trivial edits that the harness allows without formal planning), you may skip step 1; still call out assumptions in the response.
 1) Propose a PLAN (files to touch, exact changes, risks, test/docs impact).
 2) Get ACK on the PLAN (or self-review if solo), then implement minimal DIFF.
-3) Run checks (fmt, clippy -D warnings, nextest); summarize results.
+3) Run relevant checks (fmt, clippy -D warnings, nextest) when source code changes. For docs-only or textual config updates, call out the skipped checks and why they are safe.
 4) Update docs + microsummaries; create a tight PR with acceptance notes.
 
 Lightweight path (ease-of-use)
@@ -28,7 +28,7 @@ Harness alignment
 
 Micro change checklist
 - Confirm the edit scope stays within the lightweight limits (≤ 20 lines, single file, no behavior changes).
-- Explicitly list any skipped checks (fmt, clippy, tests, docs) and why the skip is safe.
+- Explicitly list any skipped checks (fmt, clippy, tests, docs) and why the skip is safe. Skipping fmt/clippy/nextest is acceptable for non-code edits.
 - Call out security/privacy impact (typically “none”) and any follow-up the reviewer should schedule.
 - Link to or restate the source of the harness approval so future agents can validate the shortcut.
 

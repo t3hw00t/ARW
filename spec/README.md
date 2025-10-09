@@ -1,6 +1,6 @@
 Agent Hub (ARW) API and Schema Artifacts
 
-This folder hosts generated specifications produced by the doc pipeline (`scripts/docgen.sh`) and by running the unified server with `OPENAPI_OUT`:
+This folder hosts generated specifications produced by the doc pipeline (`scripts/docgen.sh` / `scripts\docgen.ps1`) and by running the unified server with `OPENAPI_OUT`:
 - spec/openapi.yaml — HTTP API surface (OpenAPI 3.1)
 - spec/asyncapi.yaml — Event streams (AsyncAPI 2.x)
 - spec/mcp-tools.json — MCP tool catalog

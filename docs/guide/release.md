@@ -51,7 +51,7 @@ cargo test --workspace --locked --exclude arw-tauri --exclude arw-launcher
 Regenerate interface specs, gating references, and API docs so they match what ships:
 
 ```bash
-just docgen   # wraps scripts/docgen.sh
+just docgen   # wraps scripts/docgen.sh (Windows without Bash: powershell -ExecutionPolicy Bypass -File scripts\docgen.ps1)
 just docs-check
 ```
 

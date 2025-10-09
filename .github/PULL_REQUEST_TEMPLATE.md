@@ -25,7 +25,7 @@ Describe the change and motivation.
 ## Checklist
 
 - [ ] Registry integrity: `python3 scripts/check_feature_integrity.py` and `python3 scripts/check_system_components_integrity.py`  _(mark “not run (lightweight path)” with justification when the exception applies)_
-- [ ] Docs generated and committed: `just docs-build` (or `scripts/docgen.sh` + `mkdocs build --strict`)  _(same note as above)_
+- [ ] Docs generated and committed: `just docs-build` (Bash) or `scripts/docgen.sh` / `scripts/docgen.ps1` followed by `mkdocs build --strict`  _(same note as above)_
 - [ ] Lints/tests (targeted): `cargo clippy -p arw-core -p arw-server -- -D warnings` and `cargo nextest run -p arw-server`  _(same note as above)_
 - [ ] For registry edits: referenced docs/paths exist
 - [ ] Changelog/notes updated if user-visible

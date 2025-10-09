@@ -38,7 +38,7 @@ Assistant quickstart → [Agent Onboarding](docs/ai/AGENT_ONBOARDING.md)
 - Format: `cargo fmt --all`
 - Lint: `cargo clippy --workspace --all-targets -- -D warnings`
 - Tests: `cargo nextest run` or `scripts/test.{sh,ps1}`
-- Docs: `mkdocs build --strict` or `just docs-build` (requires Bash)
+- Docs: `mkdocs build --strict` or `just docs-build` (requires Bash). Windows without Bash: `powershell -ExecutionPolicy Bypass -File scripts\docgen.ps1` followed by `mkdocs build --strict`.
 
 ## Repository Layout
 - `crates/` - Core Rust libraries (protocol, kernel, policy, runtime, etc.).

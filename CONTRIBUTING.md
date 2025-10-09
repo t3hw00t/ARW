@@ -19,6 +19,9 @@ Prerequisites
 - Rust 1.90+ (latest stable via `rustup`)
 - Install `cargo-nextest`: `cargo install cargo-nextest`
 - Bash-compatible shell for the `just` and `.sh` helpers (Git for Windows, WSL, or another POSIX layer); PowerShell equivalents live alongside each script when you cannot install Bash.
+- Node.js 18+ (required for tokens tooling and the `just verify` task; optional if you skip those commands).
+- Python 3.11+ with `pip` (used by documentation and spec utilities invoked by `just verify`).
+- MkDocs Material: `pip install mkdocs-material` (or run `scripts/docgen.{sh,ps1}` which will prompt if missing).
 
 Commands
 ```bash
@@ -38,6 +41,8 @@ just features-gen  # regenerates docs/reference/feature_matrix.md from interface
 
 # Event kinds linter (dot.case)
 python3 scripts/lint_event_kinds.py
+
+> Tip: The `verify` meta-task and docs/tokens scripts require Node, Python, and MkDocs. If you do not have those tools installed, run the individual Rust checks (`fmt`, `clippy`, `cargo nextest`) instead and mention the skipped steps in your notes.
 
 ## Rapid iteration guardrails
 We track the latest stable Rust toolchain and ship frequently. To keep the project broadly usable while moving fast:
