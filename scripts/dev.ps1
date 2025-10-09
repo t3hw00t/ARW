@@ -119,6 +119,15 @@ function Invoke-Verify {
   )
   $mkdocs = Resolve-Tool @('mkdocs', (Join-Path $RepoRoot '.venv\Scripts\mkdocs.exe'))
   $python = Resolve-Tool @('python','python3')
+  $pythonHasYaml = $false
+  if ($python) {
+    try {
+      & $python -c "import yaml" | Out-Null
+      if ($LASTEXITCODE -eq 0) { $pythonHasYaml = $true }
+    } catch {
+      $pythonHasYaml = $false
+    }
+  }
   $bash = Resolve-Tool @((Join-Path ${env:ProgramFiles} 'Git\bin\bash.exe'), 'bash')
 
   if (-not $cargo) {
@@ -160,7 +169,7 @@ function Invoke-Verify {
         $env:PYTHONIOENCODING = $previousEncoding
       }
     }
-  } -Required:$false -ShouldRun { $null -ne $python } -SkipReason 'python not found; skipping operation docs sync check'
+  } -Required:$false -ShouldRun { ($null -ne $python) -and $pythonHasYaml } -SkipReason 'python or PyYAML missing; run `python3 -m pip install --user --break-system-packages pyyaml`'
 
   $results += Invoke-Step -Name 'python gen_topics_doc.py --check' -Action {
     $scriptPath = Join-Path $RepoRoot 'scripts\gen_topics_doc.py'
@@ -178,10 +187,6 @@ function Invoke-Verify {
   } -Required:$false -ShouldRun {
     ($null -ne $bash) -and (Test-Path (Join-Path $RepoRoot 'scripts\docs_check.sh'))
   } -SkipReason 'bash or docs_check.sh unavailable; skipping docs lint'
-
-  $results += Invoke-Step -Name 'mkdocs build --strict' -Action {
-    Invoke-Program -Executable $mkdocs -Arguments @('build','--strict','-f',(Join-Path $RepoRoot 'mkdocs.yml'))
-  } -Required:$false -ShouldRun { $null -ne $mkdocs } -SkipReason 'mkdocs not found; install via pip install mkdocs-material'
 
   $hasFailure = $false
   foreach ($result in $results) {
@@ -228,15 +233,29 @@ switch ($commandKey) {
     & (Join-Path $ScriptRoot 'setup.ps1') @defaults @Args
   }
   'setup-agent' {
-    $previous = $env:ARW_DOCGEN_SKIP_BUILDS
+    $previousDocgen = $env:ARW_DOCGEN_SKIP_BUILDS
+    $previousBuildMode = $env:ARW_BUILD_MODE
+    $previousAgentFlag = $env:ARW_SETUP_AGENT
     try {
       $env:ARW_DOCGEN_SKIP_BUILDS = '1'
+      $env:ARW_BUILD_MODE = 'debug'
+      $env:ARW_SETUP_AGENT = '1'
       & (Join-Path $ScriptRoot 'setup.ps1') -Headless -Minimal -NoDocs -Yes @Args
     } finally {
-      if ($null -eq $previous) {
+      if ($null -eq $previousDocgen) {
         Remove-Item Env:ARW_DOCGEN_SKIP_BUILDS -ErrorAction SilentlyContinue
       } else {
-        $env:ARW_DOCGEN_SKIP_BUILDS = $previous
+        $env:ARW_DOCGEN_SKIP_BUILDS = $previousDocgen
+      }
+      if ($null -eq $previousBuildMode) {
+        Remove-Item Env:ARW_BUILD_MODE -ErrorAction SilentlyContinue
+      } else {
+        $env:ARW_BUILD_MODE = $previousBuildMode
+      }
+      if ($null -eq $previousAgentFlag) {
+        Remove-Item Env:ARW_SETUP_AGENT -ErrorAction SilentlyContinue
+      } else {
+        $env:ARW_SETUP_AGENT = $previousAgentFlag
       }
     }
   }

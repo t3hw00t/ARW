@@ -578,7 +578,7 @@ fn probe_disks_macos() -> Vec<Value> {
         .iter()
         .filter_map(|p| {
             let pb = std::path::Path::new(p);
-            if std::fs::metadata(&pb).is_ok() {
+            if std::fs::metadata(pb).is_ok() {
                 Some(pb.to_path_buf())
             } else {
                 None

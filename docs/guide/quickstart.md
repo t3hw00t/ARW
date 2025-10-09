@@ -40,7 +40,7 @@ bash scripts/dev.sh setup-agent
 scripts\dev.ps1 setup-agent
 ```
 
-This path pins `--headless --minimal --no-docs` and exports `ARW_DOCGEN_SKIP_BUILDS=1` so doc generation skips release builds and packaging, keeping the workflow fast for autonomous runs.
+This path pins `--headless --minimal --no-docs`, exports `ARW_DOCGEN_SKIP_BUILDS=1`, and compiles `arw-server`/`arw-cli` in the debug profile to keep turnaround short for autonomous runs. It also installs PyYAML via `pip` (setting `PIP_BREAK_SYSTEM_PACKAGES=1` when the host enforces PEP 668) so `scripts/dev.{sh,ps1} verify` can run without extra manual steps.
 
 ### Option 1 — Portable bundle (fastest)
 

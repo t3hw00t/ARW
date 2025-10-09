@@ -19,12 +19,64 @@ function Info($m){ Write-Host "[setup] $m" -ForegroundColor DarkCyan }
 function Warn($m){ $script:warnings += $m }
 function Pause($m){ if(-not $Yes){ Read-Host $m | Out-Null } }
 
+function Ensure-PythonModule {
+  param(
+    [Parameter(Mandatory=$true)][string]$PythonPath,
+    [Parameter(Mandatory=$true)][string]$Module,
+    [Parameter()][string]$Package
+  )
+  if (-not $Package) { $Package = $Module }
+  try {
+    & $PythonPath -c "import importlib, sys; sys.exit(0 if importlib.util.find_spec('$Module') else 1)" | Out-Null
+    if ($LASTEXITCODE -eq 0) { return $true }
+  } catch {}
+  Info "Installing Python module $Package (pip --user)"
+  try {
+    & $PythonPath -m pip --version | Out-Null
+  } catch {
+    Info 'Bootstrapping pip (ensurepip --user)'
+    try {
+      & $PythonPath -m ensurepip --upgrade --user | Out-Null
+    } catch {
+      Warn "Unable to bootstrap pip; install $Package manually via `$PythonPath -m pip install --user $Package`."
+      return $false
+    }
+  }
+  try {
+    $prevBreak = $env:PIP_BREAK_SYSTEM_PACKAGES
+    $env:PIP_BREAK_SYSTEM_PACKAGES = '1'
+    try {
+      & $PythonPath -m pip install --user $Package | Out-Null
+    } finally {
+      if ([string]::IsNullOrEmpty($prevBreak)) {
+        Remove-Item Env:PIP_BREAK_SYSTEM_PACKAGES -ErrorAction SilentlyContinue
+      } else {
+        $env:PIP_BREAK_SYSTEM_PACKAGES = $prevBreak
+      }
+    }
+    Add-Content $installLog "PIP $Package"
+    return $true
+  } catch {
+    Warn "Failed to install Python module $Package; run `$PythonPath -m pip install --user $Package` manually."
+    return $false
+  }
+}
+
+$buildMode = $env:ARW_BUILD_MODE
+if ([string]::IsNullOrWhiteSpace($buildMode)) { $buildMode = 'release' }
+$buildMode = $buildMode.ToLowerInvariant()
+if ($buildMode -ne 'release' -and $buildMode -ne 'debug') { $buildMode = 'release' }
+$buildLabel = $buildMode
+
 if ($Minimal) {
   Info 'Minimal mode enabled: skipping docs and release packaging.'
   $NoDocs = $true
 }
 if ($Headless) {
   Info 'Headless mode enabled: launcher build will be skipped.'
+}
+if ($buildMode -eq 'debug' -and -not $MaxPerf) {
+  Info 'Debug build mode enabled: using cargo build --locked (no --release) for faster iteration.'
 }
 
 Title 'Prerequisites'
@@ -111,6 +163,7 @@ if (-not $py) {
       }
     }
   }
+  Ensure-PythonModule -PythonPath $py.Path -Module 'yaml' -Package 'pyyaml' | Out-Null
 }
 Title 'Clean previous build artifacts'
 if ($Clean) {
@@ -119,7 +172,9 @@ if ($Clean) {
   Info 'Skipping cargo clean (pass -Clean to force a fresh build).'
 }
 
-Title 'Build (release): core binaries'
+$buildFlags = @('--locked')
+if ($buildMode -eq 'release') { $buildFlags += '--release' }
+Title ("Build ({0}): core binaries" -f $buildLabel)
 # Build only the essential binaries first to keep memory usage low on all platforms.
 if ($MaxPerf) {
   Info 'Opt-in: maxperf profile enabled'
@@ -127,7 +182,8 @@ if ($MaxPerf) {
   try { $env:CARGO_BUILD_JOBS = [Environment]::ProcessorCount } catch {}
   & cargo build --profile maxperf --locked -p arw-server -p arw-cli
 } else {
-  & cargo build --release --locked -p arw-server -p arw-cli
+  $coreArgs = @('build') + $buildFlags + @('-p','arw-server','-p','arw-cli')
+  & cargo @coreArgs
 }
 
 # Try to build the optional Desktop Launcher (Tauri) best-effort.
@@ -137,7 +193,8 @@ if (-not $Headless) {
       if ($MaxPerf) {
         & cargo build --profile maxperf --locked -p arw-launcher --features launcher-linux-ui
       } else {
-        & cargo build --release --locked -p arw-launcher --features launcher-linux-ui
+        $launcherArgs = @('build') + $buildFlags + @('-p','arw-launcher','--features','launcher-linux-ui')
+        & cargo @launcherArgs
       }
   } catch {
     Warn "arw-launcher build skipped (optional): $($_.Exception.Message)"

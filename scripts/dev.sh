@@ -101,8 +101,16 @@ run_verify() {
 
   PYTHON="$(command -v python3 || command -v python || true)"
   if [[ -n "$PYTHON" ]]; then
-    echo "[verify] python check_operation_docs_sync.py"
-    if ! "$PYTHON" "$REPO_ROOT/scripts/check_operation_docs_sync.py"; then ok=1; fi
+    if "$PYTHON" - <<'PY' >/dev/null 2>&1
+import importlib.util, sys
+sys.exit(0 if importlib.util.find_spec("yaml") else 1)
+PY
+    then
+      echo "[verify] python check_operation_docs_sync.py"
+      if ! "$PYTHON" "$REPO_ROOT/scripts/check_operation_docs_sync.py"; then ok=1; fi
+    else
+      echo "[verify] skipping operation docs sync check (PyYAML missing; run 'python3 -m pip install --user --break-system-packages pyyaml')"
+    fi
 
     echo "[verify] python scripts/gen_topics_doc.py --check"
     if ! "$PYTHON" "$REPO_ROOT/scripts/gen_topics_doc.py" --check; then ok=1; fi
@@ -121,11 +129,6 @@ run_verify() {
     if ! mkdocs build --strict -f "$REPO_ROOT/mkdocs.yml"; then ok=1; fi
   else
     echo "[verify] skipping docs lint (docs_check.sh & mkdocs missing)"
-  fi
-
-  if command -v mkdocs >/dev/null 2>&1; then
-    echo "[verify] mkdocs build --strict"
-    if ! mkdocs build --strict -f "$REPO_ROOT/mkdocs.yml"; then ok=1; fi
   fi
 
   set -e
@@ -151,7 +154,7 @@ case "$command" in
     bash "$SCRIPT_DIR/setup.sh" "${args[@]}"
     ;;
   setup-agent)
-    env ARW_DOCGEN_SKIP_BUILDS=1 bash "$SCRIPT_DIR/setup.sh" --yes --headless --minimal --no-docs "$@"
+    env ARW_DOCGEN_SKIP_BUILDS=1 ARW_SETUP_AGENT=1 ARW_BUILD_MODE=debug bash "$SCRIPT_DIR/setup.sh" --yes --headless --minimal --no-docs "$@"
     ;;
   build)
     args=("$@")

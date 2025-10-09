@@ -67,7 +67,14 @@ fi
 info "Scanning markdown files under docs/"
 
 # Collect list of .md files
-mapfile -t files < <(find "$docs_dir" -type f -name "*.md" | sort)
+files=()
+if type mapfile >/dev/null 2>&1; then
+  mapfile -t files < <(find "$docs_dir" -type f -name "*.md" | sort)
+else
+  while IFS= read -r file; do
+    files+=("$file")
+  done < <(find "$docs_dir" -type f -name "*.md" | sort)
+fi
 
 # Simple heading/title checks and Updated line
 for f in "${files[@]}"; do

@@ -29,6 +29,44 @@ info(){ echo -e "\033[36m[setup]\033[0m $*"; }
 warn(){ WARNINGS+=("$*"); }
 pause(){ [[ $yes_flag -eq 1 ]] || read -rp "$*" _; }
 
+PYTHON_BIN="$(command -v python3 || command -v python || true)"
+build_mode="$(printf '%s' "${ARW_BUILD_MODE:-release}" | tr '[:upper:]' '[:lower:]')"
+case "$build_mode" in
+  release|debug) ;;
+  *) build_mode="release" ;;
+esac
+build_label="$build_mode"
+
+ensure_python_module() {
+  local module="$1"
+  local package="${2:-$1}"
+  if [[ -z "$PYTHON_BIN" ]]; then
+    return 1
+  fi
+  if "$PYTHON_BIN" - <<PY >/dev/null 2>&1
+import importlib
+import sys
+sys.exit(0 if importlib.util.find_spec("$module") else 1)
+PY
+  then
+    return 0
+  fi
+  if ! "$PYTHON_BIN" -m pip --version >/dev/null 2>&1; then
+    info "Bootstrapping pip to install Python module ${package}"
+    if ! "$PYTHON_BIN" -m ensurepip --upgrade --user >/dev/null 2>&1; then
+      warn "Unable to bootstrap pip; install '${package}' manually with '$PYTHON_BIN -m pip install --user ${package}'."
+      return 1
+    fi
+  fi
+  info "Installing Python module ${package} (pip --user)"
+  if PIP_BREAK_SYSTEM_PACKAGES=1 "$PYTHON_BIN" -m pip install --user "${package}"; then
+    printf 'PIP_USER %s\n' "$package" >> "$INSTALL_LOG"
+    return 0
+  fi
+  warn "Failed to install Python module ${package}; run '$PYTHON_BIN -m pip install --user ${package}' manually."
+  return 1
+}
+
 launcher_runtime_ready=1
 check_launcher_runtime() {
   if [[ "${OSTYPE:-}" != linux* ]]; then
@@ -66,24 +104,27 @@ fi
 if [[ $headless -eq 1 ]]; then
   info "Headless mode enabled: launcher build will be skipped."
 fi
+if [[ "$build_mode" == "debug" ]]; then
+  info "Debug build mode enabled: using cargo build --locked (no --release) for faster iteration."
+fi
 
 mkdocs_ok=0
 if command -v mkdocs >/dev/null 2>&1; then mkdocs_ok=1; fi
 if [[ $no_docs -eq 0 && $mkdocs_ok -eq 0 ]]; then
-  if command -v python3 >/dev/null 2>&1; then
+  if [[ -n "$PYTHON_BIN" ]]; then
     info "Installing MkDocs via pip (user site)"
-    if ! python3 -m pip --version >/dev/null 2>&1; then
+    if ! "$PYTHON_BIN" -m pip --version >/dev/null 2>&1; then
       info "Bootstrapping pip in user site"
-      if python3 -m ensurepip --upgrade --user >/dev/null 2>&1; then
+      if "$PYTHON_BIN" -m ensurepip --upgrade --user >/dev/null 2>&1; then
         :
       else
         warn "Unable to bootstrap pip; docs site generation will be skipped unless MkDocs is installed manually."
       fi
     fi
-    if python3 -m pip install --user mkdocs mkdocs-material mkdocs-git-revision-date-localized-plugin; then
+    if "$PYTHON_BIN" -m pip install --user mkdocs mkdocs-material mkdocs-git-revision-date-localized-plugin; then
       mkdocs_ok=1
       printf 'PIP_USER %s\n' mkdocs mkdocs-material mkdocs-git-revision-date-localized-plugin >> "$INSTALL_LOG"
-      user_base="$(python3 -m site --user-base 2>/dev/null || true)"
+      user_base="$("$PYTHON_BIN" -m site --user-base 2>/dev/null || true)"
       user_bin="${user_base:+$user_base/bin}"
       if [[ -n "$user_bin" && -d "$user_bin" && ":$PATH:" != *":$user_bin:"* ]]; then
         warn "MkDocs installed to $user_bin. Add it to PATH to run mkdocs directly."
@@ -92,8 +133,11 @@ if [[ $no_docs -eq 0 && $mkdocs_ok -eq 0 ]]; then
       warn "MkDocs install failed or pip is unavailable; docs site build will be skipped."
     fi
   else
-    warn "python3 not found; skipping docs site build"
+    warn "python not found; skipping docs site build"
   fi
+fi
+if [[ -n "$PYTHON_BIN" ]]; then
+  ensure_python_module yaml pyyaml || true
 fi
 if [[ $build_launcher -eq 1 ]]; then
   check_launcher_runtime
@@ -102,15 +146,19 @@ if [[ $build_launcher -eq 1 ]]; then
     build_launcher=0
   fi
 fi
-title "Build workspace (release)"
+build_flags=(--locked)
+if [[ "$build_mode" == "release" ]]; then
+  build_flags+=(--release)
+fi
+title "Build workspace (${build_label})"
 if [[ $minimal -eq 1 ]]; then
-  info "Building arw-server (release)"
-  (cd "$ROOT" && cargo build --release --locked -p arw-server)
-  info "Building arw-cli (release)"
-  (cd "$ROOT" && cargo build --release --locked -p arw-cli)
+  info "Building arw-server (${build_label})"
+  (cd "$ROOT" && cargo build "${build_flags[@]}" -p arw-server)
+  info "Building arw-cli (${build_label})"
+  (cd "$ROOT" && cargo build "${build_flags[@]}" -p arw-cli)
   if [[ $build_launcher -eq 1 ]]; then
-    info "Building arw-launcher (release)"
-    if (cd "$ROOT" && cargo build --release --locked -p arw-launcher --features launcher-linux-ui); then
+    info "Building arw-launcher (${build_label})"
+    if (cd "$ROOT" && cargo build "${build_flags[@]}" -p arw-launcher --features launcher-linux-ui); then
       :
     else
       warn "arw-launcher build failed; continue in headless mode (install WebKitGTK 4.1 + libsoup3 or run with --headless)."
@@ -120,11 +168,11 @@ if [[ $minimal -eq 1 ]]; then
     info "Skipping arw-launcher build."
   fi
 else
-  info "Building workspace (release, excluding launcher)"
-  (cd "$ROOT" && cargo build --workspace --release --locked --exclude arw-launcher)
+  info "Building workspace (${build_label}, excluding launcher)"
+  (cd "$ROOT" && cargo build "${build_flags[@]}" --workspace --exclude arw-launcher)
   if [[ $build_launcher -eq 1 ]]; then
-    info "Building arw-launcher (release)"
-    if (cd "$ROOT" && cargo build --release --locked -p arw-launcher --features launcher-linux-ui); then
+    info "Building arw-launcher (${build_label})"
+    if (cd "$ROOT" && cargo build "${build_flags[@]}" -p arw-launcher --features launcher-linux-ui); then
       :
     else
       warn "arw-launcher build failed; continue in headless mode (install WebKitGTK 4.1 + libsoup3 or run with --headless)."
