@@ -9,17 +9,18 @@ on:
 jobs:
   check:
     runs-on: ubuntu-latest
+    env:
+      CARGO_DENY_VERSION: 0.14.24
     steps:
       - name: Checkout
         uses: actions/checkout@v5
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
       - name: Install cargo-deny
-        run: cargo install cargo-deny --locked
+        run: cargo install cargo-deny --locked --version ${{ env.CARGO_DENY_VERSION }}
       - name: Run cargo-deny (advisories, licenses, bans)
         run: |
           cargo deny check advisories bans sources licenses
-        continue-on-error: true
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true

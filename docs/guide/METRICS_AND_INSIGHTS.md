@@ -39,7 +39,7 @@ Type: How‑to
   - `arw_tools_cache_error` / `arw_tools_cache_bypass` — serialization/store failures vs. intentionally uncached tools
   - `arw_memory_gc_expired_total` / `arw_memory_gc_evicted_total` — TTL expirations and lane-cap evictions reclaimed by the memory hygiene loop
   - `arw_task_*` — background task starts/completions/aborts (`*_total`) and inflight gauges
-  - `arw_legacy_capsule_headers_total` — legacy `X-ARW-Gate` headers rejected (should trend to zero before retiring compatibility shims)
+  - `arw_legacy_capsule_headers_total` — rejected requests still carrying the deprecated gate header (should trend to zero before retiring compatibility shims)
   - `arw_modular_agent_total` / `arw_modular_tool_total` — accepted modular agent responses and tool invocations (labelled by `agent`/`tool`)
   - `arw_modular_chat_text_len`, `arw_modular_chat_summary_ratio`, `arw_modular_recall_items`, `arw_modular_compression_candidates`, `arw_modular_validation_findings` — loss and health histograms emitted when modular turns persist to memory (surface in dashboards to track compression effectiveness).
   - `arw_build_info{service,version,sha}` — build metadata
@@ -114,7 +114,7 @@ Pair the metrics with a deprecation banner. For Prometheus alertmanager, you can
   annotations:
     summary: "Legacy capsule headers observed"
     description: |
-      Clients are still sending X-ARW-Gate headers. Migration should remove
+      Clients are still sending the deprecated gate header. Migration should remove
       this path before the legacy shutdown window.
 ```
 

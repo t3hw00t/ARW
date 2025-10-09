@@ -25,10 +25,15 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+      - name: Cache pip (docs)
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-docs-${{ hashFiles('requirements/docs.txt') }}
       - name: Install mkdocs + plugins
         run: |
           pip install --upgrade pip
-          pip install mkdocs-material mike git-python mkdocs-git-revision-date-localized-plugin
+          pip install -r requirements/docs.txt
       - name: Build docs
         run: mkdocs build --strict
 
@@ -45,9 +50,14 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+      - name: Cache pip (docs)
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-docs-${{ hashFiles('requirements/docs.txt') }}
       - name: Install mkdocs + mike
         run: |
-          pip install mkdocs-material mike git-python mkdocs-git-revision-date-localized-plugin
+          pip install -r requirements/docs.txt
       - name: Configure git
         run: |
           git config user.name "github-actions[bot]"
@@ -64,9 +74,14 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+      - name: Cache pip (docs)
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-docs-${{ hashFiles('requirements/docs.txt') }}
       - name: Install mkdocs
         run: |
-          pip install mkdocs-material mkdocs mkdocs-git-revision-date-localized-plugin
+          pip install -r requirements/docs.txt
       - name: Build docs
         run: mkdocs build --strict
       - name: Serve docs

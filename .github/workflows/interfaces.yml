@@ -19,8 +19,13 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.x'
+      - name: Cache pip (interfaces)
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-interfaces-${{ hashFiles('requirements/interfaces.txt') }}
       - name: Install deps
-        run: pip install pyyaml
+        run: pip install -r requirements/interfaces.txt
       - name: Generate index.yaml
         run: |
           python scripts/interfaces_generate_index.py
@@ -29,7 +34,7 @@ jobs:
           python scripts/generate_deprecations.py
       - name: Ensure OpenAPI descriptions and tags
         run: |
-          python scripts/ensure_openapi_descriptions.py || true
+          python scripts/ensure_openapi_descriptions.py
           if ! git diff --quiet -- spec/openapi.yaml; then
             echo '::error::spec/openapi.yaml was modified to add placeholder descriptions/tags; commit the changes.'
             git --no-pager diff -- spec/openapi.yaml | sed -n '1,160p'
@@ -91,11 +96,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.x'
-      - uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
-          profile: minimal
-          override: true
+      - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: |
@@ -277,8 +278,13 @@ PY
       - uses: actions/setup-python@v5
         with:
           python-version: '3.x'
+      - name: Cache pip (interfaces)
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-interfaces-${{ hashFiles('requirements/interfaces.txt') }}
       - name: Install deps
-        run: pip install pyyaml
+        run: pip install -r requirements/interfaces.txt
       - name: Check review/sunset dates
         run: |
           python - << 'PY'
@@ -316,11 +322,7 @@ PY
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
-      - uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
-          profile: minimal
-          override: true
+      - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: |

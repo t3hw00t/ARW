@@ -12,7 +12,7 @@ Type: Explanation
 The Asimov Capsule Guard turns the "mind virus" idea into an enforceable feature: a lightweight policy capsule that refreshes itself at every critical runtime boundary, keeping safety rules and leases in effect without piling up irreversible denies.
 
 ## Current Behavior & Gaps
-- ✅ Capsule adoption runs in the unified server middleware: any request carrying `X-ARW-Capsule` is verified via the RPU, cached, and published to `/state/policy/capsules`. Legacy `X-ARW-Gate` headers now error (410). Lease metadata (`lease_duration_ms`, `renew_within_ms`) travels with the capsule and surfaces in the read model.
+- ✅ Capsule adoption runs in the unified server middleware: any request carrying `X-ARW-Capsule` is verified via the RPU, cached, and published to `/state/policy/capsules`. Legacy gate headers now error (410). Lease metadata (`lease_duration_ms`, `renew_within_ms`) travels with the capsule and surfaces in the read model.
 - ✅ Capsule fingerprints ignore the signature blob, so re-signed payloads that keep identical policy data do not thrash adoption notifications or read-model patches.【F:apps/arw-server/src/capsule_guard.rs†L430-L438】
 - ✅ Legacy failures emit `policy.capsule.failed` and `policy.decision` events so operators can observe rejected attempts.
 - ✅ Guardrail preset apply events (`policy.guardrails.applied`) attach `corr_id`/`request_id`, and the HTTP response echoes the same metadata so audits can link preset changes to the initiating request.【F:apps/arw-server/src/api/policy.rs†L210】

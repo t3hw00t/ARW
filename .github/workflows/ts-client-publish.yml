@@ -30,7 +30,7 @@ jobs:
           npm -v
 
       - name: Install deps
-        run: npm ci || npm i
+        run: npm ci
 
       - name: Build
         run: npm run build

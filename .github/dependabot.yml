@@ -6,6 +6,12 @@ updates:
       interval: weekly
     open-pull-requests-limit: 5
 
+  - package-ecosystem: npm
+    directory: "/clients/typescript"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+
   - package-ecosystem: cargo
     directory: "/"
     schedule:
@@ -110,3 +116,12 @@ updates:
       rust-minor-patch:
         applies-to: version-updates
         update-types: ["minor", "patch"]
+
+  - package-ecosystem: pip
+    directory: "/"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    requirements:
+      - requirements/docs.txt
+      - requirements/interfaces.txt

@@ -6,11 +6,6 @@ on:
     paths:
       - .github/labels.yml
       - .github/workflows/labels.yml
-  pull_request_target:
-    types: [ opened, synchronize, reopened ]
-    paths:
-      - .github/labels.yml
-      - .github/workflows/labels.yml
   pull_request:
     paths:
       - .github/labels.yml
@@ -27,15 +22,10 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v5
-      - name: Checkout PR head (for PR dry-run)
-        if: github.event_name == 'pull_request_target'
-        uses: actions/checkout@v5
-        with:
-          ref: ${{ github.event.pull_request.head.sha }}
       - name: Sync labels
         uses: crazy-max/ghaction-github-labeler@v5
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           yaml-file: .github/labels.yml
           skip-delete: true
-          dry-run: ${{ github.event_name == 'pull_request' || github.event_name == 'pull_request_target' }}
+          dry-run: ${{ github.event_name == 'pull_request' }}

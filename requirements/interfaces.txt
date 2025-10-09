@@ -1,0 +1,2 @@
+# Interface registry automation
+pyyaml>=6.0,<7.0

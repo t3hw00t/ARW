@@ -17,6 +17,8 @@ jobs:
           - arch: arm64
             target: aarch64-pc-windows-msvc
     continue-on-error: ${{ matrix.arch == 'arm64' }}
+    env:
+      TAURI_CLI_VERSION: 2.0.0
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -49,7 +51,7 @@ jobs:
           Copy-Item target/${{ matrix.target }}/release/arw-cli.exe apps/arw-launcher/src-tauri/bin/arw-cli.exe -Force
 
       - name: Install Tauri CLI
-        run: cargo install tauri-cli --locked
+        run: cargo install tauri-cli --locked --version ${{ env.TAURI_CLI_VERSION }}
 
       - name: Install WiX Toolset (MSI bundler)
         run: choco install -y wixtoolset

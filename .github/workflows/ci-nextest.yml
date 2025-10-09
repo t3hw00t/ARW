@@ -9,11 +9,16 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    env:
+      NEXTEST_VERSION: 0.9.67
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - name: Install nextest
-        run: cargo install cargo-nextest --locked
+        uses: taiki-e/install-action@v2
+        with:
+          tool: nextest
+          version: ${{ env.NEXTEST_VERSION }}
       - name: Build tests
         run: cargo nextest run --no-run
       - name: Run tests (CI profile)
