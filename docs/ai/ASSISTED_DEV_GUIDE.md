@@ -1,5 +1,5 @@
 # Assisted, Iterative Coding – Working Agreement
-Updated: 2025-10-09
+Updated: 2025-10-10
 Type: Reference
 
 Microsummary: Small, safe changes with a written PLAN → minimal DIFF → tests → docs. Default‑deny risky edits. Stable.
@@ -20,7 +20,7 @@ Exception: when a change qualifies as an "ease-of-use" shortcut in the CLI (e.g.
 3) Run relevant checks (fmt, clippy -D warnings, nextest) when source code changes. For docs-only or textual config updates, call out the skipped checks and why they are safe.
 4) Update docs + microsummaries; create a tight PR with acceptance notes.
 
-Use `scripts/dev.{sh,ps1} verify` to run the standard fmt → clippy → tests → docs sequence; pass `--fast` when you only need fmt/clippy/tests and plan to handle docs or launcher UI checks separately. The command reports skipped checks so you can note them explicitly. Prefer the task workflow? `mise run verify` and `mise run verify:fast` map to those helpers after `mise install`.
+Use `scripts/dev.{sh,ps1} verify` to run the standard fmt → clippy → tests → docs sequence. The headless default excludes the Tauri `arw-launcher` crate; pass `--with-launcher` / `-WithLauncher` (or set `ARW_VERIFY_INCLUDE_LAUNCHER=1`) when you specifically need the desktop UI checks. Add `--fast` / `-Fast` to skip doc sync, docs lint, and launcher UI tests when you only need fmt/clippy/test coverage. The command reports skipped checks so you can note them explicitly. Prefer the task workflow? `mise run verify` and `mise run verify:fast` map to those helpers after `mise install`.
 Need a lighter docs lint for fast feedback? Run `DOCS_CHECK_FAST=1 bash scripts/docs_check.sh` (or pass `--fast`) to skip the mkdocs build and deep Python sweeps; follow up with the full run before merging when time permits. Prefer tasks? `mise run docs:check` and `mise run docs:check:fast` wrap those helpers.
 Missing MkDocs or Python deps? `mise run bootstrap:docs` (or `bash scripts/bootstrap_docs.sh`) installs the pinned stack defined in `requirements/docs.txt`.
 Need offline installs? Run `mise run docs:cache:build` ahead of time (or grab the `docs-wheels.tar.gz` asset from releases) and point `bootstrap_docs.sh` at the extracted wheel directory with `--wheel-dir`.
@@ -52,6 +52,7 @@ Guardrails
 Docs & discoverability
 - Update the most relevant page under docs/ (Tutorial/How‑to/Reference/Explanations).
 - When adding/altering schemas or endpoints, link them from Reference and include examples.
+- Refresh the metadata header after doc edits with `python scripts/update_doc_metadata.py path/to/doc.md` (add `--dry-run` to surface stale stamps without writing).
 
 Interfaces (for context)
 - Debug UI: `/admin/debug`; state read‑models under `/state/*`; events via SSE.

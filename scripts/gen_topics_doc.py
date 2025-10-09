@@ -16,6 +16,7 @@ DOC_PATH = ROOT / "docs" / "reference" / "topics.md"
 
 CONST_RE = re.compile(r"pub const ([A-Z0-9_]+): &str = \"([^\"]+)\";")
 SECTION_RE = re.compile(r"//\s*(.+?)\s*$")
+DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
 
 class Section:
@@ -41,6 +42,16 @@ def parse_args() -> argparse.Namespace:
         type=_pl.Path,
         default=DOC_PATH,
         help="Optional override for the output path (default: docs/reference/topics.md)",
+    )
+    parser.add_argument(
+        "--update-date",
+        action="store_true",
+        help="Refresh the Updated: stamp to today's date (default keeps the existing value).",
+    )
+    parser.add_argument(
+        "--date",
+        type=str,
+        help="Explicit YYYY-MM-DD stamp to use for the Updated: header.",
     )
     return parser.parse_args()
 
@@ -76,14 +87,38 @@ def parse_sections() -> List[Section]:
     return [sec for sec in sections if sec.items]
 
 
-def render_markdown(sections: List[Section]) -> str:
-    today = _dt.date.today().isoformat()
-    header = """---
+def read_existing_updated(path: _pl.Path) -> str | None:
+    if not path.exists():
+        return None
+    with path.open("r", encoding="utf-8") as handle:
+        for idx, raw_line in enumerate(handle):
+            if idx >= 40:
+                break
+            line = raw_line.strip()
+            if line.lower().startswith("updated:"):
+                return line.split(":", 1)[1].strip()
+    return None
+
+
+def determine_updated_value(args: argparse.Namespace, existing: str | None) -> str:
+    if args.date:
+        if not DATE_RE.fullmatch(args.date):
+            raise SystemExit(
+                f"error: invalid --date value '{args.date}' (expected YYYY-MM-DD)"
+            )
+        return args.date
+    if args.update_date or existing is None:
+        return _dt.date.today().isoformat()
+    return existing
+
+
+def render_markdown(sections: List[Section], updated: str) -> str:
+    header = f"""---
 title: Event Topics (Canonical)
 ---
 
 # Event Topics (Canonical)
-Updated: {today}
+Updated: {updated}
 Type: Reference
 
 Source of truth for event kinds published by the service. Generated from
@@ -97,7 +132,7 @@ Related docs:
 - How-to → [Subscribe to Events (SSE)](../guide/events_sse.md)
 - How-to → [Models Download (HTTP)](../guide/models_download.md)
 
-""".format(today=today)
+"""
 
     lines = [line.rstrip() for line in header.splitlines()]
 
@@ -139,7 +174,9 @@ def write_or_check(output_path: _pl.Path, content: str, check_only: bool) -> int
 def main() -> int:
     args = parse_args()
     sections = parse_sections()
-    markdown = render_markdown(sections)
+    existing_updated = read_existing_updated(args.out)
+    updated_value = determine_updated_value(args, existing_updated)
+    markdown = render_markdown(sections, updated_value)
     return write_or_check(args.out, markdown, args.check)
 
 

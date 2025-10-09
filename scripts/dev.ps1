@@ -36,7 +36,7 @@ Commands:
   test-fast          Alias for cargo nextest run --workspace.
   docs               Regenerate docs (docgen + mkdocs build --strict when available).
   docs-check         Run docs checks (uses scripts/docgen.ps1 and mkdocs when available).
-  verify             Run the standard fmt → clippy → tests → docs guardrail sequence.
+  verify             Run the standard fmt → clippy → tests → docs guardrail sequence (-Fast skips docs/UI; -WithLauncher checks Tauri crate).
   hooks              Install git hooks (cross-platform wrapper).
   status             Generate workspace status page (docgen).
 
@@ -110,6 +110,20 @@ function Invoke-Step {
 }
 
 function Invoke-Verify {
+  param(
+    [switch]$Fast,
+    [switch]$SkipDocs,
+    [switch]$SkipUI,
+    [switch]$SkipDocPython,
+    [switch]$WithLauncher
+  )
+
+  if ($Fast.IsPresent) {
+    $SkipDocs = $true
+    $SkipUI = $true
+    $SkipDocPython = $true
+  }
+
   $results = @()
   $cargo = Resolve-Tool @('cargo')
   $nextest = Resolve-Tool @('cargo-nextest')
@@ -134,28 +148,50 @@ function Invoke-Verify {
     throw "cargo not found in PATH. Install Rust toolchain via https://rustup.rs"
   }
 
+  $includeLauncher = $WithLauncher.IsPresent -or ($env:ARW_VERIFY_INCLUDE_LAUNCHER -match '^(1|true|yes)$')
+  if ($includeLauncher) {
+    Write-Host "[verify] including arw-launcher targets (per request)"
+  } else {
+    Write-Host "[verify] skipping arw-launcher crate (headless default; pass -WithLauncher or set ARW_VERIFY_INCLUDE_LAUNCHER=1 to include)"
+  }
+  if ($Fast.IsPresent) {
+    Write-Host "[verify] fast mode enabled (skipping doc sync, docs lint, launcher UI tests)."
+  }
+
   $results += Invoke-Step -Name 'cargo fmt --all -- --check' -Action {
     Invoke-Program -Executable $cargo -Arguments @('fmt','--all','--','--check')
   }
 
-  $results += Invoke-Step -Name 'cargo clippy --workspace --all-targets -- -D warnings' -Action {
-    Invoke-Program -Executable $cargo -Arguments @('clippy','--workspace','--all-targets','--','-D','warnings')
+  $clippyArgs = @('clippy','--workspace','--all-targets')
+  if (-not $includeLauncher) { $clippyArgs += @('--exclude','arw-launcher') }
+  $clippyArgs += @('--','-D','warnings')
+  $results += Invoke-Step -Name ("cargo " + ($clippyArgs -join ' ')) -Action {
+    Invoke-Program -Executable $cargo -Arguments $clippyArgs
   }
 
-  $testStepName = if ($nextest) { 'cargo nextest run --workspace' } else { 'cargo test --workspace --locked' }
+  $testArgs = $null
+  $testStepName = $null
+  if ($nextest) {
+    $testArgs = @('nextest','run','--workspace')
+    if (-not $includeLauncher) { $testArgs += @('--exclude','arw-launcher') }
+    $testStepName = "cargo $($testArgs -join ' ')"
+  } else {
+    Write-Warning 'cargo-nextest not found; falling back to cargo test --workspace --locked.'
+    $testArgs = @('test','--workspace','--locked')
+    if (-not $includeLauncher) { $testArgs += @('--exclude','arw-launcher') }
+    $testStepName = "cargo $($testArgs -join ' ')"
+  }
   $results += Invoke-Step -Name $testStepName -Action {
-    if ($nextest) {
-      Invoke-Program -Executable $cargo -Arguments @('nextest','run','--workspace')
-    } else {
-      Invoke-Program -Executable $cargo -Arguments @('test','--workspace','--locked')
-    }
+    Invoke-Program -Executable $cargo -Arguments $testArgs
   }
 
+  $uiSkipReason = if ($SkipUI) { 'launcher UI checks disabled (--fast/--skip-ui)' } else { 'node not found; skipping UI store test' }
   $results += Invoke-Step -Name 'node read_store.test.js' -Action {
     $testPath = Join-Path $RepoRoot 'apps\arw-launcher\src-tauri\ui\read_store.test.js'
     Invoke-Program -Executable $node -Arguments @($testPath)
-  } -Required:$false -ShouldRun { $null -ne $node } -SkipReason 'node not found; skipping UI store test'
+  } -Required:$false -ShouldRun { ($null -ne $node) -and -not $SkipUI } -SkipReason $uiSkipReason
 
+  $docSyncSkipReason = if ($SkipDocPython) { 'doc sync checks disabled (--fast/--skip-doc-python)' } else { 'python or PyYAML missing; run `python3 -m pip install --user --break-system-packages pyyaml`' }
   $results += Invoke-Step -Name 'python check_operation_docs_sync.py' -Action {
     $previousEncoding = $env:PYTHONIOENCODING
     try {
@@ -169,7 +205,7 @@ function Invoke-Verify {
         $env:PYTHONIOENCODING = $previousEncoding
       }
     }
-  } -Required:$false -ShouldRun { ($null -ne $python) -and $pythonHasYaml } -SkipReason 'python or PyYAML missing; run `python3 -m pip install --user --break-system-packages pyyaml`'
+  } -Required:$false -ShouldRun { ($null -ne $python) -and $pythonHasYaml -and -not $SkipDocPython } -SkipReason $docSyncSkipReason
 
   $results += Invoke-Step -Name 'python gen_topics_doc.py --check' -Action {
     $scriptPath = Join-Path $RepoRoot 'scripts\gen_topics_doc.py'
@@ -181,12 +217,13 @@ function Invoke-Verify {
     Invoke-Program -Executable $python -Arguments @($scriptPath)
   } -Required:$false -ShouldRun { $null -ne $python } -SkipReason 'python not found; skipping event-name lint'
 
+  $docsSkipReason = if ($SkipDocs) { 'docs lint disabled (--fast/--skip-docs)' } else { 'bash or docs_check.sh unavailable; skipping docs lint' }
   $results += Invoke-Step -Name 'docs_check.sh' -Action {
     $scriptPath = (Join-Path $RepoRoot 'scripts/docs_check.sh').Replace('\','/')
     & $bash.Source $scriptPath
   } -Required:$false -ShouldRun {
-    ($null -ne $bash) -and (Test-Path (Join-Path $RepoRoot 'scripts\docs_check.sh'))
-  } -SkipReason 'bash or docs_check.sh unavailable; skipping docs lint'
+    ($null -ne $bash) -and (Test-Path (Join-Path $RepoRoot 'scripts\docs_check.sh')) -and (-not $SkipDocs)
+  } -SkipReason $docsSkipReason
 
   $hasFailure = $false
   foreach ($result in $results) {
@@ -337,7 +374,28 @@ switch ($commandKey) {
     }
   }
   'verify' {
-    Invoke-Verify
+    $recognized = @('fast','skip-docs','skip-ui','skip-doc-python','with-launcher')
+    $fast = Contains-Switch -Values $Args -Switches @('fast')
+    $skipDocs = Contains-Switch -Values $Args -Switches @('skip-docs')
+    $skipUI = Contains-Switch -Values $Args -Switches @('skip-ui')
+    $skipDocPython = Contains-Switch -Values $Args -Switches @('skip-doc-python')
+    $withLauncher = Contains-Switch -Values $Args -Switches @('with-launcher')
+    $unknown = @()
+    foreach ($arg in $Args) {
+      if ($arg -like '-*') {
+        $trimmed = $arg.TrimStart('-', '/')
+        $trimmed = ($trimmed.Split('=')[0]).ToLowerInvariant()
+        if (-not $recognized.Contains($trimmed)) {
+          $unknown += $arg
+        }
+      } else {
+        $unknown += $arg
+      }
+    }
+    if ($unknown.Count -gt 0) {
+      throw "Unknown verify option(s): $($unknown -join ', ')"
+    }
+    Invoke-Verify -Fast:$fast -SkipDocs:$skipDocs -SkipUI:$skipUI -SkipDocPython:$skipDocPython -WithLauncher:$withLauncher
   }
   'hooks' {
     & (Join-Path $ScriptRoot 'hooks' 'install_hooks.ps1') @Args

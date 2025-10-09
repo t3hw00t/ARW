@@ -37,12 +37,13 @@ Assistant quickstart → [Agent Onboarding](docs/ai/AGENT_ONBOARDING.md)
 
 ## Build & Test
 - Unified helper: `scripts/dev.{sh,ps1}` wraps the common workflow (e.g., `scripts/dev.ps1 build`, `scripts/dev.ps1 verify`).
-- Guardrail sweep: `scripts/dev.sh verify` (pass `--fast` to focus on fmt/clippy/tests and skip docs or launcher UI checks until later).
+- Guardrail sweep: `scripts/dev.sh verify` (headless default skips the Tauri crate; pass `--with-launcher` or set `ARW_VERIFY_INCLUDE_LAUNCHER=1` to include it, and use `--fast` to skip docs/UI checks).
 - Build: `scripts/build.sh` (Linux/macOS) or `scripts/build.ps1` (Windows). Both default to a headless build that skips the Tauri launcher; add `--with-launcher` / `-WithLauncher` or set `ARW_BUILD_LAUNCHER=1` when you need the desktop UI (requires WebKitGTK 4.1 + libsoup3 on Linux or WebView2 on Windows). `make build` / `just build` follow the same headless default, with `make build-launcher` / `just build-launcher` opting into the full workspace build.
 - Format: `cargo fmt --all`
 - Lint: `cargo clippy --workspace --all-targets -- -D warnings`
 - Tests: `cargo nextest run` or `scripts/test.{sh,ps1}`
 - Docs: `mkdocs build --strict`, `scripts/dev.{sh,ps1} docs`, or `just docs-build` (requires Bash). Windows without Bash: `pwsh -ExecutionPolicy Bypass -File scripts\docgen.ps1` followed by `mkdocs build --strict`. Prefer task wrappers? Use `mise run docs:check` or `mise run docs:check:fast`.
+- Docs metadata: `python scripts/update_doc_metadata.py docs/<path>.md` refreshes the `Updated:` stamp after edits (add `--dry-run` to preview changes).
 - Docs toolchain: `mise run bootstrap:docs` (or `bash scripts/bootstrap_docs.sh`) installs the pinned MkDocs/Material stack. Generate an offline wheel bundle with `mise run docs:cache:build` (archive lands in `dist/docs-wheels.tar.gz`), then reuse it via `mise run bootstrap:docs -- --wheel-dir <path>`.
 - Release attachments include `docs-wheels.tar.gz`; download and extract to reuse with `scripts/bootstrap_docs.sh --wheel-dir <dir>` when mirroring the published bundle.
 

@@ -32,7 +32,7 @@ Commands:
   test-fast        Alias for cargo nextest run --workspace.
   docs             Regenerate docs (docgen + mkdocs build --strict when available).
   docs-check       Run docs checks (docgen + docs_check.sh if bash available).
-  verify           Run fmt → clippy → tests → docs guardrail sequence (pass --fast to skip docs/UI).
+  verify           Run fmt → clippy → tests → docs guardrail sequence (--fast skips docs/UI; --with-launcher checks Tauri crate).
   hooks            Install git hooks (delegates to scripts/hooks/install_hooks.sh).
   status           Generate workspace status page (docgen).
 
@@ -74,6 +74,7 @@ run_verify() {
   local skip_docs=0
   local skip_ui=0
   local skip_docs_python=0
+  local include_launcher=0
 
   while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -96,6 +97,10 @@ run_verify() {
         skip_docs_python=1
         shift
         ;;
+      --with-launcher|--include-launcher)
+        include_launcher=1
+        shift
+        ;;
       *)
         echo "[verify] Unknown option '$1'" >&2
         return 2
@@ -109,18 +114,39 @@ run_verify() {
     echo "[verify] fast mode enabled (skipping doc sync, docs lint, launcher UI tests)."
   fi
 
+  if [[ $include_launcher -eq 1 || "${ARW_VERIFY_INCLUDE_LAUNCHER:-}" =~ ^(1|true|yes)$ ]]; then
+    include_launcher=1
+  fi
+  if [[ $include_launcher -eq 1 ]]; then
+    echo "[verify] including arw-launcher targets (per request)"
+  else
+    echo "[verify] skipping arw-launcher crate (headless default; pass --with-launcher or set ARW_VERIFY_INCLUDE_LAUNCHER=1 to include)"
+  fi
+
   echo "[verify] cargo fmt --all -- --check"
   if ! cargo fmt --all -- --check; then ok=1; fi
 
-  echo "[verify] cargo clippy --workspace --all-targets -- -D warnings"
-  if ! cargo clippy --workspace --all-targets -- -D warnings; then ok=1; fi
+  local clippy_args=(--workspace --all-targets)
+  if [[ $include_launcher -ne 1 ]]; then
+    clippy_args+=(--exclude arw-launcher)
+  fi
+  echo "[verify] cargo clippy ${clippy_args[*]} -- -D warnings"
+  if ! cargo clippy "${clippy_args[@]}" -- -D warnings; then ok=1; fi
 
   if command -v cargo-nextest >/dev/null 2>&1; then
-    echo "[verify] cargo nextest run --workspace"
-    if ! cargo nextest run --workspace; then ok=1; fi
+    local nextest_args=(run --workspace)
+    if [[ $include_launcher -ne 1 ]]; then
+      nextest_args+=(--exclude arw-launcher)
+    fi
+    echo "[verify] cargo nextest ${nextest_args[*]}"
+    if ! cargo nextest "${nextest_args[@]}"; then ok=1; fi
   else
     echo "[verify] cargo-nextest not found; falling back to cargo test --workspace --locked"
-    if ! cargo test --workspace --locked; then ok=1; fi
+    local test_args=(--workspace --locked)
+    if [[ $include_launcher -ne 1 ]]; then
+      test_args+=(--exclude arw-launcher)
+    fi
+    if ! cargo test "${test_args[@]}"; then ok=1; fi
   fi
 
   if [[ $skip_ui -eq 1 ]]; then

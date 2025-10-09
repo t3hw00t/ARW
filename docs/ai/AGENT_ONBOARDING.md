@@ -1,5 +1,5 @@
 # Agent Onboarding
-Updated: 2025-10-09
+Updated: 2025-10-10
 Type: Reference
 
 Microsummary: Fast orientation for assistants working in the ARW repo—where to look, what to run, and how to respond safely.
@@ -18,7 +18,8 @@ Microsummary: Fast orientation for assistants working in the ARW repo—where to
 - Tests: `scripts/test.ps1` / `bash scripts/test.sh`, or `cargo nextest run` if the helper scripts are unavailable.
 - Docs: `mkdocs build --strict` or `just docs-build` (Bash required). On Windows without Bash, pair `mkdocs` with `scripts/docgen.ps1`.
 - Docs lint: `bash scripts/docs_check.sh` (set `DOCS_CHECK_FAST=1` or pass `--fast` when you need a lightweight pass that skips mkdocs and deep Python sweeps). Shorthand: `mise run docs:check` or `mise run docs:check:fast`.
-- Verification guardrail: `scripts/dev.sh verify` (append `--fast` to skip doc sync, docs lint, and launcher UI tests when you only need fmt/clippy/test coverage).
+- Verification guardrail: `scripts/dev.sh verify` (headless default skips the `arw-launcher` crate; pass `--with-launcher` / `-WithLauncher` or set `ARW_VERIFY_INCLUDE_LAUNCHER=1` when you explicitly need the desktop UI, and add `--fast` / `-Fast` to skip doc + UI sweeps).
+- Doc metadata helper: `python scripts/update_doc_metadata.py docs/path/to/page.md` refreshes the `Updated:` stamp (add `--dry-run` to see needed changes without writing).
 - Docs bootstrap: `mise run bootstrap:docs` (or `bash scripts/bootstrap_docs.sh`) installs the pinned MkDocs/Material toolchain.
 - Offline docs cache: `mise run docs:cache:build` produces `dist/docs-wheels.tar.gz`; releases include the same bundle for reuse. Extract it and pass `--wheel-dir` to `bootstrap_docs.sh` when PyPI is unavailable.
 

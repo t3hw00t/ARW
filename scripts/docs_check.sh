@@ -40,6 +40,16 @@ if [[ "$fast_mode" == "1" ]]; then
   warn "DOCS_CHECK_FAST enabled: skipping mkdocs build and Python-based sweeps."
 fi
 
+rg_bin=""
+have_rg=0
+if command -v rg >/dev/null 2>&1; then
+  rg_bin="$(command -v rg)"
+  have_rg=1
+else
+  warn "ripgrep (rg) not found; skipping legacy term sweeps. Install via 'mise install' or 'brew install ripgrep'."
+  warnings=$((warnings+1))
+fi
+
 PYTHON_BIN="${PYTHON:-${PYTHON3:-}}"
 if [[ -z "$PYTHON_BIN" ]]; then
   if command -v python3 >/dev/null 2>&1; then
@@ -121,9 +131,12 @@ done
 if [[ "$fast_mode" == "1" ]]; then
   warn "Skipping legacy flag sweep (fast mode)"
   warnings=$((warnings+1))
+elif [[ $have_rg -ne 1 ]]; then
+  warn "Skipping legacy flag sweep (ripgrep not installed)"
+  warnings=$((warnings+1))
 else
   info "Checking for banned legacy flags"
-  legacy_hits=$(rg --no-messages --with-filename --line-number --regexp '(--Legacy| -Legacy)' "$docs_dir" "$root_dir/README.md" || true)
+  legacy_hits=$("$rg_bin" --no-messages --with-filename --line-number --regexp '(--Legacy| -Legacy)' "$docs_dir" "$root_dir/README.md" || true)
   if [[ -n "$legacy_hits" ]]; then
     err "Deprecated legacy flags detected:"
     printf "  %s\n" "$legacy_hits"
@@ -136,9 +149,12 @@ fi
 if [[ "$fast_mode" == "1" ]]; then
   warn "Skipping legacy admin route scan (fast mode)"
   warnings=$((warnings+1))
+elif [[ $have_rg -ne 1 ]]; then
+  warn "Skipping legacy admin route scan (ripgrep not installed)"
+  warnings=$((warnings+1))
 else
   info "Scanning code for legacy admin route references"
-  legacy_routes=$(rg --no-messages --with-filename --line-number --regexp '/admin/(state|projects)/' "$root_dir" \
+  legacy_routes=$("$rg_bin" --no-messages --with-filename --line-number --regexp '/admin/(state|projects)/' "$root_dir" \
     --glob '!docs/**' --glob '!spec/**' --glob '!.git/**' --glob '!target/**' --glob '!site/**' --glob '!vendor/**' \
     --glob '!sandbox/**' --glob '!node_modules/**' --glob '!dist/**' || true)
   if [[ -n "$legacy_routes" ]]; then
@@ -152,9 +168,12 @@ fi
 if [[ "$fast_mode" == "1" ]]; then
   warn "Skipping capsule header sweep (fast mode)"
   warnings=$((warnings+1))
+elif [[ $have_rg -ne 1 ]]; then
+  warn "Skipping legacy capsule header scan (ripgrep not installed)"
+  warnings=$((warnings+1))
 else
   info "Ensuring legacy capsule header is not reintroduced"
-  capsule_hits=$(rg --no-messages --with-filename --line-number 'X-ARW-Gate' "$root_dir" \
+  capsule_hits=$("$rg_bin" --no-messages --with-filename --line-number 'X-ARW-Gate' "$root_dir" \
     --glob '!docs/**' --glob '!target/**' --glob '!site/**' --glob '!vendor/**' --glob '!sandbox/**' \
     --glob '!node_modules/**' --glob '!dist/**' --glob '!spec/**' || true)
   if [[ -n "$capsule_hits" ]]; then
@@ -187,9 +206,12 @@ fi
 if [[ "$fast_mode" == "1" ]]; then
   warn "Skipping legacy Models.* sweep (fast mode)"
   warnings=$((warnings+1))
+elif [[ $have_rg -ne 1 ]]; then
+  warn "Skipping legacy Models.* sweep (ripgrep not installed)"
+  warnings=$((warnings+1))
 else
   info "Ensuring docs avoid legacy Models.* event names"
-  models_hits=$(rg --pcre2 --no-messages --with-filename --line-number --regexp 'Models\.(?!\*)' "$docs_dir" --glob '!release_notes.md' || true)
+  models_hits=$("$rg_bin" --pcre2 --no-messages --with-filename --line-number --regexp 'Models\.(?!\*)' "$docs_dir" --glob '!release_notes.md' || true)
   if [[ -n "$models_hits" ]]; then
     err "Legacy Models.* references detected:"
     printf "  %s\n" "$models_hits"

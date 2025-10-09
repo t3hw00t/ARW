@@ -4,7 +4,7 @@ title: Quickstart
 
 # Quickstart
 
-Updated: 2025-10-09
+Updated: 2025-10-10
 Type: Tutorial
 
 Run the unified ARW server locally in minutes. The architecture centres on the `/actions` → `/events` → `/state/*` triad; enable `ARW_DEBUG=1` to serve the browser debug panels.
@@ -101,8 +101,9 @@ DOCS_CHECK_FAST=1 bash scripts/docs_check.sh
 
 Drop the environment variable (or omit `--fast`) to restore the full validation, including mkdocs build and deep legacy sweeps, before publishing.
 
-Guardrail sweep (fmt → clippy → tests → docs) lives behind `bash scripts/dev.sh verify`; append `--fast` when you only need the Rust/test coverage and will address docs or launcher UI checks later in the workflow.
+Guardrail sweep (fmt → clippy → tests → docs) lives behind `bash scripts/dev.sh verify`. The default headless run skips the `arw-launcher` crate; pass `--with-launcher` / `-WithLauncher` or set `ARW_VERIFY_INCLUDE_LAUNCHER=1` when you explicitly need the desktop UI coverage, and append `--fast` / `-Fast` when you only need the Rust/test coverage and will address docs or launcher UI checks later in the workflow.
 Prefer the new task wrappers? `mise run verify` mirrors the full suite, and `mise run verify:fast` maps to the lean option. `mise run docs:check` and `mise run docs:check:fast` wrap the docs lint commands. Run `mise run bootstrap:docs` (or `bash scripts/bootstrap_docs.sh`) whenever you need the pinned MkDocs/Material stack installed.
+Need to bump a doc header after edits? Run `python scripts/update_doc_metadata.py docs/path/to/page.md` (add `--dry-run` to preview changes).
 Working offline? `mise run docs:cache:build` creates `dist/docs-wheels.tar.gz` with all pinned MkDocs wheels. Release bundles ship the same archive—download it, extract on the air-gapped host, and run `mise run bootstrap:docs -- --wheel-dir <extracted-dir>`.
 
 ## Admin Token Handling
