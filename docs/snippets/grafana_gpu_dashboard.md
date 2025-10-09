@@ -4,7 +4,7 @@ title: Grafana — GPU/NPU Dashboard (Prometheus)
 
 # Grafana — GPU/NPU Dashboard (Prometheus)
 
-Updated: 2025-09-15
+Updated: 2025-09-25
 Type: How‑to
 
 This dashboard visualizes the GPU/NPU metrics exported by ARW at `/metrics`. Import the JSON below into Grafana and select your Prometheus data source when prompted. The queries assume the GPU telemetry pack is active; if the `arw_gpu_*`/`arw_npu_*` series are missing, enable that pack or drop the GPU-specific panels.

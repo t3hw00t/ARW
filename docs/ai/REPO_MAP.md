@@ -1,5 +1,5 @@
 # Repo Map (for assistants)
-Updated: 2025-09-22
+Updated: 2025-10-09
 Type: Reference
 
 Microsummary: High‑level map of this workspace for fast orientation. Stable headings for retrieval.

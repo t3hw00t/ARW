@@ -3,7 +3,7 @@ title: Winget Packaging
 ---
 
 # Winget Packaging
-Updated: 2025-09-15
+Updated: 2025-10-02
 Type: How‑to
 
 Goal: publish the ARW launcher MSI to the Windows Package Manager (winget).

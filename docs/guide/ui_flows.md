@@ -6,7 +6,7 @@ title: UI Flows (ASCII)
 
 Flowcharts for the main user interfaces. Complements UI Architecture and Workflow Views.
 
-Updated: 2025-10-02
+Updated: 2025-10-04
 Type: How‑to
 
 ## Navigation Overview

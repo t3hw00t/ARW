@@ -1,5 +1,5 @@
 # Telemetry & Privacy
-Updated: 2025-09-16
+Updated: 2025-10-05
 Type: Reference
 
 Microsummary: What’s logged in the event journal, how to disable, and retention defaults. Beta.

@@ -3,7 +3,7 @@ title: Subscribe to Events (SSE)
 ---
 
 # Subscribe to Events (SSE)
-Updated: 2025-09-21
+Updated: 2025-10-06
 Type: How‑to
 
 Microsummary: Connect to the live Server‑Sent Events stream, filter by prefix, and replay recent events. Admin‑gated. Stable.

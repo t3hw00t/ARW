@@ -3,7 +3,7 @@ title: Connectors (Cloud & Local Apps)
 ---
 
 # Connectors (Cloud & Local Apps)
-Updated: 2025-09-21
+Updated: 2025-09-25
 Type: How‑to
 
 Safely connect agents to cloud apps and local desktop apps with explicit scopes and leases.

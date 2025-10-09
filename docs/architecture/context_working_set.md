@@ -3,7 +3,7 @@ title: Context Working Set (Never‑Out‑Of‑Context)
 ---
 
 # Context Working Set (Never‑Out‑Of‑Context)
-Updated: 2025-09-16
+Updated: 2025-10-05
 Type: Explanation
 
 Core idea

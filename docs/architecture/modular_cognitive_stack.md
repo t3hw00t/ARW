@@ -3,7 +3,7 @@ title: Modular Cognitive Stack
 ---
 
 # Modular Cognitive Stack
-Updated: 2025-10-06
+Updated: 2025-10-07
 Type: Explanation
 
 Purpose

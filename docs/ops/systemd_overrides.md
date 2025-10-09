@@ -1,5 +1,5 @@
 # Systemd Overrides (Interactive Performance)
-Updated: 2025-09-16
+Updated: 2025-09-25
 Type: How‑to
 
 Give the interactive control plane headroom under load via cgroup v2 weights.

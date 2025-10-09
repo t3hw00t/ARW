@@ -7,6 +7,7 @@ Microsummary: Small, safe changes with a written PLAN → minimal DIFF → tests
 Harness precedence
 - Follow the execution harness or user instructions when they conflict with this guide; note the deviation in your response so the next agent has the same context.
 - Lightweight exceptions granted by the harness (e.g., trivial edits that explicitly skip planning) are valid—call them out when you use them.
+- Prefer the headless bootstrap (`scripts/dev.sh setup-agent` or `scripts\dev.ps1 setup-agent`) when you need a non-interactive setup; it pins `--headless --minimal --no-docs` and sets `ARW_DOCGEN_SKIP_BUILDS=1` so docgen skips release builds by default.
 
 Purpose
 - Make small, safe changes that keep ARW coherent and testable.
@@ -20,6 +21,7 @@ Exception: when a change qualifies as an "ease-of-use" shortcut in the CLI (e.g.
 4) Update docs + microsummaries; create a tight PR with acceptance notes.
 
 Use `scripts/dev.{sh,ps1} verify` to run the standard fmt → clippy → tests → docs sequence; it reports skipped checks so you can note them explicitly.
+Need a lighter docs lint for fast feedback? Run `DOCS_CHECK_FAST=1 bash scripts/docs_check.sh` (or pass `--fast`) to skip the mkdocs build and deep Python sweeps; follow up with the full run before merging when time permits.
 
 Lightweight path (ease-of-use)
 - Use only when the execution harness or reviewer explicitly treats the work as a trivial shortcut (typo fix, single-line docs tweak, metadata bump).

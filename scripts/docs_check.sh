@@ -12,13 +12,55 @@ err()  { echo -e "${red}[error]${reset} $*"; }
 
 errors=0; warnings=0
 
-info "Building docs with mkdocs --strict to catch nav issues"
-if command -v "$root_dir/.venv/bin/mkdocs" >/dev/null 2>&1; then
-  "$root_dir/.venv/bin/mkdocs" build --strict -f "$mkdocs_yml" >/dev/null
-elif command -v mkdocs >/dev/null 2>&1; then
-  mkdocs build --strict -f "$mkdocs_yml" >/dev/null
+usage() {
+  cat <<'EOF'
+Usage: bash scripts/docs_check.sh [options]
+
+Options:
+  --skip-mkdocs    Skip the mkdocs --strict build (or set DOCS_CHECK_SKIP_MKDOCS=1).
+  --fast           Convenience alias for setting DOCS_CHECK_FAST=1 (skips mkdocs + heavy scans).
+  -h, --help       Show this message.
+EOF
+}
+
+skip_mkdocs=${DOCS_CHECK_SKIP_MKDOCS:-0}
+fast_mode=${DOCS_CHECK_FAST:-0}
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --skip-mkdocs) skip_mkdocs=1; shift ;;
+    --fast) fast_mode=1; skip_mkdocs=1; shift ;;
+    -h|--help) usage; exit 0 ;;
+    *) err "Unknown option: $1"; usage; exit 2 ;;
+  esac
+done
+
+if [[ "$fast_mode" == "1" ]]; then
+  skip_mkdocs=1
+  warn "DOCS_CHECK_FAST enabled: skipping mkdocs build and Python-based sweeps."
+fi
+
+PYTHON_BIN="${PYTHON:-${PYTHON3:-}}"
+if [[ -z "$PYTHON_BIN" ]]; then
+  if command -v python3 >/dev/null 2>&1; then
+    PYTHON_BIN="$(command -v python3)"
+  elif command -v python >/dev/null 2>&1; then
+    PYTHON_BIN="$(command -v python)"
+  fi
+fi
+
+if [[ "$skip_mkdocs" != "1" ]]; then
+  info "Building docs with mkdocs --strict to catch nav issues"
+  if command -v "$root_dir/.venv/bin/mkdocs" >/dev/null 2>&1; then
+    "$root_dir/.venv/bin/mkdocs" build --strict -f "$mkdocs_yml" >/dev/null
+  elif command -v mkdocs >/dev/null 2>&1; then
+    mkdocs build --strict -f "$mkdocs_yml" >/dev/null
+  else
+    warn "mkdocs not found; skipping build check"
+    warnings=$((warnings+1))
+  fi
 else
-  warn "mkdocs not found; skipping build check"
+  warn "Skipping mkdocs build (--skip-mkdocs or DOCS_CHECK_SKIP_MKDOCS=1)"
   warnings=$((warnings+1))
 fi
 
@@ -48,10 +90,10 @@ for f in "${files[@]}"; do
   # Updated or Generated line near top (first 40 lines)
   # Accept either Updated:, Generated:, the stable generator headers used by
   # our docgen scripts ("_Generated ..."), and spec diff header ("Base: ")
-  head -n 40 "$f" | grep -Eq '^(Updated:|Generated:|_Last updated:|_Generated |Base: )' || {
+  if ! awk 'NR>40 {exit 0} $0 ~ /^[[:space:]]*(Updated:|Generated:|_Last updated:|_Generated |Base: )/ {found=1; exit} END {exit found?0:1}' "$f"; then
     warn "$rel: missing Updated:/Generated: information"
     warnings=$((warnings+1))
-  }
+  fi
   # Heading case scan: flag lowercase starts for H2/H3
   while IFS= read -r line; do
     text="${line### }"; text="${text#### }"
@@ -64,175 +106,88 @@ for f in "${files[@]}"; do
 done
 
 # Banned legacy flags or terminology creeping back in
-info "Checking for banned legacy flags"
-python3 - <<'PY' "$docs_dir" "$root_dir/README.md"
-import sys, pathlib
-root_docs = pathlib.Path(sys.argv[1])
-readme = pathlib.Path(sys.argv[2])
-targets = list(root_docs.rglob('*.md')) + [readme]
-hits = []
-for path in targets:
-    try:
-        text = path.read_text(encoding='utf-8')
-    except Exception as exc:
-        print(f"[error] {path}: cannot read ({exc})")
-        continue
-    for idx, line in enumerate(text.splitlines(), 1):
-        if '--Legacy' in line or ' -Legacy' in line:
-            hits.append((path, idx, line.strip()))
-if hits:
-    print('[error] Deprecated legacy flags detected:')
-    for path, line_no, line in hits:
-        rel = path.relative_to(pathlib.Path.cwd())
-        print(f"  {rel}:{line_no}: {line}")
-    # communicate error count via sentinel
-    print(f"__DOCS_CHECK_LEGACY_HITS__={len(hits)}")
-PY
-legacy_hits=$(grep -oE '__DOCS_CHECK_LEGACY_HITS__=[0-9]+' - | cut -d= -f2 || echo 0)
-if [[ "${legacy_hits:-0}" -gt 0 ]]; then
-  errors=$((errors+legacy_hits))
+if [[ "$fast_mode" == "1" ]]; then
+  warn "Skipping legacy flag sweep (fast mode)"
+  warnings=$((warnings+1))
+else
+  info "Checking for banned legacy flags"
+  legacy_hits=$(rg --no-messages --with-filename --line-number --regexp '(--Legacy| -Legacy)' "$docs_dir" "$root_dir/README.md" || true)
+  if [[ -n "$legacy_hits" ]]; then
+    err "Deprecated legacy flags detected:"
+    printf "  %s\n" "$legacy_hits"
+    hits_count=$(printf "%s" "$legacy_hits" | wc -l | tr -d ' ')
+    errors=$((errors+hits_count))
+  fi
 fi
 
 # Guard against reintroducing removed legacy admin routes outside docs/spec
-info "Scanning code for legacy admin route references"
-python3 - <<'PY' "$root_dir"
-import sys, pathlib
-
-root = pathlib.Path(sys.argv[1])
-blocked = ['/' + 'admin' + '/state/', '/' + 'admin' + '/projects/']
-skip_dirs = {".git", ".arw", "docs", "spec", "target", "site", "vendor", "sandbox"}
-allowed_suffixes = {
-    ".rs", ".js", ".ts", ".tsx", ".jsx", ".mjs", ".cjs", ".json",
-    ".toml", ".yaml", ".yml", ".py", ".sh", ".bash", ".zsh", ".fish",
-    ".go", ".rb", ".kt", ".swift", ".java", ".cs", ".html", ".css",
-    ".scss", ".sass", ".less", ".mdx", ".txt"
-}
-
-def should_skip(path: pathlib.Path) -> bool:
-    parts = set(p.name for p in path.parents)
-    return bool(skip_dirs & parts)
-
-hits = []
-for file in root.rglob('*'):
-    if not file.is_file():
-        continue
-    if should_skip(file):
-        continue
-    if file.suffix and file.suffix.lower() not in allowed_suffixes:
-        continue
-    try:
-        text = file.read_text(encoding='utf-8')
-    except Exception:
-        continue
-    for idx, line in enumerate(text.splitlines(), 1):
-        for pattern in blocked:
-            if pattern in line:
-                hits.append((file, idx, line.strip()))
-
-if hits:
-    print('[error] Legacy admin route references detected:')
-    for path, line_no, line in hits[:50]:
-        rel = path.relative_to(root)
-        print(f"  {rel}:{line_no}: {line}")
-    print(f"__DOCS_CHECK_LEGACY_ROUTES__={len(hits)}")
-PY
-legacy_routes=$(grep -oE '__DOCS_CHECK_LEGACY_ROUTES__=[0-9]+' - | cut -d= -f2 || echo 0)
-if [[ "${legacy_routes:-0}" -gt 0 ]]; then
-  errors=$((errors+legacy_routes))
+if [[ "$fast_mode" == "1" ]]; then
+  warn "Skipping legacy admin route scan (fast mode)"
+  warnings=$((warnings+1))
+else
+  info "Scanning code for legacy admin route references"
+  legacy_routes=$(rg --no-messages --with-filename --line-number --regexp '/admin/(state|projects)/' "$root_dir" \
+    --glob '!docs/**' --glob '!spec/**' --glob '!.git/**' --glob '!target/**' --glob '!site/**' --glob '!vendor/**' \
+    --glob '!sandbox/**' --glob '!node_modules/**' --glob '!dist/**' || true)
+  if [[ -n "$legacy_routes" ]]; then
+    err "Legacy admin route references detected:"
+    printf "  %s\n" "$legacy_routes"
+    routes_count=$(printf "%s" "$legacy_routes" | wc -l | tr -d ' ')
+    errors=$((errors+routes_count))
+  fi
 fi
 
-info "Ensuring legacy capsule header is not reintroduced"
-python3 - <<'PY' "$root_dir"
-import sys, pathlib
-
-root = pathlib.Path(sys.argv[1])
-blocked = "X-ARW-Gate"
-allowed_dirs = {root / "docs"}
-allowed_files = {
-    root / "apps" / "arw-server" / "src" / "capsule_guard.rs",
-    root / "scripts" / "docs_check.sh",
-    root / "CHANGELOG.md",
-    root / "scripts" / "check_legacy_surface.sh",
-}
-skip_names = {".git", ".arw", "target", "site", "vendor", "sandbox", "node_modules", "dist"}
-
-def should_skip(path: pathlib.Path) -> bool:
-    return any(part.name in skip_names for part in path.parents)
-
-hits = []
-for file in root.rglob('*'):
-    if not file.is_file():
-        continue
-    if file in allowed_files:
-        continue
-    if should_skip(file):
-        continue
-    if any(parent in allowed_dirs for parent in file.parents):
-        continue
-    try:
-        text = file.read_text(encoding='utf-8')
-    except Exception:
-        continue
-    if blocked in text:
-        hits.append(file.relative_to(root))
-
-if hits:
-    print('[error] Legacy capsule header detected:')
-    for path in hits[:50]:
-        print(f"  {path}")
-    print(f"__DOCS_CHECK_CAPSULE_HEADER__={len(hits)}")
-PY
-legacy_capsule=$(grep -oE '__DOCS_CHECK_CAPSULE_HEADER__=[0-9]+' - | cut -d= -f2 || echo 0)
-if [[ "${legacy_capsule:-0}" -gt 0 ]]; then
-  errors=$((errors+legacy_capsule))
+if [[ "$fast_mode" == "1" ]]; then
+  warn "Skipping capsule header sweep (fast mode)"
+  warnings=$((warnings+1))
+else
+  info "Ensuring legacy capsule header is not reintroduced"
+  capsule_hits=$(rg --no-messages --with-filename --line-number 'X-ARW-Gate' "$root_dir" \
+    --glob '!docs/**' --glob '!target/**' --glob '!site/**' --glob '!vendor/**' --glob '!sandbox/**' \
+    --glob '!node_modules/**' --glob '!dist/**' --glob '!spec/**' || true)
+  if [[ -n "$capsule_hits" ]]; then
+    # Allow known files
+    filtered=""
+    while IFS= read -r line; do
+      file="${line%%:*}"
+      norm="${file//\\//}"
+      case "$norm" in
+        */apps/arw-server/src/capsule_guard.rs|*/scripts/docs_check.sh|*/CHANGELOG.md|*/scripts/check_legacy_surface.sh)
+          continue
+          ;;
+      esac
+      filtered+="${line}"$'\n'
+    done <<<"$capsule_hits"
+    if [[ -n "$filtered" ]]; then
+      err "Legacy capsule header detected:"
+      printf "  %s\n" "$filtered"
+      capsule_count=$(printf "%s" "$filtered" | wc -l | tr -d ' ')
+      errors=$((errors+capsule_count))
+    fi
+  fi
 fi
 
-info "Ensuring docs avoid legacy Models.* event names"
-legacy_models_output=$(python3 - <<'PY' "$docs_dir"
-import sys
-import pathlib
-import re
-
-docs_dir = pathlib.Path(sys.argv[1])
-pattern = re.compile(r"Models\.(?!\*)")
-allowed = {pathlib.Path("release_notes.md")}
-errors = 0
-
-for path in sorted(docs_dir.rglob('*.md')):
-    rel = path.relative_to(docs_dir)
-    if rel in allowed:
-        continue
-    try:
-        text = path.read_text(encoding='utf-8')
-    except Exception as exc:
-        print(f"[warn] {rel}: unable to read file ({exc})")
-        continue
-    matches = []
-    for idx, line in enumerate(text.splitlines(), 1):
-        if pattern.search(line):
-            matches.append((idx, line.strip()))
-    if matches:
-        errors += len(matches)
-        print(f"[error] {rel}: legacy Models.* event reference detected:")
-        for idx, line in matches[:10]:
-            print(f"  line {idx}: {line}")
-        if len(matches) > 10:
-            remaining = len(matches) - 10
-            print(f"  … {remaining} more occurrences")
-
-if errors:
-    print(f"__DOCS_CHECK_MODELS_LEGACY__={errors}")
-PY
-)
-printf "%s" "$legacy_models_output"
-legacy_models=$(printf "%s" "$legacy_models_output" | grep -oE '__DOCS_CHECK_MODELS_LEGACY__=[0-9]+' | cut -d= -f2 || echo 0)
-if [[ "${legacy_models:-0}" -gt 0 ]]; then
-  errors=$((errors+legacy_models))
+if [[ "$fast_mode" == "1" ]]; then
+  warn "Skipping legacy Models.* sweep (fast mode)"
+  warnings=$((warnings+1))
+else
+  info "Ensuring docs avoid legacy Models.* event names"
+  models_hits=$(rg --pcre2 --no-messages --with-filename --line-number --regexp 'Models\.(?!\*)' "$docs_dir" --glob '!release_notes.md' || true)
+  if [[ -n "$models_hits" ]]; then
+    err "Legacy Models.* references detected:"
+    printf "  %s\n" "$models_hits"
+    models_count=$(printf "%s" "$models_hits" | wc -l | tr -d ' ')
+    errors=$((errors+models_count))
+  fi
 fi
 
 # Link check for relative .md references
-info "Checking relative links to .md files"
-python3 - << 'PY' "$docs_dir"
+if [[ "$fast_mode" == "1" ]]; then
+  warn "Skipping relative link scan (fast mode)"
+  warnings=$((warnings+1))
+elif [[ -n "$PYTHON_BIN" ]]; then
+  info "Checking relative links to .md files"
+  link_output=$("$PYTHON_BIN" - <<'PY' "$docs_dir"
 import os, re, sys
 docs_dir = sys.argv[1]
 errors = 0
@@ -259,7 +214,14 @@ for root, _, files in os.walk(docs_dir):
         errors += 1
 print(f"__DOCS_CHECK_LINK_ERRORS__={errors}")
 PY
-link_errors=$(grep -oE '__DOCS_CHECK_LINK_ERRORS__=[0-9]+' - | cut -d= -f2 || echo 0)
+)
+  printf "%s" "$link_output"
+  link_errors=$(printf "%s" "$link_output" | grep -oE '__DOCS_CHECK_LINK_ERRORS__=[0-9]+' | cut -d= -f2 || echo 0)
+else
+  warn "python not found; skipping relative link scan"
+  warnings=$((warnings+1))
+  link_errors=0
+fi
 
 if [[ "${link_errors:-0}" -gt 0 ]]; then
   errors=$((errors+link_errors))

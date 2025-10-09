@@ -7,7 +7,7 @@ title: Core Concepts
 
 This page orients you to ARW’s moving parts so the rest of the guide makes sense.
 
-Updated: 2025-09-21
+Updated: 2025-10-07
 Type: Explanation
 
 ## Service

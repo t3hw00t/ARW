@@ -26,6 +26,22 @@ Run the unified ARW server locally in minutes. The architecture centres on the `
 
 ## Launch Paths
 
+### Automation — Headless Agents
+
+Need a non-interactive bootstrap for scripted agents or CI sandboxes? Use the headless helper.
+
+=== "Bash"
+```bash
+bash scripts/dev.sh setup-agent
+```
+
+=== "PowerShell"
+```powershell
+scripts\dev.ps1 setup-agent
+```
+
+This path pins `--headless --minimal --no-docs` and exports `ARW_DOCGEN_SKIP_BUILDS=1` so doc generation skips release builds and packaging, keeping the workflow fast for autonomous runs.
+
 ### Option 1 — Portable bundle (fastest)
 
 1. Download the latest release archive from [GitHub Releases](https://github.com/t3hw00t/ARW/releases).
@@ -75,6 +91,14 @@ The build helpers default to a headless profile that skips the Tauri launcher. A
 Prefer `make build` / `just build` when you want the same headless defaults in common automation. Use `make build-launcher` or `just build-launcher` to opt into compiling the desktop UI alongside the server.
 
 The helpers fall back to `cargo test --workspace --locked` when `cargo-nextest` is missing and explain how to install it for faster runs.
+
+Need a lightweight docs lint while iterating? Run:
+
+```bash
+DOCS_CHECK_FAST=1 bash scripts/docs_check.sh
+```
+
+Drop the environment variable (or omit `--fast`) to restore the full validation, including mkdocs build and deep legacy sweeps, before publishing.
 
 ## Admin Token Handling
 

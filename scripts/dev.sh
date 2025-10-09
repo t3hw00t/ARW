@@ -19,6 +19,7 @@ Usage:
 Commands:
   help             Show this message.
   setup            Run repo setup (adds --headless by default).
+  setup-agent      Headless/minimal setup tuned for autonomous agents.
   build            Build workspace (headless by default).
   build-launcher   Build workspace including the launcher.
   clean            Remove cargo/venv artifacts via scripts/clean.sh.
@@ -148,6 +149,9 @@ case "$command" in
       args=(--yes "${args[@]}")
     fi
     bash "$SCRIPT_DIR/setup.sh" "${args[@]}"
+    ;;
+  setup-agent)
+    env ARW_DOCGEN_SKIP_BUILDS=1 bash "$SCRIPT_DIR/setup.sh" --yes --headless --minimal --no-docs "$@"
     ;;
   build)
     args=("$@")

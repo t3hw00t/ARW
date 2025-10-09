@@ -3,7 +3,7 @@ title: Research Watcher
 ---
 
 # Research Watcher
-Updated: 2025-09-20
+Updated: 2025-09-25
 Type: How‑to
 
 Status: **Online ingestion (phase one).** `arw-server` polls configured feeds, seeds candidate Logic Units into the kernel, and serves `/state/research_watcher` snapshots plus approvals/archives through the unified API. Launcher Suggested tabs and the Debug UI consume the same read-model.

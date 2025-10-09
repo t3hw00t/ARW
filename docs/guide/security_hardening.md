@@ -3,7 +3,8 @@ title: Security Hardening
 ---
 
 # Security Hardening
-Updated: 2025-09-29
+Updated: 2025-10-05
+Type: How‑to
 
 ARW ships with conservative defaults and clear toggles to harden deployments without breaking development.
 

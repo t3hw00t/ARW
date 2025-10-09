@@ -4,7 +4,7 @@ title: Grafana — Quick Panels (CPU/Mem/GPU)
 
 # Grafana — Quick Panels (CPU/Mem/GPU)
 
-Updated: 2025-09-22
+Updated: 2025-10-05
 Type: How‑to
 
 A minimal Grafana dashboard with quick panels: CPU avg %, Mem usage %, GPU mem usage %, and CPU per-core time series. The GPU panels require the upcoming GPU telemetry pack (`arw_gpu_*` metrics); omit those queries if the pack is not enabled yet.

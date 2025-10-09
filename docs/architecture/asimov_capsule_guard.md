@@ -5,7 +5,7 @@ title: Asimov Capsule Guard
 # Asimov Capsule Guard
 { .topic-trio style="--exp:.5; --complex:.7; --complicated:.6" data-exp=".5" data-complex=".7" data-complicated=".6" }
 
-Updated: 2025-09-26
+Updated: 2025-10-05
 Status: Alpha (hardening in progress)
 Type: Explanation
 

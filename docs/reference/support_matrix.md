@@ -1,5 +1,5 @@
 # Support Matrix
-Updated: 2025-09-20
+Updated: 2025-10-03
 Type: Reference
 
 Microsummary: Supported OS/arch, minimum Rust, optional Nix, and container tags. Stable and updated as releases ship.

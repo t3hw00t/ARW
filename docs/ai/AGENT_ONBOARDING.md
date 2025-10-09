@@ -11,10 +11,19 @@ Microsummary: Fast orientation for assistants working in the ARW repo—where to
 - Treat harness or user instructions as the source of truth when they differ from the defaults in these docs. Note the deviation so the next agent has the same context.
 
 ## Essential Commands
+- Headless bootstrap: `scripts/dev.sh setup-agent` (Bash) or `scripts\dev.ps1 setup-agent` (PowerShell) runs a minimal, non-interactive setup tailored for autonomous agents (headless build, no docs packaging, docgen builds skipped).
 - Cross-platform helper: `scripts/dev.{sh,ps1}` wraps the common flows (`setup`, `build`, `test`, `verify`, `docs`). Example: `scripts/dev.ps1 verify`.
 - Build: `scripts/build.ps1` (Windows) or `bash scripts/build.sh` (Linux/macOS). Both default to a headless build that skips the Tauri launcher; pass `-WithLauncher` / `--with-launcher` (or set `ARW_BUILD_LAUNCHER=1`) when you specifically need the desktop UI. `make build` / `just build` mirror this headless default, with `make build-launcher` / `just build-launcher` opting into the full workspace build.
 - Tests: `scripts/test.ps1` / `bash scripts/test.sh`, or `cargo nextest run` if the helper scripts are unavailable.
 - Docs: `mkdocs build --strict` or `just docs-build` (Bash required). On Windows without Bash, pair `mkdocs` with `scripts/docgen.ps1`.
+- Docs lint: `bash scripts/docs_check.sh` (set `DOCS_CHECK_FAST=1` or pass `--fast` when you need a lightweight pass that skips mkdocs and deep Python sweeps).
+
+## Tooling Checklist
+- Rust toolchain 1.90+ with `cargo`, `rustfmt`, `clippy`, and ideally `cargo-nextest`.
+- Python 3.11+ (or newer) on PATH; MkDocs + Material theme (`pip install mkdocs mkdocs-material`) for docs workflows.
+- Node.js 18+ (for launcher UI tests such as `apps/arw-launcher/src-tauri/ui/read_store.test.js`).
+- Command-line helpers: `jq` and `ripgrep` (`rg`) for scripts and guardrails.
+- Optional but helpful: Git Bash on Windows for `bash`-based tooling, `just`, and `make`.
 
 ## Retrieval Tips
 - Prefer concise AI reference pages (`docs/ai/*.md`) before loading long-form guides.

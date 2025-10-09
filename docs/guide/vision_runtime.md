@@ -4,7 +4,7 @@ title: Vision Runtime Preview
 
 # Vision Runtime Preview
 
-Updated: 2025-10-06  
+Updated: 2025-10-07
 Type: Guide (Preview)
 
 This guide shows how to stage the preview vision runtimes (llava.cpp and Moondream) under the managed runtime supervisor. It focuses on a privacy-first, accessibility-aware setup that you can opt into today while the signed bundles are still in flight.

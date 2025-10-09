@@ -4,7 +4,7 @@ title: Autonomy Lane Charter
 
 # Autonomy Lane Charter
 
-Updated: 2025-09-27
+Updated: 2025-10-01
 Type: Decision record
 Status: Accepted
 

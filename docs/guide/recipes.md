@@ -3,7 +3,7 @@ title: Agent Recipes
 ---
 
 # Agent Recipes
-Updated: 2025-09-16
+Updated: 2025-09-25
 Type: How‑to
 
 One‑click bundles that combine prompts, tools, guardrails, and minimal UI into a signed, human‑readable manifest. Install by dropping a folder into `${ARW_STATE_DIR:-state}/recipes/` and launching from the Gallery. The unified server creates this directory on first run; point `ARW_STATE_DIR` elsewhere if you keep state on another volume.

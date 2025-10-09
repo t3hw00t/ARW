@@ -6,7 +6,7 @@ title: Models Download (HTTP)
 
 ARW provides HTTP endpoints (admin‑gated) to manage local models with streaming downloads, live progress via SSE, safe cancel, and mandatory SHA‑256 verification. HTTP Range resume is supported when the upstream advertises validators (`ETag` or `Last-Modified`).
 
-Updated: 2025-09-30
+Updated: 2025-10-05
 Type: How‑to
 
 See also: Guide → Performance & Reasoning Playbook (budgets/admission), Reference → Configuration (ARW_DL_*, ARW_MODELS_*), and Architecture → Managed llama.cpp Runtime for how downloaded weights plug into the runtime supervisor.

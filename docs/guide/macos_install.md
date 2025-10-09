@@ -3,7 +3,7 @@ title: macOS Install & Launcher
 ---
 
 # macOS Install & Launcher
-Updated: 2025-10-05  
+Updated: 2025-10-08
 Type: How‑to
 
 This guide walks through installing Agent Hub (ARW) on macOS with both the unified service and the desktop launcher. The launcher uses the system WebKit view (no extra runtime required) and now includes inline token verification so you can confirm access before opening the workspaces.

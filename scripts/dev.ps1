@@ -23,6 +23,7 @@ Usage:
 Commands:
   help               Show this message.
   setup              Run repo setup (defaults: -Headless -Yes unless overridden).
+  setup-agent        Headless/minimal setup tuned for autonomous agents.
   build              Build workspace (headless by default).
   build-launcher     Build workspace including the launcher.
   clean              Remove cargo/venv artifacts via scripts/clean.ps1.
@@ -225,6 +226,19 @@ switch ($commandKey) {
     if (-not $hasYes) { $defaults += '-Yes' }
     if (-not $hasHeadless -and -not $hasWithLauncher) { $defaults += '-Headless' }
     & (Join-Path $ScriptRoot 'setup.ps1') @defaults @Args
+  }
+  'setup-agent' {
+    $previous = $env:ARW_DOCGEN_SKIP_BUILDS
+    try {
+      $env:ARW_DOCGEN_SKIP_BUILDS = '1'
+      & (Join-Path $ScriptRoot 'setup.ps1') -Headless -Minimal -NoDocs -Yes @Args
+    } finally {
+      if ($null -eq $previous) {
+        Remove-Item Env:ARW_DOCGEN_SKIP_BUILDS -ErrorAction SilentlyContinue
+      } else {
+        $env:ARW_DOCGEN_SKIP_BUILDS = $previous
+      }
+    }
   }
   'build' {
     $defaults = @()

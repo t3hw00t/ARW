@@ -4,7 +4,7 @@ title: Artifacts & Provenance
 
 # Artifacts & Provenance
 
-Updated: 2025-09-21
+Updated: 2025-09-29
 Type: Explanation
 
 Artifact entity

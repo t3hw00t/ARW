@@ -1,5 +1,5 @@
 # Rapid Iteration Guardrails
-Updated: 2025-10-01
+Updated: 2025-10-09
 Type: Reference
 
 We operate with short iteration cycles and track the latest stable Rust toolchain (currently 1.90+). This page captures the lightweight guardrails that keep ARW broadly compatible across platforms while we move fast.

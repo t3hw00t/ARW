@@ -3,7 +3,8 @@ title: Dev TLS Profiles
 ---
 
 # Dev TLS Profiles
-Updated: 2025-10-05
+Updated: 2025-10-06
+Type: How‑to
 
 Local TLS makes it easier to test secure transports and proxy headers without waiting for a public certificate. The `dev_tls_profile.sh` helper plants mkcert certificates when available and falls back to self-signed assets so every environment can exercise HTTPS.
 

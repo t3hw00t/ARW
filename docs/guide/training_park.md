@@ -3,7 +3,7 @@ title: Training Park
 ---
 
 # Training Park
-Updated: 2025-10-04
+Updated: 2025-10-05
 Type: How‑to
 
 Status: **Telemetry and launcher controls are live; richer charts are still in flight.** `arw-server` now exposes `/state/training/telemetry` plus `training_metrics` and `context_metrics` read-models, and the launcher streams live metrics, job actions, and logic-unit history while we finish the advanced visualization pass.

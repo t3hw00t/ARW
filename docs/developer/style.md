@@ -6,7 +6,7 @@ title: Style & Harmony
 
 We aim for a calm, precise experience. Keep visuals understated; let high-impact interactions shine.
 
-Updated: 2025-09-20
+Updated: 2025-10-09
 Type: Reference
 
 Guidelines

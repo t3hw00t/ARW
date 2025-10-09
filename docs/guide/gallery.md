@@ -4,7 +4,7 @@ title: Screenshots Gallery
 
 # Screenshots Gallery
 
-Updated: 2025-10-03
+Updated: 2025-10-02
 Type: How‑to
 
 Open from the command palette (Ctrl/Cmd‑K → “Open Screenshots Gallery”). The gallery collects recent `screenshots.captured` events and displays thumbnails.

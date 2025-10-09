@@ -6,7 +6,7 @@ title: Developer Guide
 
 This workspace is designed to be clear and modular. Start with Structure for an overview of crates and apps. CI & Releases explains how we validate changes and package artifacts.
 
-Updated: 2025-09-21
+Updated: 2025-10-09
 Type: Reference
 
 ## Key Ideas

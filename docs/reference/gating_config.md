@@ -3,6 +3,7 @@ title: Gating Config
 ---
 
 # Gating Config
+Updated: 2025-10-06
 Generated: 2025-10-05 23:14 UTC
 Type: Reference
 
