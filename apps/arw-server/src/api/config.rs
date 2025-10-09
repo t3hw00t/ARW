@@ -1,5 +1,5 @@
-use axum::http::HeaderMap;
-use axum::response::IntoResponse;
+use axum::http::{HeaderMap, StatusCode};
+use axum::response::{IntoResponse, Response};
 use axum::{
     extract::{Path, Query, State},
     Json,
@@ -11,12 +11,117 @@ use utoipa::ToSchema;
 
 use crate::{admin_ok, AppState};
 use arw_topics as topics;
+use std::io::ErrorKind;
+use std::path::{Path as FsPath, PathBuf};
+use tokio::io::{AsyncReadExt, BufReader};
+
+const MAX_SCHEMA_BYTES: usize = 512 * 1024;
+
+fn unauthorized_response() -> axum::response::Response {
+    (
+        StatusCode::UNAUTHORIZED,
+        Json(json!({"type":"about:blank","title":"Unauthorized","status":401})),
+    )
+        .into_response()
+}
+
+#[derive(Debug)]
+enum SchemaAccessError {
+    Invalid,
+    NotAllowed,
+    TooLarge,
+    Io(std::io::Error),
+}
+
+impl From<std::io::Error> for SchemaAccessError {
+    fn from(value: std::io::Error) -> Self {
+        SchemaAccessError::Io(value)
+    }
+}
+
+fn schema_error_response(detail: &str) -> axum::response::Response {
+    (
+        StatusCode::BAD_REQUEST,
+        Json(json!({"type":"about:blank","title":"Bad Request","status":400,"detail": detail})),
+    )
+        .into_response()
+}
+
+fn schema_roots() -> Vec<PathBuf> {
+    let mut roots = Vec::new();
+    if let Ok(cwd) = std::env::current_dir() {
+        roots.push(cwd.join("spec/schemas"));
+        roots.push(cwd.join("configs"));
+    }
+    if let Ok(map_path) = std::env::var("ARW_SCHEMA_MAP") {
+        if let Some(parent) = FsPath::new(&map_path).parent() {
+            roots.push(parent.to_path_buf());
+        }
+    }
+    roots
+        .into_iter()
+        .filter_map(|path| path.canonicalize().ok())
+        .collect()
+}
+
+fn resolve_schema_path(schema_ref: &str) -> Result<PathBuf, SchemaAccessError> {
+    let trimmed = schema_ref.trim();
+    if trimmed.is_empty() {
+        return Err(SchemaAccessError::Invalid);
+    }
+    let candidate = PathBuf::from(trimmed);
+    let resolved = if candidate.is_absolute() {
+        candidate
+    } else {
+        std::env::current_dir()
+            .map_err(SchemaAccessError::Io)?
+            .join(candidate)
+    };
+    let canonical = resolved.canonicalize().map_err(SchemaAccessError::Io)?;
+    if schema_roots()
+        .iter()
+        .any(|root| canonical.starts_with(root))
+    {
+        Ok(canonical)
+    } else {
+        Err(SchemaAccessError::NotAllowed)
+    }
+}
+
+async fn read_schema_file(path: &FsPath) -> Result<Vec<u8>, SchemaAccessError> {
+    let file = tokio::fs::File::open(path).await?;
+    let mut reader = BufReader::new(file);
+    let mut data = Vec::new();
+    let mut chunk = [0u8; 8192];
+    loop {
+        let read = reader.read(&mut chunk).await?;
+        if read == 0 {
+            break;
+        }
+        if data.len() + read > MAX_SCHEMA_BYTES {
+            return Err(SchemaAccessError::TooLarge);
+        }
+        data.extend_from_slice(&chunk[..read]);
+    }
+    Ok(data)
+}
 
 /// Effective config JSON.
-#[utoipa::path(get, path = "/state/config", tag = "Config", responses((status = 200, body = serde_json::Value)))]
-pub async fn state_config(State(state): State<AppState>) -> impl IntoResponse {
+#[utoipa::path(
+    get,
+    path = "/state/config",
+    tag = "Config",
+    responses(
+        (status = 200, body = serde_json::Value),
+        (status = 401, description = "Unauthorized")
+    )
+)]
+pub async fn state_config(headers: HeaderMap, State(state): State<AppState>) -> Response {
+    if !admin_ok(&headers).await {
+        return unauthorized_response();
+    }
     let snap = state.config_state().lock().await.clone();
-    Json(json!({"config": snap}))
+    Json(json!({"config": snap})).into_response()
 }
 
 #[derive(Deserialize, ToSchema)]
@@ -119,7 +224,7 @@ pub(crate) fn infer_schema_for_target(target: &str) -> Option<(String, String)> 
         let path = std::env::var("ARW_SCHEMA_MAP")
             .ok()
             .unwrap_or_else(|| "configs/schema_map.json".into());
-        let p = std::path::Path::new(&path);
+        let p = FsPath::new(&path);
         if p.exists() {
             if let Ok(bytes) = std::fs::read(p) {
                 return serde_json::from_slice::<serde_json::Value>(&bytes).ok();
@@ -140,7 +245,7 @@ pub(crate) fn infer_schema_for_target(target: &str) -> Option<(String, String)> 
                 } else {
                     target.to_string()
                 };
-                if std::path::Path::new(schema_ref).exists() {
+                if FsPath::new(schema_ref).exists() {
                     return Some((schema_ref.to_string(), pointer));
                 }
             }
@@ -154,7 +259,7 @@ pub(crate) fn infer_schema_for_target(target: &str) -> Option<(String, String)> 
         ),
         _ => return None,
     };
-    if std::path::Path::new(schema_file).exists() {
+    if FsPath::new(schema_file).exists() {
         Some((schema_file.to_string(), pointer))
     } else {
         None
@@ -428,13 +533,18 @@ pub async fn patch_revert(
     params(("limit" = Option<i64>, Query)),
     responses(
         (status = 200, body = serde_json::Value),
+        (status = 401, description = "Unauthorized"),
         (status = 501, description = "Kernel disabled", body = serde_json::Value)
     )
 )]
 pub async fn state_config_snapshots(
+    headers: HeaderMap,
     State(state): State<AppState>,
     Query(q): Query<std::collections::HashMap<String, String>>,
-) -> impl IntoResponse {
+) -> Response {
+    if !admin_ok(&headers).await {
+        return unauthorized_response();
+    }
     let limit = q
         .get("limit")
         .and_then(|s| s.parse::<i64>().ok())
@@ -463,13 +573,18 @@ pub async fn state_config_snapshots(
     responses(
         (status = 200, body = serde_json::Value),
         (status = 404),
+        (status = 401, description = "Unauthorized"),
         (status = 501, description = "Kernel disabled", body = serde_json::Value)
     )
 )]
 pub async fn state_config_snapshot_get(
+    headers: HeaderMap,
     State(state): State<AppState>,
     Path(id): Path<String>,
-) -> impl IntoResponse {
+) -> Response {
+    if !admin_ok(&headers).await {
+        return unauthorized_response();
+    }
     if !state.kernel_enabled() {
         return crate::responses::kernel_disabled();
     }
@@ -490,7 +605,7 @@ pub async fn state_config_snapshot_get(
     }
 }
 
-#[derive(Deserialize, ToSchema)]
+#[derive(Deserialize, ToSchema, Clone)]
 pub(crate) struct ValidateReq {
     pub schema_ref: String,
     #[serde(default)]
@@ -499,66 +614,422 @@ pub(crate) struct ValidateReq {
     pub config: Option<Value>,
 }
 /// Validate a config against a JSON Schema.
-#[utoipa::path(post, path = "/patch/validate", tag = "Config", request_body = ValidateReq, responses((status = 200, body = serde_json::Value), (status = 400)))]
-pub async fn patch_validate(Json(req): Json<ValidateReq>) -> impl IntoResponse {
+#[utoipa::path(
+    post,
+    path = "/patch/validate",
+    tag = "Config",
+    request_body = ValidateReq,
+    responses(
+        (status = 200, body = serde_json::Value),
+        (status = 400),
+        (status = 401, description = "Unauthorized")
+    )
+)]
+pub async fn patch_validate(headers: HeaderMap, Json(req): Json<ValidateReq>) -> Response {
+    if !admin_ok(&headers).await {
+        return unauthorized_response();
+    }
     let schema_path = req.schema_ref.as_str();
     let to_validate = req.config.unwrap_or(json!({}));
-    match std::fs::read(schema_path) {
-        Ok(bytes) => match serde_json::from_slice::<Value>(&bytes) {
-            Ok(schema_json) => match JSONSchema::options().with_draft(Draft::Draft7).compile(&schema_json) {
-                Ok(compiled) => {
-                    let pointer = req.schema_pointer.as_deref();
-                    let sub = if let Some(ptr) = pointer { get_by_dot(&to_validate, ptr).cloned().unwrap_or(json!({})) } else { to_validate };
-                    let res = compiled.validate(&sub);
-                    match res {
-                        Ok(_) => (axum::http::StatusCode::OK, Json(json!({"ok": true}))).into_response(),
-                        Err(errors) => {
-                            let errs: Vec<Value> = errors.map(|e| json!({"path": e.instance_path.to_string(), "error": e.to_string()})).collect();
-                            (axum::http::StatusCode::BAD_REQUEST, Json(json!({"type":"about:blank","title":"Bad Request","status":400, "detail":"schema validation failed", "errors": errs}))).into_response()
-                        }
+    let resolved = match resolve_schema_path(schema_path) {
+        Ok(path) => path,
+        Err(SchemaAccessError::Invalid) => return schema_error_response("schema ref missing"),
+        Err(SchemaAccessError::NotAllowed) => {
+            return schema_error_response("schema path not permitted")
+        }
+        Err(SchemaAccessError::Io(err)) if err.kind() == ErrorKind::NotFound => {
+            return schema_error_response("schema not found")
+        }
+        Err(SchemaAccessError::Io(_)) => return schema_error_response("schema not found"),
+        Err(SchemaAccessError::TooLarge) => unreachable!("size limit enforced during read"),
+    };
+    let bytes = match read_schema_file(&resolved).await {
+        Ok(data) => data,
+        Err(SchemaAccessError::TooLarge) => {
+            return schema_error_response("schema file exceeds size limit")
+        }
+        Err(SchemaAccessError::NotAllowed) => {
+            return schema_error_response("schema path not permitted")
+        }
+        Err(SchemaAccessError::Invalid) => return schema_error_response("schema ref missing"),
+        Err(SchemaAccessError::Io(err)) if err.kind() == ErrorKind::NotFound => {
+            return schema_error_response("schema not found")
+        }
+        Err(SchemaAccessError::Io(_)) => return schema_error_response("failed to read schema"),
+    };
+    match serde_json::from_slice::<Value>(&bytes) {
+        Ok(schema_json) => match JSONSchema::options()
+            .with_draft(Draft::Draft7)
+            .compile(&schema_json)
+        {
+            Ok(compiled) => {
+                let pointer = req.schema_pointer.as_deref();
+                let sub = if let Some(ptr) = pointer {
+                    get_by_dot(&to_validate, ptr)
+                        .cloned()
+                        .unwrap_or(json!({}))
+                } else {
+                    to_validate
+                };
+                let res = compiled.validate(&sub);
+                match res {
+                    Ok(_) => (StatusCode::OK, Json(json!({"ok": true}))).into_response(),
+                    Err(errors) => {
+                        let errs: Vec<Value> = errors
+                            .map(|e| {
+                                json!({"path": e.instance_path.to_string(), "error": e.to_string()})
+                            })
+                            .collect();
+                        (
+                            StatusCode::BAD_REQUEST,
+                            Json(json!({"type":"about:blank","title":"Bad Request","status":400, "detail":"schema validation failed", "errors": errs})),
+                        )
+                            .into_response()
                     }
                 }
-                Err(e) => (axum::http::StatusCode::BAD_REQUEST, Json(json!({"type":"about:blank","title":"Bad Request","status":400, "detail":"invalid schema", "error": e.to_string()}))).into_response(),
             }
-            Err(e) => (axum::http::StatusCode::BAD_REQUEST, Json(json!({"type":"about:blank","title":"Bad Request","status":400, "detail":"invalid schema json", "error": e.to_string()}))).into_response(),
-        }
-        Err(e) => (axum::http::StatusCode::BAD_REQUEST, Json(json!({"type":"about:blank","title":"Bad Request","status":400, "detail":"schema not found", "error": e.to_string()}))).into_response(),
+            Err(e) => (
+                StatusCode::BAD_REQUEST,
+                Json(
+                    json!({"type":"about:blank","title":"Bad Request","status":400, "detail":"invalid schema", "error": e.to_string()}),
+                ),
+            )
+                .into_response(),
+        },
+        Err(e) => (
+            StatusCode::BAD_REQUEST,
+            Json(
+                json!({"type":"about:blank","title":"Bad Request","status":400, "detail":"invalid schema json", "error": e.to_string()}),
+            ),
+        )
+            .into_response(),
     }
 }
 
 /// Current schema mapping used for inference.
-#[utoipa::path(get, path = "/state/schema_map", tag = "Config", responses((status = 200, body = serde_json::Value)))]
-pub async fn state_schema_map() -> impl IntoResponse {
+#[utoipa::path(
+    get,
+    path = "/state/schema_map",
+    tag = "Config",
+    responses(
+        (status = 200, body = serde_json::Value),
+        (status = 400),
+        (status = 401, description = "Unauthorized")
+    )
+)]
+pub async fn state_schema_map(headers: HeaderMap) -> impl IntoResponse {
+    if !admin_ok(&headers).await {
+        return unauthorized_response();
+    }
     let path = std::env::var("ARW_SCHEMA_MAP")
         .ok()
         .unwrap_or_else(|| "configs/schema_map.json".into());
-    let p = std::path::Path::new(&path);
+    let p = FsPath::new(&path);
     if p.exists() {
-        match tokio::fs::read(p).await {
+        let resolved = match resolve_schema_path(&path) {
+            Ok(path) => path,
+            Err(SchemaAccessError::NotAllowed) => {
+                return schema_error_response("schema path not permitted")
+            }
+            Err(SchemaAccessError::Invalid) => return schema_error_response("schema ref missing"),
+            Err(SchemaAccessError::Io(err)) if err.kind() == ErrorKind::NotFound => {
+                return (
+                    StatusCode::OK,
+                    Json(json!({"path": path, "map": json!({})})),
+                )
+                    .into_response();
+            }
+            Err(SchemaAccessError::Io(_)) => {
+                return schema_error_response("failed to read schema_map")
+            }
+            Err(SchemaAccessError::TooLarge) => unreachable!("size limit enforced during read"),
+        };
+        match read_schema_file(&resolved).await {
             Ok(bytes) => match serde_json::from_slice::<Value>(&bytes) {
-                Ok(v) => (axum::http::StatusCode::OK, Json(json!({"path": path, "map": v}))).into_response(),
-                Err(e) => (axum::http::StatusCode::BAD_REQUEST, Json(json!({"type":"about:blank","title":"Bad Request","status":400, "detail":"invalid schema_map json", "error": e.to_string(), "path": path}))).into_response(),
+                Ok(v) => (StatusCode::OK, Json(json!({"path": path, "map": v}))).into_response(),
+                Err(e) => (
+                    StatusCode::BAD_REQUEST,
+                    Json(
+                        json!({"type":"about:blank","title":"Bad Request","status":400, "detail":"invalid schema_map json", "error": e.to_string(), "path": path}),
+                    ),
+                )
+                    .into_response(),
             },
-            Err(e) => (axum::http::StatusCode::BAD_REQUEST, Json(json!({"type":"about:blank","title":"Bad Request","status":400, "detail":"failed to read schema_map", "error": e.to_string(), "path": path}))).into_response(),
+            Err(SchemaAccessError::TooLarge) => schema_error_response("schema file exceeds size limit"),
+            Err(SchemaAccessError::NotAllowed) => schema_error_response("schema path not permitted"),
+            Err(SchemaAccessError::Invalid) => schema_error_response("schema ref missing"),
+            Err(SchemaAccessError::Io(err)) if err.kind() == ErrorKind::NotFound => (
+                StatusCode::OK,
+                Json(json!({"path": path, "map": json!({})})),
+            )
+                .into_response(),
+            Err(SchemaAccessError::Io(err)) => (
+                StatusCode::BAD_REQUEST,
+                Json(
+                    json!({"type":"about:blank","title":"Bad Request","status":400, "detail":"failed to read schema_map", "error": err.to_string(), "path": path}),
+                ),
+            )
+                .into_response(),
         }
     } else {
         (
-            axum::http::StatusCode::OK,
+            StatusCode::OK,
             Json(json!({"path": path, "map": json!({})})),
         )
             .into_response()
     }
 }
 
-#[derive(Deserialize, ToSchema)]
+#[derive(Deserialize, ToSchema, Clone)]
 pub(crate) struct InferReq {
     pub target: String,
 }
 /// Infer a JSON Schema ref and pointer for a target path.
-#[utoipa::path(post, path = "/patch/infer_schema", tag = "Config", request_body = InferReq, responses((status = 200, body = serde_json::Value), (status = 404)))]
-pub async fn patch_infer_schema(Json(req): Json<InferReq>) -> impl IntoResponse {
+#[utoipa::path(
+    post,
+    path = "/patch/infer_schema",
+    tag = "Config",
+    request_body = InferReq,
+    responses(
+        (status = 200, body = serde_json::Value),
+        (status = 404),
+        (status = 401, description = "Unauthorized")
+    )
+)]
+pub async fn patch_infer_schema(headers: HeaderMap, Json(req): Json<InferReq>) -> Response {
+    if !admin_ok(&headers).await {
+        return unauthorized_response();
+    }
     match infer_schema_for_target(&req.target) {
-        Some((schema_ref, pointer)) => (axum::http::StatusCode::OK, Json(json!({"schema_ref": schema_ref, "schema_pointer": pointer}))).into_response(),
-        None => (axum::http::StatusCode::NOT_FOUND, Json(json!({"type":"about:blank","title":"Not Found","status":404, "detail":"no matching schema mapping"}))).into_response(),
+        Some((schema_ref, pointer)) => match resolve_schema_path(&schema_ref) {
+            Ok(_) => (
+                StatusCode::OK,
+                Json(json!({"schema_ref": schema_ref, "schema_pointer": pointer})),
+            )
+                .into_response(),
+            Err(SchemaAccessError::Io(err)) if err.kind() == ErrorKind::NotFound => {
+                (
+                    StatusCode::NOT_FOUND,
+                    Json(json!({"type":"about:blank","title":"Not Found","status":404, "detail":"no matching schema mapping"})),
+                )
+                    .into_response()
+            }
+            Err(_) => (
+                StatusCode::NOT_FOUND,
+                Json(json!({"type":"about:blank","title":"Not Found","status":404, "detail":"no matching schema mapping"})),
+            )
+                .into_response(),
+        },
+        None => (
+            StatusCode::NOT_FOUND,
+            Json(
+                json!({"type":"about:blank","title":"Not Found","status":404, "detail":"no matching schema mapping"}),
+            ),
+        )
+            .into_response(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::test_support::{begin_state_env, build_state};
+    use axum::{
+        extract::{Path, Query, State},
+        http::{HeaderMap, HeaderValue},
+        response::IntoResponse,
+    };
+    use serde_json::json;
+    use std::collections::HashMap;
+    use std::path::PathBuf;
+    use tempfile::tempdir;
+
+    fn admin_headers() -> HeaderMap {
+        let mut headers = HeaderMap::new();
+        headers.insert("X-ARW-Admin", HeaderValue::from_static("secret"));
+        headers
+    }
+
+    fn setup_schema_env(
+        temp: &tempfile::TempDir,
+        ctx: &mut crate::test_support::TestCtx,
+    ) -> (PathBuf, PathBuf) {
+        let schema_dir = temp.path().join("schemas");
+        std::fs::create_dir_all(&schema_dir).unwrap();
+        let map_path = schema_dir.join("schema_map.json");
+        std::fs::write(&map_path, "{}").unwrap();
+        ctx.env.set("ARW_SCHEMA_MAP", map_path.to_string_lossy());
+        (schema_dir, map_path)
+    }
+
+    #[tokio::test]
+    async fn state_config_requires_admin() {
+        let temp = tempdir().unwrap();
+        let mut ctx = begin_state_env(temp.path());
+        ctx.env.set("ARW_ADMIN_TOKEN", "secret");
+        let state = build_state(temp.path(), &mut ctx.env).await;
+        ctx.env.set("ARW_DEBUG", "0");
+
+        let resp = state_config(HeaderMap::new(), State(state.clone()))
+            .await
+            .into_response();
+        assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
+
+        let resp = state_config(admin_headers(), State(state))
+            .await
+            .into_response();
+        assert_eq!(resp.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn config_snapshot_endpoints_require_admin() {
+        let temp = tempdir().unwrap();
+        let mut ctx = begin_state_env(temp.path());
+        ctx.env.set("ARW_ADMIN_TOKEN", "secret");
+        let state = build_state(temp.path(), &mut ctx.env).await;
+        ctx.env.set("ARW_DEBUG", "0");
+        let query = Query(HashMap::<String, String>::new());
+
+        let resp = state_config_snapshots(HeaderMap::new(), State(state.clone()), query.clone())
+            .await
+            .into_response();
+        assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
+
+        let resp = state_config_snapshots(admin_headers(), State(state.clone()), query.clone())
+            .await
+            .into_response();
+        assert_eq!(resp.status(), StatusCode::OK);
+
+        let resp = state_config_snapshot_get(
+            HeaderMap::new(),
+            State(state.clone()),
+            Path("does-not-exist".into()),
+        )
+        .await
+        .into_response();
+        assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
+
+        let resp = state_config_snapshot_get(admin_headers(), State(state), Path("missing".into()))
+            .await
+            .into_response();
+        assert_eq!(resp.status(), StatusCode::NOT_FOUND);
+    }
+
+    #[tokio::test]
+    async fn patch_validate_requires_admin_and_limits_schema() {
+        let temp = tempdir().unwrap();
+        let mut ctx = begin_state_env(temp.path());
+        ctx.env.set("ARW_ADMIN_TOKEN", "secret");
+        let (schema_dir, _) = setup_schema_env(&temp, &mut ctx);
+        ctx.env.set("ARW_DEBUG", "0");
+        let schema_path = schema_dir.join("minimal.json");
+        std::fs::write(&schema_path, br#"{"type":"object"}"#).unwrap();
+
+        let body = Json(ValidateReq {
+            schema_ref: schema_path.to_string_lossy().into_owned(),
+            schema_pointer: None,
+            config: Some(json!({})),
+        });
+
+        let resp = patch_validate(HeaderMap::new(), body.clone())
+            .await
+            .into_response();
+        assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
+
+        let resp = patch_validate(admin_headers(), body).await.into_response();
+        assert_eq!(resp.status(), StatusCode::OK);
+
+        let large_path = schema_dir.join("large.json");
+        std::fs::write(&large_path, vec![b'0'; MAX_SCHEMA_BYTES + 1]).unwrap();
+        let body = Json(ValidateReq {
+            schema_ref: large_path.to_string_lossy().into_owned(),
+            schema_pointer: None,
+            config: Some(json!({})),
+        });
+        let resp = patch_validate(admin_headers(), body).await.into_response();
+        assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+    }
+
+    #[tokio::test]
+    async fn schema_map_requires_admin() {
+        let temp = tempdir().unwrap();
+        let mut ctx = begin_state_env(temp.path());
+        ctx.env.set("ARW_ADMIN_TOKEN", "secret");
+        setup_schema_env(&temp, &mut ctx);
+        ctx.env.set("ARW_DEBUG", "0");
+
+        let resp = state_schema_map(HeaderMap::new()).await.into_response();
+        assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
+
+        let resp = state_schema_map(admin_headers()).await.into_response();
+        assert_eq!(resp.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn patch_infer_schema_requires_admin_and_known_paths() {
+        let temp = tempdir().unwrap();
+        let mut ctx = begin_state_env(temp.path());
+        ctx.env.set("ARW_ADMIN_TOKEN", "secret");
+        let (schema_dir, map_path) = setup_schema_env(&temp, &mut ctx);
+        ctx.env.set("ARW_DEBUG", "0");
+
+        let mapping = json!({
+            "policy": {
+                "schema_ref": schema_dir.join("policy.json").to_string_lossy(),
+                "pointer_prefix": "policy"
+            }
+        });
+        std::fs::write(&map_path, serde_json::to_vec(&mapping).unwrap()).unwrap();
+        std::fs::write(schema_dir.join("policy.json"), br#"{"type":"object"}"#).unwrap();
+
+        let resp = patch_infer_schema(
+            HeaderMap::new(),
+            Json(InferReq {
+                target: "policy.foo".into(),
+            }),
+        )
+        .await
+        .into_response();
+        assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
+
+        let resp = patch_infer_schema(
+            admin_headers(),
+            Json(InferReq {
+                target: "policy.foo".into(),
+            }),
+        )
+        .await
+        .into_response();
+        assert_eq!(resp.status(), StatusCode::OK);
+
+        let resp = patch_infer_schema(
+            admin_headers(),
+            Json(InferReq {
+                target: "missing.foo".into(),
+            }),
+        )
+        .await
+        .into_response();
+        assert_eq!(resp.status(), StatusCode::NOT_FOUND);
+    }
+
+    #[tokio::test]
+    async fn patch_validate_rejects_outside_roots() {
+        let temp = tempdir().unwrap();
+        let mut ctx = begin_state_env(temp.path());
+        ctx.env.set("ARW_ADMIN_TOKEN", "secret");
+        setup_schema_env(&temp, &mut ctx);
+        ctx.env.set("ARW_DEBUG", "0");
+
+        // Point schema map to a path outside allowed roots.
+        ctx.env.set("ARW_SCHEMA_MAP", "/tmp/nonexistent_map.json");
+
+        let body = Json(ValidateReq {
+            schema_ref: "/etc/passwd".into(),
+            schema_pointer: None,
+            config: Some(json!({})),
+        });
+        let resp = patch_validate(admin_headers(), body).await.into_response();
+        assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
     }
 }

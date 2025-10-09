@@ -206,6 +206,8 @@ mod tests {
 
     #[tokio::test]
     async fn state_guardrails_metrics_requires_admin() {
+        let mut env_guard = guard();
+        env_guard.set("ARW_DEBUG", "0");
         let response = state_guardrails_metrics(HeaderMap::new())
             .await
             .into_response();
