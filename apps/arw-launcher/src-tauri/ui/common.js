@@ -598,7 +598,7 @@ window.ARW = {
         if (last && (now - last) < 30000) return;
         this._recent.set(key, now);
         const target = key || 'http://127.0.0.1:8091';
-        ARW.toast(`Authorization required for ${target}. Set your admin token in Control Room → Connection & alerts.`);
+        ARW.toast(`Authorization required for ${target}. Set your admin token in Home → Connection & alerts.`);
       } catch {
         // best-effort notification
       }
@@ -779,7 +779,7 @@ window.ARW = {
     if (lc.includes('lease') || lc.includes('permission') || lc.includes('denied')) {
       detail = `Grant the ${lease} lease from the sidecar before retrying.`;
     } else if (lc.includes('unauthorized') || lc.includes('401') || lc.includes('403')) {
-      detail = 'Authorize this connection with your admin token in Control Room.';
+      detail = 'Authorize this connection with your admin token in Home.';
     } else if (lc.includes('active window') || lc.includes('focus window')) {
       detail = 'Focus the window you want to capture, then try again.';
     } else if (lc.includes('not implemented') || lc.includes('unsupported') || lc.includes('platform')) {
@@ -1860,9 +1860,9 @@ window.ARW.sse.subscribe('state.read.model.patch', ({ env }) => {
     this._wrap = wrap; this._input = inp; this._list = ul;
     const base = opts.base;
     this._actions = [
-      { id:'open:hub', label:'Open Project Hub', hint:'window', run:()=> ARW.invoke('open_hub_window') },
-      { id:'open:chat', label:'Open Chat', hint:'window', run:()=> ARW.invoke('open_chat_window') },
-      { id:'open:training', label:'Open Training Park', hint:'window', run:()=> ARW.invoke('open_training_window') },
+      { id:'open:hub', label:'Open Projects workspace', hint:'window', run:()=> ARW.invoke('open_hub_window') },
+      { id:'open:chat', label:'Open Conversations workspace', hint:'window', run:()=> ARW.invoke('open_chat_window') },
+      { id:'open:training', label:'Open Training runs', hint:'window', run:()=> ARW.invoke('open_training_window') },
       { id:'open:debug', label:'Open Debug (Window)', hint:'window', run:()=> ARW.invoke('open_debug_window', { port: ARW.getPortFromInput('port') }) },
       { id:'open:events', label:'Open Events Window', hint:'window', run:()=> ARW.invoke('open_events_window') },
       { id:'open:docs', label:'Open Docs Website', hint:'web', run:()=> ARW.invoke('open_url', { url: 'https://t3hw00t.github.io/ARW/' }) },
@@ -1940,7 +1940,7 @@ window.ARW.sse.subscribe('state.read.model.patch', ({ env }) => {
       { id:'training:show-guide', label:'Show Training Quick Start', hint:'help', run: async ()=>{
           const card = document.querySelector('.training-guide');
           if (!card){
-            ARW.toast('Open Training Park to show the quick start.');
+            ARW.toast('Open Training runs to show the quick start.');
             return;
           }
           card.removeAttribute('hidden');
@@ -1957,10 +1957,10 @@ window.ARW.sse.subscribe('state.read.model.patch', ({ env }) => {
           ARW.toast('Training quick start shown.');
         }
       },
-      { id:'trial:show-guide', label:'Show Trial Checklist', hint:'help', run: async ()=>{
+      { id:'trial:show-guide', label:'Show Experiment Checklist', hint:'help', run: async ()=>{
           const card = document.querySelector('.trial-guide');
           if (!card){
-            ARW.toast('Open Trial Control to show the checklist.');
+            ARW.toast('Open Experiment control to show the checklist.');
             return;
           }
           card.removeAttribute('hidden');
@@ -1974,7 +1974,7 @@ window.ARW.sse.subscribe('state.read.model.patch', ({ env }) => {
           }catch(err){
             console.error('restore trial guide failed', err);
           }
-          ARW.toast('Trial checklist shown.');
+          ARW.toast('Experiment checklist shown.');
         }
       },
       { id:'theme:auto', label:'Theme: Auto (OS)', hint:'theme', run:()=> ARW.theme.set('auto') },
@@ -2253,27 +2253,32 @@ window.ARW.mode = {
 window.ARW.nav = {
   groups: [
     {
-      label: 'Control',
+      label: 'Welcome',
       items: [
-        { id: 'index', href: 'index.html', label: 'Control Room', desc: 'Start & monitor services' },
+        { id: 'index', href: 'index.html', label: 'Home', desc: 'Set up & launch' },
       ],
     },
     {
       label: 'Workspaces',
       items: [
-        { id: 'hub', href: 'hub.html', label: 'Project Hub', desc: 'Files, runs, context' },
-        { id: 'chat', href: 'chat.html', label: 'Chat', desc: 'Episodes & compare' },
-        { id: 'training', href: 'training.html', label: 'Training Park', desc: 'A/B & telemetry' },
-        { id: 'trial', href: 'trial.html', label: 'Trial Control', desc: 'Experiments' },
+        { id: 'hub', href: 'hub.html', label: 'Projects', desc: 'Organize files & context' },
+        { id: 'chat', href: 'chat.html', label: 'Conversations', desc: 'Chat with assistants' },
       ],
     },
     {
-      label: 'Diagnostics',
+      label: 'Automation',
       items: [
-        { id: 'events', href: 'events.html', label: 'Events', desc: 'Live event stream' },
-        { id: 'logs', href: 'logs.html', label: 'Logs', desc: 'Runtime logs' },
-        { id: 'models', href: 'models.html', label: 'Models', desc: 'Runtime catalog' },
-        { id: 'connections', href: 'connections.html', label: 'Connections', desc: 'Remotes & federation' },
+        { id: 'training', href: 'training.html', label: 'Training Runs', desc: 'Tune & evaluate models', mode: 'expert' },
+        { id: 'trial', href: 'trial.html', label: 'Experiment Control', desc: 'Coordinate staged trials', mode: 'expert' },
+      ],
+    },
+    {
+      label: 'Monitoring',
+      items: [
+        { id: 'events', href: 'events.html', label: 'Live Events', desc: 'Stream telemetry & activity', mode: 'expert' },
+        { id: 'logs', href: 'logs.html', label: 'Logs', desc: 'Inspect service output', mode: 'expert' },
+        { id: 'models', href: 'models.html', label: 'Model Registry', desc: 'Manage runtimes', mode: 'expert' },
+        { id: 'connections', href: 'connections.html', label: 'Connections', desc: 'Remote bases & sharing' },
       ],
     },
   ],
@@ -2305,6 +2310,11 @@ window.ARW.nav = {
         link.className = 'global-bar__link';
         link.href = item.href;
         link.dataset.page = item.id;
+        if (item.mode === 'expert') {
+          link.dataset.mode = 'expert-only';
+        } else if (item.mode === 'guided') {
+          link.dataset.mode = 'guided-only';
+        }
         const title = document.createElement('span');
         title.textContent = item.label;
         link.appendChild(title);
@@ -2330,8 +2340,20 @@ window.ARW.nav = {
         groupWrap.appendChild(label);
         const linkWrap = document.createElement('div');
         linkWrap.className = 'global-bar__group-links';
+        const modeSet = new Set();
         for (const item of group.items) {
-          linkWrap.appendChild(makeLink(item));
+          const link = makeLink(item);
+          linkWrap.appendChild(link);
+          const itemMode = item.mode === 'expert' || item.mode === 'guided' ? item.mode : 'any';
+          modeSet.add(itemMode);
+        }
+        if (modeSet.size === 1) {
+          const only = modeSet.values().next().value;
+          if (only === 'expert') {
+            groupWrap.dataset.mode = 'expert-only';
+          } else if (only === 'guided') {
+            groupWrap.dataset.mode = 'guided-only';
+          }
         }
         groupWrap.appendChild(linkWrap);
         nav.appendChild(groupWrap);

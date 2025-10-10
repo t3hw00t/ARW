@@ -1,6 +1,6 @@
 # Launcher UI Sources
 
-The JavaScript files in this directory (`common.js`, `hub.js`, etc.) are the hand-written source for the Control Room pages that Tauri serves. We do not bundle or minify them during build—`scripts/build.{sh,ps1}` copies the files verbatim into the app package.
+The JavaScript files in this directory (`common.js`, `hub.js`, etc.) are the hand-written source for the Home and workspace pages that Tauri serves. We do not bundle or minify them during build—`scripts/build.{sh,ps1}` copies the files verbatim into the app package.
 
 Editing tips:
 

@@ -56,6 +56,9 @@ const CONTROL_TRAINING_CSS: &str = include_str!("../../../arw-launcher/src-tauri
 const CONTROL_TRIAL_HTML: &str = include_str!("../../../arw-launcher/src-tauri/ui/trial.html");
 const CONTROL_TRIAL_JS: &str = include_str!("../../../arw-launcher/src-tauri/ui/trial.js");
 const CONTROL_TRIAL_CSS: &str = include_str!("../../../arw-launcher/src-tauri/ui/trial.css");
+const CONTROL_MASCOT_HTML: &str = include_str!("../../../arw-launcher/src-tauri/ui/mascot.html");
+const CONTROL_MASCOT_JS: &str = include_str!("../../../arw-launcher/src-tauri/ui/mascot.js");
+const CONTROL_MASCOT_CSS: &str = include_str!("../../../arw-launcher/src-tauri/ui/mascot.css");
 
 fn common_headers() -> [(axum::http::HeaderName, &'static str); 3] {
     [
@@ -147,6 +150,12 @@ fn control_asset_for_path(path: &str) -> Option<(&'static str, &'static [u8])> {
             CONTROL_TRIAL_JS.as_bytes(),
         )),
         "trial.css" => Some(("text/css; charset=utf-8", CONTROL_TRIAL_CSS.as_bytes())),
+        "mascot.html" => Some(("text/html; charset=utf-8", CONTROL_MASCOT_HTML.as_bytes())),
+        "mascot.js" => Some((
+            "application/javascript; charset=utf-8",
+            CONTROL_MASCOT_JS.as_bytes(),
+        )),
+        "mascot.css" => Some(("text/css; charset=utf-8", CONTROL_MASCOT_CSS.as_bytes())),
         _ => None,
     }
 }

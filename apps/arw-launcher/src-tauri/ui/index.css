@@ -173,6 +173,10 @@ body.has-global-bar .launcher-wrap{
   color: var(--color-muted);
   max-width:38ch;
 }
+.pref-field.pref-toggle > button{
+  align-self:flex-start;
+  margin-top:4px;
+}
 .connection-select{
   display:flex;
   flex-wrap:wrap;
@@ -270,6 +274,48 @@ body.has-global-bar .launcher-wrap{
   gap: var(--sp3);
   align-items:flex-start;
 }
+.step-status{
+  margin-left:auto;
+  align-self:flex-start;
+  display:inline-flex;
+  align-items:center;
+  gap:6px;
+  padding:4px 10px;
+  border-radius:999px;
+  border:1px solid rgba(148,163,184,0.35);
+  background: rgba(148,163,184,0.08);
+  font-size:0.75rem;
+  font-weight:600;
+  color: var(--color-muted);
+  white-space:nowrap;
+}
+.step-status-dot{
+  width:8px;
+  height:8px;
+  border-radius:999px;
+  background: currentColor;
+  box-shadow: 0 0 0 1px rgba(255,255,255,0.55);
+}
+.step-status--pending{
+  border-color: rgba(148,163,184,0.35);
+  background: rgba(148,163,184,0.08);
+  color: var(--color-muted);
+}
+.step-status--active{
+  border-color: rgba(var(--brand-copper-rgb),0.4);
+  background: rgba(var(--brand-copper-rgb),0.12);
+  color: var(--color-brand-copper);
+}
+.step-status--ready{
+  border-color: rgba(34,197,94,0.4);
+  background: rgba(34,197,94,0.12);
+  color: #059669;
+}
+.step-status--attention{
+  border-color: rgba(239,68,68,0.4);
+  background: rgba(239,68,68,0.12);
+  color: #dc2626;
+}
 .step-index{
   display:inline-flex;
   align-items:center;
@@ -287,6 +333,20 @@ body.has-global-bar .launcher-wrap{
   display:grid;
   gap: var(--sp3);
 }
+.step-body--grid{
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+}
+.step-body--grid .step-status-block{
+  grid-column: 1 / -1;
+}
+.step-status-block{
+  display:grid;
+  gap: var(--sp2);
+  align-content:start;
+}
+.step-actions{
+  justify-content:flex-start;
+}
 .step-hint{
   margin:0;
   font-size:0.85rem;
@@ -301,12 +361,22 @@ body.has-global-bar .launcher-wrap{
   display:grid;
   gap: var(--sp3);
 }
-.step-column h4{
+.step-column h4,
+.launch-group h4{
   margin:0;
   font-size:0.95rem;
   text-transform:uppercase;
   letter-spacing:0.08em;
   color: var(--color-muted);
+}
+.launch-groups{
+  display:grid;
+  gap: var(--sp4);
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+}
+.launch-group{
+  display:grid;
+  gap: var(--sp3);
 }
 .launcher-grid{
   display:grid;

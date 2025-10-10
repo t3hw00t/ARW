@@ -1,0 +1,69 @@
+/* Minimal, friendly mascot overlay */
+:root { color-scheme: light dark; }
+html, body { height: 100%; }
+body {
+  margin: 0; padding: 0; background: transparent; overflow: hidden;
+  -webkit-user-select: none; user-select: none;
+}
+
+.mascot-root {
+  position: relative;
+  width: 200px; height: 240px;
+  display: grid; place-items: center;
+  pointer-events: none; /* click-through by default; drag-strip enables drag */
+}
+
+.drag-strip {
+  position: absolute; left: 0; top: 0; right: 0; height: 16px;
+  -webkit-app-region: drag; /* enable window drag on Tauri */
+  pointer-events: auto;
+}
+
+.blob { display: block; width: 200px; height: 240px; pointer-events: none; }
+.body {
+  fill: var(--arw-surface, #f2f5ff);
+  stroke: var(--arw-border, rgba(0,0,0,0.08));
+  stroke-width: 1;
+  animation: breathe 4.2s ease-in-out infinite;
+}
+.hair {
+  fill: none;
+  stroke: var(--arw-accent, #6a8dff);
+  stroke-width: 3;
+  stroke-linecap: round;
+}
+.eye {
+  fill: var(--arw-ink, #111);
+  animation: blink 7s ease-in-out infinite;
+}
+.mouth { fill: var(--arw-ink, #222); }
+
+@keyframes breathe {
+  0% { transform: translateY(0px); }
+  50% { transform: translateY(2px); }
+  100% { transform: translateY(0px); }
+}
+@keyframes blink {
+  0%, 2%, 60%, 62%, 100% { transform: scaleY(1); }
+  1%, 61% { transform: scaleY(0.2); }
+}
+
+/* State tints */
+body[data-state="ready"] .body { fill: color-mix(in oklab, var(--arw-surface, #f2f5ff), #77ffbb 20%); }
+body[data-state="thinking"] .body { fill: color-mix(in oklab, var(--arw-surface, #f2f5ff), #6a8dff 22%); }
+body[data-state="concern"] .body { fill: color-mix(in oklab, var(--arw-surface, #f2f5ff), #ffad66 24%); }
+body[data-state="error"] .body { fill: color-mix(in oklab, var(--arw-surface, #f2f5ff), #ff6a6a 28%); }
+
+.hint {
+  position: absolute; bottom: 6px; left: 8px; right: 8px;
+  padding: 2px 6px; border-radius: 6px;
+  background: color-mix(in oklab, var(--arw-surface, #fff), var(--arw-ink, #000) 10%);
+  color: var(--arw-ink, #111);
+  font: 600 11px system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+  text-align: center; opacity: .85; pointer-events: none;
+}
+
+/* When click-through is disabled (user toggled), allow pointer events */
+body.allow-interactions .mascot-root { pointer-events: auto; }
+.mascot-root button, .mascot-root a { pointer-events: auto; }
+

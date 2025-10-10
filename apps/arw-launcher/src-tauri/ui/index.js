@@ -9,7 +9,7 @@ const isExpertMode = () => !!(ARW.mode && ARW.mode.current === 'expert');
 
 let miniDownloadsSub = null;
 let prefsDirty = false;
-const prefBaseline = { port: '', autostart: false, notif: true, loginstart: false, adminToken: '', baseOverride: '' };
+const prefBaseline = { port: '', autostart: false, notif: true, loginstart: false, adminToken: '', baseOverride: '', mascotEnabled: true };
 let lastHealthCheck = null;
 let healthMetaTimer = null;
 let serviceLogPath = null;
@@ -17,6 +17,16 @@ let tokenProbeController = null;
 let tokenProbeLast = { token: null, state: null, at: 0 };
 let serviceOnline = false;
 let controlButtonsInitialized = false;
+let mascotEnabled = true;
+let mascotChecklistState = null;
+let mascotSseState = null;
+let mascotSseSub = null;
+const MASCOT_PRIORITY = {
+  error: 3,
+  concern: 2,
+  thinking: 1,
+  ready: 0,
+};
 const CONTROL_BUTTONS = [
   { id: 'btn-hub', requiresService: true, requiresToken: true },
   { id: 'btn-chat', requiresService: true, requiresToken: true },
@@ -34,6 +44,13 @@ let connectionsList = [];
 let tokenCalloutPrimed = false;
 let anonymousAdminAccess = { state: 'unknown', at: 0, base: '' };
 let allowAnonymousAdmin = false;
+
+const MASCOT_DEFAULT_MESSAGE = {
+  ready: 'All systems ready.',
+  thinking: 'Working on it…',
+  concern: 'Double-check your setup.',
+  error: 'Something needs attention.',
+};
 
 function detectPreferredRestartShell() {
   try {
@@ -122,6 +139,126 @@ async function copyRestartCommandToClipboard(token, event) {
     } catch (modalErr) {
       console.error(modalErr);
     }
+  }
+}
+
+function composeMascotMood(state, message) {
+  const normalized = (typeof state === 'string' ? state : '').trim().toLowerCase();
+  const resolved = ['ready', 'thinking', 'concern', 'error'].includes(normalized)
+    ? normalized
+    : 'ready';
+  const text = typeof message === 'string' && message.trim().length
+    ? message.trim()
+    : MASCOT_DEFAULT_MESSAGE[resolved] || MASCOT_DEFAULT_MESSAGE.ready;
+  return {
+    state: resolved,
+    message: text,
+    priority: MASCOT_PRIORITY[resolved] ?? 0,
+  };
+}
+
+function triggerMascotState(state, hint, options = {}) {
+  if (!mascotEnabled && !options.force) return;
+  try {
+    if (window.__TAURI__?.event?.emit) {
+      window.__TAURI__.event.emit('mascot:state', {
+        state,
+        hint: hint && hint.trim ? hint.trim() : hint,
+      });
+    }
+  } catch (err) {
+    console.error(err);
+  }
+}
+
+function applyMascotMood() {
+  if (!mascotEnabled) return;
+  const candidates = [];
+  if (mascotChecklistState) candidates.push(mascotChecklistState);
+  if (mascotSseState) candidates.push(mascotSseState);
+  if (!candidates.length) {
+    triggerMascotState('ready', MASCOT_DEFAULT_MESSAGE.ready);
+    return;
+  }
+  let best = candidates[0];
+  for (let i = 1; i < candidates.length; i += 1) {
+    const current = candidates[i];
+    if ((current?.priority ?? 0) > (best?.priority ?? 0)) {
+      best = current;
+    }
+  }
+  triggerMascotState(best.state, best.message);
+}
+
+function mapSseStatusToMood(status, env = {}) {
+  const normalized = typeof status === 'string' ? status.toLowerCase() : '';
+  switch (normalized) {
+    case 'error': {
+      const retryIn = Number(env.retryIn);
+      const seconds = Number.isFinite(retryIn) ? Math.max(1, Math.round(retryIn / 1000)) : null;
+      const msg = seconds
+        ? `Event stream retrying in ${seconds}s…`
+        : 'Event stream retrying…';
+      return composeMascotMood('concern', msg);
+    }
+    case 'closed':
+      return composeMascotMood('concern', 'Event stream offline.');
+    case 'connecting':
+      return composeMascotMood('thinking', 'Connecting to event stream…');
+    case 'stale':
+      return composeMascotMood('thinking', 'Waiting for fresh events…');
+    case 'idle':
+      return composeMascotMood('thinking', 'Event stream idle.');
+    case 'open':
+      return composeMascotMood('ready', 'Event stream live.');
+    default:
+      return null;
+  }
+}
+
+function initMascotSseSubscription() {
+  if (mascotSseSub || !ARW?.sse || typeof ARW.sse.subscribe !== 'function') return;
+  mascotSseSub = ARW.sse.subscribe('*status*', ({ env }) => {
+    const status = env?.status;
+    const mood = mapSseStatusToMood(status, env);
+    mascotSseState = mood;
+    applyMascotMood();
+  });
+}
+
+async function ensureMascotWindow({ focus = false, force = false } = {}) {
+  if (!IS_DESKTOP) return;
+  if (!mascotEnabled && !force) return;
+  try {
+    await invoke('open_mascot_window');
+    if (focus && window.__TAURI__?.window?.getWindow) {
+      const w = window.__TAURI__.window.getWindow('mascot');
+      if (w && typeof w.setFocus === 'function') {
+        await w.setFocus();
+      }
+    }
+  } catch (err) {
+    console.error(err);
+  }
+}
+
+async function closeMascotWindow() {
+  if (!IS_DESKTOP) return;
+  try {
+    if (window.__TAURI__?.window?.getWindow) {
+      const w = window.__TAURI__.window.getWindow('mascot');
+      if (w && typeof w.close === 'function') {
+        await w.close();
+        return;
+      }
+    }
+  } catch (err) {
+    console.error(err);
+  }
+  try {
+    await invoke('close_mascot_window');
+  } catch (err) {
+    console.error(err);
   }
 }
 
@@ -283,6 +420,7 @@ function snapshotPrefsBaseline() {
   prefBaseline.autostart = getChecked('autostart');
   prefBaseline.notif = getChecked('notif');
   prefBaseline.loginstart = getChecked('loginstart');
+  prefBaseline.mascotEnabled = getChecked('mascotEnabled');
   const tokenEl = document.getElementById('admintok');
   prefBaseline.adminToken = tokenEl ? String(tokenEl.value ?? '').trim() : '';
   prefBaseline.baseOverride =
@@ -302,6 +440,7 @@ function calculatePrefsDirty() {
   if (isDirty('autostart', 'autostart')) return true;
   if (isDirty('notif', 'notif')) return true;
   if (isDirty('loginstart', 'loginstart')) return true;
+  if (isDirty('mascotEnabled', 'mascotEnabled')) return true;
   const tokenEl = document.getElementById('admintok');
   const tokenValue = tokenEl ? String(tokenEl.value ?? '').trim() : '';
   if (tokenValue !== prefBaseline.adminToken) return true;
@@ -328,6 +467,18 @@ function bindPrefWatchers() {
     const el = document.getElementById(id);
     if (el) el.addEventListener('change', refreshPrefsDirty);
   });
+  const mascotToggle = document.getElementById('mascotEnabled');
+  if (mascotToggle) {
+    mascotToggle.addEventListener('change', () => {
+      mascotEnabled = !!mascotToggle.checked;
+      if (mascotEnabled) {
+        ensureMascotWindow({ force: true });
+      } else {
+        void closeMascotWindow();
+      }
+      refreshPrefsDirty();
+    });
+  }
   const tokenEl = document.getElementById('admintok');
   if (tokenEl) tokenEl.addEventListener('input', refreshPrefsDirty);
 }
@@ -558,7 +709,7 @@ function setTokenValue(value, { focusEnd = false } = {}) {
 
 const TOKEN_STATUS_MESSAGES = {
   saved: {
-    missing: 'No admin token saved. Generate or paste one to unlock Project Hub, Chat, and Training.',
+    missing: 'No admin token saved. Generate or paste one to unlock Projects, Conversations, and Training.',
     saved: 'Admin token saved. Start the service or use Test to verify.',
     valid: 'Admin token accepted.',
     invalid: 'Admin token rejected. Generate a new secret or paste the correct value.',
@@ -579,6 +730,149 @@ const TOKEN_STATUS_MESSAGES = {
     open: 'Debug mode active. Save a token when you are ready to lock access.',
   },
 };
+
+const STEP_STATUS_VARIANTS = ['pending', 'active', 'ready', 'attention'];
+const STEP_STATUS_DEFAULT_TEXT = {
+  pending: 'Not started',
+  active: 'In progress',
+  ready: 'Ready',
+  attention: 'Action needed',
+};
+
+function setStepStatus(id, state, message) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  const normalized = STEP_STATUS_VARIANTS.includes(state) ? state : 'pending';
+  for (const variant of STEP_STATUS_VARIANTS) {
+    el.classList.remove(`step-status--${variant}`);
+  }
+  el.classList.add(`step-status--${normalized}`);
+  const text = el.querySelector('.step-status-text');
+  if (text) {
+    const fallback = STEP_STATUS_DEFAULT_TEXT[normalized] || STEP_STATUS_DEFAULT_TEXT.pending;
+    text.textContent = message && message.trim() ? message : fallback;
+  }
+}
+
+function updateSetupChecklist({
+  serviceOnline,
+  tokenReady,
+  tokenNeedsSave,
+  tokenTesting,
+  tokenMissing,
+  tokenInvalid,
+  tokenOffline,
+  tokenErrored,
+  openAccessActive,
+  gateMessage,
+}) {
+  // Step 1 — Service
+  let step1State = 'pending';
+  let step1Message = 'Start the service to continue.';
+  if (serviceOnline) {
+    step1State = 'ready';
+    step1Message = 'Service online.';
+  } else if (lastHealthCheck == null) {
+    step1State = 'active';
+    step1Message = 'Checking service…';
+  } else {
+    step1State = 'attention';
+    step1Message = 'Start the service to continue.';
+  }
+  setStepStatus('status-step-service', step1State, step1Message);
+
+  // Step 2 — Token
+  let step2State = 'pending';
+  let step2Message = 'Paste or generate an admin token.';
+  if (tokenReady) {
+    step2State = 'ready';
+    step2Message = openAccessActive
+      ? 'Debug mode active — token optional.'
+      : 'Admin token saved.';
+  } else if (tokenNeedsSave) {
+    step2State = 'active';
+    step2Message = 'Save your admin token to apply changes.';
+  } else if (tokenTesting) {
+    step2State = 'active';
+    step2Message = 'Testing admin token…';
+  } else if (tokenInvalid) {
+    step2State = 'attention';
+    step2Message = 'Fix the admin token to continue.';
+  } else if (tokenOffline) {
+    step2State = 'attention';
+    step2Message = 'Bring the service online to verify the token.';
+  } else if (tokenErrored) {
+    step2State = 'attention';
+    step2Message = 'Resolve token errors, then retry.';
+  } else if (!tokenMissing) {
+    step2State = 'pending';
+    step2Message = 'Paste or generate an admin token.';
+  }
+  setStepStatus('status-step-token', step2State, step2Message);
+
+  // Step 3 — Workspaces
+  let step3State = 'pending';
+  let step3Message = 'Complete Steps 1 and 2 first.';
+  if (serviceOnline && tokenReady) {
+    step3State = 'ready';
+    step3Message = 'Workspaces unlocked.';
+  } else if (!serviceOnline) {
+    step3State = 'pending';
+    step3Message = 'Complete Step 1 to unlock workspaces.';
+  } else if (tokenNeedsSave) {
+    step3State = 'active';
+    step3Message = 'Save your admin token to unlock workspaces.';
+  } else if (tokenTesting) {
+    step3State = 'active';
+    step3Message = 'Waiting on token test…';
+  } else if (tokenMissing) {
+    step3State = 'pending';
+    step3Message = 'Complete Step 2 to unlock workspaces.';
+  } else if (tokenInvalid) {
+    step3State = 'attention';
+    step3Message = 'Fix the admin token before launching workspaces.';
+  } else if (tokenOffline) {
+    step3State = 'attention';
+    step3Message = 'Bring the service online to unlock workspaces.';
+  } else if (tokenErrored) {
+    step3State = 'attention';
+    step3Message = 'Resolve token errors to continue.';
+  }
+  if (gateMessage && step3State !== 'ready') {
+    step3Message = gateMessage;
+  }
+  setStepStatus('status-step-workspaces', step3State, step3Message);
+
+  let mascotState = 'ready';
+  let mascotMessage = 'All systems ready.';
+  if (!serviceOnline) {
+    mascotState = 'concern';
+    mascotMessage = 'Start the service to continue.';
+  } else if (tokenTesting) {
+    mascotState = 'thinking';
+    mascotMessage = 'Testing admin token…';
+  } else if (tokenNeedsSave) {
+    mascotState = 'thinking';
+    mascotMessage = 'Save the admin token to apply changes.';
+  } else if (tokenInvalid) {
+    mascotState = 'error';
+    mascotMessage = 'Admin token invalid — update it before you continue.';
+  } else if (tokenOffline) {
+    mascotState = 'concern';
+    mascotMessage = 'Bring the service online to verify the token.';
+  } else if (tokenErrored) {
+    mascotState = 'concern';
+    mascotMessage = 'Resolve token errors to unlock workspaces.';
+  } else if (!tokenReady && !openAccessActive) {
+    mascotState = 'thinking';
+    mascotMessage = 'Paste or generate an admin token.';
+  } else if (openAccessActive) {
+    mascotState = 'thinking';
+    mascotMessage = 'Debug mode active — set a token before sharing.';
+  }
+  mascotChecklistState = composeMascotMood(mascotState, mascotMessage);
+  applyMascotMood();
+}
 
 function tokenBadgeClass(state) {
   switch (state) {
@@ -968,7 +1262,7 @@ function updateWorkspaceAvailability() {
 
   let gateMessage = '';
   if (!serviceOnline) {
-    gateMessage = 'Start the service to enable Project Hub, Chat, Training, and diagnostics.';
+    gateMessage = 'Start the service to enable Projects, Conversations, Training, and diagnostics.';
   } else if (tokenNeedsSave) {
     gateMessage = 'Save your admin token before opening workspaces.';
   } else if (tokenTesting) {
@@ -976,7 +1270,7 @@ function updateWorkspaceAvailability() {
   } else if (openAccessActive) {
     gateMessage = 'Debug mode active — admin surfaces are open. Set a token before sharing this service.';
   } else if (tokenMissing) {
-    gateMessage = 'Paste and save an admin token to unlock Project Hub, Chat, and Training.';
+    gateMessage = 'Paste an admin token to unlock Projects, Conversations, and Training.';
   } else if (tokenInvalid) {
     gateMessage = 'Fix the admin token (Test shows invalid) before opening workspaces.';
   } else if (tokenOffline) {
@@ -994,6 +1288,19 @@ function updateWorkspaceAvailability() {
       hint.hidden = true;
     }
   }
+
+  updateSetupChecklist({
+    serviceOnline,
+    tokenReady,
+    tokenNeedsSave,
+    tokenTesting,
+    tokenMissing,
+    tokenInvalid,
+    tokenOffline,
+    tokenErrored,
+    openAccessActive,
+    gateMessage,
+  });
 }
 
 function initStatusBadges() {
@@ -1031,6 +1338,64 @@ async function loadPrefs() {
     const enabled = await invoke('launcher_autostart_status');
     document.getElementById('loginstart').checked = !!enabled
   } catch {}
+  let mascotPrefs = {};
+  try {
+    const stored = await ARW.getPrefs('mascot');
+    if (stored && typeof stored === 'object') {
+      mascotPrefs = stored;
+    }
+  } catch {}
+  const mascotToggle = document.getElementById('mascotEnabled');
+  const openMascotBtn = document.getElementById('btn-open-mascot');
+  const supportMascotBtn = document.getElementById('btn-mascot');
+  const resolvedMascotEnabled =
+    mascotPrefs && typeof mascotPrefs.enabled === 'boolean'
+      ? !!mascotPrefs.enabled
+      : true;
+  mascotEnabled = resolvedMascotEnabled;
+  if (mascotToggle) {
+    mascotToggle.checked = resolvedMascotEnabled;
+    if (!IS_DESKTOP) {
+      mascotToggle.disabled = true;
+      mascotToggle.setAttribute('aria-disabled', 'true');
+      mascotToggle.title = 'Mascot overlay requires the desktop launcher.';
+    } else {
+      mascotToggle.removeAttribute('aria-disabled');
+      mascotToggle.removeAttribute('title');
+    }
+  }
+  const wireOpenButton = (button) => {
+    if (!button) return;
+    if (!IS_DESKTOP) {
+      button.disabled = true;
+      button.setAttribute('aria-disabled', 'true');
+      button.title = 'Mascot overlay requires the desktop launcher.';
+      return;
+    }
+    button.disabled = false;
+    button.removeAttribute('aria-disabled');
+    button.title = 'Show mascot overlay';
+    button.addEventListener('click', async () => {
+      await ensureMascotWindow({ focus: true, force: true });
+      mascotChecklistState = composeMascotMood('ready', 'Mascot on duty.');
+      applyMascotMood();
+    });
+  };
+  wireOpenButton(openMascotBtn);
+  wireOpenButton(supportMascotBtn);
+  if (IS_DESKTOP) {
+    if (resolvedMascotEnabled) {
+      await ensureMascotWindow({ force: true });
+      mascotChecklistState = composeMascotMood('thinking', 'Launcher starting…');
+      applyMascotMood();
+    } else {
+      await closeMascotWindow();
+      mascotChecklistState = null;
+      mascotSseState = null;
+      applyMascotMood();
+    }
+  }
+
   const rawConnections = Array.isArray(prefs.connections) ? prefs.connections : [];
   connectionsList = rawConnections.map(normalizeConnectionEntry);
   renderConnectionSelect();
@@ -1039,8 +1404,9 @@ async function loadPrefs() {
   syncAdvancedPrefsDisclosure();
   baseMeta = updateBaseMeta();
   connectSse({ replay: 5, resume: false });
+  initMascotSseSubscription();
   miniDownloads();
-  health();
+  await health();
   await refreshServiceLogPath();
   if (!IS_DESKTOP) {
     enterBrowserMode();
@@ -1057,6 +1423,26 @@ async function savePrefs() {
   v.adminToken = tokenValue;
   if (tokenEl) tokenEl.value = tokenValue;
   await ARW.setPrefs('launcher', v);
+  const mascotToggle = document.getElementById('mascotEnabled');
+  const desiredMascot = !!(mascotToggle && mascotToggle.checked);
+  try {
+    await ARW.setPrefs('mascot', { enabled: desiredMascot });
+    mascotEnabled = desiredMascot;
+    if (desiredMascot) {
+      await ensureMascotWindow({ force: true });
+      mascotChecklistState = composeMascotMood('thinking', 'Mascot enabled — gathering status…');
+      initMascotSseSubscription();
+      applyMascotMood();
+    } else {
+      await closeMascotWindow();
+      mascotChecklistState = null;
+      mascotSseState = null;
+      applyMascotMood();
+    }
+  } catch (err) {
+    console.error(err);
+    ARW.toast('Unable to update mascot preference');
+  }
   connectSse({ replay: 5, resume: false });
   miniDownloads();
 }

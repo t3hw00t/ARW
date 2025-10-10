@@ -22,6 +22,8 @@
       "open_chat_window",
       "open_training_window",
       "open_trial_window",
+      "open_mascot_window",
+      "close_mascot_window",
       "active_window_bounds",
       "run_trials_preflight",
       "run_tool_admin",

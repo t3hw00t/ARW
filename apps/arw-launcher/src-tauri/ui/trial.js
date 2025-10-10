@@ -411,13 +411,13 @@
       updateLists(payload.routeStats);
       renderLists();
       if (STATE.unauthorized) {
-        showNotice('Set an admin token in Control Room → Connection & alerts to see live metrics.');
+        showNotice('Set an admin token in Home → Connection & alerts to see live metrics.');
       } else if (STATE.errors.length) {
         showNotice(`Partial data: ${STATE.errors.join('; ')}`);
       }
     } catch (err) {
       console.error('Refresh failed', err);
-      showNotice('Failed to refresh trial data. Ensure the server is running and the admin token is set (Control Room → Connection & alerts).');
+      showNotice('Failed to refresh trial data. Ensure the server is running and the admin token is set (Home → Connection & alerts).');
       ARW.toast('Refresh failed');
     } finally {
       if (refreshBtn) refreshBtn.disabled = false;
@@ -1676,7 +1676,7 @@
       ARW.toast('Operator required');
       return;
     }
-    const reason = await promptAutonomyReason('Kill switch from Trial Control Center');
+    const reason = await promptAutonomyReason('Kill switch from Experiment Control');
     if (reason === null) return;
     markAutonomyBusy(true);
     try {
@@ -1942,7 +1942,7 @@
       focusBtn.disabled = disabled;
       focusBtn.setAttribute('aria-disabled', disabled ? 'true' : 'false');
       focusBtn.title = disabled
-        ? 'Set an admin token (Control Room → Connection & alerts) to open memory sources'
+        ? 'Set an admin token (Home → Connection & alerts) to open memory sources'
         : 'Open memory sources in debug view';
     }
     if (!ms || !Number.isFinite(ms)) {
@@ -2008,7 +2008,7 @@ function renderLists(){
       openBtn.disabled = disabled;
       openBtn.setAttribute('aria-disabled', disabled ? 'true' : 'false');
       openBtn.title = disabled
-        ? 'Set an admin token (Control Room → Connection & alerts) to open the feedback panel'
+        ? 'Set an admin token (Home → Connection & alerts) to open the feedback panel'
         : 'Open feedback panel in debug view';
     }
 
@@ -2069,7 +2069,7 @@ function renderLists(){
 
     if (STATE.unauthorized) {
       listEl.innerHTML = '';
-      emptyEl.textContent = 'Set an admin token (Control Room → Connection & alerts) to view feedback deltas.';
+      emptyEl.textContent = 'Set an admin token (Home → Connection & alerts) to view feedback deltas.';
       emptyEl.classList.remove('hidden');
       return;
     }
@@ -3221,7 +3221,7 @@ function renderLists(){
       return;
     }
     if (STATE.unauthorized) {
-      ARW.toast('Set an admin token (Control Room → Connection & alerts) to open the feedback panel');
+      ARW.toast('Set an admin token (Home → Connection & alerts) to open the feedback panel');
       return;
     }
     try {

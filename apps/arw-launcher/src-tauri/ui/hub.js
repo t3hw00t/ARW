@@ -2440,7 +2440,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       await fetchReadModel('projects', '/state/projects');
     }catch(e){
       if (e && e.status === 401) {
-        setStat('Set an admin token (Control Room → Connection & alerts) to load projects');
+        setStat('Set an admin token (Home → Connection & alerts) to load projects');
       } else {
         console.error(e);
       }

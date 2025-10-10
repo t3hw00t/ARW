@@ -856,6 +856,38 @@ mod cmds {
     }
 
     #[tauri::command]
+    pub fn open_mascot_window<R: tauri::Runtime>(app: tauri::AppHandle<R>) -> Result<(), String> {
+        let label = "mascot";
+        if app.get_webview_window(label).is_none() {
+            let mut builder = tauri::WebviewWindowBuilder::new(
+                &app,
+                label,
+                tauri::WebviewUrl::App("mascot.html".into()),
+            );
+            builder = builder
+                .title("ARW — Mascot")
+                .inner_size(220.0, 260.0)
+                .decorations(false)
+                .resizable(false)
+                .always_on_top(true)
+                .transparent(true)
+                .skip_taskbar(true);
+            builder.build().map_err(|e| e.to_string())?;
+        } else if let Some(w) = app.get_webview_window(label) {
+            let _ = w.set_focus();
+        }
+        Ok(())
+    }
+
+    #[tauri::command]
+    pub fn close_mascot_window<R: tauri::Runtime>(app: tauri::AppHandle<R>) -> Result<(), String> {
+        if let Some(window) = app.get_webview_window("mascot") {
+            window.close().map_err(|e| e.to_string())?;
+        }
+        Ok(())
+    }
+
+    #[tauri::command]
     pub fn open_logs_window_base<R: tauri::Runtime>(
         app: tauri::AppHandle<R>,
         base: String,
@@ -1030,7 +1062,7 @@ mod cmds {
                 label,
                 tauri::WebviewUrl::App("trial.html".into()),
             )
-            .title("Agent Hub (ARW) — Trial Control Center")
+            .title("Agent Hub (ARW) — Experiment Control")
             .inner_size(1100.0, 800.0)
             .build()
             .map_err(|e| e.to_string())?;
@@ -1842,6 +1874,8 @@ mod cmds {
                 open_chat_window,
                 open_training_window,
                 open_trial_window,
+                open_mascot_window,
+                close_mascot_window,
                 run_trials_preflight,
                 models_summary,
                 models_concurrency_get,

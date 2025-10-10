@@ -50,7 +50,7 @@ This path pins `--headless --minimal --no-docs`, exports `ARW_DOCGEN_SKIP_BUILDS
    - Linux / macOS: `./first-run.sh`
    - Windows: `pwsh -ExecutionPolicy Bypass -File .\first-run.ps1`
      (use `Unblock-File .\first-run.ps1` first if Windows marks the download as blocked)
-3. The helper generates (or reuses) `state/admin-token.txt`, starts `arw-server`, and prints the Control Room/Debug URLs. Append `--launcher` / `-Launcher` to launch the desktop Control Room when the launcher binary is present, or `--new-token` / `-NewToken` to rotate credentials on demand.
+3. The helper generates (or reuses) `state/admin-token.txt`, starts `arw-server`, and prints the Home view/Debug URLs. Append `--launcher` / `-Launcher` to launch the desktop Home view when the launcher binary is present, or `--new-token` / `-NewToken` to rotate credentials on demand.
 
 This path skips the Rust toolchain—perfect for quick evaluations or air-gapped installs that prefer prebuilt artifacts.
 
@@ -69,7 +69,7 @@ This path skips the Rust toolchain—perfect for quick evaluations or air-gapped
 - Windows  
   `powershell -ExecutionPolicy Bypass -File scripts\setup.ps1 -Headless`
 
-Use `--headless` / `-Headless` to skip the launcher build when WebKitGTK 4.1 + libsoup3 (Linux) or WebView2 (Windows) isn’t available yet. Drop the flag to compile the desktop Control Room once the prerequisites are installed. Add `--minimal` / `-Minimal` to build just the core binaries without packaging or docs, and `--run-tests` / `-RunTests` when you want the workspace test suite as part of setup.
+Use `--headless` / `-Headless` to skip the launcher build when WebKitGTK 4.1 + libsoup3 (Linux) or WebView2 (Windows) isn’t available yet. Drop the flag to compile the desktop Home view once the prerequisites are installed. Add `--minimal` / `-Minimal` to build just the core binaries without packaging or docs, and `--run-tests` / `-RunTests` when you want the workspace test suite as part of setup.
 
 ## Build and Test (optional)
 
@@ -108,7 +108,7 @@ Working offline? `mise run docs:cache:build` creates `dist/docs-wheels.tar.gz` w
 
 ## Admin Token Handling
 
-`scripts/start.sh` and `scripts/start.ps1` reuse `state/admin-token.txt` (or generate a new token automatically) and persist it to launcher preferences, so you rarely need to export `ARW_ADMIN_TOKEN` manually. Pass `--admin-token` / `-AdminToken` when you need to supply your own credential, or edit the Control Room → Connection & alerts panel to rotate it later.
+`scripts/start.sh` and `scripts/start.ps1` reuse `state/admin-token.txt` (or generate a new token automatically) and persist it to launcher preferences, so you rarely need to export `ARW_ADMIN_TOKEN` manually. Pass `--admin-token` / `-AdminToken` when you need to supply your own credential, or edit the Home view → Connection & alerts panel to rotate it later.
 
 ## Run the Unified Server
 
@@ -128,7 +128,7 @@ powershell -ExecutionPolicy Bypass -File scripts/start.ps1 -ServiceOnly -WaitHea
 bash scripts/start.sh --service-only --wait-health
 ```
 
-**Control Room + launcher** — start the service and the desktop UI together.
+**Home view + launcher** — start the service and the desktop UI together.
 
 === "Windows"
 ```powershell
@@ -152,7 +152,7 @@ bash scripts/start.sh --wait-health
     The Tauri launcher depends on WebKitGTK 4.1 + libsoup3. Run `bash scripts/install-tauri-deps.sh` on Ubuntu 24.04+, Fedora, or Arch. If your distro lacks those packages (e.g., Ubuntu 22.04, Debian 12 stable), stay headless and open `http://127.0.0.1:8091/admin/ui/control/` or `/admin/debug` in a browser.
 
 The Windows launcher flow prints a summary (service URL, launcher/headless mode, admin token status) and automatically falls back to headless mode if WebView2 is missing, with guidance for installing it.
-Open **Launcher Settings** (Control Room → Support) to tweak autostart behaviour, notifications, default port/base, and WebView2 status after the desktop UI loads.
+Open **Launcher Settings** (Home view → Support) to tweak autostart behaviour, notifications, default port/base, and WebView2 status after the desktop UI loads.
 
 ## Verify the Server
 
@@ -279,7 +279,7 @@ Generate the secret with any equivalent tool if `openssl` is unavailable.
 
 ## Portable Mode
 
-- Extracted release bundle? Run `./first-run.sh` (Linux/macOS) or `pwsh -ExecutionPolicy Bypass -File .\first-run.ps1` (Windows) from the archive root to generate/reuse an admin token (`state/admin-token.txt`) and start the unified server on `http://127.0.0.1:8091/`. If SmartScreen blocks the script, right-click -> **Properties** -> **Unblock** or run `Unblock-File .\first-run.ps1` once. Add `--launcher` / `-Launcher` to open the Control Room or `--new-token` / `-NewToken` to rotate credentials.
+- Extracted release bundle? Run `./first-run.sh` (Linux/macOS) or `pwsh -ExecutionPolicy Bypass -File .\first-run.ps1` (Windows) from the archive root to generate/reuse an admin token (`state/admin-token.txt`) and start the unified server on `http://127.0.0.1:8091/`. If SmartScreen blocks the script, right-click -> **Properties** -> **Unblock** or run `Unblock-File .\first-run.ps1` once. Add `--launcher` / `-Launcher` to open the Home view or `--new-token` / `-NewToken` to rotate credentials.
 - Set `ARW_STATE_DIR` to relocate state (defaults to `./state`).
 - Combine with `ARW_PORTABLE=1` in launchers or scripts to keep all files beside the binaries for USB-style deployment.
 

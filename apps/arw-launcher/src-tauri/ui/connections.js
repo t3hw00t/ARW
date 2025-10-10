@@ -285,7 +285,7 @@ async function pingRow(tr, entry) {
         st.innerHTML = '<span class="dot warn"></span> auth required';
         st.className = 'warn';
         st.dataset.status = 'auth';
-        st.title = 'Set an admin token (Control Room → Connection & alerts)';
+        st.title = 'Set an admin token (Home → Connection & alerts)';
       }
     } else {
       st.innerHTML = `<span class="dot bad"></span> error (${resp.status})`;

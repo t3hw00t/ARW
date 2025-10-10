@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>ARW Mascot</title>
+    <link rel="stylesheet" href="tokens.css" />
+    <link rel="stylesheet" href="ui-kit.css" />
+    <link rel="stylesheet" href="common.css" />
+    <link rel="stylesheet" href="mascot.css" />
+    <script src="common.js" defer></script>
+    <script src="mascot.js" defer></script>
+  </head>
+  <body data-page="mascot">
+    <div class="mascot-root" role="img" aria-label="Project mascot">
+      <div class="drag-strip" title="Drag to move" aria-hidden="true"></div>
+      <svg class="blob" viewBox="0 0 200 240" width="200" height="240" aria-hidden="true">
+        <defs>
+          <filter id="shadow" x="-50%" y="-50%" width="200%" height="200%">
+            <feDropShadow dx="0" dy="3" stdDeviation="6" flood-color="rgba(0,0,0,0.25)"/>
+          </filter>
+        </defs>
+        <!-- Body: pear-shaped blob -->
+        <path class="body" filter="url(#shadow)"
+          d="M100 15
+             C 85 10, 70 20, 65 35
+             C 58 55, 58 65, 55 80
+             C 35 95, 25 120, 30 150
+             C 38 190, 70 215, 100 215
+             C 130 215, 162 190, 170 150
+             C 175 120, 165 95, 145 80
+             C 142 65, 142 55, 135 35
+             C 130 20, 115 10, 100 15 Z"/>
+
+        <!-- Hairs -->
+        <path class="hair" d="M92 18 C 90 8, 78 8, 74 18"/>
+        <path class="hair" d="M100 16 C 100 6, 90 6, 88 15"/>
+        <path class="hair" d="M108 18 C 110 8, 122 8, 126 18"/>
+
+        <!-- Face -->
+        <rect class="eye" x="75" y="95" rx="3" ry="3" width="18" height="3"/>
+        <rect class="eye" x="107" y="95" rx="3" ry="3" width="18" height="3"/>
+        <circle class="mouth" cx="100" cy="118" r="5"/>
+      </svg>
+      <div class="hint" id="mascotHint" aria-live="polite"></div>
+    </div>
+  </body>
+  </html>
+

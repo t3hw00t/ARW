@@ -3,7 +3,7 @@ title: Compatibility Notes
 ---
 
 # Compatibility Notes
-Updated: 2025-10-09
+Updated: 2025-10-10
 Type: How‑to
 
 This page summarizes high‑level notes and known issues when running ARW on
@@ -35,7 +35,7 @@ problems.
     - Debian testing/unstable, Ubuntu 24.04+: `sudo apt install -y libgtk-3-dev libwebkit2gtk-4.1-dev libjavascriptcoregtk-4.1-dev libsoup-3.0-dev`
     - Fedora: `sudo dnf install -y gtk3-devel webkit2gtk4.1-devel libsoup3-devel`
     - Arch: `sudo pacman -S --needed gtk3 webkit2gtk-4.1 libsoup3`
-    - Stuck on a distro without WebKitGTK 4.1 packages (e.g., Ubuntu 22.04, Debian 12 stable)? Run the service headless instead: `bash scripts/start.sh --service-only --wait-health`, then open the browser Control Room at `http://127.0.0.1:8091/admin/ui/control/`. Desktop-only actions (start/stop service, local log tails) still need the launcher or CLI. Saved Connections also let you point a desktop launcher running on another machine that meets the requirements.
+    - Stuck on a distro without WebKitGTK 4.1 packages (e.g., Ubuntu 22.04, Debian 12 stable)? Run the service headless instead: `bash scripts/start.sh --service-only --wait-health`, then open the browser Home view at `http://127.0.0.1:8091/admin/ui/control/`. Desktop-only actions (start/stop service, local log tails) still need the launcher or CLI. Saved Connections also let you point a desktop launcher running on another machine that meets the requirements.
     - `scripts/setup.sh` and `scripts/start.sh` emit a preflight warning when these libraries are missing so you can install them (`scripts/install-tauri-deps.sh`) before attempting another launcher build.
     - Use `scripts/setup.sh --headless` when you want the install to succeed without building the launcher (for example on Ubuntu 22.04); add `--minimal` if you only need `arw-server` and `arw-cli` without docs or packaging.
     - Desktop launcher opt-in: build it explicitly with `cargo build -p arw-launcher --features launcher-linux-ui`. Omit this step to stay headless.

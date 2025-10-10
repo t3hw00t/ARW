@@ -4,7 +4,7 @@ title: Network Posture
 
 # Network Posture
 
-Updated: 2025-10-09
+Updated: 2025-10-10
 
 Status: Partial (gateway + posture enforcement implemented)
 Type: How‑to
@@ -51,7 +51,7 @@ Preview endpoint
 - `POST /egress/preview` dry-runs posture, allowlist, leases, and policy evaluation for a URL/method before running tools.
 
 ## Launcher guidance
-- When you pivot the desktop launcher to a remote base over plain HTTP, the Control Room and satellite windows surface an inline warning with a link to this guide.
+- When you pivot the desktop launcher to a remote base over plain HTTP, the Home view and satellite windows surface an inline warning with a link to this guide.
 - Switch to HTTPS (or tunnel the port) before inviting collaborators or exposing admin surfaces beyond localhost.
 
 See also: Architecture → Egress Firewall; Policy; Security Hardening; Clustering.
