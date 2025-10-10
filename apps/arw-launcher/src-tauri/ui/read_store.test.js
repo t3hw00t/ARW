@@ -51,6 +51,9 @@ function makeNode(tag = 'div') {
       node.children.push(child);
       return child;
     },
+    append(...children) {
+      children.forEach((child) => { if (child) node.appendChild(child); });
+    },
     prepend(child) {
       if (!child) return child;
       child.parentNode = node;
@@ -137,7 +140,7 @@ function makeNode(tag = 'div') {
 const documentNode = makeNode();
 documentNode.body = makeNode();
 documentNode.documentElement = makeNode();
-documentNode.createElement = () => makeNode();
+documentNode.createElement = (tag) => makeNode(tag);
 documentNode.getElementById = () => makeNode();
 documentNode.querySelector = () => makeNode();
 documentNode.querySelectorAll = () => [];
@@ -187,6 +190,8 @@ windowObj.URLSearchParams = URLSearchParams;
 vm.createContext(windowObj);
 const code = fs.readFileSync(path.join(__dirname, 'common.js'), 'utf8');
 vm.runInContext(code, windowObj, { filename: 'common.js' });
+const sidecarCode = fs.readFileSync(path.join(__dirname, 'sidecar.js'), 'utf8');
+vm.runInContext(sidecarCode, windowObj, { filename: 'sidecar.js' });
 
 const read = windowObj.ARW && windowObj.ARW.read;
 if (!read) {
@@ -298,6 +303,60 @@ async function run() {
   assert.strictEqual(token, null);
 
   console.log('ARW.connections helpers tests passed');
+
+  // Wait for sidecar bootstrap (module resolves asynchronously)
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  // Sidecar mount/dispose should tolerate partial lane sets and expose accessible toggles
+  const sidecarHost = makeNode('div');
+  const sidecarHandle = ARW.sidecar.mount(sidecarHost, ['context'], {});
+  assert.ok(sidecarHost.children.length > 0, 'sidecar should render lanes');
+  const firstSection = sidecarHost.children[0];
+  const heading = firstSection.children[0];
+  const toggleButton = heading.children[0];
+  assert.strictEqual(toggleButton.tagName, 'BUTTON', 'lane header should render as a button');
+  assert.ok(toggleButton.getAttribute('aria-controls'), 'lane toggle should describe controlled region');
+  assert.strictEqual(toggleButton.getAttribute('aria-expanded'), 'true', 'lane toggle should default to expanded');
+  assert.doesNotThrow(() => sidecarHandle.refresh({ immediate: true, reason: 'test' }), 'refresh without base should succeed');
+  assert.doesNotThrow(() => sidecarHandle.dispose(), 'dispose without approvals lane should not throw');
+
+  const timelineHost = makeNode('div');
+  const timelineHandle = ARW.sidecar.mount(timelineHost, ['timeline'], {});
+  assert.ok(timelineHost.children.length === 1, 'timeline lane should mount');
+  assert.doesNotThrow(() => timelineHandle.dispose(), 'dispose with timeline-only lane should not throw');
+
+  console.log('ARW.sidecar mount/dispose tests passed');
+
+  // EventSource path should update lastEventAt for stale detection
+  const originalEventSource = windowObj.EventSource;
+  try {
+    windowObj.EventSource = class {
+      constructor(url, opts) {
+        this.url = url;
+        this.opts = opts;
+        this.onopen = null;
+        this.onerror = null;
+        this.onmessage = null;
+      }
+      close() {
+        this.closed = true;
+      }
+    };
+    ARW.sse.close();
+    ARW.sse._connectEventSource('http://localhost:8091/events');
+    const es = ARW.sse._es;
+    assert.ok(es, 'EventSource stub should be assigned');
+    assert.strictEqual(typeof es.onmessage, 'function', 'onmessage handler missing');
+    const beforeTs = ARW.sse._lastEventAt;
+    es.onmessage({ lastEventId: '5', data: '{"kind":"test.event","payload":{"ok":true}}' });
+    assert.ok(
+      typeof ARW.sse._lastEventAt === 'number' && ARW.sse._lastEventAt >= (beforeTs || 0),
+      'EventSource path should refresh lastEventAt timestamp'
+    );
+  } finally {
+    ARW.sse.close();
+    windowObj.EventSource = originalEventSource;
+  }
 
   // SSE indicator badge behavior
   const badgeNode = makeNode('span');

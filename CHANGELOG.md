@@ -12,6 +12,7 @@ This project follows Keep a Changelog and Semantic Versioning. All notable chang
 - Retired legacy `/memory/*` REST shims and the `/admin/events` alias; new admin helpers live at `/admin/memory/*` and SSE streams at `/events`.
 - Regenerated OpenAPI/JSON artifacts to reflect the updated surface and removed legacy routes.
 - Removed the legacy `X-ARW-Gate` capsule header; requests must send capsules with `X-ARW-Capsule` (legacy usage now returns HTTP 410 and emits failure telemetry).
+- Launcher sidecar: accessible lane toggles, smarter lane-aware subscriptions/cleanup, EventSource stale detection, and a dedicated `sidecar.js` module with expanded tests keep UI state responsive even with customised layouts.
 
 ## [0.1.4] - 2025-09-15
 

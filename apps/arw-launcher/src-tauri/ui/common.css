@@ -451,7 +451,24 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 }
 .arw-sidecar section { border-bottom:1px dashed var(--color-line); padding:4px 0 }
 .arw-sidecar section:last-child{ border-bottom:none }
-.arw-sidecar h3 { margin:6px 0; font-size:14px; color:#374151; cursor:pointer; display:flex; align-items:center; gap:6px }
+.arw-sidecar h3 { margin:6px 0; font-size:14px; color:#374151; display:flex; align-items:center; }
+.arw-sidecar h3 .lane-toggle{
+  background:none;
+  border:none;
+  color:inherit;
+  font:inherit;
+  padding:2px 0;
+  width:100%;
+  text-align:left;
+  display:flex;
+  align-items:center;
+  gap:6px;
+  cursor:pointer;
+}
+.arw-sidecar h3 .lane-toggle:focus-visible{
+  outline:2px solid var(--color-ink);
+  outline-offset:2px;
+}
 .arw-sidecar section.collapsed > .lane-body { display:none }
 .arw-sidecar .lane-summary { margin:8px 0 12px; font-size:12px; color: var(--color-muted); display:none }
 .arw-sidecar .lane-summary:not([hidden]) { display:block }
