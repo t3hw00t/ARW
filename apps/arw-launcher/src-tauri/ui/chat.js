@@ -190,11 +190,25 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (!msgBox) return;
     const text = msgBox.value.trim();
     if (!text) return;
+    try{
+      if (window.__TAURI__?.event?.emit) {
+        window.__TAURI__.event.emit('mascot:state', { state:'thinking', hint:'Thinking…' });
+        window.__TAURI__.event.emit('mascot:stream', { action:'start', hint:'Streaming response…', state:'thinking' });
+      }
+    }catch{}
     addMessage('you', text);
     msgBox.value = '';
     try{ msgBox.focus({ preventScroll:true }); }catch{ try{ msgBox.focus(); }catch{} }
     // Placeholder echo; real chat will call service endpoint
-    setTimeout(()=> addMessage('assistant', text.split('').reverse().join('')), 120);
+    setTimeout(()=> {
+      addMessage('assistant', text.split('').reverse().join(''));
+      try{
+        if (window.__TAURI__?.event?.emit) {
+          window.__TAURI__.event.emit('mascot:stream', { action:'stop', hint:'Response ready', state:'ready' });
+          window.__TAURI__.event.emit('mascot:state', { state:'ready', hint:'All set.' });
+        }
+      }catch{}
+    }, 120);
   }
   document.getElementById('send').addEventListener('click', sendCurrentMessage);
   if (msgBox){

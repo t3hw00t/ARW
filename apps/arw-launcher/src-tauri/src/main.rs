@@ -220,7 +220,7 @@ fn main() {
         .manage(ServiceState::default())
         .setup(|app| {
             // Create a minimal window; tray does most of the work for now
-            tauri::WebviewWindowBuilder::new(
+            let main = tauri::WebviewWindowBuilder::new(
                 app,
                 "main",
                 tauri::WebviewUrl::App("index.html".into()),
@@ -232,6 +232,12 @@ fn main() {
             {
                 create_tray(app.handle())?;
             }
+            // Show mascot-only mode when ARW_MASCOT_ONLY=1
+            if env_bool("ARW_MASCOT_ONLY").unwrap_or(false) {
+                let _ = main.hide();
+                let _ = arw_tauri::open_mascot_window(app.handle().clone());
+            }
+
             // Auto-start service if ARW_AUTOSTART=1 or prefs say so
             let auto_env = env_bool("ARW_AUTOSTART").unwrap_or(false);
             let prefs = arw_tauri::load_prefs(Some("launcher"));

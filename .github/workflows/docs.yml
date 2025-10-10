@@ -20,6 +20,9 @@ on:
 permissions:
   contents: read
 
+env:
+  PIP_VERSION: 24.2
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -38,8 +41,8 @@ jobs:
           key: ${{ runner.os }}-pip-docs-${{ hashFiles('requirements/docs.txt') }}
       - name: Install mkdocs + plugins
         run: |
-          pip install --upgrade pip
-          pip install -r requirements/docs.txt
+          python -m pip install "pip==${PIP_VERSION}"
+          python -m pip install -r requirements/docs.txt
       - name: Build docs
         run: mkdocs build --strict
 
@@ -66,7 +69,8 @@ jobs:
           key: ${{ runner.os }}-pip-docs-${{ hashFiles('requirements/docs.txt') }}
       - name: Install mkdocs + mike
         run: |
-          pip install -r requirements/docs.txt
+          python -m pip install "pip==${PIP_VERSION}"
+          python -m pip install -r requirements/docs.txt
       - name: Configure git
         run: |
           git config user.name "github-actions[bot]"
@@ -93,7 +97,8 @@ jobs:
           key: ${{ runner.os }}-pip-docs-${{ hashFiles('requirements/docs.txt') }}
       - name: Install mkdocs
         run: |
-          pip install -r requirements/docs.txt
+          python -m pip install "pip==${PIP_VERSION}"
+          python -m pip install -r requirements/docs.txt
       - name: Build docs
         run: mkdocs build --strict
       - name: Serve docs

@@ -1348,6 +1348,11 @@ async function loadPrefs() {
   const mascotToggle = document.getElementById('mascotEnabled');
   const openMascotBtn = document.getElementById('btn-open-mascot');
   const supportMascotBtn = document.getElementById('btn-mascot');
+  const mascotIntensity = document.getElementById('mascotIntensity');
+  const mascotClickThrough = document.getElementById('mascotClickThrough');
+  const mascotSnapWindows = document.getElementById('mascotSnapWindows');
+  const mascotQuietMode = document.getElementById('mascotQuietMode');
+  const mascotCompactMode = document.getElementById('mascotCompactMode');
   const resolvedMascotEnabled =
     mascotPrefs && typeof mascotPrefs.enabled === 'boolean'
       ? !!mascotPrefs.enabled
@@ -1364,6 +1369,32 @@ async function loadPrefs() {
       mascotToggle.removeAttribute('title');
     }
   }
+  // Apply stored mascot prefs
+  const intensity = (mascotPrefs && typeof mascotPrefs.intensity === 'string') ? mascotPrefs.intensity : 'normal';
+  const clickThrough = mascotPrefs && typeof mascotPrefs.clickThrough === 'boolean' ? !!mascotPrefs.clickThrough : true;
+  const snapWindows = mascotPrefs && typeof mascotPrefs.snapWindows === 'boolean' ? !!mascotPrefs.snapWindows : true;
+  const quietMode = mascotPrefs && typeof mascotPrefs.quietMode === 'boolean' ? !!mascotPrefs.quietMode : false;
+  const compactMode = mascotPrefs && typeof mascotPrefs.compactMode === 'boolean' ? !!mascotPrefs.compactMode : false;
+  if (mascotIntensity) mascotIntensity.value = intensity;
+  if (mascotClickThrough) mascotClickThrough.checked = clickThrough;
+  if (mascotSnapWindows) mascotSnapWindows.checked = snapWindows;
+  if (mascotQuietMode) mascotQuietMode.checked = quietMode;
+  if (mascotCompactMode) mascotCompactMode.checked = compactMode;
+
+  const sendMascotConfig = async () => {
+    try {
+      if (window.__TAURI__?.event?.emit) {
+        await window.__TAURI__.event.emit('mascot:config', {
+          allowInteractions: !(mascotClickThrough && mascotClickThrough.checked),
+          intensity: mascotIntensity ? mascotIntensity.value : 'normal',
+          snapWindows: mascotSnapWindows ? !!mascotSnapWindows.checked : true,
+          quietMode: mascotQuietMode ? !!mascotQuietMode.checked : false,
+          compactMode: mascotCompactMode ? !!mascotCompactMode.checked : false,
+        });
+      }
+    } catch (err) { console.error(err); }
+  };
+
   const wireOpenButton = (button) => {
     if (!button) return;
     if (!IS_DESKTOP) {
@@ -1379,6 +1410,7 @@ async function loadPrefs() {
       await ensureMascotWindow({ focus: true, force: true });
       mascotChecklistState = composeMascotMood('ready', 'Mascot on duty.');
       applyMascotMood();
+      await sendMascotConfig();
     });
   };
   wireOpenButton(openMascotBtn);
@@ -1388,6 +1420,7 @@ async function loadPrefs() {
       await ensureMascotWindow({ force: true });
       mascotChecklistState = composeMascotMood('thinking', 'Launcher starting…');
       applyMascotMood();
+      await sendMascotConfig();
     } else {
       await closeMascotWindow();
       mascotChecklistState = null;
@@ -1426,13 +1459,33 @@ async function savePrefs() {
   const mascotToggle = document.getElementById('mascotEnabled');
   const desiredMascot = !!(mascotToggle && mascotToggle.checked);
   try {
-    await ARW.setPrefs('mascot', { enabled: desiredMascot });
+    const prefs = {
+      enabled: desiredMascot,
+      intensity: (document.getElementById('mascotIntensity') || {}).value || 'normal',
+      clickThrough: !!(document.getElementById('mascotClickThrough') || { checked: true }).checked,
+      snapWindows: !!(document.getElementById('mascotSnapWindows') || { checked: true }).checked,
+      quietMode: !!(document.getElementById('mascotQuietMode') || { checked: false }).checked,
+      compactMode: !!(document.getElementById('mascotCompactMode') || { checked: false }).checked,
+    };
+    await ARW.setPrefs('mascot', prefs);
     mascotEnabled = desiredMascot;
     if (desiredMascot) {
       await ensureMascotWindow({ force: true });
       mascotChecklistState = composeMascotMood('thinking', 'Mascot enabled — gathering status…');
       initMascotSseSubscription();
       applyMascotMood();
+      // Send config to mascot
+      try{
+        if (window.__TAURI__?.event?.emit) {
+          await window.__TAURI__.event.emit('mascot:config', {
+            allowInteractions: !prefs.clickThrough,
+            intensity: prefs.intensity,
+            snapWindows: prefs.snapWindows,
+            quietMode: prefs.quietMode,
+            compactMode: prefs.compactMode,
+          });
+        }
+      }catch{}
     } else {
       await closeMascotWindow();
       mascotChecklistState = null;

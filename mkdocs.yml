@@ -69,6 +69,7 @@ nav:
       - Network Posture: guide/network_posture.md
       - Egress Settings: guide/egress_settings.md
       - Desktop Launcher: guide/launcher.md
+      - Mascot Overlay: guide/mascot_overlay.md
       - Windows:
           - Install & Launcher: guide/windows_install.md
           - Download (x64 MSI): https://github.com/t3hw00t/ARW/releases/latest/download/arw-launcher-x64.msi

@@ -63,4 +63,6 @@ jobs:
 
       - name: No NPM token, skipping publish
         if: ${{ secrets.NPM_TOKEN == '' }}
-        run: echo "NPM_TOKEN not set; skipping publish." && exit 0
+        run: |
+          echo "::error::NPM_TOKEN not set; aborting publish."
+          exit 1

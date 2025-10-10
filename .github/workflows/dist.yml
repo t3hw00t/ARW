@@ -88,6 +88,8 @@ jobs:
     permissions:
       contents: read
       actions: write
+    env:
+      PIP_VERSION: 24.2
     steps:
       - name: Checkout
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5
@@ -98,7 +100,7 @@ jobs:
           python-version: '3.12'
 
       - name: Install pip-tools
-        run: python -m pip install --upgrade pip
+        run: python -m pip install "pip==${PIP_VERSION}" pip-tools
 
       - name: Build docs wheels archive
         run: bash scripts/build_docs_wheels.sh --archive dist/docs-wheels.tar.gz

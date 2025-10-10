@@ -42,8 +42,26 @@
         <rect class="eye" x="107" y="95" rx="3" ry="3" width="18" height="3"/>
         <circle class="mouth" cx="100" cy="118" r="5"/>
       </svg>
+      <span class="status-pill" id="mascotStatus" aria-live="polite" aria-label="Mascot status"></span>
       <div class="hint" id="mascotHint" aria-live="polite"></div>
+      <div class="menu-wrap" id="mascotMenu" hidden>
+        <div class="menu" role="menu" aria-label="Mascot actions">
+          <button type="button" role="menuitem" data-action="open-chat">Open Conversations</button>
+          <button type="button" role="menuitem" data-action="open-debug">Open Debug UI</button>
+          <button type="button" role="menuitem" data-action="start-service">Start Service</button>
+          <button type="button" role="menuitem" data-action="stop-service">Stop Service</button>
+          <button type="button" role="menuitem" data-action="open-logs">Open Logs</button>
+          <hr/>
+          <button type="button" role="menuitem" data-action="toggle-quiet">Toggle Quiet Mode</button>
+          <button type="button" role="menuitem" data-action="toggle-compact">Toggle Compact Mode</button>
+          <hr/>
+          <button type="button" role="menuitem" data-action="dock-left">Dock Left</button>
+          <button type="button" role="menuitem" data-action="dock-right">Dock Right</button>
+          <button type="button" role="menuitem" data-action="dock-bottom-right">Dock Bottom‑Right</button>
+          <button type="button" role="menuitem" data-action="reset">Reset Position</button>
+        </div>
+      </div>
+      <button class="menu-toggle" id="mascotMenuToggle" aria-haspopup="menu" aria-controls="mascotMenu" aria-expanded="false" title="Actions (toggle with M)">• • •</button>
     </div>
   </body>
   </html>
-

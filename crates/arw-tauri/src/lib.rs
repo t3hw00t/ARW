@@ -876,6 +876,8 @@ mod cmds {
         } else if let Some(w) = app.get_webview_window(label) {
             let _ = w.set_focus();
         }
+        // Nudge into view in case monitors changed
+        let _ = ensure_window_in_view(app.clone(), Some(label.to_string()));
         Ok(())
     }
 
@@ -885,6 +887,362 @@ mod cmds {
             window.close().map_err(|e| e.to_string())?;
         }
         Ok(())
+    }
+
+    fn ensure_window_in_view<R: tauri::Runtime>(
+        app: tauri::AppHandle<R>,
+        label: Option<String>,
+    ) -> Result<(), String> {
+        let id = label.unwrap_or_else(|| "mascot".into());
+        let Some(w) = app.get_webview_window(&id) else {
+            return Err("no window".into());
+        };
+        let pos = w.outer_position().map_err(|e| e.to_string())?;
+        let size = w.outer_size().map_err(|e| e.to_string())?;
+        let win_w = i32::try_from(size.width).unwrap_or(200);
+        let win_h = i32::try_from(size.height).unwrap_or(200);
+        let mon = w
+            .current_monitor()
+            .ok()
+            .flatten()
+            .or_else(|| app.primary_monitor().ok().flatten())
+            .ok_or_else(|| "no monitor".to_string())?;
+        let mx = mon.position().x;
+        let my = mon.position().y;
+        let mw = i32::try_from(mon.size().width).unwrap_or(1920);
+        let mh = i32::try_from(mon.size().height).unwrap_or(1080);
+        let min_x = mx;
+        let min_y = my;
+        let max_x = mx + mw - win_w;
+        let max_y = my + mh - win_h;
+        let nx = pos.x.clamp(min_x, max_x);
+        let ny = pos.y.clamp(min_y, max_y);
+        if nx != pos.x || ny != pos.y {
+            w.set_position(tauri::PhysicalPosition::new(nx, ny))
+                .map_err(|e| e.to_string())?;
+        }
+        Ok(())
+    }
+
+    #[tauri::command]
+    pub fn snap_window_to_edges<R: tauri::Runtime>(
+        app: tauri::AppHandle<R>,
+        label: Option<String>,
+        threshold: Option<i32>,
+        margin: Option<i32>,
+    ) -> Result<(), String> {
+        let id = label.unwrap_or_else(|| "mascot".into());
+        let Some(w) = app.get_webview_window(&id) else {
+            return Err("no window".into());
+        };
+
+        let pos = w.outer_position().map_err(|e| e.to_string())?;
+        let size = w.outer_size().map_err(|e| e.to_string())?;
+        let mon = w
+            .current_monitor()
+            .map_err(|e| e.to_string())?
+            .ok_or_else(|| "no monitor".to_string())?;
+
+        let t = threshold.unwrap_or(24).max(0);
+        let m = margin.unwrap_or(8).max(0);
+
+        let win_w = i32::try_from(size.width).unwrap_or(200);
+        let win_h = i32::try_from(size.height).unwrap_or(200);
+        let mon_x = mon.position().x;
+        let mon_y = mon.position().y;
+        let mon_w = i32::try_from(mon.size().width).unwrap_or(1920);
+        let mon_h = i32::try_from(mon.size().height).unwrap_or(1080);
+
+        let left = mon_x + m;
+        let right = mon_x + mon_w - win_w - m;
+        let top = mon_y + m;
+        let bottom = mon_y + mon_h - win_h - m;
+
+        let mut x = pos.x;
+        let mut y = pos.y;
+
+        let dist_left = (pos.x - left).abs();
+        let dist_right = (pos.x - right).abs();
+        let dist_top = (pos.y - top).abs();
+        let dist_bottom = (pos.y - bottom).abs();
+
+        if dist_left.min(dist_right) <= t {
+            x = if dist_left <= dist_right { left } else { right };
+        }
+        if dist_top.min(dist_bottom) <= t {
+            y = if dist_top <= dist_bottom { top } else { bottom };
+        }
+
+        // Clamp inside monitor bounds regardless
+        x = x.clamp(left, right);
+        y = y.clamp(top, bottom);
+
+        w.set_position(tauri::PhysicalPosition::new(x, y))
+            .map_err(|e| e.to_string())?;
+        Ok(())
+    }
+
+    #[tauri::command]
+    pub fn snap_window_to_surfaces<R: tauri::Runtime>(
+        app: tauri::AppHandle<R>,
+        label: Option<String>,
+        threshold: Option<i32>,
+        margin: Option<i32>,
+    ) -> Result<(), String> {
+        let id = label.unwrap_or_else(|| "mascot".into());
+        let Some(w) = app.get_webview_window(&id) else {
+            return Err("no window".into());
+        };
+
+        let pos = w.outer_position().map_err(|e| e.to_string())?;
+        let size = w.outer_size().map_err(|e| e.to_string())?;
+        let win_w = i32::try_from(size.width).unwrap_or(200);
+        let win_h = i32::try_from(size.height).unwrap_or(200);
+        let t = threshold.unwrap_or(28).max(0);
+        let m = margin.unwrap_or(8).max(0);
+
+        // Gather other windows' bounds
+        let mut best_delta = i32::MAX;
+        let mut best_pos = (pos.x, pos.y);
+        for (other_id, other) in app.webview_windows() {
+            if other_id == id {
+                continue;
+            }
+            if let (Ok(op), Ok(os)) = (other.outer_position(), other.outer_size()) {
+                let ox = op.x;
+                let oy = op.y;
+                let ow = i32::try_from(os.width).unwrap_or(400);
+                let oh = i32::try_from(os.height).unwrap_or(300);
+                let left = ox;
+                let right = ox + ow;
+                let top = oy;
+                let bottom = oy + oh;
+                // Candidate positions: left, right, top, bottom surfaces
+                let candidates: [(i32, i32); 4] = [
+                    (left - win_w - m, pos.y),
+                    (right + m, pos.y),
+                    (pos.x, top - win_h - m),
+                    (pos.x, bottom + m),
+                ];
+                for &(cx, cy) in &candidates {
+                    let dx = (pos.x - cx).abs();
+                    let dy = (pos.y - cy).abs();
+                    let delta = dx.saturating_add(dy);
+                    if delta < best_delta && (dx <= t || dy <= t) {
+                        // snap; also clamp Y within other vertical range when snapping to left/right
+                        let mut nx = cx;
+                        let mut ny = cy;
+                        if cx != pos.x {
+                            // snapping horizontally
+                            let min_y = top;
+                            let max_y = bottom - win_h; // keep in vertical band
+                            ny = ny.clamp(min_y, max_y);
+                        } else {
+                            // snapping vertically
+                            let min_x = left;
+                            let max_x = right - win_w;
+                            nx = nx.clamp(min_x, max_x);
+                        }
+                        best_delta = delta;
+                        best_pos = (nx, ny);
+                    }
+                }
+            }
+        }
+
+        // If no window snap applied, fall back to edge snap
+        if best_delta == i32::MAX {
+            return snap_window_to_edges(app, Some(id), Some(t), Some(m));
+        }
+
+        w.set_position(tauri::PhysicalPosition::new(best_pos.0, best_pos.1))
+            .map_err(|e| e.to_string())?;
+        Ok(())
+    }
+
+    #[tauri::command]
+    pub fn position_window<R: tauri::Runtime>(
+        app: tauri::AppHandle<R>,
+        label: Option<String>,
+        anchor: String,
+        margin: Option<i32>,
+    ) -> Result<(), String> {
+        let id = label.unwrap_or_else(|| "mascot".into());
+        let Some(w) = app.get_webview_window(&id) else {
+            return Err("no window".into());
+        };
+        let size = w.outer_size().map_err(|e| e.to_string())?;
+        let win_w = i32::try_from(size.width).unwrap_or(200);
+        let win_h = i32::try_from(size.height).unwrap_or(200);
+        let m = margin.unwrap_or(8).max(0);
+        let mon = w
+            .current_monitor()
+            .ok()
+            .flatten()
+            .or_else(|| app.primary_monitor().ok().flatten())
+            .ok_or_else(|| "no monitor".to_string())?;
+        let mx = mon.position().x;
+        let my = mon.position().y;
+        let mw = i32::try_from(mon.size().width).unwrap_or(1920);
+        let mh = i32::try_from(mon.size().height).unwrap_or(1080);
+        let left = mx + m;
+        let top = my + m;
+        let right = mx + mw - win_w - m;
+        let bottom = my + mh - win_h - m;
+        let anchor = anchor.to_lowercase();
+        let (x, y) = match anchor.as_str() {
+            "left" => (left, (top + bottom) / 2),
+            "right" => (right, (top + bottom) / 2),
+            "top" => ((left + right) / 2, top),
+            "bottom" => ((left + right) / 2, bottom),
+            "top-left" => (left, top),
+            "top-right" => (right, top),
+            "bottom-left" => (left, bottom),
+            _ => (right, bottom), // default bottom-right
+        };
+        w.set_position(tauri::PhysicalPosition::new(x, y))
+            .map_err(|e| e.to_string())?;
+        Ok(())
+    }
+
+    #[tauri::command]
+    pub fn smart_snap_window<R: tauri::Runtime>(
+        app: tauri::AppHandle<R>,
+        label: Option<String>,
+        pointer_x: Option<i32>,
+        pointer_y: Option<i32>,
+        margin: Option<i32>,
+        preview_only: Option<bool>,
+        snap_to_surfaces: Option<bool>,
+    ) -> Result<String, String> {
+        let id = label.clone().unwrap_or_else(|| "mascot".into());
+        let Some(window) = app.get_webview_window(&id) else {
+            return Err("no window".into());
+        };
+
+        let pos = window.outer_position().map_err(|e| e.to_string())?;
+        let size = window.outer_size().map_err(|e| e.to_string())?;
+        let win_w = i32::try_from(size.width).unwrap_or(200);
+        let win_h = i32::try_from(size.height).unwrap_or(200);
+
+        let margin = margin.unwrap_or(12).max(0);
+
+        let mut monitors = app.available_monitors().map_err(|e| e.to_string())?;
+        if monitors.is_empty() {
+            if let Ok(mon) = window.current_monitor() {
+                if let Some(mon) = mon {
+                    monitors.push(mon);
+                }
+            }
+        }
+        if monitors.is_empty() {
+            if let Ok(mon) = app.primary_monitor() {
+                if let Some(mon) = mon {
+                    monitors.push(mon);
+                }
+            }
+        }
+
+        let pointer = match (pointer_x, pointer_y) {
+            (Some(x), Some(y)) => (x, y),
+            _ => (pos.x + win_w / 2, pos.y + win_h / 2),
+        };
+
+        let mut monitor = monitors.iter().find(|m| {
+            let rect = m.position();
+            let size = m.size();
+            pointer.0 >= rect.x
+                && pointer.0 <= rect.x + i32::try_from(size.width).unwrap_or(0)
+                && pointer.1 >= rect.y
+                && pointer.1 <= rect.y + i32::try_from(size.height).unwrap_or(0)
+        });
+
+        if monitor.is_none() {
+            monitor = monitors.iter().min_by_key(|m| {
+                let rect = m.position();
+                let size = m.size();
+                let cx = rect.x + i32::try_from(size.width).unwrap_or(0) / 2;
+                let cy = rect.y + i32::try_from(size.height).unwrap_or(0) / 2;
+                let dx = pointer.0 - cx;
+                let dy = pointer.1 - cy;
+                dx.saturating_mul(dx) + dy.saturating_mul(dy)
+            });
+        }
+
+        let monitor = monitor.ok_or_else(|| "no monitors".to_string())?;
+        let rect = monitor.position();
+        let size = monitor.size();
+        let mon_w = i32::try_from(size.width).unwrap_or(1920);
+        let mon_h = i32::try_from(size.height).unwrap_or(1080);
+
+        let rel_x = ((pointer.0 - rect.x) as f32 / mon_w.max(1) as f32).clamp(0.0, 1.0);
+        let rel_y = ((pointer.1 - rect.y) as f32 / mon_h.max(1) as f32).clamp(0.0, 1.0);
+
+        let edge_threshold = 0.22f32;
+        let corner_threshold = 0.18f32;
+
+        let mut anchor = "bottom-right".to_string();
+
+        if rel_x <= corner_threshold && rel_y <= corner_threshold {
+            anchor = "top-left".into();
+        } else if rel_x >= 1.0 - corner_threshold && rel_y <= corner_threshold {
+            anchor = "top-right".into();
+        } else if rel_x <= corner_threshold && rel_y >= 1.0 - corner_threshold {
+            anchor = "bottom-left".into();
+        } else if rel_x >= 1.0 - corner_threshold && rel_y >= 1.0 - corner_threshold {
+            anchor = "bottom-right".into();
+        } else if rel_y <= edge_threshold {
+            anchor = "top".into();
+        } else if rel_y >= 1.0 - edge_threshold {
+            anchor = "bottom".into();
+        } else if rel_x <= edge_threshold {
+            anchor = "left".into();
+        } else if rel_x >= 1.0 - edge_threshold {
+            anchor = "right".into();
+        }
+
+        let x_range = (rect.x + margin, rect.x + mon_w - win_w - margin);
+        let y_range = (rect.y + margin, rect.y + mon_h - win_h - margin);
+
+        let (next_x, next_y) = match anchor.as_str() {
+            "top-left" => (x_range.0, y_range.0),
+            "top-right" => (x_range.1, y_range.0),
+            "bottom-left" => (x_range.0, y_range.1),
+            "left" => (
+                x_range.0,
+                (pointer.1 - win_h / 2).clamp(y_range.0, y_range.1),
+            ),
+            "right" => (
+                x_range.1,
+                (pointer.1 - win_h / 2).clamp(y_range.0, y_range.1),
+            ),
+            "top" => (
+                (pointer.0 - win_w / 2).clamp(x_range.0, x_range.1),
+                y_range.0,
+            ),
+            "bottom" => (
+                (pointer.0 - win_w / 2).clamp(x_range.0, x_range.1),
+                y_range.1,
+            ),
+            "bottom-right" => (x_range.1, y_range.1),
+            _ => (
+                (pointer.0 - win_w / 2).clamp(x_range.0, x_range.1),
+                (pointer.1 - win_h / 2).clamp(y_range.0, y_range.1),
+            ),
+        };
+
+        let preview = preview_only.unwrap_or(false);
+        if !preview {
+            window
+                .set_position(tauri::PhysicalPosition::new(next_x, next_y))
+                .map_err(|e| e.to_string())?;
+
+            if snap_to_surfaces.unwrap_or(true) {
+                let _ = snap_window_to_surfaces(app.clone(), label, Some(28), Some(margin));
+            }
+        }
+
+        Ok(anchor)
     }
 
     #[tauri::command]
@@ -1876,6 +2234,10 @@ mod cmds {
                 open_trial_window,
                 open_mascot_window,
                 close_mascot_window,
+                snap_window_to_edges,
+                snap_window_to_surfaces,
+                position_window,
+                smart_snap_window,
                 run_trials_preflight,
                 models_summary,
                 models_concurrency_get,

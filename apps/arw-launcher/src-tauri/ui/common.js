@@ -1859,6 +1859,22 @@ window.ARW.sse.subscribe('state.read.model.patch', ({ env }) => {
     document.body.appendChild(wrap);
     this._wrap = wrap; this._input = inp; this._list = ul;
     const base = opts.base;
+    const emitMascotConfig = async () => {
+      try {
+        const prefs = await ARW.getPrefs('mascot') || {};
+        if (window.__TAURI__?.event?.emit) {
+          await window.__TAURI__.event.emit('mascot:config', {
+            allowInteractions: !(prefs.clickThrough ?? true),
+            intensity: prefs.intensity || 'normal',
+            snapWindows: prefs.snapWindows !== false,
+            quietMode: !!prefs.quietMode,
+            compactMode: !!prefs.compactMode,
+          });
+        }
+      } catch (err) {
+        console.error(err);
+      }
+    };
     this._actions = [
       { id:'open:hub', label:'Open Projects workspace', hint:'window', run:()=> ARW.invoke('open_hub_window') },
       { id:'open:chat', label:'Open Conversations workspace', hint:'window', run:()=> ARW.invoke('open_chat_window') },
@@ -1866,6 +1882,35 @@ window.ARW.sse.subscribe('state.read.model.patch', ({ env }) => {
       { id:'open:debug', label:'Open Debug (Window)', hint:'window', run:()=> ARW.invoke('open_debug_window', { port: ARW.getPortFromInput('port') }) },
       { id:'open:events', label:'Open Events Window', hint:'window', run:()=> ARW.invoke('open_events_window') },
       { id:'open:docs', label:'Open Docs Website', hint:'web', run:()=> ARW.invoke('open_url', { url: 'https://t3hw00t.github.io/ARW/' }) },
+      { id:'mascot:show', label:'Show Mascot Overlay', hint:'window', run: async ()=> { try { await ARW.invoke('open_mascot_window'); await emitMascotConfig(); } catch(e){ console.error(e); } } },
+      { id:'mascot:toggle-interactions', label:'Toggle Mascot Interactions (Ctrl/⌘+D)', hint:'action', run: async ()=> { try { document.dispatchEvent(new KeyboardEvent('keydown', { key: 'd', ctrlKey: !navigator.platform.includes('Mac'), metaKey: navigator.platform.includes('Mac') })); } catch(e){ console.error(e); } } },
+      { id:'mascot:dock-left', label:'Dock Mascot Left', hint:'window', run:()=> ARW.invoke('position_window', { label:'mascot', anchor:'left', margin: 12 }) },
+      { id:'mascot:dock-right', label:'Dock Mascot Right', hint:'window', run:()=> ARW.invoke('position_window', { label:'mascot', anchor:'right', margin: 12 }) },
+      { id:'mascot:dock-bottom-right', label:'Dock Mascot Bottom‑Right', hint:'window', run:()=> ARW.invoke('position_window', { label:'mascot', anchor:'bottom-right', margin: 12 }) },
+      { id:'mascot:toggle-quiet', label:'Toggle Mascot Quiet Mode', hint:'action', run: async ()=>{
+          try {
+            const prefs = await ARW.getPrefs('mascot') || {};
+            prefs.quietMode = !(prefs.quietMode ?? false);
+            await ARW.setPrefs('mascot', prefs);
+            await emitMascotConfig();
+            ARW.toast(`Mascot quiet mode ${prefs.quietMode ? 'on' : 'off'}`);
+          } catch (err) {
+            console.error(err);
+          }
+        }
+      },
+      { id:'mascot:toggle-compact', label:'Toggle Mascot Compact Mode', hint:'action', run: async ()=>{
+          try {
+            const prefs = await ARW.getPrefs('mascot') || {};
+            prefs.compactMode = !(prefs.compactMode ?? false);
+            await ARW.setPrefs('mascot', prefs);
+            await emitMascotConfig();
+            ARW.toast(`Mascot compact mode ${prefs.compactMode ? 'on' : 'off'}`);
+          } catch (err) {
+            console.error(err);
+          }
+        }
+      },
       { id:'models:refresh', label:'Refresh Models', hint:'action', run:()=> ARW.invoke('models_refresh', { port: ARW.getPortFromInput('port') }) },
           { id:'sse:replay', label:'Replay SSE (50)', hint:'sse', run:()=> {
               const meta = ARW.baseMeta(ARW.getPortFromInput('port'));

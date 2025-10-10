@@ -152,6 +152,51 @@
                     </label>
                     <button id="btn-open-mascot" class="ghost mini" type="button" aria-label="Show mascot overlay">Show now</button>
                   </div>
+                  <div class="pref-field" id="mascotSettings">
+                    <label for="mascotIntensity">Mascot idle intensity</label>
+                    <select id="mascotIntensity" aria-label="Mascot idle intensity">
+                      <option value="low">Low</option>
+                      <option value="normal" selected>Normal</option>
+                      <option value="high">High</option>
+                    </select>
+                    <p class="field-note">Controls how often the mascot makes small idle movements.</p>
+                    <div class="pref-toggle">
+                      <label>
+                        <input id="mascotClickThrough" type="checkbox" checked />
+                        <span>
+                          <strong>Click‑through by default</strong>
+                          <small>Enable Ctrl/⌘+D to interact and drag.</small>
+                        </span>
+                      </label>
+                    </div>
+                    <div class="pref-toggle">
+                      <label>
+                        <input id="mascotSnapWindows" type="checkbox" checked />
+                        <span>
+                          <strong>Snap to window surfaces</strong>
+                          <small>Stick to sides of ARW windows after dragging.</small>
+                        </span>
+                      </label>
+                    </div>
+                    <div class="pref-toggle">
+                      <label>
+                        <input id="mascotQuietMode" type="checkbox" />
+                        <span>
+                          <strong>Quiet mode</strong>
+                          <small>Reduce flares, idle motions, and snap feedback.</small>
+                        </span>
+                      </label>
+                    </div>
+                    <div class="pref-toggle">
+                      <label>
+                        <input id="mascotCompactMode" type="checkbox" />
+                        <span>
+                          <strong>Compact mode</strong>
+                          <small>Shrink the mascot to a minimal badge.</small>
+                        </span>
+                      </label>
+                    </div>
+                  </div>
                   <div class="pref-field">
                     <label for="connectionSelect">Active connection</label>
                     <div class="connection-select">
