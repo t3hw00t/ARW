@@ -30,7 +30,7 @@
         </div>
         <div class="logs-status">
           <span id="statusBadges" class="badges"></span>
-          <div class="logs-metrics badges">
+          <div class="logs-metrics badges" data-mode="expert-only">
             <span id="cpuBadge" class="badge">CPU: –</span>
             <span id="memBadge" class="badge">Mem: –</span>
             <span id="gpuBadge" class="badge">GPU: –</span>
@@ -46,6 +46,8 @@
         </span>
         <button id="btn-base-callout" class="ghost mini" type="button" aria-label="Open network hardening guide">Network guide</button>
       </div>
+      <p class="logs-intro dim" data-mode="guided-only">Guided mode highlights the latest route snapshot and live tail only. Switch to Expert mode to unlock filters, SLO controls, and probe metrics for deeper triage.</p>
+      <p class="logs-intro dim" data-mode="expert-only">Expert mode keeps the full toolbox open: filter routes, adjust SLOs, export data, and watch live probe metrics alongside the service tail.</p>
       <main class="logs-main">
         <section class="card logs-controls" role="region" aria-labelledby="logsControlsTitle">
           <div class="logs-controls-head">
@@ -60,7 +62,7 @@
             <label>Route filter
               <input id="routeFilter" aria-label="Route filter" type="text" placeholder="route contains…">
             </label>
-            <label>SLO p95 (ms)
+            <label data-mode="expert-only">SLO p95 (ms)
               <input id="slo" aria-label="SLO threshold" type="number" min="10" step="10" value="150">
             </label>
           </div>

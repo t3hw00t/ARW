@@ -35,6 +35,28 @@ body.has-global-bar .connections-wrap{
   flex-wrap:wrap;
   gap: var(--sp2);
 }
+.connections-guide{
+  margin: var(--sp3) 0;
+  padding: var(--sp3);
+  border:1px dashed rgba(148,163,184,0.45);
+  border-radius:12px;
+  background: linear-gradient(180deg,#ffffff,#f9fbfd);
+}
+.connections-guide p{
+  margin:0 0 var(--sp2);
+  font-size:0.9rem;
+  max-width:60ch;
+  color: var(--color-muted);
+}
+.connections-guide ol{
+  margin:0;
+  padding-left: var(--sp4);
+  display:flex;
+  flex-direction:column;
+  gap: var(--sp1);
+  font-size:0.9rem;
+  color: var(--color-muted);
+}
 .connections-main{
   display:grid;
   gap: var(--sp4);

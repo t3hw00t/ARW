@@ -33,6 +33,30 @@ body.has-global-bar .launcher-wrap{
   color: var(--color-muted);
   max-width:60ch;
 }
+.hero-summary{
+  margin:0;
+  padding-left:1.2rem;
+  display:grid;
+  gap:6px;
+  font-size:0.95rem;
+  color: var(--color-muted);
+}
+.hero-summary li{
+  line-height:1.4;
+}
+.section-tag{
+  display:inline-flex;
+  align-items:center;
+  gap:6px;
+  padding:4px 10px;
+  border-radius:999px;
+  border:1px solid rgba(148,163,184,0.4);
+  font-size:0.72rem;
+  letter-spacing:0.12em;
+  text-transform:uppercase;
+  background: linear-gradient(180deg,#ffffff,#f6f7f9);
+  color: var(--color-muted);
+}
 .hero-heading{
   display:flex;
   flex-direction:column;
@@ -221,6 +245,69 @@ body.has-global-bar .launcher-wrap{
   flex-wrap:wrap;
   gap: var(--sp2);
 }
+.quickstart{
+  display:grid;
+  gap: var(--sp4);
+}
+.quickstart-steps{
+  list-style:none;
+  margin:0;
+  padding:0;
+  display:grid;
+  gap: var(--sp4);
+}
+.quickstart-step{
+  display:grid;
+  gap: var(--sp3);
+  border:1px solid rgba(148,163,184,0.2);
+  border-radius:12px;
+  padding: var(--sp4);
+  background: linear-gradient(180deg,#ffffff,#fdfdfd);
+  box-shadow: 0 10px 36px rgba(15,23,42,0.06);
+}
+.step-head{
+  display:flex;
+  gap: var(--sp3);
+  align-items:flex-start;
+}
+.step-index{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  min-width:36px;
+  height:36px;
+  border-radius:999px;
+  background: rgba(var(--brand-copper-rgb),0.12);
+  color: var(--color-brand-copper);
+  font-weight:600;
+  font-size:1.05rem;
+  box-shadow: 0 1px 0 rgba(255,255,255,0.92) inset;
+}
+.step-body{
+  display:grid;
+  gap: var(--sp3);
+}
+.step-hint{
+  margin:0;
+  font-size:0.85rem;
+  max-width:60ch;
+}
+.step-columns{
+  display:grid;
+  gap: var(--sp4);
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+}
+.step-column{
+  display:grid;
+  gap: var(--sp3);
+}
+.step-column h4{
+  margin:0;
+  font-size:0.95rem;
+  text-transform:uppercase;
+  letter-spacing:0.08em;
+  color: var(--color-muted);
+}
 .launcher-grid{
   display:grid;
   gap: var(--sp4);
@@ -302,6 +389,9 @@ body.has-global-bar .launcher-wrap{
   .hero-meta{
     grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
   }
+  .step-columns{
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  }
 }
 @media (max-width: 720px){
   .launcher-grid{
@@ -310,7 +400,13 @@ body.has-global-bar .launcher-wrap{
   .hero-head h1{
     font-size:1.5rem;
   }
+  .quickstart-step{
+    padding: var(--sp3);
+  }
 }
 @media (prefers-contrast: more){
   #prefsStatus{ font-weight:600; }
+  .step-index{
+    border:1px solid currentColor;
+  }
 }

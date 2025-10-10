@@ -25,6 +25,8 @@
   let visibilityHandlerAttached = false;
   let baseMeta = null;
   const updateBaseMeta = () => ARW.applyBaseMeta({ portInputId: 'port', badgeId: 'baseBadge', label: 'Base' });
+  let activeMode = (window.ARW?.mode?.current === 'expert') ? 'expert' : 'guided';
+  let autoLoopsRunning = false;
 
   const STATE = {
     systems: { level: 'unknown', summary: 'Loading...', meta: [] },
@@ -95,9 +97,50 @@
     connectionsRestore: null,
   };
 
+  function applyMode(mode, { force = false } = {}) {
+    const normalized = mode === 'expert' ? 'expert' : 'guided';
+    if (!force && normalized === activeMode) return;
+    activeMode = normalized;
+    const hideExpert = normalized !== 'expert';
+    document.querySelectorAll('[data-mode="expert-only"]').forEach((el) => {
+      if (!(el instanceof HTMLElement)) return;
+      if (hideExpert) el.setAttribute('aria-hidden', 'true');
+      else el.removeAttribute('aria-hidden');
+    });
+    document.querySelectorAll('[data-mode="guided-only"]').forEach((el) => {
+      if (!(el instanceof HTMLElement)) return;
+      if (hideExpert) el.removeAttribute('aria-hidden');
+      else el.setAttribute('aria-hidden', 'true');
+    });
+    if (hideExpert) {
+      stopAutoRefreshLoops();
+      if (STATE.connectionsOpen) {
+        closeConnectionsDrawer();
+      }
+    }
+  }
+
   document.addEventListener('DOMContentLoaded', init); // eslint-disable-line no-undef
 
   async function init(){
+    applyMode(activeMode, { force: true });
+    if (ARW.mode && typeof ARW.mode.subscribe === 'function') {
+      ARW.mode.subscribe((modeValue) => {
+        const previous = activeMode;
+        applyMode(modeValue);
+        if (activeMode === 'expert') {
+          if (previous !== 'expert') {
+            refreshApprovalsLane(false);
+            refreshQuarantineLane(false);
+            refreshFeedbackDelta(false);
+            refreshConnectionsSnapshot({ showLoading: false });
+          }
+          startAutoRefreshLoops();
+        } else {
+          stopAutoRefreshLoops();
+        }
+      });
+    }
     try{ await ARW.applyPortFromPrefs('port'); }catch{}
     baseMeta = updateBaseMeta();
     try {
@@ -121,7 +164,9 @@
     try {
       await refresh();
     } finally {
-      startAutoRefreshLoops();
+      if (activeMode === 'expert') {
+        startAutoRefreshLoops();
+      }
       window.addEventListener('beforeunload', stopAutoRefreshLoops, { once: true });
     }
   }
@@ -438,6 +483,7 @@
   }
 
   function startAutoRefreshLoops(){
+    if (autoLoopsRunning || activeMode !== 'expert') return;
     stopAutoRefreshLoops();
     const approvalsLoop = () => {
       if (!document.hidden) refreshApprovalsLane(true);
@@ -472,15 +518,18 @@
     if (!visibilityHandlerAttached) {
       document.addEventListener('visibilitychange', () => {
         if (!document.hidden) {
-          approvalsLoop();
-          feedbackLoop();
-          connectionsLoop();
+          if (activeMode === 'expert') {
+            approvalsLoop();
+            feedbackLoop();
+            connectionsLoop();
+            quarantineLoop();
+          }
           autonomyLoop();
-          quarantineLoop();
         }
       });
       visibilityHandlerAttached = true;
     }
+    autoLoopsRunning = true;
   }
 
   function stopAutoRefreshLoops(){
@@ -504,9 +553,11 @@
       clearInterval(quarantineTimer);
       quarantineTimer = null;
     }
+    autoLoopsRunning = false;
   }
 
-async function refreshApprovalsLane(auto = false){
+  async function refreshApprovalsLane(auto = false){
+    if (activeMode !== 'expert') return;
     if (approvalsInflight || (auto && STATE.approvals.loading)) return;
     if (!STATE.base) {
       try {
@@ -534,6 +585,7 @@ async function refreshApprovalsLane(auto = false){
   }
 
   async function refreshFeedbackDelta(auto = false){
+    if (activeMode !== 'expert') return;
     if (feedbackInflight || (auto && STATE.feedback.loading)) return;
     if (!STATE.base) {
       try {
@@ -590,6 +642,7 @@ async function refreshApprovalsLane(auto = false){
   }
 
   async function refreshQuarantineLane(auto = false){
+    if (activeMode !== 'expert') return;
     if (quarantineInflight || (auto && STATE.quarantine.loading)) return;
     if (!STATE.base) {
       try {
@@ -632,6 +685,7 @@ async function refreshApprovalsLane(auto = false){
   }
 
   async function refreshConnectionsSnapshot({ auto = false, showLoading = false } = {}){
+    if (activeMode !== 'expert') return;
     if (connectionsInflight || (STATE.connections.loading && showLoading)) return;
     if (!STATE.base) {
       try {
@@ -2890,6 +2944,7 @@ function renderLists(){
   }
 
   function openConnectionsDrawer(){
+    if (activeMode !== 'expert') return;
     const overlay = document.getElementById('connectionsOverlay');
     const drawer = document.getElementById('connectionsDrawer');
     if (!overlay || !drawer) return;
@@ -2932,6 +2987,7 @@ function renderLists(){
   }
 
   async function refreshConnections(){
+    if (activeMode !== 'expert') return;
     if (!STATE.base) {
       const port = ARW.getPortFromInput('port');
       STATE.base = ARW.base(port);

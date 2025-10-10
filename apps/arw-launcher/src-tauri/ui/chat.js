@@ -1,12 +1,85 @@
 const updateBaseMeta = () => ARW.applyBaseMeta({ portInputId: 'port', badgeId: 'baseBadge', label: 'Base' });
 const CAN_CAPTURE = !!(ARW.env && ARW.env.isTauri);
+const LANES_EXPERT = ['timeline', 'approvals', 'context', 'provenance', 'policy', 'metrics', 'models'];
+const LANES_GUIDED = ['timeline', 'context', 'activity'];
+const dedupe = (lanes = []) => Array.from(new Set(lanes));
+const lanesForMode = (mode) => (mode === 'expert' ? dedupe(LANES_EXPERT) : dedupe(LANES_GUIDED));
+let activeMode = (window.ARW?.mode?.current === 'expert') ? 'expert' : 'guided';
+let sidecar = null;
+
+function mountSidecar({ base, lanes, force = false } = {}) {
+  const profile = dedupe(Array.isArray(lanes) && lanes.length ? lanes : lanesForMode(activeMode));
+  if (!force && sidecar && typeof sidecar.refresh === 'function') {
+    sidecar.refresh({ immediate: true, reason: 'mode-change' });
+    return;
+  }
+  try { sidecar?.dispose?.(); } catch {}
+  sidecar = ARW.sidecar.mount('sidecar', profile, { base });
+}
+
+function applyMode(mode, { base } = {}) {
+  const normalized = mode === 'expert' ? 'expert' : 'guided';
+  if (normalized === activeMode && base == null) {
+    return;
+  }
+  activeMode = normalized;
+  const hideExpert = normalized !== 'expert';
+  document.querySelectorAll('[data-mode="expert-only"]').forEach((el) => {
+    if (!(el instanceof HTMLElement)) return;
+    if (hideExpert) el.setAttribute('aria-hidden', 'true');
+    else el.removeAttribute('aria-hidden');
+  });
+  document.querySelectorAll('[data-mode="guided-only"]').forEach((el) => {
+    if (!(el instanceof HTMLElement)) return;
+    if (hideExpert) el.removeAttribute('aria-hidden');
+    else el.setAttribute('aria-hidden', 'true');
+  });
+  if (base) {
+    mountSidecar({ base, lanes: lanesForMode(activeMode), force: true });
+  }
+  refreshCompareAvailability();
+  refreshCaptureAvailability();
+}
+
+function refreshCaptureAvailability({ captureMenu, captureToggle, captureMenuList } = {}) {
+  const menu = captureMenu || document.getElementById('captureMenu');
+  const toggle = captureToggle || document.getElementById('captureToggle');
+  const list = captureMenuList || document.getElementById('captureMenuList');
+  if (!menu) return;
+  if (CAN_CAPTURE && activeMode === 'expert') {
+    menu.hidden = false;
+    if (toggle) toggle.disabled = false;
+  } else {
+    menu.hidden = true;
+    if (toggle) {
+      toggle.setAttribute('aria-expanded', 'false');
+      toggle.disabled = true;
+    }
+    if (list) list.hidden = true;
+  }
+}
+
+function refreshCompareAvailability() {
+  if (activeMode === 'expert') return;
+  const cmpA = document.getElementById('cmpAOut');
+  const cmpB = document.getElementById('cmpBOut');
+  const cmpOut = document.getElementById('cmpOut');
+  if (cmpA) cmpA.innerHTML = '';
+  if (cmpB) cmpB.innerHTML = '';
+  if (cmpOut) cmpOut.innerHTML = '';
+}
 
 document.addEventListener('DOMContentLoaded', async () => {
   await ARW.applyPortFromPrefs('port');
   let meta = updateBaseMeta();
   let port = ARW.getPortFromInput('port') || meta.port || 8091;
   let base = ARW.base(port);
-  let sc = ARW.sidecar.mount('sidecar', ['timeline','approvals','context','provenance','policy','metrics','models'], { base });
+  applyMode(activeMode, { base });
+  if (ARW.mode && typeof ARW.mode.subscribe === 'function') {
+    ARW.mode.subscribe((modeValue) => {
+      applyMode(modeValue, { base });
+    });
+  }
   const applyBaseChange = async () => {
     meta = updateBaseMeta();
     port = ARW.getPortFromInput('port') || meta.port || 8091;
@@ -18,8 +91,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         await ARW.setPrefs('launcher', prefs);
       }
     } catch {}
-    try { sc?.dispose?.(); } catch {}
-    sc = ARW.sidecar.mount('sidecar', ['timeline','approvals','context','provenance','policy','metrics','models'], { base });
+    mountSidecar({ base, lanes: lanesForMode(activeMode), force: true });
     ARW.sse.connect(base, { replay: 10 });
   };
   // Load auto OCR pref
@@ -67,9 +139,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         captureToggle.focus();
       }
     });
-  } else if (captureMenu) {
-    captureMenu.hidden = true;
   }
+  refreshCaptureAvailability({ captureMenu, captureToggle, captureMenuList });
 
   // Compare helpers
   function highlightJSON(s){
@@ -135,7 +206,15 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
   }
   if (CAN_CAPTURE) {
+    const captureAllowed = () => {
+      if (activeMode !== 'expert') {
+        ARW.toast('Enable Expert mode to use capture tools.');
+        return false;
+      }
+      return true;
+    };
     document.getElementById('capture').addEventListener('click', async ()=>{
+    if (!captureAllowed()) return;
     try{
       const portForTools = ARW.toolPort();
       const out = await ARW.invoke('run_tool_admin', { id: 'ui.screenshot.capture', input: { scope:'screen', format:'png', downscale:640 }, port: portForTools });
@@ -163,6 +242,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     }catch(e){ console.error(e); ARW.toastCaptureError(e, { scope: 'capture screen', lease: 'io:screenshot' }); }
   });
     document.getElementById('captureWin').addEventListener('click', async ()=>{
+    if (!captureAllowed()) return;
     try{
       const b = await ARW.invoke('active_window_bounds', { label: null });
       const scope = `region:${b?.x??0},${b?.y??0},${b?.w??0},${b?.h??0}`;
@@ -192,6 +272,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     }catch(e){ console.error(e); ARW.toastCaptureError(e, { scope: 'capture window', lease: 'io:screenshot' }); }
   });
     document.getElementById('captureRegion').addEventListener('click', async ()=>{
+    if (!captureAllowed()) return;
     try{
       const out = await ARW.region.captureAndSave();
       if (!out) return;
@@ -223,6 +304,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       composerFoot.appendChild(note);
     }
   }
+  refreshCaptureAvailability({ captureMenu, captureToggle, captureMenuList });
   document.getElementById('clearA').addEventListener('click', ()=> document.getElementById('cmpAOut').innerHTML='');
   document.getElementById('clearB').addEventListener('click', ()=> document.getElementById('cmpBOut').innerHTML='');
   document.getElementById('btn-diff').addEventListener('click', ()=>{

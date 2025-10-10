@@ -5,6 +5,7 @@ const updateBaseMeta = () => ARW.applyBaseMeta({ portInputId: 'port', badgeId: '
 let baseMeta = null;
 const effectivePort = () => getPort() || (baseMeta && baseMeta.port) || 8091;
 const CONNECTION_SELECT_ID = 'connectionSelect';
+const isExpertMode = () => !!(ARW.mode && ARW.mode.current === 'expert');
 
 let miniDownloadsSub = null;
 let prefsDirty = false;
@@ -125,6 +126,7 @@ async function copyRestartCommandToClipboard(token, event) {
 }
 
 function shouldOpenAdvancedPrefs() {
+  if (isExpertMode()) return true;
   const portEl = document.getElementById('port');
   const auto = document.getElementById('autostart');
   const notif = document.getElementById('notif');
@@ -143,6 +145,10 @@ function shouldOpenAdvancedPrefs() {
 function syncAdvancedPrefsDisclosure() {
   const advanced = document.querySelector('.hero-preferences');
   if (!advanced) return;
+  if (advanced.dataset.forceOpen === 'expert') {
+    advanced.open = true;
+    return;
+  }
   if (advanced.dataset.forceOpen === 'true') {
     advanced.open = true;
     return;
@@ -156,7 +162,9 @@ function ensureAdvancedOpen({ focusToken = false, scrollIntoView = false } = {})
   if (!advanced.open) {
     advanced.open = true;
   }
-  advanced.dataset.forceOpen = 'true';
+  if (advanced.dataset.forceOpen !== 'expert') {
+    advanced.dataset.forceOpen = 'true';
+  }
   if (scrollIntoView) {
     try {
       advanced.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -1267,6 +1275,21 @@ document.addEventListener('DOMContentLoaded', () => {
   setTokenVisibility(false);
   initControlButtons();
   const advanced = document.querySelector('.hero-preferences');
+  if (ARW.mode && typeof ARW.mode.subscribe === 'function') {
+    ARW.mode.subscribe((mode) => {
+      if (!advanced) return;
+      if (mode === 'expert') {
+        advanced.open = true;
+        advanced.dataset.forceOpen = 'expert';
+      } else {
+        if (advanced.dataset.forceOpen === 'expert') {
+          delete advanced.dataset.forceOpen;
+        }
+        syncAdvancedPrefsDisclosure();
+      }
+    });
+  }
+  syncAdvancedPrefsDisclosure();
   if (advanced) {
     advanced.addEventListener('toggle', () => {
       if (!advanced.open) {

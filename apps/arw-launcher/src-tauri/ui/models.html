@@ -25,13 +25,13 @@
           <span id="baseBadge" class="badge base-badge mono" aria-live="polite"></span>
         </div>
         <div class="models-actions">
-          <label class="models-token">Admin token
+          <label class="models-token" data-mode="expert-only">Admin token
             <input id="admintok" type="text" placeholder="optional">
           </label>
-          <button id="btn-save-prefs" class="ghost">Save Prefs</button>
+          <button id="btn-save-prefs" class="ghost" data-mode="expert-only">Save Prefs</button>
           <button id="btn-refresh">Refresh</button>
-          <button id="btn-load">Load</button>
-          <button id="btn-save" class="ghost">Save</button>
+          <button id="btn-load" data-mode="expert-only">Load</button>
+          <button id="btn-save" class="ghost" data-mode="expert-only">Save</button>
           <button id="btn-shortcuts" class="ghost" title="Show keyboard shortcuts">Shortcuts</button>
           <button id="btn-help" class="ghost" title="Open keyboard shortcuts docs">Help</button>
         </div>
@@ -49,8 +49,10 @@
         </span>
         <button id="btn-base-callout" class="ghost mini" type="button" aria-label="Open network hardening guide">Network guide</button>
       </div>
+      <p class="models-intro dim" data-mode="guided-only">Guided mode keeps the manager focused on the current inventory. Switch to Expert mode when you need to tweak concurrency, download models, or manage egress scopes.</p>
+      <p class="models-intro dim" data-mode="expert-only">Expert mode unlocks advanced tooling—adjust concurrency, queue downloads, load catalogs, inspect hashes, and tune egress scopes from one place.</p>
       <main class="models-main">
-        <section class="card models-concurrency" role="region" aria-labelledby="modelsConcurrencyTitle">
+        <section class="card models-concurrency" role="region" aria-labelledby="modelsConcurrencyTitle" data-mode="expert-only">
           <h2 id="modelsConcurrencyTitle">Concurrency guardrails</h2>
           <p class="section-lead">Throttle concurrent model loads to protect your runtime.</p>
           <div class="row">
@@ -77,7 +79,7 @@
           </table>
         </section>
 
-        <section class="card models-add" role="region" aria-labelledby="modelsAddTitle">
+        <section class="card models-add" role="region" aria-labelledby="modelsAddTitle" data-mode="expert-only">
           <h2 id="modelsAddTitle">Add, delete, or set default</h2>
           <div class="row">
             <input id="mid" aria-label="Model id" type="text" placeholder="model id" class="mono">
@@ -89,7 +91,7 @@
           </div>
         </section>
 
-        <section class="card models-download" role="region" aria-labelledby="modelsDownloadTitle">
+        <section class="card models-download" role="region" aria-labelledby="modelsDownloadTitle" data-mode="expert-only">
           <h2 id="modelsDownloadTitle">Download models</h2>
           <div class="row">
             <input id="did" aria-label="Download model id" type="text" placeholder="model id" class="mono">
@@ -113,7 +115,7 @@
           <div id="dlbars"></div>
         </section>
 
-        <section class="card models-catalog" role="region" aria-labelledby="modelsCatalogTitle">
+        <section class="card models-catalog" role="region" aria-labelledby="modelsCatalogTitle" data-mode="expert-only">
           <h2 id="modelsCatalogTitle">Catalog</h2>
           <div class="row">
             <button id="btn-load-local">Load Built-in Catalog</button>
@@ -128,7 +130,7 @@
           </table>
         </section>
 
-        <section class="card models-hashes" role="region" aria-labelledby="modelsHashesTitle">
+        <section class="card models-hashes" role="region" aria-labelledby="modelsHashesTitle" data-mode="expert-only">
           <h2 id="modelsHashesTitle">Installed hashes</h2>
           <div class="row">
             <label>Provider: <input id="hash-prov" placeholder="(any)"></label>
@@ -164,7 +166,7 @@
           </table>
         </section>
 
-        <section class="card models-jobs" role="region" aria-labelledby="modelsJobsTitle">
+        <section class="card models-jobs" role="region" aria-labelledby="modelsJobsTitle" data-mode="expert-only">
           <h2 id="modelsJobsTitle">Jobs</h2>
           <div class="row">
             <button id="btn-jobs" class="ghost">Refresh Jobs</button>
@@ -187,7 +189,7 @@
           </div>
         </section>
 
-        <section class="card models-egress" role="region" aria-labelledby="modelsEgressTitle">
+        <section class="card models-egress" role="region" aria-labelledby="modelsEgressTitle" data-mode="expert-only">
           <h2 id="modelsEgressTitle">Egress scopes</h2>
           <div id="egress-scopes-summary" class="dim"></div>
           <div class="scope-controls">

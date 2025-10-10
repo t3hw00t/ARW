@@ -24,6 +24,14 @@ let cascadeMeta = { generated_ms: null };
 let cascadeTargetProject = null;
 let cascadeHydrated = false;
 let cascadeFetchAbort = null;
+const TRAINING_LANES_EXPERT = ['timeline', 'approvals', 'context', 'provenance', 'policy', 'metrics', 'models'];
+const TRAINING_LANES_GUIDED = ['timeline', 'context', 'metrics'];
+const dedupeLanes = (lanes = []) => Array.from(new Set(lanes));
+const arraysEqual = (a = [], b = []) => a.length === b.length && a.every((value, index) => value === b[index]);
+const lanesForMode = (mode) => (mode === 'expert' ? dedupeLanes(TRAINING_LANES_EXPERT) : dedupeLanes(TRAINING_LANES_GUIDED));
+let activeMode = (window.ARW?.mode?.current === 'expert') ? 'expert' : 'guided';
+let currentLaneProfile = lanesForMode(activeMode);
+let currentSidecarBase = null;
 
 const updateBaseMeta = () => ARW.applyBaseMeta({ portInputId: 'port', badgeId: 'baseBadge', label: 'Base' });
 
@@ -71,6 +79,48 @@ function scheduleJobsRefresh(delay = JOBS_POLL_MS) {
   jobsTimer = setTimeout(() => {
     refreshJobs().catch(() => {});
   }, delay);
+}
+
+function mountTrainingSidecar({ lanes, force = false } = {}) {
+  const profile = dedupeLanes(Array.isArray(lanes) && lanes.length ? lanes : lanesForMode(activeMode));
+  const base = telemetryBase || getCurrentBase();
+  const profileChanged = !arraysEqual(profile, currentLaneProfile);
+  const baseChanged = base !== currentSidecarBase;
+  if (!force && !profileChanged && !baseChanged) {
+    return;
+  }
+  try {
+    trainingSidecar?.dispose?.();
+  } catch {}
+  trainingSidecar = ARW.sidecar.mount('sidecar', profile, { base });
+  currentLaneProfile = profile;
+  currentSidecarBase = base;
+}
+
+function updateModeUi(mode, { force = false } = {}) {
+  const normalized = mode === 'expert' ? 'expert' : 'guided';
+  const shouldRemount = force || normalized !== activeMode;
+  activeMode = normalized;
+  const hideExpert = normalized !== 'expert';
+  document.querySelectorAll('[data-mode="expert-only"]').forEach((el) => {
+    if (!(el instanceof HTMLElement)) return;
+    if (hideExpert) {
+      el.setAttribute('aria-hidden', 'true');
+    } else {
+      el.removeAttribute('aria-hidden');
+    }
+  });
+  document.querySelectorAll('[data-mode="guided-only"]').forEach((el) => {
+    if (!(el instanceof HTMLElement)) return;
+    if (hideExpert) {
+      el.removeAttribute('aria-hidden');
+    } else {
+      el.setAttribute('aria-hidden', 'true');
+    }
+  });
+  if (shouldRemount) {
+    mountTrainingSidecar({ lanes: lanesForMode(activeMode), force: true });
+  }
 }
 
 function getCurrentBase() {
@@ -1574,7 +1624,12 @@ document.addEventListener('DOMContentLoaded', async () => {
   if (guideCard && prefs.hideTrainingGuide) {
     guideCard.setAttribute('hidden', 'true');
   }
-  trainingSidecar = ARW.sidecar.mount('sidecar', ['timeline','approvals','context','provenance','policy','metrics','models'], { base });
+  updateModeUi(window.ARW?.mode?.current || activeMode, { force: true });
+  if (ARW.mode && typeof ARW.mode.subscribe === 'function') {
+    ARW.mode.subscribe((modeValue) => {
+      updateModeUi(modeValue, { force: true });
+    });
+  }
   const applyBaseChange = async () => {
     baseMeta = updateBaseMeta();
     const p = ARW.getPortFromInput('port') || baseMeta.port || 8091;
@@ -1586,8 +1641,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       }
     } catch {}
     telemetryBase = ARW.base(p);
-    try { trainingSidecar?.dispose?.(); } catch {}
-    trainingSidecar = ARW.sidecar.mount('sidecar', ['timeline','approvals','context','provenance','policy','metrics','models'], { base: telemetryBase });
+    mountTrainingSidecar({ force: true });
     ARW.sse.connect(telemetryBase, { replay: 5 });
     await Promise.allSettled([
       refreshTelemetry(),

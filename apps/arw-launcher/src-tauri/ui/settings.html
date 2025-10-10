@@ -28,6 +28,8 @@
           </div>
         </div>
       </header>
+      <p class="settings-intro dim" data-mode="guided-only">Guided mode keeps the essentials handy—autostart, launch at login, and default port. Switch to Expert mode when you want to edit base overrides, WebView2 tooling, or diagnostic shortcuts.</p>
+      <p class="settings-intro dim" data-mode="expert-only">Expert mode opens every lever, including base overrides, WebView2 repair, and log tooling.</p>
       <main class="settings-main">
         <section id="general" class="card settings-section" aria-labelledby="settingsGeneralTitle">
           <header class="section-head">
@@ -61,7 +63,7 @@
           </div>
         </section>
 
-        <section class="card settings-section" aria-labelledby="settingsDefaultsTitle">
+        <section class="card settings-section" aria-labelledby="settingsDefaultsTitle" data-mode="expert-only">
           <header class="section-head">
             <div>
               <h2 id="settingsDefaultsTitle">Service defaults</h2>
@@ -82,7 +84,7 @@
           </div>
         </section>
 
-        <section class="card settings-section" aria-labelledby="settingsWebViewTitle">
+        <section class="card settings-section" aria-labelledby="settingsWebViewTitle" data-mode="expert-only">
           <header class="section-head">
             <div>
               <h2 id="settingsWebViewTitle">WebView2 runtime</h2>
@@ -100,7 +102,7 @@
           <p class="hint">Need an offline installer? Grab the Evergreen runtime directly from Microsoft before returning.</p>
         </section>
 
-        <section class="card settings-section" aria-labelledby="settingsLogsTitle">
+        <section class="card settings-section" aria-labelledby="settingsLogsTitle" data-mode="expert-only">
           <header class="section-head">
             <div>
               <h2 id="settingsLogsTitle">Logs &amp; diagnostics</h2>

@@ -49,6 +49,22 @@ Status
 - “Copy restart” now falls back to an inline modal if clipboard access is blocked, so users on hardened desktops can still grab the token-aware restart snippet.
 - The Logs window includes a Live Output feed that streams launcher-managed stdout/stderr in real time and adds quick copy/open/clear controls for fast triage.
 
+### Guided setup flow
+
+- The Control Room greets you with a three-step card: **Start the local service**, **Secure access with an admin token**, and **Open the workspace you need**. Each block keeps the critical controls in sight and explains what happens next in plain language.
+- “Advanced connection & automation” details stay collapsed until you opt in, keeping port overrides, autostart, notifications, and base selection out of the way for new operators. The launcher still auto-opens the panel when it detects unsaved overrides or a missing token.
+- Workspace, diagnostics, and support buttons are now grouped by purpose with concise hints so non-technical teammates can see what each window does before launching it. Buttons remain disabled (with inline guidance) until the service is healthy and the token is validated.
+- The hero status chip mirrors the latest health probe, while contextual callouts highlight missing tokens, insecure remotes, or desktop-only actions without demanding a separate troubleshooting doc.
+- A global “Mode” toggle lets you switch between Guided (default) and Expert views. Expert mode keeps advanced panels open by default and exposes additional diagnostics copy across windows; Guided mode keeps the interface focused on the core three steps.
+- Guided mode keeps Project Hub lightweight—only the timeline, context, and activity lanes appear by default, while Expert mode restores the full diagnostics sidecar and opens runtime guidance automatically.
+- Training Park mirrors the same behaviour: Guided mode focuses on presets, job status, and quick dry-runs, while Expert mode restores cascade telemetry, capsule diagnostics, and the full training sidecar lanes.
+- The Events stream honours the same toggle: Guided mode keeps the feed simple with replay controls, while Expert mode re-enables prefix filters, include/exclude text, SLO tuning, and live probe metrics.
+- Service Logs follow suit—Guided mode delivers snapshot + tail defaults, and Expert mode unlocks route filters, SLO controls, probe metrics, and CSV exports.
+- The Model Manager focuses on the current inventory in Guided mode, while Expert mode exposes concurrency tuning, download tooling, catalogs, hashes, jobs, and egress scopes.
+- Trial Control keeps the gate checklist, status tray, and autonomy controls in Guided mode; Expert mode re-enables approvals, quarantine, feedback lanes, and connections tooling.
+- Launcher Settings keeps the general toggles front-and-centre in Guided mode, while Expert mode unlocks base overrides, WebView2 tooling, and log shortcuts.
+- Chat keeps the message composer and send shortcuts in Guided mode; Expert mode adds capture tools, reply comparison, and a fully populated sidecar.
+
 ## Launcher Settings
 
 - Open from the Support card in Control Room or the tray → Windows → Settings.

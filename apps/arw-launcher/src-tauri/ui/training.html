@@ -43,6 +43,8 @@
         <button id="btn-base-callout" class="ghost mini" type="button" aria-label="Open network hardening guide">Network guide</button>
       </div>
       <p class="training-intro">Tune presets, monitor cascade telemetry, and act on job-level suggestions without leaving your project.</p>
+      <p class="training-intro dim" data-mode="guided-only">Guided mode keeps the park focused on presets, quick dry-runs, and job status. Switch to Expert mode when you need telemetry deep-dives or capsule diagnostics.</p>
+      <p class="training-intro dim" data-mode="expert-only">Expert mode unlocks cascade telemetry, policy capsules, and the full sidecar lanes so you can promote changes with confidence.</p>
       <section class="card training-guide" aria-labelledby="trainingGuideTitle">
         <div class="training-guide-head">
           <h2 id="trainingGuideTitle">Quick start</h2>
@@ -87,7 +89,7 @@
               <input id="compressionSlider" type="range" min="0" max="1" step="0.1" value="0.50" aria-describedby="compressionValue" />
               <span id="compressionValue" class="mono">0.50</span>
             </div>
-            <div class="metric-block" id="governorHistoryBlock">
+            <div class="metric-block" id="governorHistoryBlock" data-mode="expert-only">
               <h4>Recent governor profiles</h4>
               <ul id="governorHistoryList" class="metric-list"></ul>
               <div class="row">
@@ -101,8 +103,9 @@
               <button id="refreshTelemetry" class="ghost" type="button">Refresh</button>
             </div>
             <p class="section-lead">Live signals from context assembly, governor health, and recall risk.</p>
+            <p class="dim mono" data-mode="guided-only">Detailed telemetry and capsule stats are available in Expert mode.</p>
             <p id="contextTelemetryStatus" class="dim mono" role="status" aria-live="polite">Loading…</p>
-            <div id="contextTelemetryBody" hidden>
+            <div id="contextTelemetryBody" hidden data-mode="expert-only">
               <div class="metric-block" aria-live="polite">
                 <h4>Coverage</h4>
                 <span id="coverageNeedsMore" class="metric-pill">—</span>
@@ -184,7 +187,7 @@
             </div>
             <p id="jobsStatus" class="dim mono">Loading…</p>
             <div id="results" class="mono"></div>
-            <div id="logicUnitHistory" class="metric-block" aria-live="polite"></div>
+            <div id="logicUnitHistory" class="metric-block" aria-live="polite" data-mode="expert-only"></div>
             <div class="row row-tight">
               <button id="exportHistory" class="ghost" type="button">Download history (JSON)</button>
             </div>

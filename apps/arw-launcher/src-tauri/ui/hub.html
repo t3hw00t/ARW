@@ -52,7 +52,13 @@
           <span id="sseStat" class="dim" role="status" aria-live="polite">SSE: off</span>
         </div>
       </header>
-      <p class="section-lead hub-intro">Pick a project to hydrate every panel—files, context, runs, and diagnostics stay in sync.</p>
+      <p class="section-lead hub-intro">Pick or create a project to hydrate every panel. Files, notes, context, and diagnostics stay in sync as you work.</p>
+      <ul class="hub-quickstart">
+        <li>Select a project in the Files panel to load its notes, runs, and context.</li>
+        <li>Use Notes to jot decisions or next steps—autosave keeps updates in place.</li>
+        <li>Refresh Runtimes or Context when you are diagnosing cascades or drift.</li>
+        <li data-mode="expert-only">Need more signal? Keep the Events window open in Expert mode to pair live telemetry with Hub panels.</li>
+      </ul>
       <div id="baseCallout" class="hero-callout" role="alert" hidden>
         <span class="hero-callout-icon" aria-hidden="true">!</span>
         <span>
@@ -144,7 +150,7 @@
               <a href="https://github.com/t3hw00t/ARW/blob/main/docs/guide/runtime_matrix.md" target="_blank" rel="noopener noreferrer" class="ghost" role="button">Runbook</a>
               <span id="runtimeStat" class="dim" role="status" aria-live="polite" style="margin-left:auto"></span>
             </div>
-            <details id="runtimeRunbook" class="runtime-runbook">
+            <details id="runtimeRunbook" class="runtime-runbook" data-mode="expert-only">
               <summary>Operator guidance</summary>
               <p>
                 Restart requests instruct the managed runtime supervisor to rebuild or restart the selected
@@ -162,7 +168,7 @@
               </table>
             </div>
             <div id="runtimeEmpty" class="dim" role="status" aria-live="polite">No managed runtimes registered.</div>
-            <div class="runtime-matrix" role="region" aria-live="polite" aria-labelledby="runtimeMatrixTitle">
+            <div class="runtime-matrix" role="region" aria-live="polite" aria-labelledby="runtimeMatrixTitle" data-mode="expert-only">
               <h4 id="runtimeMatrixTitle">Node Status</h4>
               <div id="runtimeMatrix"></div>
             </div>
@@ -179,7 +185,7 @@
             <div id="contextPreview" class="context-preview" role="status" aria-live="polite">Context preview will appear here after the next assembly.</div>
             <div id="contextSummary" class="context-summary">Items 0 · Seeds 0 · Expanded 0</div>
             <div id="contextMeta" class="context-meta">No context specification recorded yet.</div>
-            <div id="contextMetrics" class="context-metrics">
+            <div id="contextMetrics" class="context-metrics" data-mode="expert-only">
               <div class="metric-block" aria-live="polite">
                 <h4>Coverage</h4>
                 <p class="metric-help">Tracks how many required slots still need grounding before the next run.</p>

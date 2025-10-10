@@ -14,6 +14,11 @@
   justify-content: space-between;
 }
 
+.settings-intro{
+  max-width: 68ch;
+  margin-top: -0.5rem;
+}
+
 .settings-title {
   flex: 1 1 320px;
 }

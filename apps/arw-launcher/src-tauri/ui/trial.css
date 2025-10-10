@@ -918,3 +918,7 @@ button.danger:disabled{
   align-items:center;
   gap: var(--sp2);
   flex-wrap:wrap;
+body[data-page="trial"] .trial-intro{
+  margin: calc(-1 * var(--sp2)) 0 var(--sp2);
+  max-width: 68ch;
+}

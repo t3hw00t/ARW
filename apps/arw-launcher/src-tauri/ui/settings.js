@@ -6,6 +6,7 @@ const state = {
   saving: false,
   installing: false,
 };
+let activeMode = (window.ARW?.mode?.current === 'expert') ? 'expert' : 'guided';
 
 const defaults = () => ({
   default_port: 8091,
@@ -265,7 +266,30 @@ async function openServiceLog() {
   }
 }
 
+function applyMode(mode, { force = false } = {}) {
+  const normalized = mode === 'expert' ? 'expert' : 'guided';
+  if (!force && normalized === activeMode) return;
+  activeMode = normalized;
+  const hideExpert = normalized !== 'expert';
+  document.querySelectorAll('[data-mode="expert-only"]').forEach((el) => {
+    if (!(el instanceof HTMLElement)) return;
+    if (hideExpert) el.setAttribute('aria-hidden', 'true');
+    else el.removeAttribute('aria-hidden');
+  });
+  document.querySelectorAll('[data-mode="guided-only"]').forEach((el) => {
+    if (!(el instanceof HTMLElement)) return;
+    if (hideExpert) el.removeAttribute('aria-hidden');
+    else el.setAttribute('aria-hidden', 'true');
+  });
+}
+
 document.addEventListener('DOMContentLoaded', () => {
+  applyMode(window.ARW?.mode?.current || activeMode, { force: true });
+  if (ARW.mode && typeof ARW.mode.subscribe === 'function') {
+    ARW.mode.subscribe((modeValue) => {
+      applyMode(modeValue);
+    });
+  }
   bindInputs();
   document.getElementById('btn-settings-save')?.addEventListener('click', () => {
     saveSettings();

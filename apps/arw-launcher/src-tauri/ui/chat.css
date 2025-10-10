@@ -3,6 +3,16 @@
   gap: var(--sp2);
   margin-bottom: var(--sp3);
 }
+.chat-intro{
+  margin: calc(-1 * var(--sp2)) 0 var(--sp2);
+  max-width:60ch;
+}
+.chat-tips{
+  margin: calc(-1 * var(--sp2)) 0 var(--sp3);
+  font-size:0.9rem;
+  color: var(--color-muted);
+  max-width:60ch;
+}
 .chat-primary{
   display:flex;
   flex-wrap:wrap;

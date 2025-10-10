@@ -23,6 +23,10 @@ body.has-global-bar .models-wrap{
   color: var(--color-muted);
   max-width:60ch;
 }
+.models-intro{
+  margin: calc(-1 * var(--sp2)) 0 var(--sp2);
+  max-width:68ch;
+}
 .models-meta,
 .models-actions,
 .models-status{

@@ -51,7 +51,7 @@
           <label>Port: <input id="port" type="number" min="1" max="65535" value="8091" /></label>
           <span id="baseBadge" class="badge base-badge mono" aria-live="polite"></span>
           <button id="btn-refresh" class="ghost">Refresh</button>
-          <button id="btn-open-connections" class="ghost">Connections</button>
+          <button id="btn-open-connections" class="ghost" data-mode="expert-only">Connections</button>
           <button id="btn-open-runbook" class="ghost">Runbook</button>
         </div>
       </header>
@@ -63,6 +63,8 @@
         </span>
         <button id="btn-base-callout" class="ghost mini" type="button" aria-label="Open network hardening guide">Network guide</button>
       </div>
+      <p class="trial-intro dim" data-mode="guided-only">Guided mode focuses on preflight, autonomy control, and the live status tray so you can keep trials steady. Switch to Expert mode to work the approvals, quarantine, feedback, and connections lanes.</p>
+      <p class="trial-intro dim" data-mode="expert-only">Expert mode unlocks every lane—approvals, memory quarantine, feedback delta, expanded reports, and connections management—so you can orchestrate rehearsals end to end.</p>
 
       <main id="main" tabindex="-1">
         <section class="card trial-guide" aria-labelledby="trialGuideTitle">
@@ -199,7 +201,7 @@
           </article>
         </section>
 
-        <section class="card approvals-lane" aria-label="Approvals lane">
+        <section class="card approvals-lane" aria-label="Approvals lane" data-mode="expert-only">
           <header class="approvals-header">
             <div class="approvals-title">
               <h2>Approvals lane</h2>
@@ -220,7 +222,7 @@
           </div>
         </section>
 
-        <section class="card quarantine-lane" aria-label="Memory quarantine queue">
+        <section class="card quarantine-lane" aria-label="Memory quarantine queue" data-mode="expert-only">
           <header class="quarantine-header">
             <div class="quarantine-title">
               <h2>Memory quarantine</h2>
@@ -237,7 +239,7 @@
           <div id="quarantineEmpty" class="dim quarantine-empty hidden"></div>
         </section>
 
-        <section class="card feedback-delta" aria-label="Feedback delta log">
+        <section class="card feedback-delta" aria-label="Feedback delta log" data-mode="expert-only">
           <header class="feedback-header">
             <div class="feedback-title">
               <h2>Feedback delta log</h2>
@@ -254,7 +256,7 @@
           <div id="feedbackDeltaEmpty" class="feedback-empty dim hidden"></div>
         </section>
 
-        <section class="card tabs" aria-label="Expanded details">
+        <section class="card tabs" aria-label="Expanded details" data-mode="expert-only">
           <div class="tab-buttons" role="tablist">
             <button id="tabbtn-overview" class="active" role="tab" aria-selected="true" aria-controls="tab-overview">Overview</button>
             <button id="tabbtn-workflows" role="tab" aria-selected="false" aria-controls="tab-workflows">Workflows</button>
@@ -273,7 +275,7 @@
       </main>
     </div>
 
-    <div id="connectionsOverlay" class="connections-overlay hidden" role="presentation" aria-hidden="true"></div>
+    <div id="connectionsOverlay" class="connections-overlay hidden" role="presentation" aria-hidden="true" data-mode="expert-only"></div>
     <aside
       id="connectionsDrawer"
       class="connections-drawer hidden"
@@ -281,6 +283,7 @@
       aria-modal="true"
       aria-hidden="true"
       tabindex="-1"
+      data-mode="expert-only"
     >
       <header class="connections-header">
         <h2>Connections</h2>

@@ -44,8 +44,35 @@ document.addEventListener('DOMContentLoaded', async () => {
   let base = ARW.base(port);
   let curProj = typeof hubPrefs.lastProject === 'string' ? hubPrefs.lastProject : null;
   const baseLanes = ensureLane(['timeline','context','provenance','policy','metrics','models','activity'], 'provenance', { after: 'context' });
-  const defaultLanes = ensureLane(baseLanes, 'approvals', { after: 'timeline' });
-  let sc = ARW.sidecar.mount('sidecar', defaultLanes, { base, getProject: () => curProj });
+  const expertLaneProfileBase = ensureLane(baseLanes, 'approvals', { after: 'timeline' });
+  const guidedLaneProfileBase = ['timeline', 'context', 'activity'];
+  const lanesForMode = (mode) => {
+    const normalized = mode === 'expert' ? expertLaneProfileBase : guidedLaneProfileBase;
+    return Array.from(new Set(normalized));
+  };
+  const arraysEqual = (a = [], b = []) => a.length === b.length && a.every((value, index) => value === b[index]);
+  let activeMode = (ARW.mode && ARW.mode.current === 'expert') ? 'expert' : 'guided';
+  let currentLaneProfile = lanesForMode(activeMode);
+  let sidecarSource = 'initial';
+  let sc = null;
+  const mountSidecar = (lanes, options = {}) => {
+    const profile = Array.isArray(lanes) && lanes.length ? Array.from(new Set(lanes)) : lanesForMode(activeMode);
+    const force = options.force === true;
+    if (!force && arraysEqual(profile, currentLaneProfile)) {
+      return;
+    }
+    try {
+      sc?.dispose?.();
+    } catch {}
+    const node = document.getElementById('sidecar');
+    if (node) {
+      node.innerHTML = '';
+    }
+    sc = ARW.sidecar.mount('sidecar', profile, { base, getProject: () => curProj });
+    currentLaneProfile = profile;
+    sidecarSource = options.source || sidecarSource;
+  };
+  mountSidecar(currentLaneProfile, { source: 'initial', force: true });
   const elRuntimeBadge = document.getElementById('runtimeBadge');
   const elRuntimeTable = document.getElementById('runtimeTbl');
   const elRuntimeEmpty = document.getElementById('runtimeEmpty');
@@ -53,8 +80,30 @@ document.addEventListener('DOMContentLoaded', async () => {
   const elRuntimeCopyBtn = document.getElementById('runtimeCopyAll');
   const elRuntimeAuto = document.getElementById('runtimeAuto');
   const elRuntimeStat = document.getElementById('runtimeStat');
+  const elRuntimeRunbook = document.getElementById('runtimeRunbook');
   const elRuntimeMatrix = document.getElementById('runtimeMatrix');
   const runtimePending = new Set();
+  const updateModeUi = (mode, { remount = false } = {}) => {
+    const normalized = mode === 'expert' ? 'expert' : 'guided';
+    const shouldRemount = remount || normalized !== activeMode;
+    activeMode = normalized;
+    if (shouldRemount) {
+      mountSidecar(lanesForMode(activeMode), { force: true, source: 'mode' });
+    }
+    if (elRuntimeRunbook) {
+      if (normalized === 'expert') {
+        elRuntimeRunbook.open = true;
+      } else {
+        elRuntimeRunbook.open = false;
+      }
+    }
+  };
+  updateModeUi(activeMode);
+  if (ARW.mode && typeof ARW.mode.subscribe === 'function') {
+    ARW.mode.subscribe((modeValue) => {
+      updateModeUi(modeValue, { remount: true });
+    });
+  }
 
   function setRuntimeBadge(text, level = 'neutral', hint = '') {
     if (!elRuntimeBadge) return;
@@ -630,10 +679,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         await ARW.setPrefs('launcher', prefs);
       }
     } catch {}
-    try {
-      sc?.dispose?.();
-    } catch {}
-    sc = ARW.sidecar.mount('sidecar', defaultLanes, { base, getProject: () => curProj });
+    mountSidecar(currentLaneProfile, { force: true, source: sidecarSource || 'base-change' });
     ARW.sse.connect(base, { replay: 25 });
     await Promise.allSettled([
       refreshEpisodesSnapshot(),
@@ -3166,9 +3212,8 @@ document.addEventListener('DOMContentLoaded', async () => {
       }
       // Lanes: re-mount sidecar if lanes differ
       if (Array.isArray(tpl.lanes) && tpl.lanes.length){
-        try{ sc?.dispose?.(); }catch{}
         const lanes = ensureLane(tpl.lanes, 'approvals', { after: 'timeline' });
-        sc = ARW.sidecar.mount('sidecar', lanes, { base, getProject: () => curProj });
+        mountSidecar(lanes, { force: true, source: 'template' });
       }
       ARW.toast('Layout applied');
     }catch(e){ console.error(e); ARW.toast('Apply failed'); }

@@ -14,6 +14,8 @@ let modelsSseIndicator = null;
 let currentEgressSettings = null;
 let currentEgressScopes = [];
 let scopeCapabilityIndex = new Map();
+let activeMode = (window.ARW?.mode?.current === 'expert') ? 'expert' : 'guided';
+let expertInitialized = false;
 
 function ensureSseIndicator() {
   const wrap = document.getElementById('statusBadges');
@@ -35,6 +37,41 @@ function connectModelsSse({ replay = 0, resume = true } = {}) {
   if (replay > 0) opts.replay = replay;
   const meta = updateBaseMeta();
   ARW.sse.connect(meta.base, opts, resume);
+}
+
+function applyMode(mode, { force = false } = {}) {
+  const normalized = mode === 'expert' ? 'expert' : 'guided';
+  const changed = force || normalized !== activeMode;
+  activeMode = normalized;
+  const hideExpert = normalized !== 'expert';
+  document.querySelectorAll('[data-mode="expert-only"]').forEach((el) => {
+    if (!(el instanceof HTMLElement)) return;
+    if (hideExpert) {
+      el.setAttribute('aria-hidden', 'true');
+    } else {
+      el.removeAttribute('aria-hidden');
+    }
+  });
+  document.querySelectorAll('[data-mode="guided-only"]').forEach((el) => {
+    if (!(el instanceof HTMLElement)) return;
+    if (hideExpert) {
+      el.removeAttribute('aria-hidden');
+    } else {
+      el.setAttribute('aria-hidden', 'true');
+    }
+  });
+  if (normalized === 'expert') {
+    initExpertFeatures();
+    const auto = document.getElementById('jobs-auto');
+    if (auto) {
+      setJobsAuto(!!auto.checked);
+    }
+  } else {
+    setJobsAuto(false);
+  }
+  if (normalized === 'expert' && changed) {
+    jobsRefresh();
+  }
 }
 
 async function ivk(cmd, args){
@@ -480,7 +517,9 @@ async function refresh() {
     fragModels.appendChild(tr);
   });
   tb.appendChild(fragModels);
-  loadEgressScopes().catch(err => console.error(err));
+  if (activeMode === 'expert') {
+    loadEgressScopes().catch(err => console.error(err));
+  }
 }
 
 async function add() {
@@ -662,6 +701,12 @@ function startModelsSse() {
 
 document.addEventListener('DOMContentLoaded', () => {
   updateBaseMeta();
+  applyMode(window.ARW?.mode?.current || activeMode, { force: true });
+  if (ARW.mode && typeof ARW.mode.subscribe === 'function') {
+    ARW.mode.subscribe((modeValue) => {
+      applyMode(modeValue);
+    });
+  }
   document.getElementById('btn-refresh').addEventListener('click', refresh);
   document.getElementById('btn-load').addEventListener('click', async ()=>{ await ivk('models_load', { port: port() }); refresh(); });
   document.getElementById('btn-save').addEventListener('click', async ()=>{ await ivk('models_save', { port: port() }); document.getElementById('stat').textContent='Saved'; });
@@ -1424,6 +1469,14 @@ async function loadEgressScopes() {
   }
 }
 
+function initExpertFeatures() {
+  if (expertInitialized) return;
+  expertInitialized = true;
+  const auto = document.getElementById('jobs-auto');
+  if (auto) setJobsAuto(!!auto.checked);
+  loadEgressScopes().catch((err) => console.error(err));
+}
+
 function describeLedgerEntry(entry){
   if (!entry || typeof entry !== 'object') return '';
   const ts = entry.timestamp || entry.created_at || entry.time || '';
@@ -1499,5 +1552,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
   if (auto) auto.addEventListener('change', (e)=> setJobsAuto(!!e.target.checked));
   const addScopeBtn = document.getElementById('btn-scope-add');
   if (addScopeBtn) addScopeBtn.addEventListener('click', () => openScopeForm('add'));
-  loadEgressScopes().catch(err => console.error(err));
+  if (activeMode === 'expert') {
+    initExpertFeatures();
+  }
 });

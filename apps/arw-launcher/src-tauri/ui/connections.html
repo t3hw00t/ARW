@@ -29,6 +29,15 @@
           <span id="stat" class="dim" role="status" aria-live="polite"></span>
         </div>
       </header>
+      <div class="connections-guide">
+        <p class="dim">Set up a connection once, then flip between local and remote stacks without retyping credentials.</p>
+        <ol>
+          <li>Name the connection so you can spot it quickly in the list.</li>
+          <li>Provide the base URL (we’ll normalise it and reuse the scheme/port).</li>
+          <li>Optionally paste an admin token—saved tokens stay local and unlock tooling automatically.</li>
+          <li data-mode="expert-only">Expert mode keeps remote overrides active across windows and opens diagnostics with the selected base.</li>
+        </ol>
+      </div>
       <div id="baseCallout" class="hero-callout" role="alert" hidden>
         <span class="hero-callout-icon" aria-hidden="true">!</span>
         <span>

@@ -2154,6 +2154,102 @@ window.ARW.ui.badges = {
   }
 };
 
+window.ARW.mode = {
+  _modes: ['guided', 'expert'],
+  current: 'guided',
+  _listeners: new Set(),
+  _toggleEl: null,
+  _boundToggle: null,
+  async init() {
+    if (this._initialized) {
+      this._apply();
+      return;
+    }
+    this._initialized = true;
+    try {
+      const prefs = (await ARW.getPrefs('launcher')) || {};
+      const stored = typeof prefs.mode === 'string' ? prefs.mode.toLowerCase().trim() : '';
+      if (this._modes.includes(stored)) {
+        this.current = stored;
+      }
+    } catch (err) {
+      console.error(err);
+    }
+    this._apply();
+  },
+  _apply() {
+    try {
+      const body = document.body;
+      if (body) {
+        body.dataset.uiMode = this.current;
+      }
+    } catch (err) {
+      console.error(err);
+    }
+    this._syncToggle();
+    this._notify();
+  },
+  async set(mode) {
+    if (!this._modes.includes(mode)) return;
+    if (this.current !== mode) {
+      this.current = mode;
+    }
+    this._apply();
+    try {
+      const prefs = (await ARW.getPrefs('launcher')) || {};
+      if (prefs.mode !== this.current) {
+        prefs.mode = this.current;
+        await ARW.setPrefs('launcher', prefs);
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  },
+  toggle() {
+    const next = this.current === 'expert' ? 'guided' : 'expert';
+    void this.set(next);
+  },
+  registerToggle(el) {
+    if (!el) return;
+    if (!this._boundToggle) {
+      this._boundToggle = () => this.toggle();
+    }
+    if (this._toggleEl && this._toggleEl !== el) {
+      this._toggleEl.removeEventListener('click', this._boundToggle);
+    }
+    this._toggleEl = el;
+    el.removeEventListener('click', this._boundToggle);
+    el.addEventListener('click', this._boundToggle);
+    this._syncToggle();
+  },
+  _syncToggle() {
+    const el = this._toggleEl;
+    if (!el) return;
+    const isExpert = this.current === 'expert';
+    const label = isExpert ? 'Mode: Expert' : 'Mode: Guided';
+    const hint = isExpert ? 'Switch to Guided mode (simpler panels)' : 'Switch to Expert mode (show advanced defaults)';
+    el.textContent = label;
+    el.setAttribute('title', hint);
+    el.setAttribute('aria-label', hint);
+  },
+  subscribe(callback) {
+    if (typeof callback !== 'function') return () => {};
+    this._listeners.add(callback);
+    return () => {
+      this._listeners.delete(callback);
+    };
+  },
+  _notify() {
+    for (const handler of this._listeners) {
+      try {
+        handler(this.current);
+      } catch (err) {
+        console.error(err);
+      }
+    }
+  }
+};
+
 window.ARW.nav = {
   groups: [
     {
@@ -2242,6 +2338,18 @@ window.ARW.nav = {
       }
 
       inner.appendChild(nav);
+      const controls = document.createElement('div');
+      controls.className = 'global-bar__controls';
+      const modeBtn = document.createElement('button');
+      modeBtn.type = 'button';
+      modeBtn.className = 'global-bar__mode';
+      modeBtn.setAttribute('data-mode-toggle', 'true');
+      modeBtn.textContent = 'Mode: Guided';
+      controls.appendChild(modeBtn);
+      inner.appendChild(controls);
+      if (ARW.mode && typeof ARW.mode.registerToggle === 'function') {
+        ARW.mode.registerToggle(modeBtn);
+      }
       const skip = body.querySelector('.skip-link');
       if (skip && skip.parentElement === body) {
         body.insertBefore(header, skip.nextSibling);
@@ -2255,7 +2363,7 @@ window.ARW.nav = {
 };
 
 // Apply theme/density on load and mount badges
-document.addEventListener('DOMContentLoaded', ()=>{ try{ ARW.nav.ensure(); }catch{} try{ ARW.theme.init(); }catch{} try{ ARW.density.init(); }catch{} try{ ARW.layout.init(); }catch{} try{ ARW.ui.badges.mount(); }catch{} });
+document.addEventListener('DOMContentLoaded', ()=>{ try{ ARW.mode.init(); }catch{} try{ ARW.nav.ensure(); }catch{} try{ ARW.theme.init(); }catch{} try{ ARW.density.init(); }catch{} try{ ARW.layout.init(); }catch{} try{ ARW.ui.badges.mount(); }catch{} });
 // Universal ESC closes overlays (palette/gallery/shortcuts/annot)
 window.addEventListener('keydown', (e)=>{
   if (e.key !== 'Escape') return;

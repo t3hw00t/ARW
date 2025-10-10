@@ -13,13 +13,18 @@
     <script src="index.js" defer></script>
   </head>
   <body data-page="index">
-    <a href="#service" class="skip-link">Skip to service controls</a>
+    <a href="#service" class="skip-link">Skip to guided setup</a>
     <div class="wrap launcher-wrap">
       <section class="card launcher-hero">
         <div class="hero-head">
           <div class="hero-heading">
             <h1>Control Room</h1>
-            <p class="hero-copy">Keep your local Agent Hub stack healthy, then jump into the surfaces you need.</p>
+            <p class="hero-copy">Keep your local Agent Hub stack healthy, then jump into the surfaces you need. Everything runs locally unless you switch to a saved remote.</p>
+            <ol class="hero-summary">
+              <li>Start the unified <code>arw-server</code> locally.</li>
+              <li>Paste your admin token once to unlock tooling.</li>
+              <li>Launch the workspace window that fits the task.</li>
+            </ol>
           </div>
           <div class="hero-status" role="status" aria-live="polite">
             <span class="status-chip">
@@ -29,187 +34,211 @@
                 <small id="svc-text">unknown</small>
               </span>
             </span>
-            <p class="status-hint">Start the service and paste an admin token to unlock workspaces.</p>
+            <p class="status-hint">Follow the guided setup below. We’ll highlight anything that blocks access.</p>
           </div>
-        </div>
-        <details class="hero-preferences" data-role="advanced">
-          <summary aria-controls="heroAdvanced">Connection &amp; alerts</summary>
-          <div class="hero-meta" id="heroAdvanced">
-            <div class="pref-field">
-              <label for="port">API port</label>
-              <input id="port" aria-label="Port" type="number" min="1" max="65535" value="8091"/>
-              <p class="field-note">Clients and packs connect to this port. Switch when hosting for teammates.</p>
-              <span id="baseBadge" class="badge base-badge mono" aria-live="polite"></span>
-            </div>
-            <div class="pref-field pref-toggle">
-              <label>
-                <input id="autostart" type="checkbox"/>
-                <span>
-                  <strong>Autostart service</strong>
-                  <small>Start <code>arw-server</code> as soon as the launcher opens.</small>
-                </span>
-              </label>
-            </div>
-            <div class="pref-field pref-toggle">
-              <label>
-                <input id="notif" type="checkbox" checked/>
-                <span>
-                  <strong>Notify on status change</strong>
-                  <small>Show a desktop notification when health flips.</small>
-                </span>
-              </label>
-            </div>
-            <div class="pref-field pref-toggle">
-              <label>
-                <input id="loginstart" type="checkbox"/>
-                <span>
-                  <strong>Launch at login</strong>
-                  <small>Keep the control room ready after you sign in.</small>
-                </span>
-              </label>
-            </div>
-            <div class="pref-field">
-              <label for="connectionSelect">Active connection</label>
-              <div class="connection-select">
-                <select id="connectionSelect" aria-label="Active connection">
-                  <option value="" selected>Local default (127.0.0.1)</option>
-                </select>
-                <button id="btn-open-connections" class="ghost mini" type="button" aria-label="Manage connections">Manage</button>
-              </div>
-              <p class="field-note">Jump to a saved remote or return to the default local stack without leaving the Control Room.</p>
-            </div>
-            <div class="pref-field">
-              <label for="admintok">Admin token <small class="dim">(required for Hub, Chat, Training)</small></label>
-              <div class="input-with-toggle token-control">
-                <input id="admintok" type="password" autocomplete="off" placeholder="Paste admin token"/>
-                <button id="btn-token-toggle" class="ghost mini" type="button" aria-pressed="false" aria-label="Show admin token">Show</button>
-                <button id="btn-token-generate" class="ghost mini" type="button" aria-label="Generate a new admin token">Generate</button>
-                <button id="btn-token-copy" class="ghost mini" type="button" aria-label="Copy admin token">Copy</button>
-                <button id="btn-token-test" class="ghost mini" type="button" aria-label="Test admin token">Test</button>
-                <button id="btn-token-restart" class="ghost mini" type="button" aria-label="Copy restart command (Shift for alternate shell)" title="Copy restart command (Shift for alternate shell)">Copy restart</button>
-              </div>
-              <p class="field-note token-note">Set this once to unlock Project Hub, Chat, Training Park, and other admin APIs. Stored locally; restart the service after saving to rotate credentials. Use Test to confirm access before you restart, then use Copy restart for a ready-made CLI snippet (Shift copies the alternate shell). <button id="btn-token-guide" class="link-button" type="button">How do tokens work?</button></p>
-              <p id="tokenStatus" class="field-note token-status" role="status" aria-live="polite"></p>
-            </div>
-          </div>
-        </details>
-        <div class="hero-footer">
-          <div class="hero-actions">
-            <button id="btn-save" type="button" class="ghost" title="Save preferences" disabled>Save preferences</button>
-            <span id="prefsStatus" class="dim" data-state="clean" role="status" aria-live="polite">All changes saved</span>
-          </div>
-          <span id="statusBadges" class="badges"></span>
-        </div>
-        <div id="tokenCallout" class="hero-callout" role="alert" hidden>
-          <span class="hero-callout-icon" aria-hidden="true">!</span>
-          <span>
-            <strong>Secure setup required.</strong>
-            <span id="tokenCalloutBody">Paste an admin token to unlock Project Hub, Chat, Training, and other admin surfaces.</span>
-          </span>
-          <button id="btn-token-callout" class="ghost mini" type="button" aria-label="Open admin token controls">Set token</button>
-        </div>
-        <div id="baseCallout" class="hero-callout" role="alert" hidden>
-          <span class="hero-callout-icon" aria-hidden="true">!</span>
-          <span>
-            <strong>Secure remote access.</strong>
-            <span id="baseCalloutBody">Remote base is using plain HTTP. Switch to HTTPS or a trusted tunnel before sharing admin surfaces.</span>
-          </span>
-          <button id="btn-base-callout" class="ghost mini" type="button" aria-label="Open network hardening guide">Network guide</button>
-        </div>
-        <div id="desktopCallout" class="hero-callout" role="alert" hidden>
-          <span class="hero-callout-icon" aria-hidden="true">!</span>
-          <span>
-            <strong>Desktop launcher features.</strong>
-            <span id="desktopCalloutBody">Starting or stopping the service and viewing local logs require the desktop launcher or CLI scripts.</span>
-          </span>
         </div>
       </section>
+      <section class="card quickstart" id="service" aria-labelledby="quickstartTitle">
+        <header class="section-head">
+          <span class="section-tag">Guided setup</span>
+          <h2 id="quickstartTitle">Bring the Control Room online in three steps</h2>
+          <p class="dim">Start the service, secure it with your admin token, then open the workspace that fits your project.</p>
+        </header>
+        <ol class="quickstart-steps">
+          <li class="quickstart-step">
+            <div class="step-head">
+              <span class="step-index" aria-hidden="true">1</span>
+              <div>
+                <h3>Start the local service</h3>
+                <p class="dim">Launch <code>arw-server</code> on this machine. We monitor health automatically and announce changes.</p>
+              </div>
+            </div>
+            <div class="step-body">
+              <div class="button-row emphasis">
+                <button id="btn-start" class="primary" title="Start local service">Start Service</button>
+                <button id="btn-stop" class="ghost" title="Stop local service">Stop Service</button>
+                <button id="btn-health" class="ghost" title="Check service health">Check Health</button>
+              </div>
+              <div class="button-row">
+                <button id="btn-open" class="primary" title="Open Debug UI in browser">Open Debug UI</button>
+                <button id="btn-open-window" class="ghost" title="Open Debug UI in window">Open in Window</button>
+              </div>
+              <div class="button-row">
+                <button id="btn-log-file" class="ghost" title="Open latest service log" disabled>Open Service Log</button>
+              </div>
+              <p class="step-hint dim">Need more context? The Debug UI mirrors the browser panels and the log shortcut opens the current stdout/stderr file.</p>
+              <p class="step-hint dim" data-mode="expert-only">Prefer scripts? Restart headless with <code>bash scripts/start.sh --service-only --wait-health --admin-token "$ARW_ADMIN_TOKEN"</code>.</p>
+              <div class="health-wrap" role="status" aria-live="polite">
+                <span id="health" class="dim"></span>
+                <span id="healthMeta" class="dim">Waiting for first check…</span>
+              </div>
+            </div>
+          </li>
+          <li class="quickstart-step" id="step-token">
+            <div class="step-head">
+              <span class="step-index" aria-hidden="true">2</span>
+              <div>
+                <h3>Secure access with an admin token</h3>
+                <p class="dim">Paste the token once to unlock Hub, Chat, Training, and other admin tooling. We keep it local and never echo it back.</p>
+              </div>
+            </div>
+            <div class="step-body">
+              <div class="pref-field">
+                <label for="admintok">Admin token <small class="dim">(required for Hub, Chat, Training)</small></label>
+                <div class="input-with-toggle token-control">
+                  <input id="admintok" type="password" autocomplete="off" placeholder="Paste admin token"/>
+                  <button id="btn-token-toggle" class="ghost mini" type="button" aria-pressed="false" aria-label="Show admin token">Show</button>
+                  <button id="btn-token-generate" class="ghost mini" type="button" aria-label="Generate a new admin token">Generate</button>
+                  <button id="btn-token-copy" class="ghost mini" type="button" aria-label="Copy admin token">Copy</button>
+                  <button id="btn-token-test" class="ghost mini" type="button" aria-label="Test admin token">Test</button>
+                  <button id="btn-token-restart" class="ghost mini" type="button" aria-label="Copy restart command (Shift for alternate shell)" title="Copy restart command (Shift for alternate shell)">Copy restart</button>
+                </div>
+                <p class="field-note token-note">Store the token once, then use “Test” to confirm access before restarting. “Copy restart” builds a shell-ready snippet that exports the token for CLI scripts. <button id="btn-token-guide" class="link-button" type="button">How do tokens work?</button></p>
+                <p id="tokenStatus" class="field-note token-status" role="status" aria-live="polite"></p>
+              </div>
+              <details class="hero-preferences" data-role="advanced">
+                <summary aria-controls="heroAdvanced">Advanced connection &amp; automation</summary>
+                <div class="hero-meta" id="heroAdvanced">
+                  <div class="pref-field">
+                    <label for="port">API port</label>
+                    <input id="port" aria-label="Port" type="number" min="1" max="65535" value="8091"/>
+                    <p class="field-note">Clients connect to this port. Change it when you host for teammates or pin a saved remote.</p>
+                    <span id="baseBadge" class="badge base-badge mono" aria-live="polite"></span>
+                  </div>
+                  <div class="pref-field pref-toggle">
+                    <label>
+                      <input id="autostart" type="checkbox"/>
+                      <span>
+                        <strong>Autostart service</strong>
+                        <small>Start <code>arw-server</code> the moment the launcher opens.</small>
+                      </span>
+                    </label>
+                  </div>
+                  <div class="pref-field pref-toggle">
+                    <label>
+                      <input id="notif" type="checkbox" checked/>
+                      <span>
+                        <strong>Notify on status change</strong>
+                        <small>Show a desktop notification when health flips.</small>
+                      </span>
+                    </label>
+                  </div>
+                  <div class="pref-field pref-toggle">
+                    <label>
+                      <input id="loginstart" type="checkbox"/>
+                      <span>
+                        <strong>Launch at login</strong>
+                        <small>Keep the Control Room ready after you sign in.</small>
+                      </span>
+                    </label>
+                  </div>
+                  <div class="pref-field">
+                    <label for="connectionSelect">Active connection</label>
+                    <div class="connection-select">
+                      <select id="connectionSelect" aria-label="Active connection">
+                        <option value="" selected>Local default (127.0.0.1)</option>
+                      </select>
+                      <button id="btn-open-connections" class="ghost mini" type="button" aria-label="Manage connections">Manage</button>
+                    </div>
+                    <p class="field-note">Jump to a saved remote or return to the default local stack without leaving the Control Room.</p>
+                  </div>
+                </div>
+              </details>
+              <div class="hero-footer">
+                <div class="hero-actions">
+                  <button id="btn-save" type="button" class="ghost" title="Save preferences" disabled>Save preferences</button>
+                  <span id="prefsStatus" class="dim" data-state="clean" role="status" aria-live="polite">All changes saved</span>
+                </div>
+                <span id="statusBadges" class="badges"></span>
+              </div>
+              <p class="step-hint dim" data-mode="guided-only">Need a token? Run <code>bash scripts/start.sh --new-token</code> once or ask your operator for a shared credential.</p>
+              <div id="tokenCallout" class="hero-callout" role="alert" hidden>
+                <span class="hero-callout-icon" aria-hidden="true">!</span>
+                <span>
+                  <strong>Secure setup required.</strong>
+                  <span id="tokenCalloutBody">Paste an admin token to unlock Project Hub, Chat, Training, and other admin surfaces.</span>
+                </span>
+                <button id="btn-token-callout" class="ghost mini" type="button" aria-label="Open admin token controls">Set token</button>
+              </div>
+              <div id="baseCallout" class="hero-callout" role="alert" hidden>
+                <span class="hero-callout-icon" aria-hidden="true">!</span>
+                <span>
+                  <strong>Secure remote access.</strong>
+                  <span id="baseCalloutBody">Remote base is using plain HTTP. Switch to HTTPS or a trusted tunnel before sharing admin surfaces.</span>
+                </span>
+                <button id="btn-base-callout" class="ghost mini" type="button" aria-label="Open network hardening guide">Network guide</button>
+              </div>
+              <div id="desktopCallout" class="hero-callout" role="alert" hidden>
+                <span class="hero-callout-icon" aria-hidden="true">!</span>
+                <span>
+                  <strong>Desktop launcher features.</strong>
+                  <span id="desktopCalloutBody">Starting or stopping the service and viewing local logs require the desktop launcher or CLI scripts.</span>
+                </span>
+              </div>
+            </div>
+          </li>
+          <li class="quickstart-step">
+            <div class="step-head">
+              <span class="step-index" aria-hidden="true">3</span>
+              <div>
+                <h3>Open the workspace you need</h3>
+                <p class="dim">Each workspace launches in its own window. Disabled buttons mean we still need the service or token.</p>
+              </div>
+            </div>
+            <div class="step-body">
+              <div class="step-columns">
+                <div class="step-column">
+                  <h4>Projects &amp; collaboration</h4>
+                  <div class="button-column">
+                    <button id="btn-hub" class="primary" title="Open Project Hub">Project Hub</button>
+                    <p class="button-hint">Manage files, notes, assembled context, and run history in one place.</p>
+                    <button id="btn-chat" class="ghost" title="Open Chat">Chat</button>
+                    <p class="button-hint">Episode-first conversation view with shared tools and capture shortcuts.</p>
+                    <button id="btn-training" class="ghost" title="Open Training Park">Training Park</button>
+                    <p class="button-hint">Monitor cascades, run A/B jobs, and inspect telemetry.</p>
+                    <button id="btn-trial" class="ghost" title="Open Trial Control Center">Trial Control</button>
+                    <p class="button-hint">Coordinate staged experiments and capture decisions.</p>
+                  </div>
+                </div>
+                <div class="step-column">
+                  <h4>Diagnostics</h4>
+                  <div class="button-column">
+                    <button id="btn-events" class="ghost" title="Open Events window">Events</button>
+                    <p class="button-hint">Follow the live event stream as it happens (SSE).</p>
+                    <button id="btn-logs" class="ghost" title="Open Logs window">Logs</button>
+                    <p class="button-hint">Review structured service logs with filtering and search.</p>
+                    <button id="btn-models" class="ghost" title="Open Models manager">Models</button>
+                    <p class="button-hint">Track managed runtimes, restart budgets, and downloads.</p>
+                    <button id="btn-connections" class="ghost" title="Open Connections manager">Connections</button>
+                    <p class="button-hint">Manage remotes, pooled compute, and guardrail policies.</p>
+                  </div>
+                </div>
+                <div class="step-column">
+                  <h4>Support &amp; preferences</h4>
+                  <div class="button-column">
+                    <button id="btn-settings" class="primary" title="Open launcher settings window">Launcher Settings</button>
+                    <p class="button-hint">Adjust launch behaviour, defaults, accessibility preferences, and WebView2 status.</p>
+                    <button id="btn-updates" class="ghost" title="Open releases page">Check Updates</button>
+                    <p class="button-hint">Grab the latest builds and release notes.</p>
+                    <button id="btn-shortcuts" class="ghost" title="Show keyboard shortcuts">Shortcuts</button>
+                    <p class="button-hint">Open the in-launcher shortcut reference.</p>
+                    <button id="btn-help" class="ghost" title="Open keyboard shortcuts docs">Help</button>
+                    <p class="button-hint">Read the online guide for deeper help.</p>
+                  </div>
+                </div>
+              </div>
+              <p id="workspaceHint" class="dim workspace-hint" role="status" aria-live="polite" hidden></p>
+              <p class="step-hint dim" data-mode="guided-only">Switch to Expert mode (top bar) when you want advanced controls to stay open.</p>
+              <p class="step-hint dim" data-mode="expert-only">Expert mode keeps advanced panels auto-open and surfaces extra diagnostics across windows.</p>
+            </div>
+          </li>
+        </ol>
+      </section>
       <div class="launcher-grid">
-        <section class="card service-card" id="service">
+        <section class="card downloads-card" aria-labelledby="downloadsTitle">
           <header class="section-head">
-            <div>
-              <h2>Local service</h2>
-              <p class="dim">Control and audit the unified <code>arw-server</code> instance running on this machine.</p>
-            </div>
-          </header>
-          <div class="button-row emphasis">
-            <button id="btn-start" class="primary" title="Start local service">Start Service</button>
-            <button id="btn-stop" class="ghost" title="Stop local service">Stop Service</button>
-            <button id="btn-health" class="ghost" title="Check service health">Check Health</button>
-          </div>
-          <div class="button-row">
-            <button id="btn-open" class="primary" title="Open Debug UI in browser">Open Debug UI</button>
-            <button id="btn-open-window" class="ghost" title="Open Debug UI in window">Open in Window</button>
-          </div>
-          <div class="button-row">
-            <button id="btn-log-file" class="ghost" title="Open latest service log" disabled>Open Service Log</button>
-          </div>
-          <div class="health-wrap" role="status" aria-live="polite">
-            <span id="health" class="dim"></span>
-            <span id="healthMeta" class="dim">Waiting for first check…</span>
-          </div>
-        </section>
-        <section class="card">
-          <header class="section-head">
-            <div>
-              <h2>Workspaces</h2>
-              <p class="dim">Open focused surfaces for the current project. Each workspace launches in its own window.</p>
-            </div>
-          </header>
-          <div class="button-column">
-            <button id="btn-hub" class="primary" title="Open Project Hub">Project Hub</button>
-            <p class="button-hint">Manage files, notes, assembled context, and run history.</p>
-            <button id="btn-chat" class="ghost" title="Open Chat">Chat</button>
-            <p class="button-hint">Episode-first conversation view with shared sidecar tools.</p>
-            <button id="btn-training" class="ghost" title="Open Training Park">Training Park</button>
-            <p class="button-hint">Monitor cascades, run A/B jobs, and inspect telemetry.</p>
-            <button id="btn-trial" class="ghost" title="Open Trial Control Center">Trial Control</button>
-            <p class="button-hint">Coordinate staged experiments and capture decisions.</p>
-          </div>
-          <p id="workspaceHint" class="dim workspace-hint" role="status" aria-live="polite" hidden></p>
-        </section>
-        <section class="card">
-          <header class="section-head">
-            <div>
-              <h2>Diagnostics</h2>
-              <p class="dim">Inspect live streams and runtime inventory when something needs attention.</p>
-            </div>
-          </header>
-          <div class="button-column">
-            <button id="btn-events" class="ghost" title="Open Events window">Events</button>
-            <p class="button-hint">Follow the live event stream (SSE) as it happens.</p>
-            <button id="btn-logs" class="ghost" title="Open Logs window">Logs</button>
-            <p class="button-hint">Review structured service logs with filtering.</p>
-            <button id="btn-models" class="ghost" title="Open Models manager">Models</button>
-            <p class="button-hint">Track managed runtimes, restart budgets, and downloads.</p>
-            <button id="btn-connections" class="ghost" title="Open Connections manager">Connections</button>
-            <p class="button-hint">Manage remotes, pooled compute, and guardrail policies.</p>
-          </div>
-        </section>
-        <section class="card">
-          <header class="section-head">
-            <div>
-              <h2>Support</h2>
-              <p class="dim">Stay up to date or revisit quick-reference docs.</p>
-            </div>
-          </header>
-          <div class="button-column">
-            <button id="btn-settings" class="primary" title="Open launcher settings window">Launcher Settings</button>
-            <p class="button-hint">Adjust launch behavior, defaults, accessibility preferences, and WebView2 status.</p>
-            <button id="btn-updates" class="ghost" title="Open releases page">Check Updates</button>
-            <p class="button-hint">Grab the latest builds and release notes.</p>
-            <button id="btn-shortcuts" class="ghost" title="Show keyboard shortcuts">Shortcuts</button>
-            <p class="button-hint">Show the in-launcher shortcut reference.</p>
-            <button id="btn-help" class="ghost" title="Open keyboard shortcuts docs">Help</button>
-            <p class="button-hint">Open the online guide for deeper help.</p>
-          </div>
-        </section>
-        <section class="card">
-          <header class="section-head">
-            <div>
-              <h2>Active downloads</h2>
-              <p class="dim">See runtime assets in flight. Entries clear automatically when complete.</p>
-            </div>
+            <h2 id="downloadsTitle">Active downloads</h2>
+            <p class="dim">Runtime assets in flight clear automatically when complete.</p>
           </header>
           <div id="dlmini" class="badge-row" role="status" aria-live="polite"></div>
         </section>

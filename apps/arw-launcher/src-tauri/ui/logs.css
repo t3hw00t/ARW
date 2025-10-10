@@ -23,6 +23,10 @@ body.has-global-bar .logs-wrap{
   color: var(--color-muted);
   max-width:60ch;
 }
+.logs-intro{
+  margin: calc(-1 * var(--sp2)) 0 var(--sp2);
+  max-width:68ch;
+}
 .logs-meta,
 .logs-actions,
 .logs-status{

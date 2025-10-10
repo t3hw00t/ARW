@@ -30,7 +30,7 @@
         </div>
         <div class="events-status">
           <span id="statusBadges" class="badges"></span>
-          <div class="events-metrics badges">
+          <div class="events-metrics badges" data-mode="expert-only">
             <span id="cpuBadge" class="badge" aria-label="CPU usage">CPU: –</span>
             <span id="memBadge" class="badge" aria-label="Memory usage">Mem: –</span>
             <span id="gpuBadge" class="badge" aria-label="GPU usage">GPU: –</span>
@@ -46,6 +46,8 @@
         </span>
         <button id="btn-base-callout" class="ghost mini" type="button" aria-label="Open network hardening guide">Network guide</button>
       </div>
+      <p class="events-intro dim" data-mode="guided-only">Guided mode keeps the stream simple: watch live events, replay the last batch, and share a single entry without tuning filters first. Switch to Expert mode when you need prefix filters, include/exclude text, or latency SLO tuning.</p>
+      <p class="events-intro dim" data-mode="expert-only">Expert mode enables advanced filters, SLO tuning, and probe metrics so you can zero in on problem routes while watching the stream.</p>
       <main class="events-main">
         <section class="card events-controls" role="region" aria-labelledby="eventsControlsTitle">
           <div class="events-controls-head">
@@ -61,13 +63,13 @@
             <label>Prefix
               <input id="filter" aria-label="Event prefix filter" type="text" placeholder="e.g. models. or state.">
             </label>
-            <label>Include text
+            <label data-mode="expert-only">Include text
               <input id="inc" aria-label="Include text" type="text" placeholder="text in body">
             </label>
-            <label>Exclude text
+            <label data-mode="expert-only">Exclude text
               <input id="exc" aria-label="Exclude text" type="text" placeholder="text to skip">
             </label>
-            <label>SLO p95 (ms)
+            <label data-mode="expert-only">SLO p95 (ms)
               <input id="slo" type="number" min="10" step="10" value="150">
             </label>
           </div>

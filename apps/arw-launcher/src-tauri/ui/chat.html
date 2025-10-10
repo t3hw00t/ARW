@@ -18,7 +18,7 @@
       <header class="chat-head">
         <div class="chat-primary">
           <strong>Chat</strong>
-          <p>Episode-first conversations tied to the current project.</p>
+          <p>Keep project conversations grounded in the same files and context as the Control Room.</p>
         </div>
         <div class="chat-controls">
           <label>Port: <input id="port" type="number" min="1" max="65535" value="8091"></label>
@@ -31,6 +31,9 @@
           <button id="btn-help" class="ghost" title="Open keyboard shortcuts docs">Help</button>
         </div>
       </header>
+      <p class="chat-intro dim" data-mode="guided-only">Guided mode keeps the conversation pane and quick send shortcuts front-and-centre. Flip to Expert mode when you need capture tools, message diffing, or the full sidecar.</p>
+      <p class="chat-intro dim" data-mode="expert-only">Expert mode unlocks screen capture, reply comparison, and shared sidecar lanes for deep debugging.</p>
+      <p class="chat-tips">Pin any message to compare replies side-by-side, capture your screen when you need extra context, and press Ctrl+Enter to send quickly.</p>
       <div id="baseCallout" class="hero-callout" role="alert" hidden>
         <span class="hero-callout-icon" aria-hidden="true">!</span>
         <span>
@@ -49,7 +52,7 @@
                 <textarea id="msg" aria-label="Message" rows="3" placeholder="Share context or ask a question"></textarea>
                 <div class="composer-buttons">
                   <button id="send" type="button" class="primary">Send</button>
-                  <div class="action-menu" id="captureMenu">
+                  <div class="action-menu" id="captureMenu" data-mode="expert-only">
                     <button id="captureToggle" type="button" class="ghost menu-toggle" aria-haspopup="true" aria-expanded="false">Capture</button>
                     <div id="captureMenuList" class="menu-list" role="menu" hidden>
                       <button id="capture" type="button" class="ghost menu-item" role="menuitem" title="Capture entire screen">Full screen</button>
@@ -65,7 +68,7 @@
               </div>
             </div>
           </section>
-          <section class="card">
+          <section class="card" data-mode="expert-only">
             <h3>Compare Replies</h3>
             <div class="row"><span class="dim">Click any message → Pin A/B</span></div>
             <div class="grid cols-2">

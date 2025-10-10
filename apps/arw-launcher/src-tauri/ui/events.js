@@ -1,16 +1,40 @@
 let lastRaw = '';
 let logSubId = null;
 let metricsSubId = null;
+let activeMode = (window.ARW?.mode?.current === 'expert') ? 'expert' : 'guided';
 const updateBaseMeta = () => ARW.applyBaseMeta({ portInputId: 'port', badgeId: 'baseBadge', label: 'Base' });
 function bytesHuman(n){ if(!n && n!==0) return '–'; const kb=1024, mb=kb*1024, gb=mb*1024, tb=gb*1024; if(n>=tb) return (n/tb).toFixed(2)+' TiB'; if(n>=gb) return (n/gb).toFixed(2)+' GiB'; if(n>=mb) return (n/mb).toFixed(1)+' MiB'; if(n>=kb) return (n/kb).toFixed(1)+' KiB'; return n+' B'; }
 function setCpuBadge(p){ try{ const el=document.getElementById('cpuBadge'); if(!el) return; const v = Number(p)||0; el.textContent = 'CPU: ' + v.toFixed(1) + '%'; el.className = 'badge ' + (v>=90? 'bad' : v>=75? 'warn':''); }catch{} }
 function setMemBadge(used,total){ try{ const el=document.getElementById('memBadge'); if(!el) return; const pct = total>0? (100*used/total):0; el.textContent = 'Mem: ' + pct.toFixed(1) + '% ('+bytesHuman(used)+'/'+bytesHuman(total)+')'; el.className = 'badge ' + (pct>=90? 'bad' : pct>=75? 'warn':''); }catch{} }
 function setGpuBadge(used,total){ try{ const el=document.getElementById('gpuBadge'); if(!el) return; const pct = total>0? (100*used/total):0; el.textContent = 'GPU: ' + pct.toFixed(1) + '%'; el.className = 'badge ' + (pct>=95? 'bad' : pct>=80? 'warn':''); }catch{} }
 async function refreshRouteStats(meta){
+  if (activeMode !== 'expert') return;
   try {
     await ARW.metrics.routeStats({ base: meta?.base });
   } catch (err) {
     console.warn('route stats refresh failed', err);
+  }
+}
+async function fetchProbeMetrics(base) {
+  if (!base || activeMode !== 'expert') return;
+  try {
+    const j = await ARW.http.json(base, '/admin/probe/metrics');
+    const d = j?.data || j;
+    const cpu = d?.cpu?.avg || 0;
+    setCpuBadge(cpu);
+    const mu = d?.memory?.used || 0;
+    const mt = d?.memory?.total || 0;
+    setMemBadge(mu, mt);
+    const g = Array.isArray(d?.gpus) ? d.gpus : [];
+    let t = 0;
+    let u = 0;
+    for (const x of g) {
+      t += Number(x?.mem_total || 0);
+      u += Number(x?.mem_used || 0);
+    }
+    setGpuBadge(u, t);
+  } catch (err) {
+    console.debug('probe metrics fetch failed', err?.message || err);
   }
 }
 function add(kind, envelope) {
@@ -36,23 +60,88 @@ function add(kind, envelope) {
   log.prepend(el);
   while (log.childElementCount > 300) log.removeChild(log.lastChild);
 }
-function ensureSubscriptions(){
+function ensureLogSubscription() {
   if (!logSubId) {
     logSubId = ARW.sse.subscribe('*', ({ kind, env }) => add(kind, env));
   }
-  if (!metricsSubId) {
-    metricsSubId = ARW.sse.subscribe('probe.metrics', ({ env }) => {
-      try {
-        const j = env?.payload || env || {};
-        const data = j?.data || j;
-        const cpu = data?.cpu?.avg || 0; setCpuBadge(cpu);
-        const mu = data?.memory?.used || 0; const mt = data?.memory?.total || 0; setMemBadge(mu, mt);
-        const g = Array.isArray(data?.gpus) ? data.gpus : [];
-        let t = 0, u = 0;
-        for (const x of g){ t += Number(x?.mem_total || 0); u += Number(x?.mem_used || 0); }
-        setGpuBadge(u, t);
-      } catch {}
-    });
+}
+function enableMetricsSubscription() {
+  if (metricsSubId) return;
+  metricsSubId = ARW.sse.subscribe('probe.metrics', ({ env }) => {
+    try {
+      const j = env?.payload || env || {};
+      const data = j?.data || j;
+      const cpu = data?.cpu?.avg || 0;
+      setCpuBadge(cpu);
+      const mu = data?.memory?.used || 0;
+      const mt = data?.memory?.total || 0;
+      setMemBadge(mu, mt);
+      const g = Array.isArray(data?.gpus) ? data.gpus : [];
+      let t = 0;
+      let u = 0;
+      for (const x of g) {
+        t += Number(x?.mem_total || 0);
+        u += Number(x?.mem_used || 0);
+      }
+      setGpuBadge(u, t);
+    } catch {}
+  });
+}
+function disableMetricsSubscription() {
+  if (!metricsSubId) return;
+  try {
+    ARW.sse.unsubscribe(metricsSubId);
+  } catch {}
+  metricsSubId = null;
+}
+function resetMetricsBadges() {
+  const cpu = document.getElementById('cpuBadge');
+  if (cpu) {
+    cpu.textContent = 'CPU: –';
+    cpu.className = 'badge';
+  }
+  const mem = document.getElementById('memBadge');
+  if (mem) {
+    mem.textContent = 'Mem: –';
+    mem.className = 'badge';
+  }
+  const gpu = document.getElementById('gpuBadge');
+  if (gpu) {
+    gpu.textContent = 'GPU: –';
+    gpu.className = 'badge';
+  }
+}
+function applyMode(mode, { force = false } = {}) {
+  const normalized = mode === 'expert' ? 'expert' : 'guided';
+  const changed = force || normalized !== activeMode;
+  activeMode = normalized;
+  const hideExpert = normalized !== 'expert';
+  document.querySelectorAll('[data-mode="expert-only"]').forEach((el) => {
+    if (!(el instanceof HTMLElement)) return;
+    if (hideExpert) {
+      el.setAttribute('aria-hidden', 'true');
+    } else {
+      el.removeAttribute('aria-hidden');
+    }
+  });
+  document.querySelectorAll('[data-mode="guided-only"]').forEach((el) => {
+    if (!(el instanceof HTMLElement)) return;
+    if (hideExpert) {
+      el.removeAttribute('aria-hidden');
+    } else {
+      el.setAttribute('aria-hidden', 'true');
+    }
+  });
+  if (normalized === 'expert') {
+    enableMetricsSubscription();
+  } else {
+    disableMetricsSubscription();
+    resetMetricsBadges();
+  }
+  if (normalized === 'expert' && changed) {
+    const meta = updateBaseMeta();
+    refreshRouteStats(meta).catch(() => {});
+    fetchProbeMetrics(meta.base).catch(() => {});
   }
 }
 function sse(replay) {
@@ -66,7 +155,13 @@ function sse(replay) {
 }
 document.addEventListener('DOMContentLoaded', () => {
   updateBaseMeta();
-  ensureSubscriptions();
+  ensureLogSubscription();
+  applyMode(window.ARW?.mode?.current || activeMode, { force: true });
+  if (ARW.mode && typeof ARW.mode.subscribe === 'function') {
+    ARW.mode.subscribe((modeValue) => {
+      applyMode(modeValue, { force: true });
+    });
+  }
   ARW.sse.indicator('stat', { prefix: null, labels: { open:'on', connecting:'connecting', idle:'off', error:'retrying', closed:'off' } });
   document.getElementById('btn-replay').addEventListener('click', ()=> sse(50));
   document.querySelectorAll('[data-preset]').forEach(b=> b.addEventListener('click', ()=>{
@@ -89,6 +184,7 @@ document.addEventListener('DOMContentLoaded', () => {
     } catch {}
     sse(0);
     await refreshRouteStats(meta);
+    await fetchProbeMetrics(meta.base);
   };
   const portInput = document.getElementById('port');
   if (portInput) {
@@ -101,21 +197,17 @@ document.addEventListener('DOMContentLoaded', () => {
     const meta = updateBaseMeta();
     sse(0);
     await refreshRouteStats(meta);
-    try {
-      const current = meta.base;
-      const j = await ARW.http.json(current, '/admin/probe/metrics');
-      const d = j?.data || j;
-      const cpu = d?.cpu?.avg || 0;
-      setCpuBadge(cpu);
-      const mu = d?.memory?.used || 0;
-      const mt = d?.memory?.total || 0;
-      setMemBadge(mu, mt);
-      const g = Array.isArray(d?.gpus) ? d.gpus : [];
-      let t = 0, u = 0;
-      for (const x of g){ t += Number(x?.mem_total || 0); u += Number(x?.mem_used || 0); }
-      setGpuBadge(u, t);
-    } catch (e) {}
+    await fetchProbeMetrics(meta.base);
   })();
+  window.addEventListener('beforeunload', () => {
+    disableMetricsSubscription();
+    if (logSubId) {
+      try {
+        ARW.sse.unsubscribe(logSubId);
+      } catch {}
+      logSubId = null;
+    }
+  });
   window.addEventListener('arw:base-override-changed', () => {
     rebindBase().catch(() => {});
   });
