@@ -10,6 +10,18 @@
     <link rel="stylesheet" href="/admin/ui/assets/flows.css" />
   </head>
   <body>
+    <a href="#main" class="skip-link">Skip to main content</a>
+    <header class="admin-nav">
+      <nav aria-label="Admin navigation">
+        <a href="/admin/ui/control/">Launcher</a>
+        <a href="/admin/ui/projects">Projects</a>
+        <a href="/admin/ui/models">Models</a>
+        <a href="/admin/ui/agents">Agents</a>
+        <a href="/admin/ui/flows" aria-current="page">Flows</a>
+        <a href="/admin/debug">Debug</a>
+      </nav>
+    </header>
+    <main id="main">
     <header>
       <h1>Flows (Logic Units)</h1>
       <span class="badge" title="POST /admin/logic-units/apply">Logic Units API</span>
@@ -74,5 +86,6 @@
       document.getElementById('dry').addEventListener('click', ()=> run(true));
       document.getElementById('apply').addEventListener('click', ()=> run(false));
     </script>
+    </main>
   </body>
   </html>

@@ -9,6 +9,18 @@
     <link rel="stylesheet" href="/admin/ui/assets/models.css"/>
   </head>
   <body>
+    <a href="#main" class="skip-link">Skip to main content</a>
+    <header class="admin-nav">
+      <nav aria-label="Admin navigation">
+        <a href="/admin/ui/control/">Launcher</a>
+        <a href="/admin/ui/projects">Projects</a>
+        <a href="/admin/ui/models" aria-current="page">Models</a>
+        <a href="/admin/ui/agents">Agents</a>
+        <a href="/admin/ui/flows">Flows</a>
+        <a href="/admin/debug">Debug</a>
+      </nav>
+    </header>
+    <main id="main">
     <h1>Models <span id="mdlBadge" class="badge warn"><span class="dot"></span> 0</span></h1>
     <div class="models-status">
       <span class="models-status__spacer badge" id="sseBadge"><span class="dot"></span> SSE: off</span>
@@ -38,6 +50,7 @@
       <div id="runtimeHints"></div>
       <div id="errorHints" class="models-runtime__errors"></div>
     </div>
+    </main>
     <script src="/admin/ui/assets/models.js"></script>
   </body>
 </html>

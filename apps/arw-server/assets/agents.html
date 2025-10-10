@@ -2,6 +2,18 @@
 <link rel="stylesheet" href="/admin/ui/assets/tokens.css"/>
 <link rel="stylesheet" href="/admin/ui/assets/ui-kit.css"/>
 <link rel="stylesheet" href="/admin/ui/assets/pages.css"/>
+<a href="#main" class="skip-link">Skip to main content</a>
+<header class="admin-nav">
+  <nav aria-label="Admin navigation">
+    <a href="/admin/ui/control/">Launcher</a>
+    <a href="/admin/ui/projects">Projects</a>
+    <a href="/admin/ui/models">Models</a>
+    <a href="/admin/ui/agents" aria-current="page">Agents</a>
+    <a href="/admin/ui/flows">Flows</a>
+    <a href="/admin/debug">Debug</a>
+  </nav>
+</header>
+<main id="main">
 <h1>Agents</h1>
 <div class='row'>
   <span class='badge' id='sseBadge' style='margin-left:auto'><span class='dot'></span> SSE: off</span>
@@ -23,4 +35,5 @@
   </div>
   <pre id='state'>{}</pre>
 </div>
+</main>
 <script src="/admin/ui/assets/agents.js"></script>
