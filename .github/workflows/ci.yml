@@ -109,7 +109,7 @@ jobs:
         run: python3 scripts/check_operation_docs_sync.py
 
       - name: Tests (workspace)
-        run: cargo nextest run --locked --workspace
+        run: cargo nextest run --locked --profile ci --workspace
 
       - name: Snappy bench (sanity)
         run: bash scripts/ci_snappy_bench.sh

@@ -3,10 +3,49 @@ name: Interfaces
 on:
   push:
     branches: [ main ]
+    paths:
+      - 'interfaces/**'
+      - 'spec/**'
+      - 'docs/reference/deprecations.md'
+      - 'docs/reference/interface-release-notes.md'
+      - 'docs/static/openapi.json'
+      - 'quality/openapi-spectral.yaml'
+      - 'requirements/interfaces.txt'
+      - 'requirements/interfaces.in'
+      - 'scripts/generate_deprecations.py'
+      - 'scripts/generate_interface_release_notes.py'
+      - 'scripts/generate_openapi_json.py'
+      - 'scripts/ensure_openapi_descriptions.py'
+      - 'scripts/interfaces_generate_index.py'
+      - 'scripts/interfaces_generate_*.py'
+      - 'scripts/openapi_ci.py'
+      - '.github/workflows/interfaces.yml'
   pull_request:
+    paths:
+      - 'interfaces/**'
+      - 'spec/**'
+      - 'docs/reference/deprecations.md'
+      - 'docs/reference/interface-release-notes.md'
+      - 'docs/static/openapi.json'
+      - 'quality/openapi-spectral.yaml'
+      - 'requirements/interfaces.txt'
+      - 'requirements/interfaces.in'
+      - 'scripts/generate_deprecations.py'
+      - 'scripts/generate_interface_release_notes.py'
+      - 'scripts/generate_openapi_json.py'
+      - 'scripts/ensure_openapi_descriptions.py'
+      - 'scripts/interfaces_generate_index.py'
+      - 'scripts/interfaces_generate_*.py'
+      - 'scripts/openapi_ci.py'
+      - '.github/workflows/interfaces.yml'
+  workflow_dispatch:
 
 permissions:
   contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 env:
   PIP_VERSION: 24.2
@@ -78,9 +117,6 @@ jobs:
   spectral-lint:
     name: Lint OpenAPI/AsyncAPI
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      actions: write
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
@@ -131,22 +167,8 @@ jobs:
       - name: Compare with spec/openapi.yaml
         run: |
           set -euo pipefail
-          python - << 'PY'
-          import sys, yaml
-          def strip_deprecated(obj):
-            if isinstance(obj, dict):
-              obj.pop('deprecated', None)
-              return {k: strip_deprecated(v) for k,v in obj.items()}
-            if isinstance(obj, list):
-              return [strip_deprecated(x) for x in obj]
-            return obj
-          a = yaml.safe_load(open('spec/openapi.yaml'))
-          b = yaml.safe_load(open('/tmp/ifc-gen/openapi.yaml'))
-          a = strip_deprecated(a)
-          b = strip_deprecated(b)
-          yaml.safe_dump(a, open('/tmp/spec.norm.yaml','w'), sort_keys=False)
-          yaml.safe_dump(b, open('/tmp/gen.norm.yaml','w'), sort_keys=False)
-          PY
+          python3 scripts/openapi_ci.py normalize spec/openapi.yaml /tmp/spec.norm.yaml --strip-deprecated
+          python3 scripts/openapi_ci.py normalize /tmp/ifc-gen/openapi.yaml /tmp/gen.norm.yaml --strip-deprecated
           diff -u /tmp/spec.norm.yaml /tmp/gen.norm.yaml > /tmp/openapi.diff || {
             echo '::error::spec/openapi.yaml is out of sync with code-generated output (normalized).'
             cat /tmp/openapi.diff || true
@@ -162,14 +184,8 @@ jobs:
         run: |
           set -euo pipefail
           if [ -s /tmp/ifc-gen/openapi.annot.yaml ]; then
-            python - << 'PY' /tmp/ifc-gen/openapi.annot.yaml > /tmp/gen.annot.norm.yaml
-import sys, yaml
-print(yaml.safe_dump(yaml.safe_load(open(sys.argv[1])), sort_keys=True), end='')
-PY
-            python - << 'PY' spec/openapi.yaml > /tmp/spec.curated.norm.yaml
-import sys, yaml
-print(yaml.safe_dump(yaml.safe_load(open(sys.argv[1])), sort_keys=True), end='')
-PY
+            python3 scripts/openapi_ci.py normalize /tmp/ifc-gen/openapi.annot.yaml /tmp/gen.annot.norm.yaml --sort-keys
+            python3 scripts/openapi_ci.py normalize spec/openapi.yaml /tmp/spec.curated.norm.yaml --sort-keys
             diff -u /tmp/spec.curated.norm.yaml /tmp/gen.annot.norm.yaml > /tmp/ifc-gen/openapi.annot.diff || true
             if [ -s /tmp/ifc-gen/openapi.annot.diff ]; then
               echo '::notice::Annotated OpenAPI differs from curated; see artifact openapi.annot.diff'
@@ -269,9 +285,6 @@ PY
   prism-mock:
     name: Mock server smoke test
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      actions: write
     steps:
       - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
@@ -291,7 +304,7 @@ PY
       - name: Stop Prism
         if: always()
         run: |
-          kill $(cat PRISM_PID) 2>/dev/null || true
+          kill "$(cat PRISM_PID)" 2>/dev/null || true
 
   hygiene:
     name: Descriptor hygiene
@@ -378,7 +391,18 @@ PY
         if: steps.find.outputs.hits != '[]'
         run: |
           ARW_DEBUG=1 ARW_PORT=8099 nohup cargo run -p arw-server >/tmp/svc.log 2>&1 &
-          for i in $(seq 1 60); do curl -fsS http://127.0.0.1:8099/healthz && break || sleep 1; done
+          ready=0
+          for attempt in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:8099/healthz >/dev/null; then
+              ready=1
+              break
+            fi
+            sleep 1
+          done
+          if [ "$ready" -ne 1 ]; then
+            echo "::error::Service did not become healthy within ${attempt}s"
+            exit 1
+          fi
       - name: Verify headers for one deprecated op
         if: steps.find.outputs.hits != '[]'
         run: |

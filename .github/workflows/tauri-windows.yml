@@ -22,6 +22,8 @@ jobs:
     continue-on-error: ${{ matrix.arch == 'arm64' }}
     env:
       TAURI_CLI_VERSION: 2.0.0
+      WINDOWS_CERT_PFX: ${{ secrets.WINDOWS_CERT_PFX }}
+      WINDOWS_CERT_PASSWORD: ${{ secrets.WINDOWS_CERT_PASSWORD }}
     permissions:
       contents: read
       actions: write
@@ -91,11 +93,14 @@ jobs:
           }
 
       - name: Optional Code Sign (EXE/MSI)
-        if: ${{ secrets.WINDOWS_CERT_PFX && secrets.WINDOWS_CERT_PASSWORD }}
+        if: ${{ env.WINDOWS_CERT_PFX != '' && env.WINDOWS_CERT_PASSWORD != '' }}
         shell: pwsh
+        env:
+          WINDOWS_CERT_PFX: ${{ env.WINDOWS_CERT_PFX }}
+          WINDOWS_CERT_PASSWORD: ${{ env.WINDOWS_CERT_PASSWORD }}
         run: |
-          $pfxB64 = "${{ secrets.WINDOWS_CERT_PFX }}"
-          $pwd    = "${{ secrets.WINDOWS_CERT_PASSWORD }}"
+          $pfxB64 = $env:WINDOWS_CERT_PFX
+          $pwd    = $env:WINDOWS_CERT_PASSWORD
           $pfx    = "$env:RUNNER_TEMP\code_sign_cert.pfx"
           [IO.File]::WriteAllBytes($pfx, [Convert]::FromBase64String($pfxB64))
           $signtool = (Get-Command signtool.exe -ErrorAction SilentlyContinue).Path

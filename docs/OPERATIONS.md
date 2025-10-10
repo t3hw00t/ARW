@@ -47,7 +47,7 @@ Env vars:
 ## Test Stability + CI
 
 - Test locks are hardened: state‑dir lock is reentrant; ENV lock has a 10s acquisition timeout to avoid deadlocks.
-- Nextest configuration (`nextest.toml`) provides per‑test and run timeouts; GitHub workflow is included under `.github/workflows/ci-nextest.yml`.
+- Nextest configuration (`nextest.toml`) provides per-test and run timeouts; the primary CI job runs `cargo nextest run --profile ci` inside `.github/workflows/ci.yml`.
 
 ## Grafana Dashboard
 

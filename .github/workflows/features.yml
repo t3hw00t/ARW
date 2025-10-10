@@ -24,7 +24,7 @@ jobs:
       - name: Ensure matrix is committed
         run: |
           if ! git diff --quiet -- docs/reference/feature_matrix.md; then
-            echo '::error::Feature Matrix is out of date. Run `just features-gen` and commit.'
+            echo "::error::Feature Matrix is out of date. Run \`just features-gen\` and commit."
             git --no-pager diff -- docs/reference/feature_matrix.md | sed -n '1,200p'
             exit 1
           fi
