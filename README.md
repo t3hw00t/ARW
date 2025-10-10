@@ -33,11 +33,11 @@ Assistant quickstart → [Agent Onboarding](docs/ai/AGENT_ONBOARDING.md)
 - Clone the repo and install Rust 1.90+ via `rustup`.
 - For a packaged install, download the latest release archive from GitHub Releases and run `scripts/first-run.{sh,ps1}`.
 - For source builds, run `scripts/dev.{sh,ps1} setup` (defaults to headless + non-interactive `-Yes`) or follow docs/guide/quickstart.md; pass `--with-launcher` / `-WithLauncher` when desktop UI prerequisites are ready.
-- Prefer an all-in-one toolchain bootstrap? Install [mise](https://mise.jdx.dev) and run `mise install` to pin Rust 1.90, Python 3.12, Node.js 18, jq, and ripgrep; `mise run verify` and `mise run verify:fast` wrap the guardrail helpers.
+- Prefer an all-in-one toolchain bootstrap? Install [mise](https://mise.jdx.dev) and run `mise install` to pin Rust 1.90, Python 3.12, Node.js 18, jq, and ripgrep; `mise run verify`, `mise run verify:fast`, and `mise run verify:ci` wrap the guardrail helpers.
 
 ## Build & Test
 - Unified helper: `scripts/dev.{sh,ps1}` wraps the common workflow (e.g., `scripts/dev.ps1 build`, `scripts/dev.ps1 verify`).
-- Guardrail sweep: `scripts/dev.sh verify` (headless default skips the Tauri crate; pass `--with-launcher` or set `ARW_VERIFY_INCLUDE_LAUNCHER=1` to include it, and use `--fast` to skip docs/UI checks).
+- Guardrail sweep: `scripts/dev.sh verify` (headless default skips the Tauri crate; pass `--with-launcher` or set `ARW_VERIFY_INCLUDE_LAUNCHER=1` to include it). Use `--fast` to skip docs/UI checks, or `--ci` for a CI‑parity sweep (registry integrity, docgens in `--check` mode, env‑guard, and smokes). Missing Node.js auto‑skips the launcher UI smoke; set `ARW_VERIFY_REQUIRE_DOCS=1` to require Python/PyYAML for doc checks.
 - Build: `scripts/build.sh` (Linux/macOS) or `scripts/build.ps1` (Windows). Both default to a headless build that skips the Tauri launcher; add `--with-launcher` / `-WithLauncher` or set `ARW_BUILD_LAUNCHER=1` when you need the desktop UI (requires WebKitGTK 4.1 + libsoup3 on Linux or WebView2 on Windows). `make build` / `just build` follow the same headless default, with `make build-launcher` / `just build-launcher` opting into the full workspace build.
 - Format: `cargo fmt --all`
 - Lint: `cargo clippy --workspace --all-targets -- -D warnings`

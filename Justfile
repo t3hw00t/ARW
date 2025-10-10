@@ -1,5 +1,15 @@
 set shell := ["bash", "-cu"]
 
+# Guardrails
+verify:
+  bash scripts/dev.sh verify
+
+verify-fast:
+  bash scripts/dev.sh verify --fast
+
+verify-ci:
+  bash scripts/dev.sh verify --ci
+
 # Cleanup
 clean *args:
   bash scripts/clean_workspace.sh {{args}}

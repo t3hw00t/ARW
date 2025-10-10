@@ -13,6 +13,10 @@ run = "bash scripts/dev.sh verify"
 description = "Run the fast guardrail (fmt → clippy → tests only)."
 run = "bash scripts/dev.sh verify --fast"
 
+[tasks."verify:ci"]
+description = "Run CI-parity guardrails (registries, docgens --check, env-guard, smokes)."
+run = "bash scripts/dev.sh verify --ci"
+
 [tasks."bootstrap:docs"]
 description = "Install pinned MkDocs/doc tooling into the active Python."
 run = "bash scripts/bootstrap_docs.sh"

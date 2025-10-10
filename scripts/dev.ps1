@@ -36,7 +36,8 @@ Commands:
   test-fast          Alias for cargo nextest run --workspace.
   docs               Regenerate docs (docgen + mkdocs build --strict when available).
   docs-check         Run docs checks (uses scripts/docgen.ps1 and mkdocs when available).
-  verify             Run the standard fmt → clippy → tests → docs guardrail sequence (-Fast skips docs/UI; -WithLauncher checks Tauri crate).
+  verify             Run the standard fmt → clippy → tests → docs guardrail sequence.
+                     Flags: -Fast (skip docs/UI), -WithLauncher (include Tauri crate), -Ci (CI parity: registries, docgens --check, env-guard, smokes)
   hooks              Install git hooks (cross-platform wrapper).
   status             Generate workspace status page (docgen).
 

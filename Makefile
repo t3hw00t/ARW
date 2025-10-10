@@ -1,5 +1,5 @@
 .PHONY: build dev-build build-launcher fmt lint lint-events test package docgen docs-build start clean clean-venv
-.PHONY: docs-bootstrap docs-check docs-check-fast docs-cache mise-hash
+.PHONY: docs-bootstrap docs-check docs-check-fast docs-cache mise-hash verify verify-fast verify-ci
 
 build:
 	cargo build --workspace --release --locked --exclude arw-launcher
@@ -45,6 +45,15 @@ docs-cache:
 
 mise-hash:
 	bash scripts/update_mise_hash.sh
+
+verify:
+	bash scripts/dev.sh verify
+
+verify-fast:
+	bash scripts/dev.sh verify --fast
+
+verify-ci:
+	bash scripts/dev.sh verify --ci
 
 start:
 	ARW_NO_LAUNCHER=1 ARW_NO_TRAY=1 bash scripts/start.sh --debug --port 8091
