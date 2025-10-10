@@ -15,6 +15,8 @@ Features
 - Quiet mode option to soften glow, idle motion, and snap feedback when you need fewer distractions.
 - Compact mode shrinks the mascot into a minimal badge while preserving status tinting.
 - Conversation responses trigger a streaming pulse and update the badge so you can see progress without opening the full chat.
+- Multiple simultaneous responses stack in the badge (e.g., “Streaming ×2”) so you know how many conversations are active at a glance.
+- Character presets (Guide, Engineer, Researcher, Navigator, Guardian) tint the glow and morph accessories to match the mascot’s role.
 - Independent launch mode for kiosk/control scenarios.
 
 Usage
@@ -37,6 +39,8 @@ Settings
 - Actions menu also offers Dock left/right/bottom-right and Reset position shortcuts.
 - Quiet mode toggle available in Preferences and the mascot menu.
 - Compact mode toggle available in Preferences, the mascot menu, and the Command Palette.
+- Character selector (Guide, Engineer, Researcher, Navigator, Guardian) available in Preferences, the mascot menu, and the Command Palette.
+- Open additional mascots per project: use the Command Palette (“Open Mascot for Project…”) or the mascot menu’s “Open Project Mascot…” option. Each project mascot remembers its own quiet/compact/character settings.
 
 Preferences (persisted)
 - Namespace: `mascot`
@@ -47,6 +51,21 @@ Preferences (persisted)
   - `snapWindows` (bool)
   - `quietMode` (bool)
   - `compactMode` (bool)
+  - `character` (`guide` | `engineer` | `researcher` | `navigator` | `guardian`)
+
+Character Presets
+- **Guide** – default halo; gentle neutral glow for onboarding.
+- **Engineer** – wrench arm with metallic accents; ideal when focusing on builds or operations.
+- **Researcher** – magnifier overlay; pairs well with deep-dive or analysis sessions.
+- **Navigator** – compass pointer; emphasizes planning and coordination work.
+- **Guardian** – shield form; highlights oversight, approvals, and safety review modes.
+
+Switch characters quickly via the Command Palette (`Set Mascot Character: …`) or the mascot menu’s “Next Character” option.
+
+Multiple Mascots
+- Spawn a mascot dedicated to a project (`project:alpha`) while keeping a global guide active.
+- Each mascot listens only to `mascot:config` payloads for its profile (global or `project:<slug>`), so settings stay scoped.
+- Close extra mascots via the tray > Windows list or the Command Palette (`window:close` targeting the mascot label).
 
 Independent launch
 - Start the launcher in mascot‑only mode:

@@ -11,7 +11,7 @@
     <script src="common.js" defer></script>
     <script src="mascot.js" defer></script>
   </head>
-  <body data-page="mascot">
+  <body data-page="mascot" data-character="guide">
     <div class="mascot-root" role="img" aria-label="Project mascot">
       <div class="drag-strip" title="Drag to move" aria-hidden="true"></div>
       <svg class="blob" viewBox="0 0 200 240" width="200" height="240" aria-hidden="true">
@@ -41,6 +41,26 @@
         <rect class="eye" x="75" y="95" rx="3" ry="3" width="18" height="3"/>
         <rect class="eye" x="107" y="95" rx="3" ry="3" width="18" height="3"/>
         <circle class="mouth" cx="100" cy="118" r="5"/>
+
+        <!-- Accessories -->
+        <g class="accessory accessory--guide" aria-hidden="true">
+          <path d="M120 70 q18 -12 34 0" class="acc-halo"/>
+        </g>
+        <g class="accessory accessory--engineer" aria-hidden="true">
+          <path d="M130 128 l18 -18 8 8 -18 18z" class="acc-metal"/>
+          <circle cx="150" cy="116" r="6" class="acc-joint"/>
+        </g>
+        <g class="accessory accessory--researcher" aria-hidden="true">
+          <circle cx="135" cy="118" r="12" class="acc-glass"/>
+          <rect x="145" y="128" width="16" height="5" rx="2.5" class="acc-handle" transform="rotate(38 145 128)"/>
+        </g>
+        <g class="accessory accessory--navigator" aria-hidden="true">
+          <polygon points="72,156 116,146 92,194" class="acc-pointer"/>
+          <circle cx="96" cy="178" r="7" class="acc-pointer-core"/>
+        </g>
+        <g class="accessory accessory--guardian" aria-hidden="true">
+          <path d="M60 130 L90 120 L120 130 L120 160 L90 178 L60 160 Z" class="acc-shield"/>
+        </g>
       </svg>
       <span class="status-pill" id="mascotStatus" aria-live="polite" aria-label="Mascot status"></span>
       <div class="hint" id="mascotHint" aria-live="polite"></div>
@@ -54,6 +74,8 @@
           <hr/>
           <button type="button" role="menuitem" data-action="toggle-quiet">Toggle Quiet Mode</button>
           <button type="button" role="menuitem" data-action="toggle-compact">Toggle Compact Mode</button>
+          <button type="button" role="menuitem" data-action="cycle-character">Next Character</button>
+          <button type="button" role="menuitem" data-action="spawn-project">Open Project Mascot…</button>
           <hr/>
           <button type="button" role="menuitem" data-action="dock-left">Dock Left</button>
           <button type="button" role="menuitem" data-action="dock-right">Dock Right</button>

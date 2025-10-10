@@ -1859,22 +1859,35 @@ window.ARW.sse.subscribe('state.read.model.patch', ({ env }) => {
     document.body.appendChild(wrap);
     this._wrap = wrap; this._input = inp; this._list = ul;
     const base = opts.base;
-    const emitMascotConfig = async () => {
+    const emitMascotConfig = async (profile = 'global', overrides = {}) => {
       try {
         const prefs = await ARW.getPrefs('mascot') || {};
+        const base = {
+          allowInteractions: !(prefs.clickThrough ?? true),
+          intensity: prefs.intensity || 'normal',
+          snapWindows: prefs.snapWindows !== false,
+          quietMode: !!prefs.quietMode,
+          compactMode: !!prefs.compactMode,
+          character: prefs.character || 'guide',
+        };
+        const profilePrefs = profile !== 'global'
+          && prefs.profiles
+          && typeof prefs.profiles === 'object'
+          ? prefs.profiles[profile] || {}
+          : {};
         if (window.__TAURI__?.event?.emit) {
           await window.__TAURI__.event.emit('mascot:config', {
-            allowInteractions: !(prefs.clickThrough ?? true),
-            intensity: prefs.intensity || 'normal',
-            snapWindows: prefs.snapWindows !== false,
-            quietMode: !!prefs.quietMode,
-            compactMode: !!prefs.compactMode,
+            profile,
+            ...base,
+            ...profilePrefs,
+            ...overrides,
           });
         }
       } catch (err) {
         console.error(err);
       }
     };
+    const characterOrder = ['guide','engineer','researcher','navigator','guardian'];
     this._actions = [
       { id:'open:hub', label:'Open Projects workspace', hint:'window', run:()=> ARW.invoke('open_hub_window') },
       { id:'open:chat', label:'Open Conversations workspace', hint:'window', run:()=> ARW.invoke('open_chat_window') },
@@ -1882,7 +1895,7 @@ window.ARW.sse.subscribe('state.read.model.patch', ({ env }) => {
       { id:'open:debug', label:'Open Debug (Window)', hint:'window', run:()=> ARW.invoke('open_debug_window', { port: ARW.getPortFromInput('port') }) },
       { id:'open:events', label:'Open Events Window', hint:'window', run:()=> ARW.invoke('open_events_window') },
       { id:'open:docs', label:'Open Docs Website', hint:'web', run:()=> ARW.invoke('open_url', { url: 'https://t3hw00t.github.io/ARW/' }) },
-      { id:'mascot:show', label:'Show Mascot Overlay', hint:'window', run: async ()=> { try { await ARW.invoke('open_mascot_window'); await emitMascotConfig(); } catch(e){ console.error(e); } } },
+      { id:'mascot:show', label:'Show Mascot Overlay', hint:'window', run: async ()=> { try { await ARW.invoke('open_mascot_window', { profile: 'global' }); await emitMascotConfig('global'); } catch(e){ console.error(e); } } },
       { id:'mascot:toggle-interactions', label:'Toggle Mascot Interactions (Ctrl/⌘+D)', hint:'action', run: async ()=> { try { document.dispatchEvent(new KeyboardEvent('keydown', { key: 'd', ctrlKey: !navigator.platform.includes('Mac'), metaKey: navigator.platform.includes('Mac') })); } catch(e){ console.error(e); } } },
       { id:'mascot:dock-left', label:'Dock Mascot Left', hint:'window', run:()=> ARW.invoke('position_window', { label:'mascot', anchor:'left', margin: 12 }) },
       { id:'mascot:dock-right', label:'Dock Mascot Right', hint:'window', run:()=> ARW.invoke('position_window', { label:'mascot', anchor:'right', margin: 12 }) },
@@ -1906,6 +1919,86 @@ window.ARW.sse.subscribe('state.read.model.patch', ({ env }) => {
             await ARW.setPrefs('mascot', prefs);
             await emitMascotConfig();
             ARW.toast(`Mascot compact mode ${prefs.compactMode ? 'on' : 'off'}`);
+          } catch (err) {
+            console.error(err);
+          }
+        }
+      },
+      { id:'mascot:cycle-character', label:'Cycle Mascot Character', hint:'action', run: async ()=>{
+          try {
+            const prefs = await ARW.getPrefs('mascot') || {};
+            const current = prefs.character && characterOrder.includes(prefs.character) ? prefs.character : 'guide';
+            const next = characterOrder[(characterOrder.indexOf(current) + 1) % characterOrder.length];
+            prefs.character = next;
+            await ARW.setPrefs('mascot', prefs);
+            await emitMascotConfig('global');
+            ARW.toast(`Mascot character: ${next}`);
+          } catch (err) {
+            console.error(err);
+          }
+        }
+      },
+      ...characterOrder.map((value) => ({
+        id: `mascot:character:${value}`,
+        label: `Set Mascot Character: ${value.charAt(0).toUpperCase()}${value.slice(1)}`,
+        hint: 'action',
+        run: async ()=>{
+          try {
+            const prefs = await ARW.getPrefs('mascot') || {};
+            prefs.character = value;
+            await ARW.setPrefs('mascot', prefs);
+            await emitMascotConfig('global');
+            ARW.toast(`Mascot character: ${value}`);
+          } catch (err) {
+            console.error(err);
+          }
+        }
+      })),
+      { id:'mascot:open-project', label:'Open Mascot for Project…', hint:'window', run: async ()=>{
+          try {
+            const result = await ARW.modal.form({
+              title: 'Open Project Mascot',
+              description: 'Spawn a dedicated mascot for a project or workspace.',
+              submitLabel: 'Open',
+              fields: [
+                { name:'name', label:'Project name', placeholder:'Project Alpha', required: true },
+                { name:'character', label:'Character', type:'select', value:'guide', options: characterOrder.map((value)=>({ value, label: value.charAt(0).toUpperCase()+value.slice(1) })) },
+                { name:'quietMode', label:'Start in quiet mode', type:'checkbox', value:false },
+                { name:'compactMode', label:'Start in compact mode', type:'checkbox', value:false },
+              ],
+            });
+            if (!result) return;
+            const rawName = String(result.name || '').trim();
+            if (!rawName) return;
+            const slug = rawName
+              .toLowerCase()
+              .replace(/[^a-z0-9]+/g, '-')
+              .replace(/^-+|-+$/g, '')
+              || 'project';
+            const profile = `project:${slug}`;
+            const label = `mascot-${slug}`;
+            const overrides = {
+              quietMode: !!result.quietMode,
+              compactMode: !!result.compactMode,
+              character: result.character || 'guide',
+            };
+            const prefs = await ARW.getPrefs('mascot') || {};
+            if (typeof prefs.profiles !== 'object' || !prefs.profiles) prefs.profiles = {};
+            prefs.profiles[profile] = {
+              quietMode: overrides.quietMode,
+              compactMode: overrides.compactMode,
+              character: overrides.character,
+            };
+            await ARW.setPrefs('mascot', prefs);
+            await ARW.invoke('open_mascot_window', {
+              label,
+              profile,
+              character: overrides.character,
+              quiet: overrides.quietMode,
+              compact: overrides.compactMode,
+            });
+            await emitMascotConfig(profile, overrides);
+            ARW.toast(`Opened mascot for ${rawName}`);
           } catch (err) {
             console.error(err);
           }

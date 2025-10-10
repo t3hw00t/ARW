@@ -1,6 +1,14 @@
 // Minimal logic to keep the mascot lively and semi-empathetic
 (function(){
   const HAS_TAURI = !!(window.__TAURI__ && window.__TAURI__.invoke);
+  const searchParams = (()=>{
+    try { return new URLSearchParams(window.location.search || ''); }
+    catch { return new URLSearchParams(); }
+  })();
+  const initialProfile = searchParams.get('profile') || 'global';
+  const initialCharacter = searchParams.get('character') || 'guide';
+  const initialQuiet = searchParams.get('quiet') === '1';
+  const initialCompact = searchParams.get('compact') === '1';
 
   let state = 'unknown';
   let healthTimer = null;
@@ -11,14 +19,22 @@
     allowInteractions: false,
     intensity: 'normal',
     snapWindows: true,
-    quietMode: false,
-    compactMode: false,
+    quietMode: initialQuiet,
+    compactMode: initialCompact,
+    character: initialCharacter,
+    profile: initialProfile,
   };
+  try {
+    document.body.dataset.profile = config.profile;
+    document.body.dataset.character = config.character;
+  } catch {}
   let previewAnchor = null;
   let previewTimer = null;
   let savedHint = null;
+  let lastHint = '';
   let streamingCount = 0;
   let statusOverride = null;
+  const activeStreams = new Map();
   const SNAP_HINTS = {
     'left': 'Docking left edge…',
     'right': 'Docking right edge…',
@@ -35,8 +51,72 @@
     concern: 'Check',
     error: 'Error',
   };
+  const CHARACTER_ORDER = ['guide','engineer','researcher','navigator','guardian'];
   const hint = () => document.getElementById('mascotHint');
   const statusPill = () => document.getElementById('mascotStatus');
+
+  async function loadMascotPrefs(){
+    if (!window.ARW || typeof window.ARW.getPrefs !== 'function') return {};
+    try {
+      const prefs = await window.ARW.getPrefs('mascot');
+      return prefs && typeof prefs === 'object' ? { ...prefs } : {};
+    } catch (err) {
+      console.error(err);
+      return {};
+    }
+  }
+
+  async function storeMascotPrefs(prefs){
+    if (!window.ARW || typeof window.ARW.setPrefs !== 'function') return;
+    try {
+      await window.ARW.setPrefs('mascot', prefs);
+    } catch (err) {
+      console.error(err);
+    }
+  }
+
+  function ensureProfilePrefs(prefs, profile){
+    if (profile === 'global') return prefs;
+    if (!prefs.profiles || typeof prefs.profiles !== 'object') {
+      prefs.profiles = {};
+    }
+    if (!prefs.profiles[profile] || typeof prefs.profiles[profile] !== 'object') {
+      prefs.profiles[profile] = {};
+    }
+    return prefs.profiles[profile];
+  }
+
+  function buildConfigPayload(prefs, profileKey, entryOverrides = {}, extra = {}) {
+    const isGlobal = profileKey === 'global';
+    const entry = isGlobal ? prefs : entryOverrides;
+    const quiet = isGlobal
+      ? !!(prefs.quietMode ?? false)
+      : !!(entry.quietMode ?? prefs.quietMode ?? false);
+    const compact = isGlobal
+      ? !!(prefs.compactMode ?? false)
+      : !!(entry.compactMode ?? prefs.compactMode ?? false);
+    const character = isGlobal
+      ? (prefs.character || config.character)
+      : (entry.character || prefs.character || config.character);
+    return {
+      profile: profileKey,
+      allowInteractions: !(prefs.clickThrough ?? true),
+      intensity: prefs.intensity || 'normal',
+      snapWindows: prefs.snapWindows !== false,
+      quietMode: quiet,
+      compactMode: compact,
+      character,
+      ...extra,
+    };
+  }
+
+  function slugifyName(raw) {
+    return String(raw || '')
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      || 'project';
+  }
 
   function setState(next){
     const s = String(next||'').trim().toLowerCase();
@@ -55,12 +135,20 @@
 
   function setHint(text){
     const el = hint();
+    const value = text || '';
+    lastHint = value;
     if (el && !document.body.classList.contains('compact-mode')) {
-      el.textContent = text || '';
+      el.textContent = value;
     }
     const pill = statusPill();
-    if (pill && document.body.classList.contains('compact-mode')) {
-      pill.dataset.hint = text || '';
+    if (pill) {
+      if (document.body.classList.contains('compact-mode')) {
+        pill.dataset.hint = value;
+        pill.title = value;
+      } else {
+        pill.removeAttribute('data-hint');
+        pill.removeAttribute('title');
+      }
     }
   }
 
@@ -68,7 +156,10 @@
     const pill = statusPill();
     if (!pill) return;
     const label = statusOverride || STATE_LABELS[state] || state;
+    const character = config.character || 'guide';
     pill.textContent = label;
+    pill.dataset.character = character;
+    pill.setAttribute('aria-label', `${label}${character ? ` — ${character}` : ''}`);
   }
 
   function scheduleIdleTick(){
@@ -115,29 +206,68 @@
       const el = hint();
       if (el) el.textContent = '';
     }
+    if (next) {
+      const pill = statusPill();
+      if (pill) {
+        pill.dataset.hint = lastHint;
+        pill.title = lastHint;
+      }
+    }
     updateStatusPill();
   }
 
-  function setStreaming(active, message){
-    if (active) streamingCount += 1;
-    else streamingCount = Math.max(0, streamingCount - 1);
-    const activeNow = streamingCount > 0;
-    if (activeNow) {
+  function applyCharacter(name){
+    const normalized = CHARACTER_ORDER.includes(name) ? name : 'guide';
+    config.character = normalized;
+    document.body.dataset.character = normalized;
+    try {
+      const root = document.querySelector('.mascot-root');
+      if (root) root.setAttribute('aria-label', `Project mascot (${normalized})`);
+    } catch {}
+    updateStatusPill();
+  }
+
+  function setStreaming(id, active, payload = {}){
+    const key = id || 'global';
+    if (active) {
+      activeStreams.set(key, {
+        message: payload.hint || payload.message || '',
+        label: payload.label || payload.title || (key !== 'global' ? key : 'Streaming'),
+      });
+    } else {
+      activeStreams.delete(key);
+    }
+    streamingCount = activeStreams.size;
+    if (streamingCount > 0) {
       document.body.dataset.stream = 'active';
-      statusOverride = 'Streaming';
+      const firstEntry = activeStreams.values().next().value;
+      const label = streamingCount > 1
+        ? `Streaming ×${streamingCount}`
+        : `Streaming — ${firstEntry?.label || 'Chat'}`;
+      statusOverride = label;
       updateStatusPill();
-      if (message) setHint(message);
+      const msg = firstEntry?.message || payload.hint || payload.message;
+      if (msg) setHint(msg);
     } else {
       delete document.body.dataset.stream;
       statusOverride = null;
       updateStatusPill();
-      if (message) setHint(message);
+      const msg = payload.hint || payload.message;
+      if (msg) setHint(msg);
     }
   }
 
   async function init(){
     setState('thinking');
     setHint('Warming up…');
+    applyCharacter(config.character);
+    if (config.quietMode) {
+      applyQuietMode(true);
+    }
+    if (config.compactMode) {
+      applyCompactMode(true);
+    }
+    updateStatusPill();
     // Gentle periodic health checks
     await healthCheck();
     healthTimer = setInterval(healthCheck, 15000);
@@ -278,6 +408,57 @@
       }
     }, 1200);
 
+    const spawnProjectMascot = async () => {
+      if (!window.ARW || typeof window.ARW.modal?.form !== 'function') {
+        try { window.ARW?.toast?.('Project mascots require the desktop launcher.'); } catch {}
+        return;
+      }
+      const result = await window.ARW.modal.form({
+        title: 'Open Project Mascot',
+        description: 'Spawn a mascot tuned to a project or remote node.',
+        submitLabel: 'Open',
+        fields: [
+          { name: 'name', label: 'Project name', placeholder: 'Project Alpha', required: true },
+          { name: 'character', label: 'Character', type: 'select', value: config.character || 'guide', options: CHARACTER_ORDER.map((value) => ({ value, label: value.charAt(0).toUpperCase() + value.slice(1) })) },
+          { name: 'quietMode', label: 'Start in quiet mode', type: 'checkbox', value: config.quietMode },
+          { name: 'compactMode', label: 'Start in compact mode', type: 'checkbox', value: config.compactMode },
+        ],
+      });
+      if (!result) return;
+      const rawName = String(result.name || '').trim();
+      if (!rawName) return;
+      const slug = slugifyName(rawName);
+      const profileKey = `project:${slug}`;
+      const windowLabel = `mascot-${slug}`;
+      const prefs = await loadMascotPrefs();
+      const entry = ensureProfilePrefs(prefs, profileKey);
+      entry.quietMode = !!result.quietMode;
+      entry.compactMode = !!result.compactMode;
+      entry.character = result.character || entry.character || prefs.character || 'guide';
+      await storeMascotPrefs(prefs);
+      const overrides = {
+        quietMode: entry.quietMode,
+        compactMode: entry.compactMode,
+        character: entry.character,
+      };
+      try {
+        await window.__TAURI__?.invoke('open_mascot_window', {
+          label: windowLabel,
+          profile: profileKey,
+          character: entry.character,
+          quiet: entry.quietMode,
+          compact: entry.compactMode,
+        });
+        if (window.__TAURI__?.event?.emit) {
+          await window.__TAURI__.event.emit('mascot:config', buildConfigPayload(prefs, profileKey, entry, overrides));
+        }
+        window.ARW.toast?.(`Opened mascot for ${rawName}`);
+      } catch (err) {
+        console.error(err);
+        window.ARW.toast?.('Unable to open project mascot');
+      }
+    };
+
     try{
       if (ARW?.sse?.subscribe) {
         ARW.sse.subscribe((kind) => {
@@ -286,19 +467,21 @@
           return lower.includes('chat') && (lower.includes('turn') || lower.includes('stream') || lower.includes('response'));
         }, ({ kind, env }) => {
           const lower = String(kind || '').toLowerCase();
+          const convId = env?.conversationId || env?.conversation_id || env?.conversation?.id || env?.conversation || env?.window || env?.label || null;
+          const label = env?.label || env?.title || (env?.window ? String(env.window) : (convId && convId !== 'global' ? String(convId) : 'Chat'));
           if (lower.includes('error') || env?.error) {
-            setStreaming(false, 'Response failed');
+            setStreaming(convId, false, { hint: 'Response failed', label });
             setState('error');
             return;
           }
           if (lower.includes('start') || lower.includes('open')) {
-            setStreaming(true, 'Streaming response…');
+            setStreaming(convId, true, { hint: 'Streaming response…', label });
             setState('thinking');
           } else if (lower.includes('delta')) {
-            setStreaming(true, 'Streaming response…');
+            setStreaming(convId, true, { hint: 'Streaming response…', label });
             setState('thinking');
           } else if (lower.includes('complete') || lower.includes('finish') || lower.includes('done') || lower.includes('close')) {
-            setStreaming(false, 'Response ready');
+            setStreaming(convId, false, { hint: 'Response ready', label });
             setState('ready');
           }
         });
@@ -310,14 +493,16 @@
         await window.__TAURI__.event.listen('mascot:stream', (evt) => {
           const payload = evt?.payload || {};
           const action = String(payload.action || '').toLowerCase();
+          const convId = payload.conversationId || payload.window || null;
+          const label = payload.label || payload.title || (convId && convId !== 'global' ? String(convId) : 'Chat');
           if (action === 'start') {
-            setStreaming(true, payload.hint || 'Streaming response…');
+            setStreaming(convId, true, { hint: payload.hint || 'Streaming response…', label });
             if (payload.state) setState(payload.state);
           } else if (action === 'stop' || action === 'end') {
-            setStreaming(false, payload.hint || 'Response ready');
+            setStreaming(convId, false, { hint: payload.hint || 'Response ready', label });
             if (payload.state) setState(payload.state);
           } else if (action === 'error') {
-            setStreaming(false, payload.hint || 'Response failed');
+            setStreaming(convId, false, { hint: payload.hint || 'Response failed', label });
             setState('error');
           }
         });
@@ -361,19 +546,29 @@
               break;
             case 'toggle-quiet': {
               try {
-                const prefs = await ARW.getPrefs('mascot') || {};
-                const next = !(prefs.quietMode ?? false);
-                prefs.quietMode = next;
-                prefs.compactMode = prefs.compactMode ?? config.compactMode;
-                await ARW.setPrefs('mascot', prefs);
+                const profileKey = config.profile || 'global';
+                const prefs = await loadMascotPrefs();
+                const entry = ensureProfilePrefs(prefs, profileKey);
+                const currentQuiet = profileKey === 'global'
+                  ? !!(prefs.quietMode ?? false)
+                  : !!(entry.quietMode ?? prefs.quietMode ?? false);
+                const next = !currentQuiet;
+                if (profileKey === 'global') {
+                  prefs.quietMode = next;
+                } else {
+                  entry.quietMode = next;
+                }
+                await storeMascotPrefs(prefs);
                 if (window.__TAURI__?.event?.emit) {
-                  await window.__TAURI__.event.emit('mascot:config', {
-                    allowInteractions: !(prefs.clickThrough ?? true),
-                    intensity: prefs.intensity || 'normal',
-                    snapWindows: prefs.snapWindows !== false,
-                    quietMode: next,
-                    compactMode: prefs.compactMode ?? false,
-                  });
+                  await window.__TAURI__.event.emit(
+                    'mascot:config',
+                    buildConfigPayload(
+                      prefs,
+                      profileKey,
+                      profileKey === 'global' ? {} : entry,
+                      { quietMode: next }
+                    )
+                  );
                 }
                 setHint(next ? 'Quiet mode enabled' : 'Quiet mode disabled');
               } catch (err) {
@@ -383,19 +578,29 @@
             }
             case 'toggle-compact': {
               try {
-                const prefs = await ARW.getPrefs('mascot') || {};
-                const next = !(prefs.compactMode ?? false);
-                prefs.compactMode = next;
-                prefs.quietMode = prefs.quietMode ?? config.quietMode;
-                await ARW.setPrefs('mascot', prefs);
+                const profileKey = config.profile || 'global';
+                const prefs = await loadMascotPrefs();
+                const entry = ensureProfilePrefs(prefs, profileKey);
+                const currentCompact = profileKey === 'global'
+                  ? !!(prefs.compactMode ?? false)
+                  : !!(entry.compactMode ?? prefs.compactMode ?? false);
+                const next = !currentCompact;
+                if (profileKey === 'global') {
+                  prefs.compactMode = next;
+                } else {
+                  entry.compactMode = next;
+                }
+                await storeMascotPrefs(prefs);
                 if (window.__TAURI__?.event?.emit) {
-                  await window.__TAURI__.event.emit('mascot:config', {
-                    allowInteractions: !(prefs.clickThrough ?? true),
-                    intensity: prefs.intensity || 'normal',
-                    snapWindows: prefs.snapWindows !== false,
-                    quietMode: prefs.quietMode ?? false,
-                    compactMode: next,
-                  });
+                  await window.__TAURI__.event.emit(
+                    'mascot:config',
+                    buildConfigPayload(
+                      prefs,
+                      profileKey,
+                      profileKey === 'global' ? {} : entry,
+                      { compactMode: next }
+                    )
+                  );
                 }
                 setHint(next ? 'Compact mode enabled' : 'Compact mode disabled');
               } catch (err) {
@@ -403,6 +608,44 @@
               }
               break;
             }
+            case 'cycle-character': {
+              try {
+                const profileKey = config.profile || 'global';
+                const prefs = await loadMascotPrefs();
+                const entry = ensureProfilePrefs(prefs, profileKey);
+                const current = profileKey === 'global'
+                  ? (prefs.character && CHARACTER_ORDER.includes(prefs.character) ? prefs.character : 'guide')
+                  : (entry.character && CHARACTER_ORDER.includes(entry.character)
+                      ? entry.character
+                      : (prefs.character && CHARACTER_ORDER.includes(prefs.character) ? prefs.character : 'guide'));
+                const next = CHARACTER_ORDER[(CHARACTER_ORDER.indexOf(current) + 1) % CHARACTER_ORDER.length];
+                if (profileKey === 'global') {
+                  prefs.character = next;
+                } else {
+                  entry.character = next;
+                }
+                await storeMascotPrefs(prefs);
+                applyCharacter(next);
+                if (window.__TAURI__?.event?.emit) {
+                  await window.__TAURI__.event.emit(
+                    'mascot:config',
+                    buildConfigPayload(
+                      prefs,
+                      profileKey,
+                      profileKey === 'global' ? {} : entry,
+                      { character: next }
+                    )
+                  );
+                }
+                setHint(`Character: ${next}`);
+              } catch (err) {
+                console.error(err);
+              }
+              break;
+            }
+            case 'spawn-project':
+              await spawnProjectMascot();
+              break;
             case 'dock-left':
               await ARW.invoke('position_window', { label:'mascot', anchor:'left', margin: 12 });
               if (config.snapWindows) await snapToSurfaces();
@@ -437,6 +680,12 @@
       if (window.__TAURI__?.event){
         await window.__TAURI__.event.listen('mascot:config', (evt)=>{
           const cfg = evt?.payload || {};
+          const targetProfile = typeof cfg.profile === 'string' && cfg.profile.trim()
+            ? cfg.profile.trim()
+            : 'global';
+          if (targetProfile !== 'global' && targetProfile !== config.profile) {
+            return;
+          }
           if (typeof cfg.allowInteractions === 'boolean'){
             config.allowInteractions = !!cfg.allowInteractions;
             document.body.classList.toggle('allow-interactions', config.allowInteractions);
@@ -450,6 +699,11 @@
           }
           if (typeof cfg.compactMode === 'boolean') {
             applyCompactMode(cfg.compactMode);
+          } else {
+            updateStatusPill();
+          }
+          if (typeof cfg.character === 'string') {
+            applyCharacter(cfg.character);
           }
         });
       }

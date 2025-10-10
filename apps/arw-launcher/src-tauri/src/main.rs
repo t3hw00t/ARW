@@ -121,7 +121,7 @@ fn create_tray<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> tauri::Result<()
                 let _ = arw_tauri::open_settings_window(app.clone());
             }
             "win-mascot" => {
-                let _ = arw_tauri::open_mascot_window(app.clone());
+                let _ = arw_tauri::open_mascot_window(app.clone(), None, None, None, None, None);
             }
             // App
             "quit" => app.exit(0),
@@ -235,7 +235,14 @@ fn main() {
             // Show mascot-only mode when ARW_MASCOT_ONLY=1
             if env_bool("ARW_MASCOT_ONLY").unwrap_or(false) {
                 let _ = main.hide();
-                let _ = arw_tauri::open_mascot_window(app.handle().clone());
+                let _ = arw_tauri::open_mascot_window(
+                    app.handle().clone(),
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                );
             }
 
             // Auto-start service if ARW_AUTOSTART=1 or prefs say so

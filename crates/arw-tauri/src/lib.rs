@@ -856,16 +856,58 @@ mod cmds {
     }
 
     #[tauri::command]
-    pub fn open_mascot_window<R: tauri::Runtime>(app: tauri::AppHandle<R>) -> Result<(), String> {
-        let label = "mascot";
-        if app.get_webview_window(label).is_none() {
+    pub fn open_mascot_window<R: tauri::Runtime>(
+        app: tauri::AppHandle<R>,
+        label: Option<String>,
+        profile: Option<String>,
+        character: Option<String>,
+        quiet: Option<bool>,
+        compact: Option<bool>,
+    ) -> Result<(), String> {
+        let window_label = label
+            .as_ref()
+            .map(|s| s.trim())
+            .filter(|s| !s.is_empty())
+            .map(|s| s.to_string())
+            .unwrap_or_else(|| "mascot".to_string());
+        let profile_ref = profile
+            .as_ref()
+            .map(|s| s.trim())
+            .filter(|s| !s.is_empty())
+            .map(|s| s.to_string())
+            .unwrap_or_else(|| "global".to_string());
+        let mut params = vec![format!("profile={}", urlencoding::encode(&profile_ref))];
+        if let Some(ch) = character
+            .as_ref()
+            .map(|s| s.trim())
+            .filter(|s| !s.is_empty())
+        {
+            params.push(format!("character={}", urlencoding::encode(ch)));
+        }
+        if quiet.unwrap_or(false) {
+            params.push("quiet=1".to_string());
+        }
+        if compact.unwrap_or(false) {
+            params.push("compact=1".to_string());
+        }
+        let query = if params.is_empty() {
+            String::new()
+        } else {
+            format!("?{}", params.join("&"))
+        };
+        if app.get_webview_window(&window_label).is_none() {
+            let title_suffix = if profile_ref != "global" {
+                format!(" — {}", profile_ref)
+            } else {
+                String::new()
+            };
             let mut builder = tauri::WebviewWindowBuilder::new(
                 &app,
-                label,
-                tauri::WebviewUrl::App("mascot.html".into()),
+                &window_label,
+                tauri::WebviewUrl::App(format!("mascot.html{}", query).into()),
             );
             builder = builder
-                .title("ARW — Mascot")
+                .title(format!("ARW — Mascot{}", title_suffix))
                 .inner_size(220.0, 260.0)
                 .decorations(false)
                 .resizable(false)
@@ -873,17 +915,26 @@ mod cmds {
                 .transparent(true)
                 .skip_taskbar(true);
             builder.build().map_err(|e| e.to_string())?;
-        } else if let Some(w) = app.get_webview_window(label) {
+        } else if let Some(w) = app.get_webview_window(&window_label) {
             let _ = w.set_focus();
         }
         // Nudge into view in case monitors changed
-        let _ = ensure_window_in_view(app.clone(), Some(label.to_string()));
+        let _ = ensure_window_in_view(app.clone(), Some(window_label));
         Ok(())
     }
 
     #[tauri::command]
-    pub fn close_mascot_window<R: tauri::Runtime>(app: tauri::AppHandle<R>) -> Result<(), String> {
-        if let Some(window) = app.get_webview_window("mascot") {
+    pub fn close_mascot_window<R: tauri::Runtime>(
+        app: tauri::AppHandle<R>,
+        label: Option<String>,
+    ) -> Result<(), String> {
+        let target = label
+            .as_ref()
+            .map(|s| s.trim())
+            .filter(|s| !s.is_empty())
+            .map(|s| s.to_string())
+            .unwrap_or_else(|| "mascot".to_string());
+        if let Some(window) = app.get_webview_window(&target) {
             window.close().map_err(|e| e.to_string())?;
         }
         Ok(())

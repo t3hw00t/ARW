@@ -193,7 +193,13 @@ document.addEventListener('DOMContentLoaded', async () => {
     try{
       if (window.__TAURI__?.event?.emit) {
         window.__TAURI__.event.emit('mascot:state', { state:'thinking', hint:'Thinking…' });
-        window.__TAURI__.event.emit('mascot:stream', { action:'start', hint:'Streaming response…', state:'thinking' });
+        window.__TAURI__.event.emit('mascot:stream', {
+          action:'start',
+          hint:'Streaming response…',
+          state:'thinking',
+          conversationId:'local-chat',
+          label:'Local chat',
+        });
       }
     }catch{}
     addMessage('you', text);
@@ -204,7 +210,13 @@ document.addEventListener('DOMContentLoaded', async () => {
       addMessage('assistant', text.split('').reverse().join(''));
       try{
         if (window.__TAURI__?.event?.emit) {
-          window.__TAURI__.event.emit('mascot:stream', { action:'stop', hint:'Response ready', state:'ready' });
+          window.__TAURI__.event.emit('mascot:stream', {
+            action:'stop',
+            hint:'Response ready',
+            state:'ready',
+            conversationId:'local-chat',
+            label:'Local chat',
+          });
           window.__TAURI__.event.emit('mascot:state', { state:'ready', hint:'All set.' });
         }
       }catch{}

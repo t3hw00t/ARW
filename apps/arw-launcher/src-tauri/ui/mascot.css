@@ -145,6 +145,27 @@ body.quiet-mode .mascot-root::after {
   border-color: transparent;
 }
 
+.accessory { display: none; opacity: 0.92; }
+.acc-halo { fill: none; stroke: rgba(255,255,255,0.6); stroke-width: 4; stroke-linecap: round; }
+.acc-metal { fill: #d7dee8; }
+.acc-joint { fill: #95a4c5; }
+.acc-glass { fill: rgba(173,207,255,0.45); stroke: rgba(94,132,220,0.7); stroke-width: 2; }
+.acc-handle { fill: #5e84dc; }
+.acc-pointer { fill: rgba(120,190,255,0.75); }
+.acc-pointer-core { fill: #235; stroke: rgba(255,255,255,0.6); stroke-width: 2; }
+.acc-shield { fill: rgba(255,120,120,0.4); stroke: rgba(255,120,120,0.7); stroke-width: 2; }
+
+body[data-character="guide"] .accessory--guide { display: block; }
+body[data-character="engineer"] .accessory--engineer { display: block; }
+body[data-character="researcher"] .accessory--researcher { display: block; }
+body[data-character="navigator"] .accessory--navigator { display: block; }
+body[data-character="guardian"] .accessory--guardian { display: block; }
+
+body[data-character="engineer"] .status-pill::after { color: #4f6bff; }
+body[data-character="researcher"] .status-pill::after { color: #5caabf; }
+body[data-character="navigator"] .status-pill::after { color: #4ca966; }
+body[data-character="guardian"] .status-pill::after { color: #d45c5c; }
+
 body.compact-mode .mascot-root {
   width: 140px;
   height: 160px;
@@ -208,6 +229,15 @@ body[data-stream="active"] .mascot-root {
   transition: opacity 140ms ease-out, transform 140ms ease-out;
 }
 
+.status-pill::after {
+  content: attr(data-character);
+  display: none;
+  margin-left: 6px;
+  font-weight: 500;
+  text-transform: capitalize;
+  opacity: 0.8;
+}
+
 body.compact-mode .status-pill {
   opacity: 0.88;
   transform: translateY(0px);
@@ -215,6 +245,10 @@ body.compact-mode .status-pill {
 
 body.compact-mode.quiet-mode .status-pill {
   background: color-mix(in oklab, var(--arw-surface, #fff), var(--arw-ink, #000) 6%);
+}
+
+body.compact-mode .status-pill::after {
+  display: inline;
 }
 
 /* When click-through is disabled (user toggled), allow pointer events */
