@@ -14,6 +14,52 @@ body {
   transition: transform 120ms ease-out;
 }
 
+.mascot-stream-list {
+  position:absolute;
+  top: 12px;
+  left: 12px;
+  display:flex;
+  flex-direction:column;
+  gap:4px;
+  max-width: 140px;
+  font-size:0.72rem;
+  color: var(--arw-ink, #1f2933);
+  background: rgba(255,255,255,0.8);
+  border-radius:8px;
+  border:1px solid rgba(148,163,184,0.35);
+  padding:6px 8px;
+  box-shadow: 0 8px 24px rgba(15,23,42,0.12);
+  opacity:0;
+  transform:translateY(-4px);
+  pointer-events:none;
+  transition: opacity .16s ease-out, transform .16s ease-out;
+}
+
+body[data-stream="active"] .mascot-stream-list {
+  opacity:1;
+  transform:translateY(0);
+}
+
+.mascot-stream-item {
+  display:flex;
+  align-items:center;
+  gap:4px;
+  white-space:nowrap;
+}
+
+.mascot-stream-indicator {
+  width:6px;
+  height:6px;
+  border-radius:999px;
+  background: #2563eb;
+  box-shadow: 0 0 0 2px rgba(37,99,235,0.2);
+}
+
+.mascot-stream-item span {
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+
 .mascot-root::before {
   content: '';
   position: absolute;
@@ -165,6 +211,10 @@ body[data-character="engineer"] .status-pill::after { color: #4f6bff; }
 body[data-character="researcher"] .status-pill::after { color: #5caabf; }
 body[data-character="navigator"] .status-pill::after { color: #4ca966; }
 body[data-character="guardian"] .status-pill::after { color: #d45c5c; }
+
+body[data-profile="global"] [data-action="toggle-auto-open"] {
+  display: none;
+}
 
 body.compact-mode .mascot-root {
   width: 140px;

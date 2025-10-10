@@ -6,10 +6,20 @@ let baseMeta = null;
 const effectivePort = () => getPort() || (baseMeta && baseMeta.port) || 8091;
 const CONNECTION_SELECT_ID = 'connectionSelect';
 const isExpertMode = () => !!(ARW.mode && ARW.mode.current === 'expert');
+const slugify = (value) => String(value || '')
+  .toLowerCase()
+  .replace(/[^a-z0-9]+/g, '-')
+  .replace(/^-+|-+$/g, '')
+  || 'project';
 
 let miniDownloadsSub = null;
 let prefsDirty = false;
 const prefBaseline = { port: '', autostart: false, notif: true, loginstart: false, adminToken: '', baseOverride: '', mascotEnabled: true };
+let currentMascotPrefs = {};
+let mascotConfigUnlisten = null;
+let mascotStatusUnlisten = null;
+const MASCOT_CHARACTERS = ['guide','engineer','researcher','navigator','guardian'];
+const mascotRuntimeStatus = new Map();
 let lastHealthCheck = null;
 let healthMetaTimer = null;
 let serviceLogPath = null;
@@ -556,6 +566,461 @@ function renderConnectionSelect() {
     try {
       select.focus();
     } catch {}
+  }
+}
+
+function ensureMascotProfile(prefs, profile) {
+  if (!prefs.profiles || typeof prefs.profiles !== 'object') {
+    prefs.profiles = {};
+  }
+  if (!prefs.profiles[profile] || typeof prefs.profiles[profile] !== 'object') {
+    prefs.profiles[profile] = {};
+  }
+  const entry = prefs.profiles[profile];
+  entry.slug = entry.slug || slugify(profile.replace(/^project:|^custom:/, ''));
+  entry.name = entry.name || (profile === 'global' ? 'Global mascot' : profile.replace(/^project:/, ''));
+  entry.character = entry.character || prefs.character || 'guide';
+  return entry;
+}
+
+async function loadMascotPrefs() {
+  try {
+    const prefs = await ARW.getPrefs('mascot');
+    return prefs && typeof prefs === 'object' ? { ...prefs } : {};
+  } catch (err) {
+    console.error(err);
+    return {};
+  }
+}
+
+async function storeMascotPrefs(prefs) {
+  try {
+    await ARW.setPrefs('mascot', prefs);
+  } catch (err) {
+    console.error(err);
+  }
+}
+
+async function openMascotProfile(profile) {
+  const prefs = await loadMascotPrefs();
+  const entry = ensureMascotProfile(prefs, profile);
+  const quiet = entry.quietMode ?? prefs.quietMode ?? false;
+  const compact = entry.compactMode ?? prefs.compactMode ?? false;
+  const character = entry.character || prefs.character || 'guide';
+  const slug = entry.slug || slugify(profile.replace(/^project:|^custom:/, ''));
+  const label = profile === 'global' ? 'mascot' : `mascot-${slug}`;
+  try {
+    await invoke('open_mascot_window', {
+      label,
+      profile,
+      character,
+      quiet,
+      compact,
+    });
+    await sendMascotConfig(profile, {
+      quietMode: quiet,
+      compactMode: compact,
+      character,
+      name: entry.name,
+    });
+    await renderMascotProfiles(prefs);
+  } catch (err) {
+    console.error(err);
+    ARW.toast?.('Unable to open mascot');
+  }
+}
+
+async function closeMascotProfile(profile) {
+  const prefs = await loadMascotPrefs();
+  const entry = ensureMascotProfile(prefs, profile);
+  const slug = entry.slug || slugify(profile.replace(/^project:|^custom:/, ''));
+  const label = profile === 'global' ? 'mascot' : `mascot-${slug}`;
+  try {
+    await invoke('close_mascot_window', { label });
+    mascotRuntimeStatus.set(profile, { ...(mascotRuntimeStatus.get(profile) || {}), streaming: 0, state: 'ready', open: false, name: entry.name });
+    await renderMascotProfiles(prefs);
+    ARW.toast?.(`Closed mascot for ${entry.name}`);
+  } catch (err) {
+    console.error(err);
+    ARW.toast?.('Unable to close mascot');
+  }
+}
+
+async function updateMascotProfile(profile, updater, { emitConfig = true } = {}) {
+  const prefs = await loadMascotPrefs();
+  const entry = ensureMascotProfile(prefs, profile);
+  const result = await updater(entry, prefs);
+  await storeMascotPrefs(prefs);
+  currentMascotPrefs = prefs;
+  await renderMascotProfiles(prefs);
+  if (emitConfig) {
+    await sendMascotConfig(profile, {
+      quietMode: entry.quietMode ?? prefs.quietMode ?? false,
+      compactMode: entry.compactMode ?? prefs.compactMode ?? false,
+      character: entry.character || prefs.character || 'guide',
+      name: entry.name,
+    });
+  }
+  return result;
+}
+
+async function removeMascotProfile(profile) {
+  const prefs = await loadMascotPrefs();
+  if (!prefs.profiles || !prefs.profiles[profile]) return;
+  delete prefs.profiles[profile];
+  await storeMascotPrefs(prefs);
+  currentMascotPrefs = prefs;
+  mascotRuntimeStatus.delete(profile);
+  await renderMascotProfiles(prefs);
+  const slug = slugify(profile.replace(/^project:|^custom:/, ''));
+  const label = profile === 'global' ? 'mascot' : `mascot-${slug}`;
+  try { await invoke('close_mascot_window', { label }); } catch {}
+}
+
+function formatProfileTags(entry) {
+  const tags = [];
+  if (entry.character) tags.push(entry.character);
+  if (entry.quietMode) tags.push('quiet');
+  if (entry.compactMode) tags.push('compact');
+  if (entry.autoOpen) tags.push('auto-open');
+  return tags;
+}
+
+async function renderMascotProfiles(prefs = currentMascotPrefs) {
+  currentMascotPrefs = prefs || {};
+  const container = document.getElementById('mascotProfileList');
+  if (!container) return;
+  container.innerHTML = '';
+  const profiles = (currentMascotPrefs.profiles && typeof currentMascotPrefs.profiles === 'object')
+    ? Object.entries(currentMascotPrefs.profiles)
+    : [];
+  if (!profiles.length) {
+    const empty = document.createElement('div');
+    empty.className = 'mascot-profile-empty';
+    empty.textContent = 'No project mascots yet. Create one to keep a role-focused companion on screen.';
+    container.appendChild(empty);
+    return;
+  }
+  profiles.sort(([aKey, aVal], [bKey, bVal]) => {
+    const aName = (aVal?.name || aKey).toLowerCase();
+    const bName = (bVal?.name || bKey).toLowerCase();
+    return aName.localeCompare(bName);
+  });
+  for (const [profile, entryRaw] of profiles) {
+    const entry = ensureMascotProfile(currentMascotPrefs, profile);
+    const runtime = mascotRuntimeStatus.get(profile) || {};
+    const item = document.createElement('div');
+    item.className = 'mascot-profile-item';
+    item.dataset.profile = profile;
+    const info = document.createElement('div');
+    info.className = 'mascot-profile-info';
+    const title = document.createElement('div');
+    title.className = 'mascot-profile-name';
+    title.textContent = entry.name || profile;
+    const tagsWrap = document.createElement('div');
+    tagsWrap.className = 'mascot-profile-tags';
+    const slug = entry.slug || slugify(profile.replace(/^project:|^custom:/, ''));
+    const label = profile === 'global' ? 'mascot' : `mascot-${slug}`;
+    let isOpen = !!runtime.open;
+    if (!isOpen) {
+      try {
+        isOpen = !!(window.__TAURI__?.window?.getWindow?.(label));
+      } catch {}
+    }
+    const statusTag = document.createElement('span');
+    statusTag.className = `mascot-tag ${isOpen ? 'status-open' : 'status-closed'}`;
+    statusTag.textContent = isOpen ? 'open' : 'closed';
+    statusTag.title = isOpen ? 'Mascot window is open' : 'Mascot window is closed';
+    tagsWrap.appendChild(statusTag);
+    const tags = formatProfileTags(entry);
+    tags.forEach((tag) => {
+      const pill = document.createElement('span');
+      pill.className = 'mascot-tag';
+      pill.textContent = tag;
+      tagsWrap.appendChild(pill);
+    });
+    if (runtime.streaming > 0) {
+      const pill = document.createElement('span');
+      pill.className = 'mascot-tag';
+      pill.textContent = `streaming ×${runtime.streaming}`;
+      tagsWrap.appendChild(pill);
+    }
+    if (runtime.state && runtime.state !== 'ready') {
+      const pill = document.createElement('span');
+      pill.className = 'mascot-tag';
+      pill.textContent = runtime.state;
+      tagsWrap.appendChild(pill);
+    }
+    if (!tags.length) {
+      const pill = document.createElement('span');
+      pill.className = 'mascot-tag';
+      pill.textContent = 'default';
+      tagsWrap.appendChild(pill);
+    }
+    info.appendChild(title);
+    info.appendChild(tagsWrap);
+    const actions = document.createElement('div');
+    actions.className = 'mascot-profile-actions';
+    const makeBtn = (label, action, className = 'ghost mini') => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = className;
+      btn.dataset.action = action;
+      btn.textContent = label;
+      return btn;
+    };
+    actions.appendChild(makeBtn(isOpen ? 'Focus' : 'Open', 'open', 'primary mini'));
+    const focusBtn = actions.lastChild;
+    focusBtn.title = isOpen ? 'Bring this mascot to the front' : 'Open mascot window';
+    if (isOpen) {
+      const closeBtn = makeBtn('Close', 'close');
+      closeBtn.title = 'Close mascot window';
+      actions.appendChild(closeBtn);
+    }
+    actions.appendChild(makeBtn(entry.quietMode ? 'Quiet on' : 'Quiet off', 'toggle-quiet'));
+    actions.appendChild(makeBtn(entry.compactMode ? 'Compact on' : 'Compact off', 'toggle-compact'));
+    actions.appendChild(makeBtn(entry.autoOpen ? 'Auto-on' : 'Auto-off', 'toggle-auto'));
+    const charBtn = makeBtn('Character', 'cycle-character');
+    charBtn.title = 'Cycle character';
+    actions.appendChild(charBtn);
+    const renameBtn = makeBtn('Rename', 'rename');
+    renameBtn.title = 'Rename profile';
+    actions.appendChild(renameBtn);
+    const deleteBtn = makeBtn('Remove', 'delete');
+    deleteBtn.title = 'Remove profile';
+    actions.appendChild(deleteBtn);
+    item.appendChild(info);
+    item.appendChild(actions);
+    container.appendChild(item);
+  }
+}
+
+async function renameMascotProfile(profile) {
+  const prefs = await loadMascotPrefs();
+  const entry = ensureMascotProfile(prefs, profile);
+  if (!ARW.modal?.form) {
+    const next = window.prompt('Profile name', entry.name || profile);
+    if (!next) return;
+    await updateMascotProfile(profile, (entry) => { entry.name = next.trim(); return entry.name; });
+    ARW.toast?.(`Profile renamed to ${ensureMascotProfile(currentMascotPrefs, profile).name}`);
+    return;
+  }
+  const result = await ARW.modal.form({
+    title: 'Rename Mascot',
+    submitLabel: 'Save',
+    fields: [
+      { name: 'name', label: 'Profile name', required: true, value: entry.name || profile, placeholder: 'Project Alpha' },
+    ],
+  });
+  if (!result || !result.name) return;
+  const nextName = String(result.name || '').trim();
+  if (!nextName) return;
+  await updateMascotProfile(profile, (entry) => { entry.name = nextName; return entry.name; });
+  ARW.toast?.(`Profile renamed to ${ensureMascotProfile(currentMascotPrefs, profile).name}`);
+}
+
+async function handleDeleteMascotProfile(profile) {
+  const prefs = await loadMascotPrefs();
+  const entry = ensureMascotProfile(prefs, profile);
+  let confirmed = true;
+  if (ARW.modal?.form) {
+    const result = await ARW.modal.form({
+      title: 'Remove Mascot Profile',
+      description: `Remove the mascot profile for “${entry.name || profile}”?`,
+      submitLabel: 'Remove',
+      destructive: true,
+      fields: [],
+    });
+    confirmed = !!result;
+  } else {
+    confirmed = window.confirm(`Remove mascot profile ${entry.name || profile}?`);
+  }
+  if (!confirmed) return;
+  await removeMascotProfile(profile);
+  ARW.toast?.(`Removed mascot profile ${entry.name || profile}`);
+}
+
+async function fetchProjectsForMascot() {
+  try {
+    baseMeta = updateBaseMeta();
+    const resolvedBase = (baseMeta && baseMeta.base) || ARW.base(effectivePort());
+    if (!resolvedBase) return [];
+    let data = null;
+    if (ARW.http?.json) {
+      data = await ARW.http.json(resolvedBase, '/state/projects');
+    } else {
+      const resp = await fetch(`${String(resolvedBase).replace(/\/$/, '')}/state/projects`, {
+        headers: { Accept: 'application/json' },
+      });
+      if (!resp.ok) return [];
+      data = await resp.json();
+    }
+    const items = Array.isArray(data?.items) ? data.items : Array.isArray(data) ? data : [];
+    return items
+      .map((item) => {
+        if (!item) return '';
+        if (typeof item === 'string') return item;
+        if (typeof item === 'object') return item.name || item.id || '';
+        return '';
+      })
+      .filter(Boolean)
+      .filter((value, index, arr) => arr.indexOf(value) === index)
+      .sort((a, b) => a.localeCompare(b));
+  } catch (err) {
+    console.error(err);
+    return [];
+  }
+}
+
+async function createMascotProfileManual() {
+  if (!ARW.modal?.form) {
+    ARW.toast?.('Desktop launcher modal unavailable');
+    return;
+  }
+  const result = await ARW.modal.form({
+    title: 'New Mascot Profile',
+    submitLabel: 'Create',
+    fields: [
+      { name: 'name', label: 'Profile name', placeholder: 'Support crew', required: true },
+      { name: 'slug', label: 'Identifier (optional)', placeholder: 'support' },
+      { name: 'character', label: 'Character', type: 'select', value: 'guide', options: MASCOT_CHARACTERS.map((value) => ({ value, label: value.charAt(0).toUpperCase() + value.slice(1) })) },
+      { name: 'quietMode', label: 'Start in quiet mode', type: 'checkbox', value: false },
+      { name: 'compactMode', label: 'Start in compact mode', type: 'checkbox', value: false },
+      { name: 'autoOpen', label: 'Reopen automatically on launch', type: 'checkbox', value: false },
+      { name: 'openNow', label: 'Open immediately', type: 'checkbox', value: true },
+    ],
+  });
+  if (!result || !result.name) return;
+  const name = String(result.name || '').trim();
+  if (!name) return;
+  const slug = result.slug ? slugify(result.slug) : slugify(name);
+  const profile = `custom:${slug}`;
+  const prefs = await loadMascotPrefs();
+  const entry = ensureMascotProfile(prefs, profile);
+  entry.name = name;
+  entry.slug = slug;
+  entry.character = result.character || entry.character || prefs.character || 'guide';
+  entry.quietMode = !!result.quietMode;
+  entry.compactMode = !!result.compactMode;
+  entry.autoOpen = !!result.autoOpen;
+  await storeMascotPrefs(prefs);
+  currentMascotPrefs = prefs;
+  await renderMascotProfiles(prefs);
+  if (result.openNow !== false) {
+    await openMascotProfile(profile);
+  }
+}
+
+async function createMascotProfileFromProject() {
+  if (!ARW.modal?.form) {
+    ARW.toast?.('Desktop launcher modal unavailable');
+    return;
+  }
+  const projects = await fetchProjectsForMascot();
+  if (!projects.length) {
+    ARW.toast?.('No projects found. Create a project first, or add a manual profile.');
+    await createMascotProfileManual();
+    return;
+  }
+  const options = projects.map((name) => ({ value: name, label: name }));
+  const result = await ARW.modal.form({
+    title: 'New Project Mascot',
+    submitLabel: 'Create',
+    fields: [
+      { name: 'project', label: 'Project', type: 'select', value: options[0].value, options },
+      { name: 'character', label: 'Character', type: 'select', value: 'guide', options: MASCOT_CHARACTERS.map((value) => ({ value, label: value.charAt(0).toUpperCase() + value.slice(1) })) },
+      { name: 'quietMode', label: 'Start in quiet mode', type: 'checkbox', value: false },
+      { name: 'compactMode', label: 'Start in compact mode', type: 'checkbox', value: false },
+      { name: 'autoOpen', label: 'Reopen automatically on launch', type: 'checkbox', value: true },
+      { name: 'openNow', label: 'Open immediately', type: 'checkbox', value: true },
+    ],
+  });
+  if (!result || !result.project) return;
+  const name = String(result.project || '').trim();
+  if (!name) return;
+  const slug = slugify(name);
+  const profile = `project:${slug}`;
+  const prefs = await loadMascotPrefs();
+  const entry = ensureMascotProfile(prefs, profile);
+  entry.name = name;
+  entry.slug = slug;
+  entry.character = result.character || entry.character || prefs.character || 'guide';
+  entry.quietMode = !!result.quietMode;
+  entry.compactMode = !!result.compactMode;
+  entry.autoOpen = !!result.autoOpen;
+  await storeMascotPrefs(prefs);
+  currentMascotPrefs = prefs;
+  await renderMascotProfiles(prefs);
+  if (result.openNow !== false) {
+    await openMascotProfile(profile);
+  }
+}
+
+async function handleMascotProfileListClick(event) {
+  const button = event.target.closest('button[data-action]');
+  if (!button) return;
+  const row = button.closest('.mascot-profile-item');
+  if (!row || !row.dataset.profile) return;
+  const profile = row.dataset.profile;
+  const action = button.dataset.action;
+  event.preventDefault();
+  switch (action) {
+    case 'open':
+      await openMascotProfile(profile);
+      {
+        const entry = ensureMascotProfile(currentMascotPrefs, profile);
+        ARW.toast?.(`Mascot opened for ${entry.name}`);
+      }
+      break;
+    case 'toggle-quiet':
+      await updateMascotProfile(profile, (entry, prefs) => {
+        entry.quietMode = !(entry.quietMode ?? prefs.quietMode ?? false);
+      });
+      {
+        const entry = ensureMascotProfile(currentMascotPrefs, profile);
+        ARW.toast?.(`Quiet mode ${entry.quietMode ? 'enabled' : 'disabled'} for ${entry.name}`);
+      }
+      break;
+    case 'toggle-compact':
+      await updateMascotProfile(profile, (entry, prefs) => {
+        entry.compactMode = !(entry.compactMode ?? prefs.compactMode ?? false);
+      });
+      {
+        const entry = ensureMascotProfile(currentMascotPrefs, profile);
+        ARW.toast?.(`Compact mode ${entry.compactMode ? 'enabled' : 'disabled'} for ${entry.name}`);
+      }
+      break;
+    case 'toggle-auto':
+      await updateMascotProfile(profile, (entry) => {
+        entry.autoOpen = !(entry.autoOpen ?? false);
+      }, { emitConfig: false });
+      {
+        const entry = ensureMascotProfile(currentMascotPrefs, profile);
+        ARW.toast?.(`Auto reopen ${entry.autoOpen ? 'enabled' : 'disabled'} for ${entry.name}`);
+      }
+      break;
+    case 'cycle-character':
+      await updateMascotProfile(profile, (entry, prefs) => {
+        const current = entry.character || prefs.character || 'guide';
+        const idx = MASCOT_CHARACTERS.indexOf(current);
+        entry.character = MASCOT_CHARACTERS[(idx + 1) % MASCOT_CHARACTERS.length];
+      });
+      {
+        const entry = ensureMascotProfile(currentMascotPrefs, profile);
+        ARW.toast?.(`Character set to ${entry.character} for ${entry.name}`);
+      }
+      break;
+    case 'rename':
+      await renameMascotProfile(profile);
+      break;
+    case 'delete':
+      await handleDeleteMascotProfile(profile);
+      break;
+    case 'close':
+      await closeMascotProfile(profile);
+      break;
+    default:
+      break;
   }
 }
 
@@ -1345,6 +1810,7 @@ async function loadPrefs() {
       mascotPrefs = stored;
     }
   } catch {}
+  currentMascotPrefs = mascotPrefs;
   const mascotToggle = document.getElementById('mascotEnabled');
   const openMascotBtn = document.getElementById('btn-open-mascot');
   const supportMascotBtn = document.getElementById('btn-mascot');
@@ -1383,6 +1849,7 @@ async function loadPrefs() {
   if (mascotSnapWindows) mascotSnapWindows.checked = snapWindows;
   if (mascotQuietMode) mascotQuietMode.checked = quietMode;
   if (mascotCompactMode) mascotCompactMode.checked = compactMode;
+  await renderMascotProfiles(mascotPrefs);
 
   const sendMascotConfig = async (profile = 'global', overrides = {}) => {
     try {
@@ -1433,6 +1900,46 @@ async function loadPrefs() {
       mascotChecklistState = null;
       mascotSseState = null;
       applyMascotMood();
+    }
+    const projectProfiles = mascotPrefs && typeof mascotPrefs.profiles === 'object'
+      ? Object.entries(mascotPrefs.profiles)
+      : [];
+    for (const [profileKey, entry] of projectProfiles) {
+      if (!entry || !entry.autoOpen) continue;
+      const slug = entry.slug || slugify(profileKey.replace(/^project:/, ''));
+      try {
+        await invoke('open_mascot_window', {
+          label: `mascot-${slug}`,
+          profile: profileKey,
+          character: entry.character || mascotPrefs.character || 'guide',
+          quiet: entry.quietMode ?? mascotPrefs.quietMode ?? false,
+          compact: entry.compactMode ?? mascotPrefs.compactMode ?? false,
+        });
+        await sendMascotConfig(profileKey, entry);
+      } catch (err) {
+        console.error(err);
+      }
+    }
+    if (window.__TAURI__?.event) {
+      try {
+        if (!mascotConfigUnlisten) {
+          mascotConfigUnlisten = await window.__TAURI__.event.listen('mascot:config', async () => {
+            const prefs = await loadMascotPrefs();
+            currentMascotPrefs = prefs;
+            await renderMascotProfiles(prefs);
+          });
+        }
+        if (!mascotStatusUnlisten) {
+          mascotStatusUnlisten = await window.__TAURI__.event.listen('mascot:profile-status', (evt) => {
+            const payload = evt?.payload || {};
+            const key = payload.profile || 'global';
+            mascotRuntimeStatus.set(key, payload);
+            renderMascotProfiles();
+          });
+        }
+      } catch (err) {
+        console.error(err);
+      }
     }
   }
 
@@ -1854,6 +2361,18 @@ document.addEventListener('DOMContentLoaded', () => {
         ARW.toast('Unable to open connections');
       }
     });
+  }
+  const mascotProfileListEl = document.getElementById('mascotProfileList');
+  if (mascotProfileListEl) {
+    mascotProfileListEl.addEventListener('click', handleMascotProfileListClick);
+  }
+  const mascotProfileNewBtn = document.getElementById('mascotProfileNew');
+  if (mascotProfileNewBtn) {
+    mascotProfileNewBtn.addEventListener('click', createMascotProfileManual);
+  }
+  const mascotProfileProjectBtn = document.getElementById('mascotProfileProject');
+  if (mascotProfileProjectBtn) {
+    mascotProfileProjectBtn.addEventListener('click', createMascotProfileFromProject);
   }
   const connectionSelect = document.getElementById(CONNECTION_SELECT_ID);
   if (connectionSelect) {

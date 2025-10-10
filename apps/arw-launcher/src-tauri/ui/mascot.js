@@ -23,10 +23,12 @@
     compactMode: initialCompact,
     character: initialCharacter,
     profile: initialProfile,
+    profileName: initialProfile === 'global' ? 'Global mascot' : initialProfile.replace(/^project:/, ''),
   };
   try {
     document.body.dataset.profile = config.profile;
     document.body.dataset.character = config.character;
+    document.body.dataset.profileName = config.profileName;
   } catch {}
   let previewAnchor = null;
   let previewTimer = null;
@@ -98,6 +100,9 @@
     const character = isGlobal
       ? (prefs.character || config.character)
       : (entry.character || prefs.character || config.character);
+    const name = isGlobal
+      ? (prefs.profileName || 'Global mascot')
+      : (entry.name || prefs.profileName || profileKey.replace(/^project:/, ''));
     return {
       profile: profileKey,
       allowInteractions: !(prefs.clickThrough ?? true),
@@ -106,6 +111,7 @@
       quietMode: quiet,
       compactMode: compact,
       character,
+      name,
       ...extra,
     };
   }
@@ -116,6 +122,22 @@
       .replace(/[^a-z0-9]+/g, '-')
       .replace(/^-+|-+$/g, '')
       || 'project';
+  }
+
+  function applyProfileName(raw) {
+    const fallback = raw && raw.trim()
+      ? raw.trim()
+      : (config.profile === 'global' ? 'Global mascot' : config.profile.replace(/^project:/, ''));
+    config.profileName = fallback;
+    try {
+      document.body.dataset.profile = config.profile;
+      document.body.dataset.profileName = fallback;
+      const root = document.querySelector('.mascot-root');
+      if (root) {
+        root.setAttribute('aria-label', `${fallback} (${config.character || 'guide'})`);
+      }
+    } catch {}
+    updateStatusPill();
   }
 
   function setState(next){
@@ -152,14 +174,67 @@
     }
   }
 
+  function updateStreamList() {
+    const list = document.getElementById('mascotStreamList');
+    if (!list) return;
+    const entries = Array.from(activeStreams.values());
+    if (!entries.length) {
+      list.hidden = true;
+      list.innerHTML = '';
+      return;
+    }
+    list.hidden = false;
+    list.innerHTML = '';
+    entries.forEach((entry) => {
+      const row = document.createElement('div');
+      row.className = 'mascot-stream-item';
+      const dot = document.createElement('span');
+      dot.className = 'mascot-stream-indicator';
+      const label = document.createElement('span');
+      label.textContent = entry.label || 'Chat';
+      row.appendChild(dot);
+      row.appendChild(label);
+      list.appendChild(row);
+    });
+  }
+
+  function emitProfileStatus(extra = {}) {
+    if (!window.__TAURI__?.event?.emit) return;
+    const payload = {
+      profile: config.profile,
+      name: config.profileName,
+      character: config.character,
+      quietMode: config.quietMode,
+      compactMode: config.compactMode,
+      streaming: streamingCount,
+      state,
+      timestamp: new Date().toISOString(),
+      open: true,
+      ...extra,
+    };
+    window.__TAURI__.event.emit('mascot:profile-status', payload).catch(() => {});
+  }
+
   function updateStatusPill(){
     const pill = statusPill();
     if (!pill) return;
     const label = statusOverride || STATE_LABELS[state] || state;
     const character = config.character || 'guide';
+    const profileName = config.profileName || (config.profile === 'global' ? 'Global mascot' : config.profile.replace(/^project:/, ''));
     pill.textContent = label;
     pill.dataset.character = character;
-    pill.setAttribute('aria-label', `${label}${character ? ` — ${character}` : ''}`);
+    pill.dataset.profile = profileName;
+    const hintValue = document.body.classList.contains('compact-mode') ? lastHint : '';
+    if (hintValue) {
+      pill.dataset.hint = hintValue;
+      pill.title = hintValue;
+    } else {
+      pill.removeAttribute('data-hint');
+      pill.removeAttribute('title');
+    }
+    pill.setAttribute('aria-label', `${profileName}: ${label} (${character})`);
+    updateStreamList();
+    emitProfileStatus();
   }
 
   function scheduleIdleTick(){
@@ -222,7 +297,7 @@
     document.body.dataset.character = normalized;
     try {
       const root = document.querySelector('.mascot-root');
-      if (root) root.setAttribute('aria-label', `Project mascot (${normalized})`);
+      if (root) root.setAttribute('aria-label', `${config.profileName || 'Mascot'} (${normalized})`);
     } catch {}
     updateStatusPill();
   }
@@ -233,6 +308,7 @@
       activeStreams.set(key, {
         message: payload.hint || payload.message || '',
         label: payload.label || payload.title || (key !== 'global' ? key : 'Streaming'),
+        conversationId: key,
       });
     } else {
       activeStreams.delete(key);
@@ -248,18 +324,37 @@
       updateStatusPill();
       const msg = firstEntry?.message || payload.hint || payload.message;
       if (msg) setHint(msg);
+      emitProfileStatus({ streaming: streamingCount });
     } else {
       delete document.body.dataset.stream;
       statusOverride = null;
       updateStatusPill();
       const msg = payload.hint || payload.message;
       if (msg) setHint(msg);
+      emitProfileStatus({ streaming: streamingCount });
     }
   }
 
   async function init(){
     setState('thinking');
     setHint('Warming up…');
+    const prefs = await loadMascotPrefs();
+    let profilePrefs = prefs;
+    if (config.profile !== 'global') {
+      profilePrefs = ensureProfilePrefs(prefs, config.profile);
+    }
+    if (config.profile === 'global') {
+      config.quietMode = prefs.quietMode ?? config.quietMode;
+      config.compactMode = prefs.compactMode ?? config.compactMode;
+      config.character = prefs.character || config.character;
+      config.profileName = 'Global mascot';
+    } else {
+      config.quietMode = profilePrefs.quietMode ?? prefs.quietMode ?? config.quietMode;
+      config.compactMode = profilePrefs.compactMode ?? prefs.compactMode ?? config.compactMode;
+      config.character = profilePrefs.character ?? prefs.character ?? config.character;
+      config.profileName = profilePrefs.name || config.profileName;
+    }
+    applyProfileName(config.profileName);
     applyCharacter(config.character);
     if (config.quietMode) {
       applyQuietMode(true);
@@ -268,6 +363,7 @@
       applyCompactMode(true);
     }
     updateStatusPill();
+    updateStreamList();
     // Gentle periodic health checks
     await healthCheck();
     healthTimer = setInterval(healthCheck, 15000);
@@ -422,6 +518,7 @@
           { name: 'character', label: 'Character', type: 'select', value: config.character || 'guide', options: CHARACTER_ORDER.map((value) => ({ value, label: value.charAt(0).toUpperCase() + value.slice(1) })) },
           { name: 'quietMode', label: 'Start in quiet mode', type: 'checkbox', value: config.quietMode },
           { name: 'compactMode', label: 'Start in compact mode', type: 'checkbox', value: config.compactMode },
+          { name: 'autoOpen', label: 'Reopen automatically on launch', type: 'checkbox', value: false },
         ],
       });
       if (!result) return;
@@ -435,11 +532,15 @@
       entry.quietMode = !!result.quietMode;
       entry.compactMode = !!result.compactMode;
       entry.character = result.character || entry.character || prefs.character || 'guide';
+      entry.name = rawName;
+      entry.slug = slug;
+      entry.autoOpen = !!result.autoOpen;
       await storeMascotPrefs(prefs);
       const overrides = {
         quietMode: entry.quietMode,
         compactMode: entry.compactMode,
         character: entry.character,
+        name: entry.name,
       };
       try {
         await window.__TAURI__?.invoke('open_mascot_window', {
@@ -557,6 +658,8 @@
                   prefs.quietMode = next;
                 } else {
                   entry.quietMode = next;
+                  entry.slug = entry.slug || slugifyName(profileKey.replace(/^project:/, ''));
+                  entry.name = entry.name || config.profileName;
                 }
                 await storeMascotPrefs(prefs);
                 if (window.__TAURI__?.event?.emit) {
@@ -589,6 +692,8 @@
                   prefs.compactMode = next;
                 } else {
                   entry.compactMode = next;
+                  entry.slug = entry.slug || slugifyName(profileKey.replace(/^project:/, ''));
+                  entry.name = entry.name || config.profileName;
                 }
                 await storeMascotPrefs(prefs);
                 if (window.__TAURI__?.event?.emit) {
@@ -623,6 +728,8 @@
                   prefs.character = next;
                 } else {
                   entry.character = next;
+                  entry.slug = entry.slug || slugifyName(profileKey.replace(/^project:/, ''));
+                  entry.name = entry.name || config.profileName;
                 }
                 await storeMascotPrefs(prefs);
                 applyCharacter(next);
@@ -638,6 +745,26 @@
                   );
                 }
                 setHint(`Character: ${next}`);
+              } catch (err) {
+                console.error(err);
+              }
+              break;
+            }
+            case 'toggle-auto-open': {
+              try {
+                const profileKey = config.profile || 'global';
+                if (profileKey === 'global') {
+                  setHint('Auto reopen applies to project mascots only.');
+                  break;
+                }
+                const prefs = await loadMascotPrefs();
+                const entry = ensureProfilePrefs(prefs, profileKey);
+                entry.slug = entry.slug || slugifyName(profileKey.replace(/^project:/, ''));
+                entry.name = entry.name || config.profileName || profileKey;
+                const next = !(entry.autoOpen ?? false);
+                entry.autoOpen = next;
+                await storeMascotPrefs(prefs);
+                window.ARW.toast?.(`Auto reopen ${next ? 'enabled' : 'disabled'} for ${entry.name}`);
               } catch (err) {
                 console.error(err);
               }
@@ -685,6 +812,9 @@
             : 'global';
           if (targetProfile !== 'global' && targetProfile !== config.profile) {
             return;
+          }
+          if (typeof cfg.name === 'string') {
+            applyProfileName(cfg.name);
           }
           if (typeof cfg.allowInteractions === 'boolean'){
             config.allowInteractions = !!cfg.allowInteractions;

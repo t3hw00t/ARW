@@ -1965,6 +1965,7 @@ window.ARW.sse.subscribe('state.read.model.patch', ({ env }) => {
                 { name:'character', label:'Character', type:'select', value:'guide', options: characterOrder.map((value)=>({ value, label: value.charAt(0).toUpperCase()+value.slice(1) })) },
                 { name:'quietMode', label:'Start in quiet mode', type:'checkbox', value:false },
                 { name:'compactMode', label:'Start in compact mode', type:'checkbox', value:false },
+                { name:'autoOpen', label:'Reopen automatically on launch', type:'checkbox', value:false },
               ],
             });
             if (!result) return;
@@ -1981,6 +1982,7 @@ window.ARW.sse.subscribe('state.read.model.patch', ({ env }) => {
               quietMode: !!result.quietMode,
               compactMode: !!result.compactMode,
               character: result.character || 'guide',
+              name: rawName,
             };
             const prefs = await ARW.getPrefs('mascot') || {};
             if (typeof prefs.profiles !== 'object' || !prefs.profiles) prefs.profiles = {};
@@ -1988,6 +1990,9 @@ window.ARW.sse.subscribe('state.read.model.patch', ({ env }) => {
               quietMode: overrides.quietMode,
               compactMode: overrides.compactMode,
               character: overrides.character,
+               name: rawName,
+               slug,
+               autoOpen: !!result.autoOpen,
             };
             await ARW.setPrefs('mascot', prefs);
             await ARW.invoke('open_mascot_window', {
@@ -1999,6 +2004,41 @@ window.ARW.sse.subscribe('state.read.model.patch', ({ env }) => {
             });
             await emitMascotConfig(profile, overrides);
             ARW.toast(`Opened mascot for ${rawName}`);
+          } catch (err) {
+            console.error(err);
+          }
+        }
+      },
+      { id:'mascot:toggle-auto-open', label:'Toggle Project Mascot Auto-Reopen', hint:'action', run: async ()=>{
+          try {
+            const prefs = await ARW.getPrefs('mascot') || {};
+            const profiles = prefs.profiles && typeof prefs.profiles === 'object' ? prefs.profiles : {};
+            const entries = Object.entries(profiles);
+            if (!entries.length) {
+              ARW.toast('No project mascots saved yet');
+              return;
+            }
+            const options = entries.map(([key, entry]) => ({
+              value: key,
+              label: entry?.name ? `${entry.name} (${key})` : key,
+            }));
+            const result = await ARW.modal.form({
+              title: 'Toggle Auto Reopen',
+              description: 'Select a mascot profile to toggle automatic reopening.',
+              submitLabel: 'Toggle',
+              fields: [
+                { name: 'profile', label: 'Profile', type: 'select', value: options[0].value, options },
+              ],
+            });
+            if (!result || !result.profile) return;
+            const target = profiles[result.profile];
+            if (!target) {
+              ARW.toast('Profile not found');
+              return;
+            }
+            target.autoOpen = !(target.autoOpen ?? false);
+            await ARW.setPrefs('mascot', prefs);
+            ARW.toast(`Auto reopen ${target.autoOpen ? 'enabled' : 'disabled'} for ${target.name || result.profile}`);
           } catch (err) {
             console.error(err);
           }

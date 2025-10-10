@@ -15,8 +15,10 @@ Features
 - Quiet mode option to soften glow, idle motion, and snap feedback when you need fewer distractions.
 - Compact mode shrinks the mascot into a minimal badge while preserving status tinting.
 - Conversation responses trigger a streaming pulse and update the badge so you can see progress without opening the full chat.
+- When responses stream, a card inside the overlay lists the active conversations so you can see which project is talking.
 - Multiple simultaneous responses stack in the badge (e.g., “Streaming ×2”) so you know how many conversations are active at a glance.
 - Character presets (Guide, Engineer, Researcher, Navigator, Guardian) tint the glow and morph accessories to match the mascot’s role.
+- Per-project mascots can auto-reopen on launch, keeping their role-specific settings intact.
 - Independent launch mode for kiosk/control scenarios.
 
 Usage
@@ -41,6 +43,7 @@ Settings
 - Compact mode toggle available in Preferences, the mascot menu, and the Command Palette.
 - Character selector (Guide, Engineer, Researcher, Navigator, Guardian) available in Preferences, the mascot menu, and the Command Palette.
 - Open additional mascots per project: use the Command Palette (“Open Mascot for Project…”) or the mascot menu’s “Open Project Mascot…” option. Each project mascot remembers its own quiet/compact/character settings.
+- Toggle automatic reopen for project mascots via the mascot menu or the Command Palette.
 
 Preferences (persisted)
 - Namespace: `mascot`
@@ -52,6 +55,12 @@ Preferences (persisted)
   - `quietMode` (bool)
   - `compactMode` (bool)
   - `character` (`guide` | `engineer` | `researcher` | `navigator` | `guardian`)
+  - `profiles` (object keyed by profile, e.g., `project:alpha`), each storing:
+    - `name` (string)
+    - `slug` (string)
+    - `quietMode` / `compactMode` (bool)
+    - `character` (`guide` | `engineer` | `researcher` | `navigator` | `guardian`)
+    - `autoOpen` (bool)
 
 Character Presets
 - **Guide** – default halo; gentle neutral glow for onboarding.
@@ -66,6 +75,9 @@ Multiple Mascots
 - Spawn a mascot dedicated to a project (`project:alpha`) while keeping a global guide active.
 - Each mascot listens only to `mascot:config` payloads for its profile (global or `project:<slug>`), so settings stay scoped.
 - Close extra mascots via the tray > Windows list or the Command Palette (`window:close` targeting the mascot label).
+- Manage saved profiles in Home → Preferences → Mascot profiles: open, rename, toggle quiet/compact/auto-reopen, or remove profiles without touching the overlay menu.
+- Each profile entry shows whether a mascot window is open (and lets you focus or close it directly).
+- Streaming chats appear inside the mascot as a mini list so you can see which conversations are active without switching windows.
 
 Independent launch
 - Start the launcher in mascot‑only mode:
