@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import argparse
 import json
 import pathlib
 import re
@@ -332,7 +333,20 @@ def render(doc, features, known_topics):
     return "\n".join(lines)
 
 
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="Generate docs/reference/system_components.md from system component metadata."
+    )
+    parser.add_argument(
+        "--check",
+        action="store_true",
+        help="Verify the existing file matches generated content without writing.",
+    )
+    return parser.parse_args()
+
+
 def main():
+    args = parse_args()
     try:
         doc = load_components()
     except Exception as exc:
@@ -362,8 +376,22 @@ def main():
     if missing:
         print("warning: missing references:\n  - " + "\n  - ".join(missing), file=sys.stderr)
     known_topics = parse_topics_rs(include_defaults={"state.read.model.patch"})
+    content = render(doc, features, known_topics)
+    if not content.endswith("\n"):
+        content += "\n"
+
+    if args.check:
+        if not OUT_MD.exists():
+            print(f"{OUT_MD} missing; run python scripts/gen_system_components.py to regenerate.", file=sys.stderr)
+            return 1
+        current = OUT_MD.read_text(encoding="utf-8")
+        if current.rstrip() == content.rstrip():
+            return 0
+        print(f"{OUT_MD} out of date; run python scripts/gen_system_components.py to refresh.", file=sys.stderr)
+        return 1
+
     OUT_MD.parent.mkdir(parents=True, exist_ok=True)
-    OUT_MD.write_text(render(doc, features, known_topics), encoding="utf-8")
+    OUT_MD.write_text(content, encoding="utf-8")
     print(f"wrote {OUT_MD}")
     return 0
 

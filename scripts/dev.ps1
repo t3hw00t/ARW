@@ -115,10 +115,19 @@ function Invoke-Verify {
     [switch]$SkipDocs,
     [switch]$SkipUI,
     [switch]$SkipDocPython,
-    [switch]$WithLauncher
+    [switch]$WithLauncher,
+    [switch]$Ci
   )
 
-  if ($Fast.IsPresent) {
+  $fastMode = $Fast.IsPresent -and -not $Ci.IsPresent
+  if ($Fast.IsPresent -and $Ci.IsPresent) {
+    Write-Host "[verify] -Ci overrides -Fast; running full suite."
+  }
+  if ($Ci.IsPresent) {
+    $SkipDocs = $false
+    $SkipUI = $false
+    $SkipDocPython = $false
+  } elseif ($fastMode) {
     $SkipDocs = $true
     $SkipUI = $true
     $SkipDocPython = $true
@@ -154,7 +163,11 @@ function Invoke-Verify {
   } else {
     Write-Host "[verify] skipping arw-launcher crate (headless default; pass -WithLauncher or set ARW_VERIFY_INCLUDE_LAUNCHER=1 to include)"
   }
-  if ($Fast.IsPresent) {
+  $requireDocs = $Ci.IsPresent
+  if ($env:ARW_VERIFY_REQUIRE_DOCS -match '^(1|true|yes)$') {
+    $requireDocs = $true
+  }
+  if ($fastMode) {
     Write-Host "[verify] fast mode enabled (skipping doc sync, docs lint, launcher UI tests)."
   }
 
@@ -185,55 +198,96 @@ function Invoke-Verify {
     Invoke-Program -Executable $cargo -Arguments $testArgs
   }
 
-  $uiSkipReason = if ($SkipUI) { 'launcher UI checks disabled (--fast/--skip-ui)' } else { 'Node.js 18+ missing; install it or pass -SkipUI/-Fast' }
-  $results += Invoke-Step -Name 'node read_store.test.js' -Action {
-    if ($null -eq $node) {
-      throw 'Node.js 18+ not found in PATH'
+  if ($SkipUI.IsPresent) {
+    $results += [pscustomobject]@{
+      Name    = 'node read_store.test.js'
+      Status  = 'skipped'
+      Message = 'launcher UI checks disabled (--fast/-SkipUI)'
     }
-    $testPath = Join-Path $RepoRoot 'apps\arw-launcher\src-tauri\ui\read_store.test.js'
-    Invoke-Program -Executable $node -Arguments @($testPath)
-  } -Required:$true -ShouldRun { -not $SkipUI } -SkipReason $uiSkipReason
+  } elseif (-not $includeLauncher) {
+    $results += [pscustomobject]@{
+      Name    = 'node read_store.test.js'
+      Status  = 'skipped'
+      Message = 'headless default; pass -WithLauncher to include'
+    }
+  } else {
+    $results += Invoke-Step -Name 'node read_store.test.js' -Action {
+      if ($null -eq $node) {
+        throw 'Node.js 18+ not found in PATH'
+      }
+      $testPath = Join-Path $RepoRoot 'apps\arw-launcher\src-tauri\ui\read_store.test.js'
+      Invoke-Program -Executable $node -Arguments @($testPath)
+    }
+  }
 
-  $docSyncSkipReason = if ($SkipDocPython) { 'doc sync checks disabled (--fast/--skip-doc-python)' } else { 'python3 + PyYAML missing; install them or pass -SkipDocPython/-Fast' }
-  $results += Invoke-Step -Name 'python check_operation_docs_sync.py' -Action {
-    if ($null -eq $python) {
-      throw 'Python 3.11+ not found in PATH'
+  $docStepName1 = 'python check_operation_docs_sync.py'
+  $docStepName2 = 'python gen_topics_doc.py --check'
+  if ($SkipDocPython.IsPresent) {
+    $message = 'doc sync checks disabled (--fast/-SkipDocPython)'
+    $results += [pscustomobject]@{ Name = $docStepName1; Status = 'skipped'; Message = $message }
+    $results += [pscustomobject]@{ Name = $docStepName2; Status = 'skipped'; Message = $message }
+  } elseif ($null -eq $python) {
+    if ($requireDocs) {
+      $message = 'Python 3.11+ not found in PATH'
+      $results += [pscustomobject]@{ Name = $docStepName1; Status = 'failed'; Message = $message }
+      $results += [pscustomobject]@{ Name = $docStepName2; Status = 'failed'; Message = $message }
+    } else {
+      $message = 'python not found; set ARW_VERIFY_REQUIRE_DOCS=1 to require doc tooling'
+      $results += [pscustomobject]@{ Name = $docStepName1; Status = 'skipped'; Message = $message }
+      $results += [pscustomobject]@{ Name = $docStepName2; Status = 'skipped'; Message = $message }
     }
-    if (-not $pythonHasYaml) {
-      throw "PyYAML missing for $($python.Name); install with `python3 -m pip install --user --break-system-packages pyyaml`"
+  } elseif (-not $pythonHasYaml) {
+    if ($requireDocs) {
+      $message = "PyYAML missing for $($python.Name); install with `python3 -m pip install --user --break-system-packages pyyaml`"
+      $results += [pscustomobject]@{ Name = $docStepName1; Status = 'failed'; Message = $message }
+      $results += [pscustomobject]@{ Name = $docStepName2; Status = 'failed'; Message = $message }
+    } else {
+      $message = 'PyYAML missing; set ARW_VERIFY_REQUIRE_DOCS=1 to require doc tooling'
+      $results += [pscustomobject]@{ Name = $docStepName1; Status = 'skipped'; Message = $message }
+      $results += [pscustomobject]@{ Name = $docStepName2; Status = 'skipped'; Message = $message }
     }
-    $previousEncoding = $env:PYTHONIOENCODING
-    try {
-      $env:PYTHONIOENCODING = 'utf-8'
-      $scriptPath = Join-Path $RepoRoot 'scripts\check_operation_docs_sync.py'
-      Invoke-Program -Executable $python -Arguments @($scriptPath)
-    } finally {
-      if ($null -eq $previousEncoding) {
-        Remove-Item Env:PYTHONIOENCODING -ErrorAction SilentlyContinue
-      } else {
-        $env:PYTHONIOENCODING = $previousEncoding
+  } else {
+    $results += Invoke-Step -Name $docStepName1 -Action {
+      $previousEncoding = $env:PYTHONIOENCODING
+      try {
+        $env:PYTHONIOENCODING = 'utf-8'
+        $scriptPath = Join-Path $RepoRoot 'scripts\check_operation_docs_sync.py'
+        Invoke-Program -Executable $python -Arguments @($scriptPath)
+      } finally {
+        if ($null -eq $previousEncoding) {
+          Remove-Item Env:PYTHONIOENCODING -ErrorAction SilentlyContinue
+        } else {
+          $env:PYTHONIOENCODING = $previousEncoding
+        }
       }
     }
-  } -Required:$true -ShouldRun { -not $SkipDocPython } -SkipReason $docSyncSkipReason
 
-  $results += Invoke-Step -Name 'python gen_topics_doc.py --check' -Action {
-    if ($null -eq $python) {
-      throw 'Python 3.11+ not found in PATH'
+    $results += Invoke-Step -Name $docStepName2 -Action {
+      $scriptPath = Join-Path $RepoRoot 'scripts\gen_topics_doc.py'
+      Invoke-Program -Executable $python -Arguments @($scriptPath,'--check')
     }
-    if ((-not $SkipDocPython) -and (-not $pythonHasYaml)) {
-      throw "PyYAML missing for $($python.Name); install with `python3 -m pip install --user --break-system-packages pyyaml`"
-    }
-    $scriptPath = Join-Path $RepoRoot 'scripts\gen_topics_doc.py'
-    Invoke-Program -Executable $python -Arguments @($scriptPath,'--check')
-  } -Required:$true -ShouldRun { -not $SkipDocPython } -SkipReason $docSyncSkipReason
+  }
 
-  $results += Invoke-Step -Name 'python lint_event_names.py' -Action {
-    if ($null -eq $python) {
-      throw 'Python 3.11+ not found in PATH'
+  if ($null -eq $python) {
+    if ($requireDocs) {
+      $results += [pscustomobject]@{
+        Name    = 'python lint_event_names.py'
+        Status  = 'failed'
+        Message = 'Python 3.11+ not found in PATH'
+      }
+    } else {
+      $results += [pscustomobject]@{
+        Name    = 'python lint_event_names.py'
+        Status  = 'skipped'
+        Message = 'python not found; set ARW_VERIFY_REQUIRE_DOCS=1 to require doc tooling'
+      }
     }
-    $scriptPath = Join-Path $RepoRoot 'scripts\lint_event_names.py'
-    Invoke-Program -Executable $python -Arguments @($scriptPath)
-  } -Required:$true -ShouldRun { $null -ne $python } -SkipReason 'Python 3.11+ not found in PATH'
+  } else {
+    $results += Invoke-Step -Name 'python lint_event_names.py' -Action {
+      $scriptPath = Join-Path $RepoRoot 'scripts\lint_event_names.py'
+      Invoke-Program -Executable $python -Arguments @($scriptPath)
+    }
+  }
 
   $docsSkipReason = if ($SkipDocs) { 'docs lint disabled (--fast/--skip-docs)' } else { 'Docs toolchain missing; install via `mise run bootstrap:docs` or pass -SkipDocs/-Fast' }
   $results += Invoke-Step -Name 'docs lint' -Action {
@@ -251,6 +305,118 @@ function Invoke-Verify {
     }
     throw 'docs_check.sh and mkdocs not available'
   } -Required:$true -ShouldRun { -not $SkipDocs } -SkipReason $docsSkipReason
+
+  if ($Ci.IsPresent) {
+    Write-Host "[verify] CI mode enabled (running extended guardrails)."
+    if ($null -eq $python) {
+      $results += [pscustomobject]@{
+        Name    = 'python check_feature_integrity.py'
+        Status  = 'failed'
+        Message = 'Python 3.11+ not found in PATH'
+      }
+    } else {
+      $results += Invoke-Step -Name 'python check_feature_integrity.py' -Action {
+        $scriptPath = Join-Path $RepoRoot 'scripts\check_feature_integrity.py'
+        Invoke-Program -Executable $python -Arguments @($scriptPath)
+      }
+
+      $results += Invoke-Step -Name 'python check_system_components_integrity.py' -Action {
+        $scriptPath = Join-Path $RepoRoot 'scripts\check_system_components_integrity.py'
+        Invoke-Program -Executable $python -Arguments @($scriptPath)
+      }
+
+      foreach ($regen in @(
+          'scripts\gen_feature_matrix.py',
+          'scripts\gen_feature_catalog.py',
+          'scripts\gen_system_components.py'
+        )) {
+        $results += Invoke-Step -Name ("python $regen --check") -Action {
+          $scriptPath = Join-Path $RepoRoot $regen
+          Invoke-Program -Executable $python -Arguments @($scriptPath,'--check')
+        }
+      }
+    }
+
+    if ($null -eq $bash) {
+      $results += [pscustomobject]@{
+        Name    = 'bash check_env_guard.sh'
+        Status  = 'failed'
+        Message = 'Git Bash not found; install Git Bash to run CI guardrails'
+      }
+    } else {
+      $results += Invoke-Step -Name 'bash check_env_guard.sh' -Action {
+        $previous = $env:ENFORCE_ENV_GUARD
+        try {
+          $env:ENFORCE_ENV_GUARD = '1'
+          & $bash.Source (Join-Path $RepoRoot 'scripts\check_env_guard.sh')
+          if ($LASTEXITCODE -ne 0) {
+            throw "check_env_guard.sh exited with $LASTEXITCODE"
+          }
+        } finally {
+          if ($null -eq $previous) {
+            Remove-Item Env:ENFORCE_ENV_GUARD -ErrorAction SilentlyContinue
+          } else {
+            $env:ENFORCE_ENV_GUARD = $previous
+          }
+        }
+      }
+
+      $results += Invoke-Step -Name 'bash ci_snappy_bench.sh' -Action {
+        & $bash.Source (Join-Path $RepoRoot 'scripts\ci_snappy_bench.sh')
+        if ($LASTEXITCODE -ne 0) {
+          throw "ci_snappy_bench.sh exited with $LASTEXITCODE"
+        }
+      }
+
+      $results += Invoke-Step -Name 'bash triad_smoke.sh' -Action {
+        & $bash.Source (Join-Path $RepoRoot 'scripts\triad_smoke.sh')
+        if ($LASTEXITCODE -ne 0) {
+          throw "triad_smoke.sh exited with $LASTEXITCODE"
+        }
+      }
+
+      $results += Invoke-Step -Name 'bash context_ci.sh' -Action {
+        & $bash.Source (Join-Path $RepoRoot 'scripts\context_ci.sh')
+        if ($LASTEXITCODE -ne 0) {
+          throw "context_ci.sh exited with $LASTEXITCODE"
+        }
+      }
+
+      $results += Invoke-Step -Name 'bash runtime_llama_smoke.sh (MODE=stub)' -Action {
+        $previousMode = $env:MODE
+        try {
+          $env:MODE = 'stub'
+          & $bash.Source (Join-Path $RepoRoot 'scripts\runtime_llama_smoke.sh')
+          if ($LASTEXITCODE -ne 0) {
+            throw "runtime_llama_smoke.sh exited with $LASTEXITCODE"
+          }
+        } finally {
+          if ($null -eq $previousMode) {
+            Remove-Item Env:MODE -ErrorAction SilentlyContinue
+          } else {
+            $env:MODE = $previousMode
+          }
+        }
+      }
+
+      $results += Invoke-Step -Name 'bash check_legacy_surface.sh' -Action {
+        $previousWait = $env:ARW_LEGACY_CHECK_WAIT_SECS
+        try {
+          $env:ARW_LEGACY_CHECK_WAIT_SECS = '30'
+          & $bash.Source (Join-Path $RepoRoot 'scripts\check_legacy_surface.sh')
+          if ($LASTEXITCODE -ne 0) {
+            throw "check_legacy_surface.sh exited with $LASTEXITCODE"
+          }
+        } finally {
+          if ($null -eq $previousWait) {
+            Remove-Item Env:ARW_LEGACY_CHECK_WAIT_SECS -ErrorAction SilentlyContinue
+          } else {
+            $env:ARW_LEGACY_CHECK_WAIT_SECS = $previousWait
+          }
+        }
+      }
+    }
+  }
 
   $hasFailure = $false
   foreach ($result in $results) {
@@ -304,7 +470,7 @@ switch ($commandKey) {
       $env:ARW_DOCGEN_SKIP_BUILDS = '1'
       $env:ARW_BUILD_MODE = 'debug'
       $env:ARW_SETUP_AGENT = '1'
-      & (Join-Path $ScriptRoot 'setup.ps1') -Headless -Minimal -NoDocs -Yes @Args
+      & (Join-Path $ScriptRoot 'setup.ps1') -Headless -Minimal -NoDocs -SkipCli -Yes @Args
     } finally {
       if ($null -eq $previousDocgen) {
         Remove-Item Env:ARW_DOCGEN_SKIP_BUILDS -ErrorAction SilentlyContinue
@@ -401,12 +567,13 @@ switch ($commandKey) {
     }
   }
   'verify' {
-    $recognized = @('fast','skip-docs','skip-ui','skip-doc-python','with-launcher')
+    $recognized = @('fast','skip-docs','skip-ui','skip-doc-python','with-launcher','ci')
     $fast = Contains-Switch -Values $Args -Switches @('fast')
     $skipDocs = Contains-Switch -Values $Args -Switches @('skip-docs')
     $skipUI = Contains-Switch -Values $Args -Switches @('skip-ui')
     $skipDocPython = Contains-Switch -Values $Args -Switches @('skip-doc-python')
     $withLauncher = Contains-Switch -Values $Args -Switches @('with-launcher')
+    $ci = Contains-Switch -Values $Args -Switches @('ci')
     $unknown = @()
     foreach ($arg in $Args) {
       if ($arg -like '-*') {
@@ -422,7 +589,7 @@ switch ($commandKey) {
     if ($unknown.Count -gt 0) {
       throw "Unknown verify option(s): $($unknown -join ', ')"
     }
-    Invoke-Verify -Fast:$fast -SkipDocs:$skipDocs -SkipUI:$skipUI -SkipDocPython:$skipDocPython -WithLauncher:$withLauncher
+    Invoke-Verify -Fast:$fast -SkipDocs:$skipDocs -SkipUI:$skipUI -SkipDocPython:$skipDocPython -WithLauncher:$withLauncher -Ci:$ci
   }
   'hooks' {
     & (Join-Path $ScriptRoot 'hooks' 'install_hooks.ps1') @Args

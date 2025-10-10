@@ -41,7 +41,7 @@ bash scripts/dev.sh setup-agent
 scripts\dev.ps1 setup-agent
 ```
 
-This path pins `--headless --minimal --no-docs`, exports `ARW_DOCGEN_SKIP_BUILDS=1`, and compiles `arw-server`/`arw-cli` in the debug profile to keep turnaround short for autonomous runs. It also installs PyYAML via `pip` (setting `PIP_BREAK_SYSTEM_PACKAGES=1` when the host enforces PEP 668) so `scripts/dev.{sh,ps1} verify` can run without extra manual steps.
+This path pins `--headless --minimal --no-docs`, exports `ARW_DOCGEN_SKIP_BUILDS=1`, and compiles `arw-server` in the debug profile to keep turnaround short for autonomous runs (append `--with-cli` / `-WithCli` when you also need `arw-cli`). It also installs PyYAML via `pip` (setting `PIP_BREAK_SYSTEM_PACKAGES=1` when the host enforces PEP 668) so `scripts/dev.{sh,ps1} verify` can run without extra manual steps.
 
 ### Option 1 — Portable bundle (fastest)
 
@@ -104,7 +104,7 @@ DOCS_CHECK_FAST=1 bash scripts/docs_check.sh
 
 Drop the environment variable (or omit `--fast`) to restore the full validation, including mkdocs build and deep legacy sweeps, before publishing.
 
-Guardrail sweep (fmt → clippy → tests → docs) lives behind `bash scripts/dev.sh verify`. The default headless run skips the `arw-launcher` crate; pass `--with-launcher` / `-WithLauncher` or set `ARW_VERIFY_INCLUDE_LAUNCHER=1` when you explicitly need the desktop UI coverage, and append `--fast` / `-Fast` when you only need the Rust/test coverage and will address docs or launcher UI checks later in the workflow.
+Guardrail sweep (fmt → clippy → tests → docs) lives behind `bash scripts/dev.sh verify`. The default headless run skips the `arw-launcher` crate; pass `--with-launcher` / `-WithLauncher` or set `ARW_VERIFY_INCLUDE_LAUNCHER=1` when you explicitly need the desktop UI coverage, and append `--fast` / `-Fast` when you only need the Rust/test coverage and will address docs or launcher UI checks later in the workflow. When Node.js is missing the launcher smoke is auto-skipped; export `ARW_VERIFY_REQUIRE_DOCS=1` if you want absent Python/PyYAML to fail the run instead of downgrading to informational skips. Reach for `--ci` / `-Ci` when you need the GitHub Actions matrix locally (registry integrity, doc generators in `--check` mode, env-guard lint, snappy bench, triad/context/runtime smokes, and legacy surface checks).
 Prefer the new task wrappers? `mise run verify` mirrors the full suite, and `mise run verify:fast` maps to the lean option. `mise run docs:check` and `mise run docs:check:fast` wrap the docs lint commands. Run `mise run bootstrap:docs` (or `bash scripts/bootstrap_docs.sh`) whenever you need the pinned MkDocs/Material stack installed.
 Need to bump a doc header after edits? Run `python scripts/update_doc_metadata.py docs/path/to/page.md` (add `--dry-run` to preview changes).
 Working offline? `mise run docs:cache:build` creates `dist/docs-wheels.tar.gz` with all pinned MkDocs wheels. Release bundles ship the same archive—download it, extract on the air-gapped host, and run `mise run bootstrap:docs -- --wheel-dir <extracted-dir>`.

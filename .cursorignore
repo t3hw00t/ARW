@@ -1,5 +1,10 @@
 .arw/
 target/
+dist/
+cache/
+.arw-data/
+vendor/
+%LOCALAPPDATA%/
 site/
 apps/arw-launcher/src-tauri/bin/
 apps/arw-launcher/src-tauri/gen/

@@ -14,6 +14,8 @@ no_docs=0
 minimal=0
 headless=0
 skip_build=0
+build_cli=1
+cli_flag=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
     -y|--yes) yes_flag=1; shift;;
@@ -22,9 +24,23 @@ while [[ $# -gt 0 ]]; do
     --minimal) minimal=1; no_docs=1; shift;;
     --headless) headless=1; shift;;
     --skip-build|--no-build) skip_build=1; shift;;
+    --skip-cli)
+      build_cli=0
+      cli_flag="skip"
+      shift
+      ;;
+    --with-cli)
+      build_cli=1
+      cli_flag="with"
+      shift
+      ;;
     *) echo "Unknown option: $1"; exit 1;;
   esac
 done
+
+if [[ "${ARW_SETUP_AGENT:-0}" == 1 && -z "$cli_flag" ]]; then
+  build_cli=0
+fi
 
 title(){ echo -e "\033[36m\n=== $* ===\033[0m"; }
 info(){ echo -e "\033[36m[setup]\033[0m $*"; }
@@ -162,8 +178,12 @@ else
   if [[ $minimal -eq 1 ]]; then
     info "Building arw-server (${build_label})"
     (cd "$ROOT" && cargo build "${build_flags[@]}" -p arw-server)
-    info "Building arw-cli (${build_label})"
-    (cd "$ROOT" && cargo build "${build_flags[@]}" -p arw-cli)
+    if [[ $build_cli -eq 1 ]]; then
+      info "Building arw-cli (${build_label})"
+      (cd "$ROOT" && cargo build "${build_flags[@]}" -p arw-cli)
+    else
+      info "Skipping arw-cli build (requested)"
+    fi
     if [[ $build_launcher -eq 1 ]]; then
       info "Building arw-launcher (${build_label})"
       if (cd "$ROOT" && cargo build "${build_flags[@]}" -p arw-launcher --features launcher-linux-ui); then
@@ -176,8 +196,16 @@ else
       info "Skipping arw-launcher build."
     fi
   else
-    info "Building workspace (${build_label}, excluding launcher)"
-    (cd "$ROOT" && cargo build "${build_flags[@]}" --workspace --exclude arw-launcher)
+    if [[ $build_cli -eq 1 ]]; then
+      info "Building workspace (${build_label}, excluding launcher)"
+    else
+      info "Building workspace (${build_label}, excluding launcher and arw-cli)"
+    fi
+    cargo_args=(build "${build_flags[@]}" --workspace --exclude arw-launcher)
+    if [[ $build_cli -ne 1 ]]; then
+      cargo_args+=(--exclude arw-cli)
+    fi
+    (cd "$ROOT" && cargo "${cargo_args[@]}")
     if [[ $build_launcher -eq 1 ]]; then
       info "Building arw-launcher (${build_label})"
       if (cd "$ROOT" && cargo build "${build_flags[@]}" -p arw-launcher --features launcher-linux-ui); then

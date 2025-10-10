@@ -6,6 +6,8 @@ param(
   [switch]$Minimal,
   [switch]$Headless,
   [switch]$SkipBuild,
+  [switch]$SkipCli,
+  [switch]$WithCli,
   [switch]$MaxPerf,
   [switch]$StrictReleaseGate,
   [switch]$SkipReleaseGate,
@@ -61,6 +63,15 @@ function Ensure-PythonModule {
     Warn "Failed to install Python module $Package; run `$PythonPath -m pip install --user $Package` manually."
     return $false
   }
+}
+
+$buildCli = $true
+if ($WithCli.IsPresent) {
+  $buildCli = $true
+} elseif ($SkipCli.IsPresent) {
+  $buildCli = $false
+} elseif ($env:ARW_SETUP_AGENT -eq '1') {
+  $buildCli = $false
 }
 
 $buildMode = $env:ARW_BUILD_MODE
@@ -188,10 +199,25 @@ if ($SkipBuild) {
     Info 'Opt-in: maxperf profile enabled'
     # Override global jobs=1 to allow parallel builds for maxperf
     try { $env:CARGO_BUILD_JOBS = [Environment]::ProcessorCount } catch {}
-    & cargo build --profile maxperf --locked -p arw-server -p arw-cli
+    Info ("Building arw-server ({0})" -f $buildLabel)
+    & cargo build --profile maxperf --locked -p arw-server
+    if ($buildCli) {
+      Info ("Building arw-cli ({0})" -f $buildLabel)
+      & cargo build --profile maxperf --locked -p arw-cli
+    } else {
+      Info 'Skipping arw-cli build (requested)'
+    }
   } else {
-    $coreArgs = @('build') + $buildFlags + @('-p','arw-server','-p','arw-cli')
-    & cargo @coreArgs
+    Info ("Building arw-server ({0})" -f $buildLabel)
+    $serverArgs = @('build') + $buildFlags + @('-p','arw-server')
+    & cargo @serverArgs
+    if ($buildCli) {
+      Info ("Building arw-cli ({0})" -f $buildLabel)
+      $cliArgs = @('build') + $buildFlags + @('-p','arw-cli')
+      & cargo @cliArgs
+    } else {
+      Info 'Skipping arw-cli build (requested)'
+    }
   }
 
   # Try to build the optional Desktop Launcher (Tauri) best-effort.

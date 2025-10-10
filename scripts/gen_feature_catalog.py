@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import argparse
 import json
 import pathlib
 
@@ -166,7 +167,20 @@ def render_catalog(catalog: dict, features: dict) -> str:
     return "\n".join(out).rstrip() + "\n"
 
 
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="Generate docs/reference/feature_catalog.md from catalog metadata."
+    )
+    parser.add_argument(
+        "--check",
+        action="store_true",
+        help="Verify the existing file matches the generated output without writing.",
+    )
+    return parser.parse_args()
+
+
 def main() -> int:
+    args = parse_args()
     if not FEATURES_JSON.exists():
         print(f"error: missing {FEATURES_JSON}", flush=True)
         return 2
@@ -186,8 +200,22 @@ def main() -> int:
     if missing:
         missing_sorted = sorted(set(missing))
         raise SystemExit(f"catalog references unknown features: {', '.join(missing_sorted)}")
+    content = render_catalog(catalog, features)
+    if not content.endswith("\n"):
+        content += "\n"
+
+    if args.check:
+        if not OUT_MD.exists():
+            print(f"{OUT_MD} missing; run python scripts/gen_feature_catalog.py to regenerate.", flush=True)
+            return 1
+        current = OUT_MD.read_text(encoding="utf-8")
+        if current.rstrip() == content.rstrip():
+            return 0
+        print(f"{OUT_MD} out of date; run python scripts/gen_feature_catalog.py to refresh.", flush=True)
+        return 1
+
     OUT_MD.parent.mkdir(parents=True, exist_ok=True)
-    OUT_MD.write_text(render_catalog(catalog, features), encoding="utf-8")
+    OUT_MD.write_text(content, encoding="utf-8")
     print(f"wrote {OUT_MD}")
     return 0
 

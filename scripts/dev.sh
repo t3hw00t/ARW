@@ -75,6 +75,8 @@ run_verify() {
   local skip_ui=0
   local skip_docs_python=0
   local include_launcher=0
+  local require_docs=0
+  local ci_mode=0
 
   while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -101,12 +103,37 @@ run_verify() {
         include_launcher=1
         shift
         ;;
+      --ci)
+        ci_mode=1
+        shift
+        ;;
       *)
         echo "[verify] Unknown option '$1'" >&2
         return 2
         ;;
     esac
   done
+
+  if [[ $ci_mode -eq 1 ]]; then
+    if [[ $fast -eq 1 ]]; then
+      echo "[verify] --ci overrides --fast; running full suite."
+      fast=0
+      skip_docs=0
+      skip_ui=0
+      skip_docs_python=0
+    fi
+    if [[ $skip_docs -eq 1 || $skip_ui -eq 1 || $skip_docs_python -eq 1 ]]; then
+      echo "[verify] --ci ignores skip flags to align with CI coverage."
+      skip_docs=0
+      skip_ui=0
+      skip_docs_python=0
+    fi
+    require_docs=1
+  fi
+
+  if [[ "${ARW_VERIFY_REQUIRE_DOCS:-}" =~ ^(1|true|yes)$ ]]; then
+    require_docs=1
+  fi
 
   set +e
 
@@ -151,6 +178,8 @@ run_verify() {
 
   if [[ $skip_ui -eq 1 ]]; then
     echo "[verify] skipping launcher UI smoke (requested)"
+  elif [[ $include_launcher -ne 1 ]]; then
+    echo "[verify] launcher UI smoke skipped (headless default; pass --with-launcher to include)"
   else
     if command -v node >/dev/null 2>&1; then
       echo "[verify] node apps/arw-launcher/src-tauri/ui/read_store.test.js"
@@ -169,20 +198,32 @@ run_verify() {
 
   PYTHON="$(command -v python3 || command -v python || true)"
   if [[ -n "$PYTHON" ]]; then
+    local run_doc_sync=1
     if [[ $skip_docs_python -eq 1 ]]; then
       echo "[verify] skipping doc sync checks (requested)"
-    else
+      run_doc_sync=0
+    fi
+    if [[ $run_doc_sync -eq 1 ]]; then
       if "$PYTHON" - <<'PY' >/dev/null 2>&1
 import importlib.util, sys
 sys.exit(0 if importlib.util.find_spec("yaml") else 1)
 PY
       then
-        echo "[verify] python check_operation_docs_sync.py"
-        if ! "$PYTHON" "$REPO_ROOT/scripts/check_operation_docs_sync.py"; then ok=1; fi
+        :
       else
-        echo "[verify] doc sync blocked (PyYAML missing; install with 'python3 -m pip install --user --break-system-packages pyyaml' or pass --skip-doc-python/--fast)"
-        ok=1
+        if [[ $require_docs -eq 1 ]]; then
+          echo "[verify] doc sync blocked (PyYAML missing; install with 'python3 -m pip install --user --break-system-packages pyyaml' or pass --skip-doc-python/--fast)"
+          ok=1
+        else
+          echo "[verify] PyYAML missing; skipping doc sync checks (set ARW_VERIFY_REQUIRE_DOCS=1 to require doc tooling)"
+        fi
+        run_doc_sync=0
       fi
+    fi
+
+    if [[ $run_doc_sync -eq 1 ]]; then
+      echo "[verify] python check_operation_docs_sync.py"
+      if ! "$PYTHON" "$REPO_ROOT/scripts/check_operation_docs_sync.py"; then ok=1; fi
 
       echo "[verify] python scripts/gen_topics_doc.py --check"
       if ! "$PYTHON" "$REPO_ROOT/scripts/gen_topics_doc.py" --check; then ok=1; fi
@@ -191,8 +232,12 @@ PY
     echo "[verify] python scripts/lint_event_names.py"
     if ! "$PYTHON" "$REPO_ROOT/scripts/lint_event_names.py"; then ok=1; fi
   else
-    echo "[verify] doc sync blocked (python not found; install Python 3.11+ or pass --skip-doc-python/--fast)"
-    ok=1
+    if [[ $require_docs -eq 1 ]]; then
+      echo "[verify] doc sync blocked (python not found; install Python 3.11+ or pass --skip-doc-python/--fast)"
+      ok=1
+    else
+      echo "[verify] python not found; skipping doc sync + event lint (set ARW_VERIFY_REQUIRE_DOCS=1 to require doc tooling)"
+    fi
   fi
 
   if [[ $skip_docs -eq 1 ]]; then
@@ -208,6 +253,49 @@ PY
       echo "[verify] docs lint blocked (missing scripts/docs_check.sh and mkdocs; install the docs toolchain or pass --skip-docs/--fast)"
       ok=1
     fi
+  fi
+
+  if [[ $ci_mode -eq 1 ]]; then
+    echo "[verify] CI mode enabled (running extended guardrails)."
+    if [[ -z "$PYTHON" ]]; then
+      echo "[verify] CI checks require python 3.11+ on PATH"
+      ok=1
+    else
+      echo "[verify] python scripts/check_feature_integrity.py"
+      if ! "$PYTHON" "$REPO_ROOT/scripts/check_feature_integrity.py"; then ok=1; fi
+
+      echo "[verify] python scripts/check_system_components_integrity.py"
+      if ! "$PYTHON" "$REPO_ROOT/scripts/check_system_components_integrity.py"; then ok=1; fi
+
+      local regen_scripts=(
+        "scripts/gen_feature_matrix.py"
+        "scripts/gen_feature_catalog.py"
+        "scripts/gen_system_components.py"
+      )
+      local script_path
+      for script_path in "${regen_scripts[@]}"; do
+        echo "[verify] python ${script_path} --check"
+        if ! "$PYTHON" "$REPO_ROOT/${script_path}" --check; then ok=1; fi
+      done
+    fi
+
+    echo "[verify] ENFORCE_ENV_GUARD=1 bash scripts/check_env_guard.sh"
+    if ! ENFORCE_ENV_GUARD=1 bash "$REPO_ROOT/scripts/check_env_guard.sh"; then ok=1; fi
+
+    echo "[verify] bash scripts/ci_snappy_bench.sh"
+    if ! bash "$REPO_ROOT/scripts/ci_snappy_bench.sh"; then ok=1; fi
+
+    echo "[verify] bash scripts/triad_smoke.sh"
+    if ! bash "$REPO_ROOT/scripts/triad_smoke.sh"; then ok=1; fi
+
+    echo "[verify] bash scripts/context_ci.sh"
+    if ! bash "$REPO_ROOT/scripts/context_ci.sh"; then ok=1; fi
+
+    echo "[verify] MODE=stub bash scripts/runtime_llama_smoke.sh"
+    if ! MODE=stub bash "$REPO_ROOT/scripts/runtime_llama_smoke.sh"; then ok=1; fi
+
+    echo "[verify] ARW_LEGACY_CHECK_WAIT_SECS=30 bash scripts/check_legacy_surface.sh"
+    if ! ARW_LEGACY_CHECK_WAIT_SECS=30 bash "$REPO_ROOT/scripts/check_legacy_surface.sh"; then ok=1; fi
   fi
 
   set -e
@@ -233,7 +321,7 @@ case "$command" in
     bash "$SCRIPT_DIR/setup.sh" "${args[@]}"
     ;;
   setup-agent)
-    env ARW_DOCGEN_SKIP_BUILDS=1 ARW_SETUP_AGENT=1 ARW_BUILD_MODE=debug bash "$SCRIPT_DIR/setup.sh" --yes --headless --minimal --no-docs "$@"
+    env ARW_DOCGEN_SKIP_BUILDS=1 ARW_SETUP_AGENT=1 ARW_BUILD_MODE=debug bash "$SCRIPT_DIR/setup.sh" --yes --headless --minimal --no-docs --skip-cli "$@"
     ;;
   build)
     args=("$@")

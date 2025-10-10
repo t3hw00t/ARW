@@ -6,7 +6,7 @@ title: System Components
 
 # System Components
 
-Updated: 2025-10-09
+Updated: 2025-10-07
 Status: Stable
 Type: Reference
 

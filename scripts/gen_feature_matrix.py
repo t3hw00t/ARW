@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import argparse
 import json
 import pathlib
 import sys
@@ -16,9 +17,11 @@ from doc_utils import (
 FEATURES_JSON = ROOT / "interfaces" / "features.json"
 OUT_MD = ROOT / "docs" / "reference" / "feature_matrix.md"
 
+
 def load_features():
     with FEATURES_JSON.open("r", encoding="utf-8") as f:
         return json.load(f)
+
 
 def render(features_doc, known_topics):
     timestamp = _stable_now_timestamp([FEATURES_JSON])
@@ -127,7 +130,21 @@ def render(features_doc, known_topics):
         out.append("")
     return "\n".join(out)
 
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="Generate docs/reference/feature_matrix.md from interfaces/features.json.",
+    )
+    parser.add_argument(
+        "--check",
+        action="store_true",
+        help="Verify the existing file matches the generated content without writing.",
+    )
+    return parser.parse_args()
+
+
 def main():
+    args = parse_args()
     try:
         features = load_features()
     except Exception as e:
@@ -144,8 +161,22 @@ def main():
     missing = check_paths_exist(all_paths)
     if missing:
         print("warning: missing SSoT paths:\n  - " + "\n  - ".join(missing), file=sys.stderr)
+    content = render(features, known_topics)
+    if not content.endswith("\n"):
+        content += "\n"
+
+    if args.check:
+        if not OUT_MD.exists():
+            print(f"{OUT_MD} missing; run python scripts/gen_feature_matrix.py to regenerate.", file=sys.stderr)
+            return 1
+        current = OUT_MD.read_text(encoding="utf-8")
+        if current.rstrip() == content.rstrip():
+            return 0
+        print(f"{OUT_MD} out of date; run python scripts/gen_feature_matrix.py to refresh.", file=sys.stderr)
+        return 1
+
     OUT_MD.parent.mkdir(parents=True, exist_ok=True)
-    OUT_MD.write_text(render(features, known_topics), encoding="utf-8")
+    OUT_MD.write_text(content, encoding="utf-8")
     print(f"wrote {OUT_MD}")
     return 0
 

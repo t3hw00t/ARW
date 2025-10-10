@@ -6,7 +6,7 @@ title: Universal Feature Catalog
 
 # Universal Feature Catalog
 
-Updated: 2025-10-09
+Updated: 2025-10-07
 Status: Stable
 Type: Reference
 
