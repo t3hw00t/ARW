@@ -246,8 +246,11 @@ fn spawn_tool_competence(state: AppState) -> TaskHandle {
     TaskHandle::new(
         "self_model.tool_competence",
         tokio::spawn(async move {
-            let mut rx = state.bus().subscribe();
-            while let Ok(env) = rx.recv().await {
+            let bus = state.bus();
+            let mut rx = bus.subscribe();
+            while let Some(env) =
+                crate::util::next_bus_event(&mut rx, &bus, "self_model.tool_competence").await
+            {
                 if env.kind.as_str() == topics::TOPIC_TOOL_RAN {
                     if let Some(tool_id) = env.payload.get("id").and_then(|v| v.as_str()) {
                         let now = chrono::Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true);

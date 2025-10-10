@@ -8,6 +8,7 @@ use serde_json::{json, Value};
 use std::path::Path;
 use std::path::PathBuf;
 use std::sync::Mutex;
+use tokio::sync::broadcast;
 
 static STATE_DIR: Lazy<Mutex<OnceCell<PathBuf>>> = Lazy::new(|| Mutex::new(OnceCell::new()));
 
@@ -110,6 +111,34 @@ pub fn attach_memory_ptr(value: &mut Value) {
     }
     if let Some(id) = obj.get("id").and_then(|v| v.as_str()) {
         obj.insert("ptr".into(), json!({"kind": "memory", "id": id}));
+    }
+}
+
+/// Receive the next bus event, handling lag/backpressure transparently.
+/// Returns `None` when the channel is closed.
+pub async fn next_bus_event(
+    rx: &mut broadcast::Receiver<arw_events::Envelope>,
+    bus: &arw_events::Bus,
+    task: &str,
+) -> Option<arw_events::Envelope> {
+    loop {
+        match rx.recv().await {
+            Ok(env) => return Some(env),
+            Err(broadcast::error::RecvError::Lagged(skipped)) => {
+                bus.note_lag(skipped as u64);
+                tracing::warn!(
+                    target: "arw::bus",
+                    %task,
+                    skipped,
+                    "bus receiver lagged; skipped events"
+                );
+                continue;
+            }
+            Err(broadcast::error::RecvError::Closed) => {
+                tracing::warn!(target: "arw::bus", %task, "bus closed; stopping listener");
+                return None;
+            }
+        }
     }
 }
 

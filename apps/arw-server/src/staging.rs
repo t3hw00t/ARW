@@ -136,6 +136,7 @@ pub async fn approve_action(
         )
         .await?;
     state.signal_action_queue();
+    state.metrics().queue_enqueued();
     let now = chrono::Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true);
     state
         .kernel()

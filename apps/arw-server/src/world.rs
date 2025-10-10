@@ -188,7 +188,9 @@ pub(crate) fn start(state: AppState) -> Vec<TaskHandle> {
         "world.bus_listener",
         tokio::spawn(async move {
             let mut rx = bus.subscribe();
-            while let Ok(env) = rx.recv().await {
+            while let Some(env) =
+                crate::util::next_bus_event(&mut rx, &bus, "world.bus_listener").await
+            {
                 process_event(&bus, &env).await;
             }
         }),

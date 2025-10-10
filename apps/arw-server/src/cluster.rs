@@ -188,7 +188,11 @@ pub fn start(state: AppState) -> Vec<TaskHandle> {
         "cluster.advertise_on_events",
         tokio::spawn(async move {
             let mut rx = bus.subscribe();
-            while let Ok(env) = rx.recv().await {
+            let bus_for_task = bus.clone();
+            while let Some(env) =
+                crate::util::next_bus_event(&mut rx, &bus_for_task, "cluster.advertise_on_events")
+                    .await
+            {
                 match env.kind.as_str() {
                     topics::TOPIC_MODELS_CHANGED | topics::TOPIC_MODELS_REFRESHED => {
                         event_registry.advertise_local(&event_state).await;

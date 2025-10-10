@@ -160,6 +160,10 @@ pub(crate) async fn submit_action(
         (id, false)
     };
 
+    if !reused {
+        state.metrics().queue_enqueued();
+    }
+
     let payload = json!({"id": id, "kind": req.kind, "status": "queued"});
     let now = chrono::Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true);
     let env = arw_events::Envelope {

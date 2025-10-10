@@ -705,11 +705,19 @@ pub(crate) fn start(state: AppState) -> Vec<TaskHandle> {
     ));
 
     let registry = state.runtime();
-    let mut rx = state.bus().subscribe();
+    let bus = state.bus();
+    let mut rx = bus.subscribe();
+    let bus_for_task = bus.clone();
     tasks.push(TaskHandle::new(
         "runtime.registry.health_listener",
         tokio::spawn(async move {
-            while let Ok(env) = rx.recv().await {
+            while let Some(env) = crate::util::next_bus_event(
+                &mut rx,
+                &bus_for_task,
+                "runtime.registry.health_listener",
+            )
+            .await
+            {
                 if env.kind.as_str() == "runtime.health" {
                     registry.handle_health_event(env.payload.clone()).await;
                 }

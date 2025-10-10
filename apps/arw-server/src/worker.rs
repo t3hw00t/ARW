@@ -18,11 +18,25 @@ use crate::{
 use arw_topics as topics;
 use tokio::sync::broadcast;
 
-pub(crate) fn start_local_worker(state: AppState) -> TaskHandle {
+pub(crate) fn desired_worker_count() -> usize {
+    std::env::var("ARW_WORKERS")
+        .ok()
+        .and_then(|s| s.parse::<usize>().ok())
+        .filter(|&n| n > 0)
+        .unwrap_or_else(|| {
+            let fallback = std::thread::available_parallelism()
+                .map(|n| n.get())
+                .unwrap_or(1);
+            fallback.clamp(1, 4)
+        })
+}
+
+pub(crate) fn start_local_worker(state: AppState, slot: usize) -> TaskHandle {
     let ctx = WorkerContext::new(&state);
     let worker_state = state;
+    let task_name = format!("worker.local[{slot}]");
     TaskHandle::new(
-        "worker.local",
+        task_name.clone(),
         tokio::spawn(async move {
             let state = worker_state;
             let ctx = ctx;
@@ -37,6 +51,8 @@ pub(crate) fn start_local_worker(state: AppState) -> TaskHandle {
                 }
                 match ctx.kernel.dequeue_one_queued_async().await {
                     Ok(Some((id, kind, input))) => {
+                        ctx.metrics.worker_job_started();
+                        ctx.metrics.queue_dequeued();
                         let now = chrono::Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true);
                         let running_env = arw_events::Envelope {
                             time: now,
@@ -53,9 +69,11 @@ pub(crate) fn start_local_worker(state: AppState) -> TaskHandle {
                         {
                             ActionDispatchResult::Completed(outcome) => {
                                 ctx.complete_action(&id, outcome).await;
+                                ctx.metrics.worker_job_finished();
                             }
                             ActionDispatchResult::Failed(failure) => {
                                 ctx.fail_action(&id, &kind, failure).await;
+                                ctx.metrics.worker_job_finished();
                                 continue;
                             }
                             ActionDispatchResult::Interrupted(signal) => {
@@ -69,6 +87,7 @@ pub(crate) fn start_local_worker(state: AppState) -> TaskHandle {
                                     }),
                                 )
                                 .await;
+                                ctx.metrics.worker_job_finished();
                                 continue;
                             }
                         }
@@ -1239,7 +1258,8 @@ mod tests {
         let temp = tempfile::tempdir().expect("tempdir");
         let mut ctx = crate::test_support::begin_state_env(temp.path());
         let state = build_state(temp.path(), &mut ctx.env).await;
-        let _worker = start_local_worker(state.clone());
+        state.metrics().set_worker_configured(1);
+        let _worker = start_local_worker(state.clone(), 0);
 
         let bus = state.bus();
         let mut rx =
@@ -1284,7 +1304,8 @@ mod tests {
         let temp = tempfile::tempdir().expect("tempdir");
         let mut ctx = crate::test_support::begin_state_env(temp.path());
         let state = build_state(temp.path(), &mut ctx.env).await;
-        let _worker = start_local_worker(state.clone());
+        state.metrics().set_worker_configured(1);
+        let _worker = start_local_worker(state.clone(), 0);
 
         let bus = state.bus();
         let mut rx =
@@ -1333,7 +1354,7 @@ mod tests {
         let temp = tempfile::tempdir().expect("tempdir");
         let mut ctx = crate::test_support::begin_state_env(temp.path());
         let state = build_state(temp.path(), &mut ctx.env).await;
-        let _worker = start_local_worker(state.clone());
+        let _worker = start_local_worker(state.clone(), 0);
 
         let insert_body = memory_service::MemoryUpsertInput {
             lane: "episodic".into(),
@@ -1388,7 +1409,7 @@ mod tests {
         let temp = tempfile::tempdir().expect("tempdir");
         let mut ctx = crate::test_support::begin_state_env(temp.path());
         let state = build_state(temp.path(), &mut ctx.env).await;
-        let _worker = start_local_worker(state.clone());
+        let _worker = start_local_worker(state.clone(), 0);
 
         for idx in 0..3 {
             let insert_body = memory_service::MemoryUpsertInput {
@@ -1458,7 +1479,7 @@ mod tests {
         let temp = tempfile::tempdir().expect("tempdir");
         let mut ctx = crate::test_support::begin_state_env(temp.path());
         let state = build_state(temp.path(), &mut ctx.env).await;
-        let _worker = start_local_worker(state.clone());
+        let _worker = start_local_worker(state.clone(), 0);
 
         let bus = state.bus();
         let mut rx =
@@ -1513,7 +1534,7 @@ mod tests {
         let mut ctx = crate::test_support::begin_state_env(temp.path());
         let state = build_state(temp.path(), &mut ctx.env).await;
         let lease_id = insert_active_lease(&state, "context:read").await;
-        let _worker = start_local_worker(state.clone());
+        let _worker = start_local_worker(state.clone(), 0);
 
         let bus = state.bus();
         let mut completed_rx =
@@ -1680,7 +1701,7 @@ mod tests {
         let temp = tempfile::tempdir().expect("tempdir");
         let mut ctx = crate::test_support::begin_state_env(temp.path());
         let state = build_state(temp.path(), &mut ctx.env).await;
-        let _worker = start_local_worker(state.clone());
+        let _worker = start_local_worker(state.clone(), 0);
 
         let bus = state.bus();
         let mut completed_rx =
@@ -2043,7 +2064,7 @@ mod tests {
             .await
             .expect("insert lease");
 
-        let worker = start_local_worker(state.clone());
+        let worker = start_local_worker(state.clone(), 0);
 
         let action_id = Uuid::new_v4().to_string();
         state
@@ -2244,7 +2265,7 @@ mod tests {
             notify: notify.clone(),
         });
         let state = build_state_with_host(temp.path(), &mut ctx.env, host).await;
-        let _worker = start_local_worker(state.clone());
+        let _worker = start_local_worker(state.clone(), 0);
 
         let bus = state.bus();
         let mut running_rx =
@@ -2311,5 +2332,72 @@ mod tests {
         assert_eq!(output["error"]["reason"].as_str(), Some("autonomy_pause"));
 
         notify.notify_waiters();
+    }
+
+    #[tokio::test]
+    async fn additional_worker_progresses_when_peer_blocked() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let mut ctx = crate::test_support::begin_state_env(temp.path());
+        let notify = Arc::new(Notify::new());
+        let host: Arc<dyn arw_wasi::ToolHost> = Arc::new(BlockingHost {
+            notify: notify.clone(),
+        });
+        let state = build_state_with_host(temp.path(), &mut ctx.env, host).await;
+        state.metrics().set_worker_configured(2);
+        let worker_a = start_local_worker(state.clone(), 0);
+        let worker_b = start_local_worker(state.clone(), 1);
+
+        let bus = state.bus();
+        let mut completed_rx =
+            bus.subscribe_filtered(vec![topics::TOPIC_ACTIONS_COMPLETED.to_string()], Some(8));
+
+        let blocking_id = Uuid::new_v4().to_string();
+        state
+            .kernel()
+            .insert_action_async(
+                &blocking_id,
+                "blocking.wait",
+                &json!({}),
+                None,
+                None,
+                "queued",
+            )
+            .await
+            .expect("enqueue blocking action");
+        state.signal_action_queue();
+
+        let fast_id = Uuid::new_v4().to_string();
+        state
+            .kernel()
+            .insert_action_async(&fast_id, "demo.echo", &json!({}), None, None, "queued")
+            .await
+            .expect("enqueue fast action");
+        state.signal_action_queue();
+
+        let env = timeout(Duration::from_secs(2), completed_rx.recv())
+            .await
+            .expect("fast action completion event")
+            .expect("completed envelope");
+        assert_eq!(env.kind, topics::TOPIC_ACTIONS_COMPLETED);
+        assert_eq!(env.payload["id"].as_str(), Some(fast_id.as_str()));
+
+        notify.notify_waiters();
+
+        let mut snapshot = state.metrics().snapshot();
+        for _ in 0..20 {
+            if snapshot.worker.completed >= 1 {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+            snapshot = state.metrics().snapshot();
+        }
+        assert_eq!(snapshot.worker.configured, 2);
+        assert!(snapshot.worker.started >= 2);
+        assert!(snapshot.worker.completed >= 1);
+
+        let (_, _, handle_a) = worker_a.into_inner();
+        handle_a.abort();
+        let (_, _, handle_b) = worker_b.into_inner();
+        handle_b.abort();
     }
 }

@@ -6,7 +6,7 @@ title: Restructure Handbook (Source of Truth)
 
 This document is the single source of truth for the ARW restructure. It now serves as the hand-off reference for the completed migration and gives new contributors (or a chat without prior context) the context needed to work with the unified stack.
 
-Updated: 2025-10-04
+Updated: 2025-10-10
 Type: Explanation
 Owner: Core maintainers
 Scope: Architecture, APIs, modules, migration plan, status, hand‑off tips
@@ -56,6 +56,7 @@ Fast feedback is a product value. We design for immediacy:
 - Streaming by default: `/events` is always on; `/actions` returns 202 quickly and progress streams over SSE.
 - HTTP layers: compression, tracing, and a global concurrency governor (`ARW_HTTP_MAX_CONC`) provide stable latency under load; presets seed the limit (256 → 16384) so lightweight hosts stay snappy and workstations scale.
 - Non‑blocking request paths: enqueue and return; heavy work runs in workers; avoid synchronous compute in handlers.
+- Worker pool auto-scales with host parallelism (1–4 workers by default) and can be pinned via `ARW_WORKERS` so long-running actions never starve the queue.
 - Warm starts: pre‑warm caches (read‑models, prepared SQL, HTTP clients) at boot for low first‑hit latency.
 - Small writes, big reads: journal writes are small and fast; large artifacts go to CAS; clients fetch head or stream on demand.
 - Singleflight + caches: coalesce identical work; use short‑lived in‑mem caches and durable CAS for reuse.

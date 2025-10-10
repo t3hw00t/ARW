@@ -4,7 +4,7 @@ title: Configuration
 
 # Configuration
 { .topic-trio style="--exp:.7; --complex:.5; --complicated:.3" data-exp=".7" data-complex=".5" data-complicated=".3" }
-Updated: 2025-10-09
+Updated: 2025-10-10
 Type: Reference
 
 See also: [Glossary](GLOSSARY.md), [Admin Endpoints](guide/admin_endpoints.md), [Quickstart](guide/quickstart.md)
@@ -32,6 +32,7 @@ Centralized reference for ARW environment variables and common flags. Defaults f
 - `ARW_SPEC_DIR`: base directory for spec artifacts served under `/spec/*` (default: `spec`).
  - `ARW_INTERFACES_DIR`: base directory for the interface catalog served at `/catalog/index` (default: `interfaces`).
 - `ARW_ACTIONS_QUEUE_MAX`: backpressure limit for queued actions. Defaults follow the active performance preset (256 → 16384); explicit exports override the preset.
+- `ARW_WORKERS`: number of background action workers that drain the queue. Defaults to an auto-detected value (1‑4) based on host parallelism; set explicitly to pin the pool size.
 - `ARW_ACTION_STAGING_MODE`: staging policy for `/actions` submissions. Options: `auto` (default, queue immediately), `ask` (stage unless action kind appears in `ARW_ACTION_STAGING_ALLOW`), or `always` (stage every action for manual approval).
 - `ARW_ACTION_STAGING_ALLOW`: comma‑delimited list of action kinds that bypass staging when `ARW_ACTION_STAGING_MODE=ask`.
 - `ARW_ACTION_STAGING_ACTOR`: label recorded on staging entries for audit trails (defaults to `local`).

@@ -3,7 +3,7 @@ title: Performance Presets
 ---
 
 # Performance Presets
-Updated: 2025-10-09
+Updated: 2025-10-10
 Type: How‑to
 
 ARW ships with built‑in performance presets to adapt resource usage to your machine without hand‑tuning dozens of knobs.
@@ -31,6 +31,7 @@ echo $ARW_PERF_PRESET_TIER
 ## What Presets Tune
 - HTTP Concurrency: `ARW_HTTP_MAX_CONC`
 - Actions Queue Capacity: `ARW_ACTIONS_QUEUE_MAX`
+- Action Worker Pool: `ARW_WORKERS` (auto-detected 1–4 if unset)
 - Context Working Set: `ARW_CONTEXT_K`, `ARW_CONTEXT_EXPAND_PER_SEED`, `ARW_CONTEXT_DIVERSITY_LAMBDA`, `ARW_CONTEXT_MIN_SCORE`, `ARW_CONTEXT_LANES_DEFAULT`, `ARW_CONTEXT_LANE_BONUS`, `ARW_CONTEXT_EXPAND_QUERY`, `ARW_CONTEXT_EXPAND_QUERY_TOP_K`, `ARW_CONTEXT_SCORER`, `ARW_CONTEXT_STREAM_DEFAULT`, `ARW_CONTEXT_COVERAGE_MAX_ITERS`
 - File Rehydrate Head Bytes: `ARW_REHYDRATE_FILE_HEAD_KB`
 - Read‑model Cadences: `ARW_ROUTE_STATS_*`, `ARW_MODELS_METRICS_*`

@@ -99,8 +99,11 @@ pub(crate) fn actions_version_value() -> u64 {
 
 pub(crate) fn start(state: AppState) -> Vec<TaskHandle> {
     let handle = tokio::spawn(async move {
-        let mut rx = state.bus().subscribe();
-        while let Ok(env) = rx.recv().await {
+        let bus = state.bus();
+        let mut rx = bus.subscribe();
+        while let Some(env) =
+            crate::util::next_bus_event(&mut rx, &bus, "state_observer.bus_listener").await
+        {
             on_event(&env).await;
         }
     });

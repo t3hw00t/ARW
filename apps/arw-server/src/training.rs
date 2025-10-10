@@ -526,9 +526,12 @@ pub(crate) fn start_logic_history_recorder(state: AppState) -> crate::tasks::Tas
             ],
             Some(128),
         );
+        let bus_for_task = bus.clone();
         let store = store.clone();
         async move {
-            while let Ok(env) = rx.recv().await {
+            while let Some(env) =
+                crate::util::next_bus_event(&mut rx, &bus_for_task, "training.logic_history").await
+            {
                 if let Err(err) = store.append_envelope(&env).await {
                     warn!(
                         target: "training",

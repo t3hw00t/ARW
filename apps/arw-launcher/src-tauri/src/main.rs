@@ -1,4 +1,4 @@
-#[cfg(all(target_os = "linux", not(feature = "launcher-linux-ui")))]
+#[cfg(all(target_os = "linux", not(feature = "launcher-linux-ui"), not(test)))]
 compile_error!(
     "Linux builds of the ARW launcher require enabling the `launcher-linux-ui` feature. \
 Run `cargo build -p arw-launcher --features launcher-linux-ui` or exclude the launcher crate \

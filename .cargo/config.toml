@@ -13,4 +13,15 @@ targets = [
 # Universal default to keep peak memory predictable across platforms
 # (jobs=1 reduces concurrent rustc processes which can OOM on Windows/MSVC).
 jobs = 1
+
+[target.x86_64-apple-darwin]
 rustflags = ["-Clink-arg=-fuse-ld=/usr/local/opt/lld/bin/ld64.lld", "-Clink-arg=-Wl,--icf=none"]
+
+[target.aarch64-apple-darwin]
+rustflags = ["-Clink-arg=-fuse-ld=/usr/local/opt/lld/bin/ld64.lld", "-Clink-arg=-Wl,--icf=none"]
+
+[target.x86_64-unknown-linux-gnu]
+rustflags = ["-Clink-arg=-fuse-ld=lld", "-Clink-arg=-Wl,--icf=none"]
+
+[target.aarch64-unknown-linux-gnu]
+rustflags = ["-Clink-arg=-fuse-ld=lld", "-Clink-arg=-Wl,--icf=none"]

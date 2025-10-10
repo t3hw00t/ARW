@@ -350,6 +350,7 @@ pub async fn orchestrator_start_training(
                 );
             } else {
                 state2.signal_action_queue();
+                state2.metrics().queue_enqueued();
             }
 
             let tool_action_id = Uuid::new_v4().to_string();
@@ -393,6 +394,7 @@ pub async fn orchestrator_start_training(
                 );
             } else {
                 state2.signal_action_queue();
+                state2.metrics().queue_enqueued();
             }
         }
     });

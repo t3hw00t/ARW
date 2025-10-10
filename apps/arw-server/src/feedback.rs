@@ -301,7 +301,10 @@ impl FeedbackHub {
         let this = Arc::clone(self);
         tokio::spawn(async move {
             let mut rx = this.bus.subscribe();
-            while let Ok(env) = rx.recv().await {
+            let bus = this.bus.clone();
+            while let Some(env) =
+                crate::util::next_bus_event(&mut rx, &bus, "feedback.auto_apply_listener").await
+            {
                 this.auto_apply_from_event(&env).await;
             }
         });

@@ -520,6 +520,9 @@ impl Kernel {
               created TEXT NOT NULL,
               updated TEXT NOT NULL
             );
+            CREATE INDEX IF NOT EXISTS idx_actions_state_created ON actions(state, created);
+            CREATE INDEX IF NOT EXISTS idx_actions_updated ON actions(updated);
+            CREATE INDEX IF NOT EXISTS idx_actions_idem ON actions(idem_key);
 
             -- Contribution ledger: append-only accounting of work/resources
             CREATE TABLE IF NOT EXISTS contributions (

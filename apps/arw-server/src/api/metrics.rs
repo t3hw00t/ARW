@@ -66,6 +66,47 @@ fn render_prometheus(
     );
 
     out.push_str(
+        "# HELP arw_workers_configured Configured worker pool size\n# TYPE arw_workers_configured gauge\n",
+    );
+    write_metric_line(
+        &mut out,
+        "arw_workers_configured",
+        &[],
+        summary.worker.configured,
+    );
+    out.push_str(
+        "# HELP arw_workers_busy Current number of workers processing actions\n# TYPE arw_workers_busy gauge\n",
+    );
+    write_metric_line(&mut out, "arw_workers_busy", &[], summary.worker.busy);
+    out.push_str(
+        "# HELP arw_worker_jobs_started_total Actions started by workers\n# TYPE arw_worker_jobs_started_total counter\n",
+    );
+    write_metric_line(
+        &mut out,
+        "arw_worker_jobs_started_total",
+        &[],
+        summary.worker.started,
+    );
+    out.push_str(
+        "# HELP arw_worker_jobs_completed_total Actions completed by workers\n# TYPE arw_worker_jobs_completed_total counter\n",
+    );
+    write_metric_line(
+        &mut out,
+        "arw_worker_jobs_completed_total",
+        &[],
+        summary.worker.completed,
+    );
+    out.push_str(
+        "# HELP arw_actions_queue_depth Estimated queued actions awaiting workers\n# TYPE arw_actions_queue_depth gauge\n",
+    );
+    write_metric_line(
+        &mut out,
+        "arw_actions_queue_depth",
+        &[],
+        summary.worker.queue_depth,
+    );
+
+    out.push_str(
         "# HELP arw_events_total Events processed by kind\n# TYPE arw_events_total counter\n",
     );
     for (kind, count) in summary.events.kinds.iter() {

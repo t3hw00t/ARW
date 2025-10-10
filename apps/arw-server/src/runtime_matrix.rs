@@ -217,8 +217,16 @@ pub(crate) fn start(state: AppState) -> Vec<TaskHandle> {
     handles.push(TaskHandle::new(
         "runtime_matrix.health_subscriber",
         tokio::spawn(async move {
-            let mut rx = subscriber_state.bus().subscribe();
-            while let Ok(env) = rx.recv().await {
+            let bus = subscriber_state.bus();
+            let mut rx = bus.subscribe();
+            let bus_for_task = bus.clone();
+            while let Some(env) = crate::util::next_bus_event(
+                &mut rx,
+                &bus_for_task,
+                "runtime_matrix.health_subscriber",
+            )
+            .await
+            {
                 if env.kind == TOPIC_RUNTIME_HEALTH {
                     let key = env
                         .payload

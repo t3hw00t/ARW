@@ -279,7 +279,7 @@ mod http_tests {
         let mut ctx = crate::test_support::begin_state_env(temp.path());
         let state_dir = temp.path().to_path_buf();
         let state = build_state(&state_dir, &mut ctx.env).await;
-        let _worker = worker::start_local_worker(state.clone());
+        let _worker = worker::start_local_worker(state.clone(), 0);
         let app = router_with_actions(state);
 
         let submit_body = json!({

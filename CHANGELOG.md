@@ -4,6 +4,9 @@ This project follows Keep a Changelog and Semantic Versioning. All notable chang
 
 ## [Unreleased]
 
+- Hardened bus fan-out to survive broadcast lag (SSE replay, metrics, and state observers now recover after channel overflows) and tightened filtered subscriber logging.
+- Auto-scale the action worker pool (configurable via `ARW_WORKERS`) and added SQLite indexes for the actions table to keep queue drains fast as workloads grow.
+- Exposed worker/queue metrics (`arw_workers_*`, `arw_actions_queue_depth`) across `/state/route_stats` and Prometheus output for easier capacity tuning.
 - Added lease-aware capsule adoption (`policy.capsule.expired` telemetry, read-model patches) and tightened guardrail gateway refresh behaviour.
 - Restored unified server chat endpoints (`/admin/chat*`) with debug UI panels for staging approvals, research watcher, and training telemetry.
 - Retired legacy `/memory/*` REST shims and the `/admin/events` alias; new admin helpers live at `/admin/memory/*` and SSE streams at `/events`.

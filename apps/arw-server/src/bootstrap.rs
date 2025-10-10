@@ -124,6 +124,14 @@ pub(crate) async fn build() -> BootstrapOutput {
         .build()
         .await;
 
+    if kernel_enabled {
+        if let Ok(depth) = state.kernel().count_actions_by_state_async("queued").await {
+            state.metrics().queue_reset(depth.max(0) as u64);
+        }
+    } else {
+        state.metrics().queue_reset(0);
+    }
+
     if let Err(err) = state.runtime_supervisor().install_builtin_adapters().await {
         warn!(
             target: "arw::runtime",
@@ -350,9 +358,13 @@ fn spawn_bus_forwarders(
                 let sse_id_map = sse_id_map.clone();
                 let kernel = kernel.clone();
                 let mut rx = bus_clone.subscribe();
+                let bus_for_task = bus_clone.clone();
+                let task_name = name.to_string();
                 async move {
                     use sha2::Digest as _;
-                    while let Ok(env) = rx.recv().await {
+                    while let Some(env) =
+                        crate::util::next_bus_event(&mut rx, &bus_for_task, &task_name).await
+                    {
                         metrics.record_event(&env.kind);
                         if let Ok(row_id) = kernel.append_event_async(&env).await {
                             let mut hasher = sha2::Sha256::new();
@@ -398,8 +410,12 @@ fn spawn_bus_forwarders(
             move || {
                 let metrics = metrics.clone();
                 let mut rx = bus_clone.subscribe();
+                let bus_for_task = bus_clone.clone();
+                let task_name = name.to_string();
                 async move {
-                    while let Ok(env) = rx.recv().await {
+                    while let Some(env) =
+                        crate::util::next_bus_event(&mut rx, &bus_for_task, &task_name).await
+                    {
                         metrics.record_event(&env.kind);
                     }
                 }
@@ -466,7 +482,16 @@ async fn initialise_state(state: &AppState, kernel_enabled: bool, smoke_mode: bo
     }
 
     if kernel_enabled && !smoke_mode {
-        tasks.push(worker::start_local_worker(state.clone()));
+        let worker_count = worker::desired_worker_count();
+        info!(
+            target: "arw::worker",
+            workers = worker_count,
+            "starting local worker pool"
+        );
+        state.metrics().set_worker_configured(worker_count as u64);
+        for slot in 0..worker_count {
+            tasks.push(worker::start_local_worker(state.clone(), slot));
+        }
     }
 
     tasks.extend(read_models::start_read_models(state.clone()));

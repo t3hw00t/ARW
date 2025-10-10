@@ -261,13 +261,29 @@ impl EventBus for LocalBus {
         let prefs: Vec<String> = prefixes.into_iter().collect();
         let out = tx.clone();
         tokio::spawn(async move {
-            while let Ok(env) = src.recv().await {
-                let k = env.kind.as_str();
-                if prefs.iter().any(|p| k.starts_with(p)) {
-                    let _ = out.send(env);
-                }
-                if out.receiver_count() == 0 {
-                    break;
+            loop {
+                match src.recv().await {
+                    Ok(env) => {
+                        let k = env.kind.as_str();
+                        if prefs.iter().any(|p| k.starts_with(p)) {
+                            let _ = out.send(env);
+                        }
+                        if out.receiver_count() == 0 {
+                            break;
+                        }
+                    }
+                    Err(tokio::sync::broadcast::error::RecvError::Lagged(skipped)) => {
+                        tracing::warn!(
+                            target: "arw::bus",
+                            skipped,
+                            "filtered bus subscriber lagged; skipped events"
+                        );
+                        if out.receiver_count() == 0 {
+                            break;
+                        }
+                        continue;
+                    }
+                    Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
                 }
             }
         });

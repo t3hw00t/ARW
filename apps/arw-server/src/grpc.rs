@@ -424,7 +424,7 @@ mod tests {
         let temp = tempdir().expect("tempdir");
         let mut ctx = crate::test_support::begin_state_env(temp.path());
         let state = build_state(temp.path(), &mut ctx.env).await;
-        let _worker = worker::start_local_worker(state.clone());
+        let _worker = worker::start_local_worker(state.clone(), 0);
         let service = ArwGrpcService {
             state: state.clone(),
         };

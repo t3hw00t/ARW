@@ -114,6 +114,7 @@ pub struct MetricsSummary {
     pub memory_gc: MemoryGcSummary,
     pub autonomy: AutonomySummary,
     pub modular: ModularSummary,
+    pub worker: WorkerSummary,
 }
 
 #[derive(Clone, Serialize, Default)]
@@ -268,6 +269,15 @@ struct ModularCounters {
     tools: BTreeMap<String, u64>,
 }
 
+#[derive(Clone, Serialize, Default)]
+pub struct WorkerSummary {
+    pub configured: u64,
+    pub busy: u64,
+    pub started: u64,
+    pub completed: u64,
+    pub queue_depth: u64,
+}
+
 impl ModularCounters {
     fn record_agent(&mut self, agent: &str) {
         *self.agents.entry(agent.to_string()).or_default() += 1;
@@ -336,6 +346,11 @@ pub struct Metrics {
     memory_gc: MemoryGcCounters,
     autonomy_interrupts: Mutex<BTreeMap<String, u64>>,
     modular: Mutex<ModularCounters>,
+    worker_configured: AtomicU64,
+    worker_busy: AtomicU64,
+    worker_started: AtomicU64,
+    worker_completed: AtomicU64,
+    queue_depth: AtomicU64,
 }
 
 impl Default for Metrics {
@@ -373,6 +388,11 @@ impl Metrics {
             memory_gc: MemoryGcCounters::default(),
             autonomy_interrupts: Mutex::new(BTreeMap::new()),
             modular: Mutex::new(ModularCounters::default()),
+            worker_configured: AtomicU64::new(0),
+            worker_busy: AtomicU64::new(0),
+            worker_started: AtomicU64::new(0),
+            worker_completed: AtomicU64::new(0),
+            queue_depth: AtomicU64::new(0),
         }
     }
 
@@ -437,6 +457,13 @@ impl Metrics {
             .lock()
             .map(|counters| counters.snapshot())
             .unwrap_or_default();
+        let worker = WorkerSummary {
+            configured: self.worker_configured.load(Ordering::Relaxed),
+            busy: self.worker_busy.load(Ordering::Relaxed),
+            started: self.worker_started.load(Ordering::Relaxed),
+            completed: self.worker_completed.load(Ordering::Relaxed),
+            queue_depth: self.queue_depth.load(Ordering::Relaxed),
+        };
         MetricsSummary {
             events,
             routes,
@@ -445,6 +472,7 @@ impl Metrics {
             memory_gc,
             autonomy,
             modular,
+            worker,
         }
     }
 
@@ -533,6 +561,40 @@ impl Metrics {
             counters.record_tool(tool_id);
         }
     }
+
+    pub fn set_worker_configured(&self, count: u64) {
+        self.worker_configured.store(count, Ordering::Relaxed);
+    }
+
+    pub fn worker_job_started(&self) {
+        self.worker_started.fetch_add(1, Ordering::Relaxed);
+        self.worker_busy.fetch_add(1, Ordering::Relaxed);
+    }
+
+    pub fn worker_job_finished(&self) {
+        self.worker_completed.fetch_add(1, Ordering::Relaxed);
+        let _ = self
+            .worker_busy
+            .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |current| {
+                Some(current.saturating_sub(1))
+            });
+    }
+
+    pub fn queue_enqueued(&self) {
+        self.queue_depth.fetch_add(1, Ordering::Relaxed);
+    }
+
+    pub fn queue_dequeued(&self) {
+        let _ = self
+            .queue_depth
+            .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |current| {
+                Some(current.saturating_sub(1))
+            });
+    }
+
+    pub fn queue_reset(&self, depth: u64) {
+        self.queue_depth.store(depth, Ordering::Relaxed);
+    }
 }
 
 pub fn route_stats_snapshot(
@@ -555,6 +617,7 @@ pub fn route_stats_snapshot(
         "memory_gc": summary.memory_gc,
         "autonomy": summary.autonomy,
         "modular": summary.modular,
+        "worker": summary.worker,
     })
 }
 
