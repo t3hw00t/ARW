@@ -17,8 +17,7 @@ members = [
   "apps/arw-connector",
   "apps/snappy-bench",
   "crates/arw-tauri",
-  "apps/arw-launcher/src-tauri",
-  "vendor/screenshots"
+  "apps/arw-launcher/src-tauri"
 ]
 default-members = [
   "crates/arw-protocol",
@@ -37,8 +36,7 @@ default-members = [
   "apps/arw-server",
   "apps/arw-connector",
   "apps/snappy-bench",
-  "crates/arw-tauri",
-  "vendor/screenshots"
+  "crates/arw-tauri"
 ]
 resolver = "2"
 

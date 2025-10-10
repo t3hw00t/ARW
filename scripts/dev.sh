@@ -161,7 +161,8 @@ run_verify() {
         echo "[verify] node fallback apps/arw-launcher/src-tauri/ui/read_store.test.js"
         if ! "$node_fallback" "$REPO_ROOT/apps/arw-launcher/src-tauri/ui/read_store.test.js"; then ok=1; fi
       else
-        echo "[verify] skipping node UI tests (node not found)"
+        echo "[verify] launcher UI smoke blocked (node not found; install Node.js 18+ or pass --skip-ui/--fast)"
+        ok=1
       fi
     fi
   fi
@@ -179,7 +180,8 @@ PY
         echo "[verify] python check_operation_docs_sync.py"
         if ! "$PYTHON" "$REPO_ROOT/scripts/check_operation_docs_sync.py"; then ok=1; fi
       else
-        echo "[verify] skipping operation docs sync check (PyYAML missing; run 'python3 -m pip install --user --break-system-packages pyyaml')"
+        echo "[verify] doc sync blocked (PyYAML missing; install with 'python3 -m pip install --user --break-system-packages pyyaml' or pass --skip-doc-python/--fast)"
+        ok=1
       fi
 
       echo "[verify] python scripts/gen_topics_doc.py --check"
@@ -189,7 +191,8 @@ PY
     echo "[verify] python scripts/lint_event_names.py"
     if ! "$PYTHON" "$REPO_ROOT/scripts/lint_event_names.py"; then ok=1; fi
   else
-    echo "[verify] python not found; skipping python-based checks"
+    echo "[verify] doc sync blocked (python not found; install Python 3.11+ or pass --skip-doc-python/--fast)"
+    ok=1
   fi
 
   if [[ $skip_docs -eq 1 ]]; then
@@ -202,7 +205,8 @@ PY
       echo "[verify] docs_check.sh unavailable; running mkdocs build --strict"
       if ! mkdocs build --strict -f "$REPO_ROOT/mkdocs.yml"; then ok=1; fi
     else
-      echo "[verify] skipping docs lint (docs_check.sh & mkdocs missing)"
+      echo "[verify] docs lint blocked (missing scripts/docs_check.sh and mkdocs; install the docs toolchain or pass --skip-docs/--fast)"
+      ok=1
     fi
   fi
 

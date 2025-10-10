@@ -125,7 +125,7 @@ pub async fn next_bus_event(
         match rx.recv().await {
             Ok(env) => return Some(env),
             Err(broadcast::error::RecvError::Lagged(skipped)) => {
-                bus.note_lag(skipped as u64);
+                bus.note_lag(skipped);
                 tracing::warn!(
                     target: "arw::bus",
                     %task,

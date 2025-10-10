@@ -1,5 +1,5 @@
 # Assisted, Iterative Coding – Working Agreement
-Updated: 2025-10-10
+Updated: 2025-10-11
 Type: Reference
 
 Microsummary: Small, safe changes with a written PLAN → minimal DIFF → tests → docs. Default‑deny risky edits. Stable.
@@ -8,6 +8,7 @@ Harness precedence
 - Follow the execution harness or user instructions when they conflict with this guide; note the deviation in your response so the next agent has the same context.
 - Lightweight exceptions granted by the harness (e.g., trivial edits that explicitly skip planning) are valid—call them out when you use them.
 - Prefer the headless bootstrap (`scripts/dev.sh setup-agent` or `scripts\dev.ps1 setup-agent`) when you need a non-interactive setup; it pins `--headless --minimal --no-docs`, sets `ARW_DOCGEN_SKIP_BUILDS=1`, compiles debug binaries, and installs PyYAML so docgen skips release packaging while verification still works by default.
+- Need the toolchain only? Append `--skip-build` / `-SkipBuild` so the helper hydrates dependencies without compiling immediately.
 
 Purpose
 - Make small, safe changes that keep ARW coherent and testable.

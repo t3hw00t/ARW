@@ -1180,17 +1180,13 @@ mod cmds {
 
         let mut monitors = app.available_monitors().map_err(|e| e.to_string())?;
         if monitors.is_empty() {
-            if let Ok(mon) = window.current_monitor() {
-                if let Some(mon) = mon {
-                    monitors.push(mon);
-                }
+            if let Ok(Some(mon)) = window.current_monitor() {
+                monitors.push(mon);
             }
         }
         if monitors.is_empty() {
-            if let Ok(mon) = app.primary_monitor() {
-                if let Some(mon) = mon {
-                    monitors.push(mon);
-                }
+            if let Ok(Some(mon)) = app.primary_monitor() {
+                monitors.push(mon);
             }
         }
 

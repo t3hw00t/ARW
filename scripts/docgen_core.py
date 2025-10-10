@@ -199,22 +199,40 @@ def update_tasks_docs(runner: Runner) -> None:
     timestamp = datetime.now(timezone.utc)
     timestamp_str = timestamp.strftime("%Y-%m-%d %H:%M")
     timestamp_label = f"{timestamp_str} UTC"
+    existing_tasks_json = None
+    existing_updated = None
+    existing_text = None
     tasks_data = {"updated": timestamp_label, "tasks": []}
     if TASKS_JSON.exists():
+        existing_text = TASKS_JSON.read_text(encoding="utf-8")
         try:
-            tasks_data = json.loads(TASKS_JSON.read_text(encoding="utf-8"))
+            tasks_data = json.loads(existing_text)
         except json.JSONDecodeError as exc:
             msg = f"Failed to parse {TASKS_JSON}: {exc}"
             runner.warnings.append(msg)
             log_warn(msg)
+            tasks_data = {"updated": timestamp_label, "tasks": []}
         else:
             tasks = tasks_data.get("tasks") or []
             if not isinstance(tasks, list):
                 tasks = []
             tasks_data["tasks"] = tasks
-            tasks_data["updated"] = timestamp_label
-    TASKS_JSON.parent.mkdir(parents=True, exist_ok=True)
-    TASKS_JSON.write_text(json.dumps(tasks_data, indent=2) + "\n", encoding="utf-8")
+            existing_tasks_json = json.dumps(tasks, sort_keys=True)
+            existing_updated = tasks_data.get("updated")
+
+    if existing_tasks_json is None:
+        existing_tasks_json = json.dumps(tasks_data.get("tasks", []), sort_keys=True)
+
+    current_tasks_json = json.dumps(tasks_data.get("tasks", []), sort_keys=True)
+    if current_tasks_json == existing_tasks_json and existing_updated:
+        tasks_data["updated"] = existing_updated
+    else:
+        tasks_data["updated"] = timestamp_label
+
+    serialized = json.dumps(tasks_data, indent=2) + "\n"
+    if existing_text is None or existing_text != serialized:
+        TASKS_JSON.parent.mkdir(parents=True, exist_ok=True)
+        TASKS_JSON.write_text(serialized, encoding="utf-8")
 
     tasks = tasks_data.get("tasks", [])
     grouped: dict[str, list[dict]] = defaultdict(list)

@@ -2,23 +2,12 @@ use std::collections::{HashMap, VecDeque};
 
 /// Small O(1) LRU map for deduplicating SSE events by a stable key.
 /// Stores only the last `cap` keys with their DB ids.
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub(crate) struct SseIdCache {
     cap: usize,
     order: VecDeque<(u64, u64)>,
     map: HashMap<u64, (i64, u64)>,
     next_token: u64,
-}
-
-impl Default for SseIdCache {
-    fn default() -> Self {
-        Self {
-            cap: 0,
-            order: VecDeque::new(),
-            map: HashMap::new(),
-            next_token: 0,
-        }
-    }
 }
 
 impl SseIdCache {

@@ -3,6 +3,9 @@ title: Mascot Overlay
 description: Floating desktop companion that mirrors service state and offers quick actions.
 ---
 
+Updated: 2025-10-11
+Type: Reference
+
 The Mascot Overlay is a small, transparent Tauri window that “lives” on your desktop. It mirrors core status (online, starting, error), provides gentle idle movement, and offers quick actions when needed — without getting in your way.
 
 Features

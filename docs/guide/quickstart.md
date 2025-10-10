@@ -4,7 +4,7 @@ title: Quickstart
 
 # Quickstart
 
-Updated: 2025-10-10
+Updated: 2025-10-11
 Type: Tutorial
 
 Run the unified ARW server locally in minutes. The architecture centres on the `/actions` → `/events` → `/state/*` triad; enable `ARW_DEBUG=1` to serve the browser debug panels.
@@ -70,6 +70,9 @@ This path skips the Rust toolchain—perfect for quick evaluations or air-gapped
   `powershell -ExecutionPolicy Bypass -File scripts\setup.ps1 -Headless`
 
 Use `--headless` / `-Headless` to skip the launcher build when WebKitGTK 4.1 + libsoup3 (Linux) or WebView2 (Windows) isn’t available yet. Drop the flag to compile the desktop Home view once the prerequisites are installed. Add `--minimal` / `-Minimal` to build just the core binaries without packaging or docs, and `--run-tests` / `-RunTests` when you want the workspace test suite as part of setup.
+
+!!! tip "Bootstrap without compiling immediately"
+    Append `--skip-build` (or `-SkipBuild` on Windows) when you only need the toolchains and dependency checks. The workspace build/tests can run later (e.g., in CI or on demand).
 
 ## Build and Test (optional)
 

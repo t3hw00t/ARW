@@ -1,5 +1,5 @@
 # Agent Onboarding
-Updated: 2025-10-10
+Updated: 2025-10-11
 Type: Reference
 
 Microsummary: Fast orientation for assistants working in the ARW repo—where to look, what to run, and how to respond safely.
@@ -12,6 +12,7 @@ Microsummary: Fast orientation for assistants working in the ARW repo—where to
 
 ## Essential Commands
 - Headless bootstrap: `scripts/dev.sh setup-agent` (Bash) or `scripts\dev.ps1 setup-agent` (PowerShell) runs a minimal, non-interactive setup tailored for autonomous agents (headless build, debug profile for arw-server/arw-cli, no docs packaging, docgen builds skipped). The script now ensures PyYAML via `pip` (setting `PIP_BREAK_SYSTEM_PACKAGES=1` when needed) so verification guardrails work out-of-the-box.
+- Priming toolchains only? Add `--skip-build` / `-SkipBuild` to the setup helpers to install dependencies without compiling; run `cargo build` later once the sandbox is ready.
 - Cross-platform helper: `scripts/dev.{sh,ps1}` wraps the common flows (`setup`, `build`, `test`, `verify`, `docs`). Example: `scripts/dev.ps1 verify`.
 - Toolchain manager: install [mise](https://mise.jdx.dev) and run `mise install` to provision Rust/Python/Node/jq/rg plus shortcuts like `mise run verify` or `mise run verify:fast`.
 - Build: `scripts/build.ps1` (Windows) or `bash scripts/build.sh` (Linux/macOS). Both default to a headless build that skips the Tauri launcher; pass `-WithLauncher` / `--with-launcher` (or set `ARW_BUILD_LAUNCHER=1`) when you specifically need the desktop UI. `make build` / `just build` mirror this headless default, with `make build-launcher` / `just build-launcher` opting into the full workspace build.

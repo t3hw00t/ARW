@@ -185,14 +185,23 @@ function Invoke-Verify {
     Invoke-Program -Executable $cargo -Arguments $testArgs
   }
 
-  $uiSkipReason = if ($SkipUI) { 'launcher UI checks disabled (--fast/--skip-ui)' } else { 'node not found; skipping UI store test' }
+  $uiSkipReason = if ($SkipUI) { 'launcher UI checks disabled (--fast/--skip-ui)' } else { 'Node.js 18+ missing; install it or pass -SkipUI/-Fast' }
   $results += Invoke-Step -Name 'node read_store.test.js' -Action {
+    if ($null -eq $node) {
+      throw 'Node.js 18+ not found in PATH'
+    }
     $testPath = Join-Path $RepoRoot 'apps\arw-launcher\src-tauri\ui\read_store.test.js'
     Invoke-Program -Executable $node -Arguments @($testPath)
-  } -Required:$false -ShouldRun { ($null -ne $node) -and -not $SkipUI } -SkipReason $uiSkipReason
+  } -Required:$true -ShouldRun { -not $SkipUI } -SkipReason $uiSkipReason
 
-  $docSyncSkipReason = if ($SkipDocPython) { 'doc sync checks disabled (--fast/--skip-doc-python)' } else { 'python or PyYAML missing; run `python3 -m pip install --user --break-system-packages pyyaml`' }
+  $docSyncSkipReason = if ($SkipDocPython) { 'doc sync checks disabled (--fast/--skip-doc-python)' } else { 'python3 + PyYAML missing; install them or pass -SkipDocPython/-Fast' }
   $results += Invoke-Step -Name 'python check_operation_docs_sync.py' -Action {
+    if ($null -eq $python) {
+      throw 'Python 3.11+ not found in PATH'
+    }
+    if (-not $pythonHasYaml) {
+      throw "PyYAML missing for $($python.Name); install with `python3 -m pip install --user --break-system-packages pyyaml`"
+    }
     $previousEncoding = $env:PYTHONIOENCODING
     try {
       $env:PYTHONIOENCODING = 'utf-8'
@@ -205,25 +214,43 @@ function Invoke-Verify {
         $env:PYTHONIOENCODING = $previousEncoding
       }
     }
-  } -Required:$false -ShouldRun { ($null -ne $python) -and $pythonHasYaml -and -not $SkipDocPython } -SkipReason $docSyncSkipReason
+  } -Required:$true -ShouldRun { -not $SkipDocPython } -SkipReason $docSyncSkipReason
 
   $results += Invoke-Step -Name 'python gen_topics_doc.py --check' -Action {
+    if ($null -eq $python) {
+      throw 'Python 3.11+ not found in PATH'
+    }
+    if ((-not $SkipDocPython) -and (-not $pythonHasYaml)) {
+      throw "PyYAML missing for $($python.Name); install with `python3 -m pip install --user --break-system-packages pyyaml`"
+    }
     $scriptPath = Join-Path $RepoRoot 'scripts\gen_topics_doc.py'
     Invoke-Program -Executable $python -Arguments @($scriptPath,'--check')
-  } -Required:$false -ShouldRun { $null -ne $python } -SkipReason 'python not found; skipping topics doc check'
+  } -Required:$true -ShouldRun { -not $SkipDocPython } -SkipReason $docSyncSkipReason
 
   $results += Invoke-Step -Name 'python lint_event_names.py' -Action {
+    if ($null -eq $python) {
+      throw 'Python 3.11+ not found in PATH'
+    }
     $scriptPath = Join-Path $RepoRoot 'scripts\lint_event_names.py'
     Invoke-Program -Executable $python -Arguments @($scriptPath)
-  } -Required:$false -ShouldRun { $null -ne $python } -SkipReason 'python not found; skipping event-name lint'
+  } -Required:$true -ShouldRun { $null -ne $python } -SkipReason 'Python 3.11+ not found in PATH'
 
-  $docsSkipReason = if ($SkipDocs) { 'docs lint disabled (--fast/--skip-docs)' } else { 'bash or docs_check.sh unavailable; skipping docs lint' }
-  $results += Invoke-Step -Name 'docs_check.sh' -Action {
-    $scriptPath = (Join-Path $RepoRoot 'scripts/docs_check.sh').Replace('\','/')
-    & $bash.Source $scriptPath
-  } -Required:$false -ShouldRun {
-    ($null -ne $bash) -and (Test-Path (Join-Path $RepoRoot 'scripts\docs_check.sh')) -and (-not $SkipDocs)
-  } -SkipReason $docsSkipReason
+  $docsSkipReason = if ($SkipDocs) { 'docs lint disabled (--fast/--skip-docs)' } else { 'Docs toolchain missing; install via `mise run bootstrap:docs` or pass -SkipDocs/-Fast' }
+  $results += Invoke-Step -Name 'docs lint' -Action {
+    $docsScript = Join-Path $RepoRoot 'scripts\docs_check.sh'
+    if ((Test-Path $docsScript) -and ($null -ne $bash)) {
+      & $bash.Source ($docsScript.Replace('\','/'))
+      if ($LASTEXITCODE -ne 0) {
+        throw "docs_check.sh exited with $LASTEXITCODE"
+      }
+      return
+    }
+    if ($mkdocs) {
+      Invoke-Program -Executable $mkdocs -Arguments @('build','--strict','-f', (Join-Path $RepoRoot 'mkdocs.yml'))
+      return
+    }
+    throw 'docs_check.sh and mkdocs not available'
+  } -Required:$true -ShouldRun { -not $SkipDocs } -SkipReason $docsSkipReason
 
   $hasFailure = $false
   foreach ($result in $results) {

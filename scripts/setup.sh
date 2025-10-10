@@ -13,6 +13,7 @@ run_tests=0
 no_docs=0
 minimal=0
 headless=0
+skip_build=0
 while [[ $# -gt 0 ]]; do
   case "$1" in
     -y|--yes) yes_flag=1; shift;;
@@ -20,6 +21,7 @@ while [[ $# -gt 0 ]]; do
     --run-tests) run_tests=1; shift;;
     --minimal) minimal=1; no_docs=1; shift;;
     --headless) headless=1; shift;;
+    --skip-build|--no-build) skip_build=1; shift;;
     *) echo "Unknown option: $1"; exit 1;;
   esac
 done
@@ -104,6 +106,9 @@ fi
 if [[ $headless -eq 1 ]]; then
   info "Headless mode enabled: launcher build will be skipped."
 fi
+if [[ $skip_build -eq 1 ]]; then
+  info "Skip-build enabled: workspace compile/test steps will be bypassed."
+fi
 if [[ "$build_mode" == "debug" ]]; then
   info "Debug build mode enabled: using cargo build --locked (no --release) for faster iteration."
 fi
@@ -151,69 +156,77 @@ if [[ "$build_mode" == "release" ]]; then
   build_flags+=(--release)
 fi
 title "Build workspace (${build_label})"
-if [[ $minimal -eq 1 ]]; then
-  info "Building arw-server (${build_label})"
-  (cd "$ROOT" && cargo build "${build_flags[@]}" -p arw-server)
-  info "Building arw-cli (${build_label})"
-  (cd "$ROOT" && cargo build "${build_flags[@]}" -p arw-cli)
-  if [[ $build_launcher -eq 1 ]]; then
-    info "Building arw-launcher (${build_label})"
-    if (cd "$ROOT" && cargo build "${build_flags[@]}" -p arw-launcher --features launcher-linux-ui); then
-      :
-    else
-      warn "arw-launcher build failed; continue in headless mode (install WebKitGTK 4.1 + libsoup3 or run with --headless)."
-      build_launcher=0
-    fi
-  else
-    info "Skipping arw-launcher build."
-  fi
+if [[ $skip_build -eq 1 ]]; then
+  info "Skipping workspace build (--skip-build)."
 else
-  info "Building workspace (${build_label}, excluding launcher)"
-  (cd "$ROOT" && cargo build "${build_flags[@]}" --workspace --exclude arw-launcher)
-  if [[ $build_launcher -eq 1 ]]; then
-    info "Building arw-launcher (${build_label})"
-    if (cd "$ROOT" && cargo build "${build_flags[@]}" -p arw-launcher --features launcher-linux-ui); then
-      :
+  if [[ $minimal -eq 1 ]]; then
+    info "Building arw-server (${build_label})"
+    (cd "$ROOT" && cargo build "${build_flags[@]}" -p arw-server)
+    info "Building arw-cli (${build_label})"
+    (cd "$ROOT" && cargo build "${build_flags[@]}" -p arw-cli)
+    if [[ $build_launcher -eq 1 ]]; then
+      info "Building arw-launcher (${build_label})"
+      if (cd "$ROOT" && cargo build "${build_flags[@]}" -p arw-launcher --features launcher-linux-ui); then
+        :
+      else
+        warn "arw-launcher build failed; continue in headless mode (install WebKitGTK 4.1 + libsoup3 or run with --headless)."
+        build_launcher=0
+      fi
     else
-      warn "arw-launcher build failed; continue in headless mode (install WebKitGTK 4.1 + libsoup3 or run with --headless)."
-      build_launcher=0
+      info "Skipping arw-launcher build."
     fi
   else
-    info "Skipping arw-launcher build."
+    info "Building workspace (${build_label}, excluding launcher)"
+    (cd "$ROOT" && cargo build "${build_flags[@]}" --workspace --exclude arw-launcher)
+    if [[ $build_launcher -eq 1 ]]; then
+      info "Building arw-launcher (${build_label})"
+      if (cd "$ROOT" && cargo build "${build_flags[@]}" -p arw-launcher --features launcher-linux-ui); then
+        :
+      else
+        warn "arw-launcher build failed; continue in headless mode (install WebKitGTK 4.1 + libsoup3 or run with --headless)."
+        build_launcher=0
+      fi
+    else
+      info "Skipping arw-launcher build."
+    fi
   fi
+  printf 'DIR target\n' >> "$INSTALL_LOG"
 fi
-printf 'DIR target\n' >> "$INSTALL_LOG"
 
 if [[ $run_tests -eq 1 ]]; then
-  title "Run tests (workspace)"
-  if command -v cargo-nextest >/dev/null 2>&1; then
-    (cd "$ROOT" && cargo nextest run --workspace --locked)
+  if [[ $skip_build -eq 1 ]]; then
+    warn "--run-tests requested but build step was skipped; not running tests."
   else
-    if command -v cargo >/dev/null 2>&1; then
-      install_nextest=0
-      if [[ $yes_flag -eq 1 ]]; then
-        install_nextest=1
-      else
-        read -rp "cargo-nextest not found. Install now? (Y/n) " resp
-        if [[ -z "$resp" || "$resp" =~ ^[Yy]$ ]]; then
+    title "Run tests (workspace)"
+    if command -v cargo-nextest >/dev/null 2>&1; then
+      (cd "$ROOT" && cargo nextest run --workspace --locked)
+    else
+      if command -v cargo >/dev/null 2>&1; then
+        install_nextest=0
+        if [[ $yes_flag -eq 1 ]]; then
           install_nextest=1
-        fi
-      fi
-      if [[ $install_nextest -eq 1 ]]; then
-        info "Installing cargo-nextest (cargo install --locked cargo-nextest)"
-        if cargo install --locked cargo-nextest; then
-          (cd "$ROOT" && cargo nextest run --workspace --locked)
         else
-          warn "cargo-nextest install failed; falling back to cargo test --workspace --locked."
+          read -rp "cargo-nextest not found. Install now? (Y/n) " resp
+          if [[ -z "$resp" || "$resp" =~ ^[Yy]$ ]]; then
+            install_nextest=1
+          fi
+        fi
+        if [[ $install_nextest -eq 1 ]]; then
+          info "Installing cargo-nextest (cargo install --locked cargo-nextest)"
+          if cargo install --locked cargo-nextest; then
+            (cd "$ROOT" && cargo nextest run --workspace --locked)
+          else
+            warn "cargo-nextest install failed; falling back to cargo test --workspace --locked."
+            (cd "$ROOT" && cargo test --workspace --locked)
+          fi
+        else
+          warn "Skipping cargo-nextest install; falling back to cargo test --workspace --locked."
           (cd "$ROOT" && cargo test --workspace --locked)
         fi
       else
-        warn "Skipping cargo-nextest install; falling back to cargo test --workspace --locked."
+        warn "cargo-nextest not found and cargo unavailable; running cargo test --workspace --locked."
         (cd "$ROOT" && cargo test --workspace --locked)
       fi
-    else
-      warn "cargo-nextest not found and cargo unavailable; running cargo test --workspace --locked."
-      (cd "$ROOT" && cargo test --workspace --locked)
     fi
   fi
 fi

@@ -5,6 +5,7 @@ param(
   [switch]$NoDocs,
   [switch]$Minimal,
   [switch]$Headless,
+  [switch]$SkipBuild,
   [switch]$MaxPerf,
   [switch]$StrictReleaseGate,
   [switch]$SkipReleaseGate,
@@ -74,6 +75,9 @@ if ($Minimal) {
 }
 if ($Headless) {
   Info 'Headless mode enabled: launcher build will be skipped.'
+}
+if ($SkipBuild) {
+  Info 'Skip-build enabled: workspace compile/test steps will be bypassed.'
 }
 if ($buildMode -eq 'debug' -and -not $MaxPerf) {
   Info 'Debug build mode enabled: using cargo build --locked (no --release) for faster iteration.'
@@ -176,36 +180,44 @@ $buildFlags = @('--locked')
 if ($buildMode -eq 'release') { $buildFlags += '--release' }
 Title ("Build ({0}): core binaries" -f $buildLabel)
 # Build only the essential binaries first to keep memory usage low on all platforms.
-if ($MaxPerf) {
-  Info 'Opt-in: maxperf profile enabled'
-  # Override global jobs=1 to allow parallel builds for maxperf
-  try { $env:CARGO_BUILD_JOBS = [Environment]::ProcessorCount } catch {}
-  & cargo build --profile maxperf --locked -p arw-server -p arw-cli
+Title "Build workspace ($buildLabel)"
+if ($SkipBuild) {
+  Info 'Skipping workspace build (--SkipBuild).'
 } else {
-  $coreArgs = @('build') + $buildFlags + @('-p','arw-server','-p','arw-cli')
-  & cargo @coreArgs
-}
-
-# Try to build the optional Desktop Launcher (Tauri) best-effort.
-if (-not $Headless) {
-    try {
-      Write-Host "[setup] Attempting optional build: arw-launcher" -ForegroundColor DarkCyan
-      if ($MaxPerf) {
-        & cargo build --profile maxperf --locked -p arw-launcher --features launcher-linux-ui
-      } else {
-        $launcherArgs = @('build') + $buildFlags + @('-p','arw-launcher','--features','launcher-linux-ui')
-        & cargo @launcherArgs
-      }
-  } catch {
-    Warn "arw-launcher build skipped (optional): $($_.Exception.Message)"
+  if ($MaxPerf) {
+    Info 'Opt-in: maxperf profile enabled'
+    # Override global jobs=1 to allow parallel builds for maxperf
+    try { $env:CARGO_BUILD_JOBS = [Environment]::ProcessorCount } catch {}
+    & cargo build --profile maxperf --locked -p arw-server -p arw-cli
+  } else {
+    $coreArgs = @('build') + $buildFlags + @('-p','arw-server','-p','arw-cli')
+    & cargo @coreArgs
   }
-} else {
-  Info 'Skipping arw-launcher build (headless).'
-}
 
-Add-Content $installLog 'DIR target'
+  # Try to build the optional Desktop Launcher (Tauri) best-effort.
+  if (-not $Headless) {
+      try {
+        Write-Host "[setup] Attempting optional build: arw-launcher" -ForegroundColor DarkCyan
+        if ($MaxPerf) {
+          & cargo build --profile maxperf --locked -p arw-launcher --features launcher-linux-ui
+        } else {
+          $launcherArgs = @('build') + $buildFlags + @('-p','arw-launcher','--features','launcher-linux-ui')
+          & cargo @launcherArgs
+        }
+    } catch {
+      Warn "arw-launcher build skipped (optional): $($_.Exception.Message)"
+    }
+  } else {
+    Info 'Skipping arw-launcher build (headless).'
+  }
+
+  Add-Content $installLog 'DIR target'
+}
 
 if ($RunTests) {
+  if ($SkipBuild) {
+    Warn '-RunTests requested but build step was skipped; not running tests.'
+  } else {
   Title 'Run tests (workspace)'
   $nextest = Get-Command cargo-nextest -ErrorAction SilentlyContinue
   $useCargoTest = $false
@@ -243,6 +255,7 @@ if ($RunTests) {
     & cargo test --workspace --locked
   } else {
     & $nextest.Source run --workspace --locked
+  }
   }
 }
 
