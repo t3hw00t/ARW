@@ -810,6 +810,7 @@ const installSidecar = (ARW) => {
           return card;
         };
         const renderApprovals = (restoreFilterFocus = false) => {
+          if (!approvalsState) return;
           const el = bodyFor('approvals');
           if (!el) return;
           clearLanePlaceholder(el);
@@ -840,6 +841,7 @@ const installSidecar = (ARW) => {
           const pending = Array.isArray(model.pending) ? model.pending : [];
           const recent = Array.isArray(model.recent) ? model.recent : [];
           const filterMode = approvalsState.filterMode || 'text';
+          const sortMode = approvalsState.sortMode || 'newest';
           const filterNeedle = filterMode === 'text' ? (approvalsState.filter || '').trim().toLowerCase() : '';
           const matchesFilter = (item) => {
             if (filterMode === 'stale') {
@@ -1283,21 +1285,23 @@ const installSidecar = (ARW) => {
           }
         };
         const loadLanePrefs = async () => {
-          if (approvalsState.lanePrefsLoaded) return;
-          approvalsState.lanePrefsLoaded = true;
+          const stateToken = approvalsState;
+          if (!stateToken || stateToken.lanePrefsLoaded) return;
+          stateToken.lanePrefsLoaded = true;
           try {
             const prefs = await ARW.getPrefs('launcher');
+            if (approvalsState !== stateToken || !stateToken) return;
             if (prefs && typeof prefs.approvalsFilter === 'string') {
-              approvalsState.filter = prefs.approvalsFilter;
+              stateToken.filter = prefs.approvalsFilter;
             }
             if (prefs && typeof prefs.approvalsFilterMode === 'string') {
-              approvalsState.filterMode = prefs.approvalsFilterMode === 'stale' ? 'stale' : 'text';
+              stateToken.filterMode = prefs.approvalsFilterMode === 'stale' ? 'stale' : 'text';
             }
             if (prefs && Number.isFinite(prefs.approvalsStaleMs)) {
-              approvalsState.staleThresholdMs = prefs.approvalsStaleMs;
+              stateToken.staleThresholdMs = prefs.approvalsStaleMs;
             }
             if (prefs && typeof prefs.approvalsSortMode === 'string') {
-              approvalsState.sortMode = ['newest', 'oldest', 'project'].includes(
+              stateToken.sortMode = ['newest', 'oldest', 'project'].includes(
                 prefs.approvalsSortMode,
               )
                 ? prefs.approvalsSortMode
@@ -1306,23 +1310,26 @@ const installSidecar = (ARW) => {
           } catch {}
         };
         const loadReviewerPref = async () => {
-          if (approvalsState.reviewerLoaded) return;
-          approvalsState.reviewerLoaded = true;
+          const stateToken = approvalsState;
+          if (!stateToken || stateToken.reviewerLoaded) return;
+          stateToken.reviewerLoaded = true;
           try {
             const prefs = await ARW.getPrefs('launcher');
+            if (approvalsState !== stateToken || !stateToken) return;
             const saved =
               prefs && typeof prefs.approvalsReviewer === 'string'
                 ? prefs.approvalsReviewer.trim()
                 : '';
             if (saved) {
-              approvalsState.reviewer = saved;
+              stateToken.reviewer = saved;
               renderApprovals();
             }
           } catch {}
         };
         const primeApprovals = async () => {
-          if (!opts.base) return;
-          approvalsState.loading = true;
+          if (!opts.base || !approvalsState) return;
+          const stateToken = approvalsState;
+          stateToken.loading = true;
           renderApprovals();
           try {
             const pendingSnap = await ARW.http.json(opts.base, '/state/staging/actions?status=pending&limit=50');
@@ -1339,16 +1346,19 @@ const installSidecar = (ARW) => {
             if (recentSnap && Array.isArray(recentSnap.items)) {
               next.recent = recentSnap.items;
             }
-            approvalsState.error = null;
-            approvalsState.detail = null;
-            approvalsState.loading = false;
             ARW.read._store.set('staging_actions', next);
             ARW.read._emit('staging_actions');
+            if (approvalsState !== stateToken) return;
+            stateToken.error = null;
+            stateToken.detail = null;
+            stateToken.loading = false;
+            renderApprovals();
           } catch (err) {
             const msg = err?.message || String(err);
-            approvalsState.loading = false;
-            approvalsState.detail = msg;
-            approvalsState.error = /HTTP\s+401/.test(msg)
+            if (approvalsState !== stateToken || !stateToken) return;
+            stateToken.loading = false;
+            stateToken.detail = msg;
+            stateToken.error = /HTTP\s+401/.test(msg)
               ? 'Authorize to view approvals queue'
               : 'Approvals queue unavailable';
             renderApprovals();

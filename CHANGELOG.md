@@ -13,6 +13,7 @@ This project follows Keep a Changelog and Semantic Versioning. All notable chang
 - Regenerated OpenAPI/JSON artifacts to reflect the updated surface and removed legacy routes.
 - Removed the legacy `X-ARW-Gate` capsule header; requests must send capsules with `X-ARW-Capsule` (legacy usage now returns HTTP 410 and emits failure telemetry).
 - Launcher sidecar: accessible lane toggles, smarter lane-aware subscriptions/cleanup, EventSource stale detection, and a dedicated `sidecar.js` module with expanded tests keep UI state responsive even with customised layouts.
+- Launcher sidecar approvals lane: initialise sort/filter state defensively, avoid post-dispose render crashes, and extend tests to cover approvals workflows.
 
 ## [0.1.4] - 2025-09-15
 

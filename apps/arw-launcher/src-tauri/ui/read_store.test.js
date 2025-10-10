@@ -327,6 +327,29 @@ async function run() {
 
   console.log('ARW.sidecar mount/dispose tests passed');
 
+  // Approvals lane should initialise state, honour prefs, and survive disposal
+  windowObj.ARW.read._store.set('staging_actions', { pending: [], recent: [] });
+  const approvalsHost = makeNode('div');
+  const approvalsHandle = ARW.sidecar.mount(approvalsHost, ['approvals'], { base: 'http://localhost:8091' });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  const approvalsSection = approvalsHost.children.find(
+    (child) => child && child.dataset && child.dataset.lane === 'approvals',
+  );
+  assert.ok(approvalsSection, 'approvals lane section should render');
+  const approvalsBody = approvalsSection && approvalsSection.children ? approvalsSection.children[2] : null;
+  assert.ok(approvalsBody, 'approvals lane body should render');
+  assert.ok(
+    Array.isArray(approvalsBody.children) ? approvalsBody.children.length >= 1 : true,
+    'approvals lane should populate body content',
+  );
+  assert.doesNotThrow(() => windowObj.ARW.read._emit('staging_actions'), 'emit should re-render approvals safely');
+  assert.doesNotThrow(() => approvalsHandle.dispose(), 'approvals dispose should not throw');
+  assert.doesNotThrow(
+    () => windowObj.ARW.read._emit('staging_actions'),
+    'post-dispose emits should no-op without errors',
+  );
+  console.log('ARW.sidecar approvals lane tests passed');
+
   // EventSource path should update lastEventAt for stale detection
   const originalEventSource = windowObj.EventSource;
   try {
