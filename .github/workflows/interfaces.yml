@@ -8,6 +8,9 @@ on:
 permissions:
   contents: read
 
+env:
+  PIP_VERSION: 24.2
+
 jobs:
   catalog-index:
     name: Generate index and check in sync
@@ -28,7 +31,9 @@ jobs:
           path: ~/.cache/pip
           key: ${{ runner.os }}-pip-interfaces-${{ hashFiles('requirements/interfaces.txt') }}
       - name: Install deps
-        run: pip install -r requirements/interfaces.txt
+        run: |
+          python -m pip install "pip==${PIP_VERSION}"
+          python -m pip install -r requirements/interfaces.txt
       - name: Generate index.yaml
         run: |
           python scripts/interfaces_generate_index.py
@@ -305,7 +310,9 @@ PY
           path: ~/.cache/pip
           key: ${{ runner.os }}-pip-interfaces-${{ hashFiles('requirements/interfaces.txt') }}
       - name: Install deps
-        run: pip install -r requirements/interfaces.txt
+        run: |
+          python -m pip install "pip==${PIP_VERSION}"
+          python -m pip install -r requirements/interfaces.txt
       - name: Check review/sunset dates
         run: |
           python - << 'PY'
