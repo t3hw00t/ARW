@@ -29,6 +29,7 @@ Centralized reference for ARW environment variables and common flags. Defaults f
 - `ARW_SQLITE_POOL_AUTOTUNE`: set to `1` to enable adaptive tuning of the pool target based on observed wait times (default `0`).
 - `ARW_SQLITE_POOL_AUTOTUNE_INTERVAL_SEC`: evaluation interval for the autotuner (default `30`).
 - `ARW_SQLITE_POOL_AUTOTUNE_WAIT_MS`: average wait threshold (in ms) that triggers pool growth (default `50`). Shrink decisions use one quarter of this threshold.
+- `ARW_KERNEL_BLOCKING_THREADS`: size of the dedicated SQLite blocking pool used by the kernel’s async helpers. Defaults to the host parallelism clamped to 2–16 when unset; tune upward if blocking queue metrics show sustained contention.
 - `ARW_SPEC_DIR`: base directory for spec artifacts served under `/spec/*` (default: `spec`).
  - `ARW_INTERFACES_DIR`: base directory for the interface catalog served at `/catalog/index` (default: `interfaces`).
 - `ARW_ACTIONS_QUEUE_MAX`: backpressure limit for queued actions. Defaults follow the active performance preset (256 → 16384); explicit exports override the preset.

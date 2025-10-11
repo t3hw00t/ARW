@@ -18,6 +18,10 @@ This project follows Keep a Changelog and Semantic Versioning. All notable chang
 - Context loop and memory packing now reuse shared `Arc` snapshots for beliefs and batch linked-memory lookups, slashing blocking-lane clones and SQLite round-trips; SQLite helpers expose `get_memory_many` plus record-returning inserts so callers can emit events without extra queries. Working-set selection also precomputes slot labels and caches slot limits to reduce per-iteration string churn.
 - Hybrid memory retrieval now honours the caller’s requested limit (instead of always pulling 400 rows) and fast-path parses `updated` timestamps, trimming SQLite and chrono overhead during memory searches.
 - Working-set candidate selection switched to a lazy recomputing heap that avoids O(n²) rescoring, yielding lower CPU cost when context expansion returns large candidate sets.
+- Kernel hot paths now use rusqlite’s statement cache for event and action mutations, eliminating redundant SQL recompilation while holding existing pool semantics intact.
+- Queue wakeups avoid SeqCst fences and polling sleeps; access logs capture only the required headers and stream through `tracing`, reducing scheduler wakeups and stdout backpressure.
+- Tool cache hashing streams canonical JSON directly into the digest, avoiding large intermediate buffers when caching sizable tool inputs.
+- Kernel async helpers now ride a dedicated blocking pool (tunable via `ARW_KERNEL_BLOCKING_THREADS`), replacing ad-hoc `spawn_blocking`, smoothing rusqlite latency tails, and exporting queue-depth/counter metrics for observability.
 
 ## [0.1.4] - 2025-09-15
 

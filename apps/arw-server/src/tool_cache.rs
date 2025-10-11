@@ -3,9 +3,9 @@ use once_cell::sync::{Lazy, OnceCell};
 #[cfg(test)]
 use serde_json::json;
 use serde_json::{Map, Value};
-use sha2::{Digest, Sha256};
+use sha2::{digest::Update, Digest, Sha256};
 use std::collections::{HashMap, HashSet};
-use std::io::ErrorKind;
+use std::io::{self, ErrorKind, Write};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
@@ -160,6 +160,30 @@ fn tool_version(tool_id: &str) -> &'static str {
         })
     }
     tool_versions_map().get(tool_id).copied().unwrap_or("0.0.0")
+}
+
+struct HashWriter<'a, D> {
+    digest: &'a mut D,
+}
+
+impl<'a, D> HashWriter<'a, D> {
+    fn new(digest: &'a mut D) -> Self {
+        Self { digest }
+    }
+}
+
+impl<'a, D> Write for HashWriter<'a, D>
+where
+    D: Update,
+{
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        self.digest.update(buf);
+        Ok(buf.len())
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        Ok(())
+    }
 }
 
 fn env_signature() -> String {
@@ -442,8 +466,11 @@ impl ToolCache {
         hasher.update(env_sig.as_bytes());
         hasher.update(b"\0");
         let canon = canonicalize_json(input);
-        if let Ok(bytes) = serde_json::to_vec(&canon) {
-            hasher.update(&bytes);
+        let mut writer = HashWriter::new(&mut hasher);
+        if serde_json::to_writer(&mut writer, &canon).is_err() {
+            if let Ok(bytes) = serde_json::to_vec(&canon) {
+                hasher.update(&bytes);
+            }
         }
         format!("{:x}", hasher.finalize())
     }

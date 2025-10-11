@@ -7,6 +7,7 @@ use sha2::Digest as _;
 use std::net::SocketAddr;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Instant;
+use tracing::info;
 
 #[derive(Clone, Debug)]
 struct Cfg {
@@ -85,7 +86,22 @@ pub async fn access_log_mw(req: Request<axum::body::Body>, next: Next) -> Respon
             .get::<axum::extract::ConnectInfo<SocketAddr>>()
             .map(|c| c.0.ip().to_string())
     };
-    let headers = req.headers().clone();
+    let ua_val = if CFG.ua || CFG.ua_hash {
+        req.headers()
+            .get(axum::http::header::USER_AGENT)
+            .and_then(|h| h.to_str().ok())
+            .map(|s| s.to_string())
+    } else {
+        None
+    };
+    let referer_val = if CFG.referer {
+        req.headers()
+            .get(axum::http::header::REFERER)
+            .and_then(|h| h.to_str().ok())
+            .map(|s| s.to_string())
+    } else {
+        None
+    };
     let res = next.run(req).await;
     let dur_ms = started.elapsed().as_millis() as u64;
     let status = res.status().as_u16();
@@ -104,10 +120,7 @@ pub async fn access_log_mw(req: Request<axum::body::Body>, next: Next) -> Respon
         obj["remote"] = serde_json::Value::String(ip);
     }
     if CFG.ua || CFG.ua_hash {
-        if let Some(ua) = headers
-            .get(axum::http::header::USER_AGENT)
-            .and_then(|h| h.to_str().ok())
-        {
+        if let Some(ua) = ua_val.as_deref() {
             if CFG.ua_hash {
                 let mut hasher = sha2::Sha256::new();
                 hasher.update(ua.as_bytes());
@@ -119,10 +132,7 @@ pub async fn access_log_mw(req: Request<axum::body::Body>, next: Next) -> Respon
         }
     }
     if CFG.referer {
-        if let Some(rf) = headers
-            .get(axum::http::header::REFERER)
-            .and_then(|h| h.to_str().ok())
-        {
+        if let Some(rf) = referer_val.as_deref() {
             let val = if CFG.ref_strip_qs {
                 rf.split('?').next().unwrap_or("").to_string()
             } else {
@@ -133,9 +143,9 @@ pub async fn access_log_mw(req: Request<axum::body::Body>, next: Next) -> Respon
             }
         }
     }
-    println!(
-        "{}",
-        serde_json::to_string(&obj).unwrap_or_else(|_| "{}".into())
-    );
+    match serde_json::to_string(&obj) {
+        Ok(line) => info!(target: "arw::access", "{}", line),
+        Err(_) => info!(target: "arw::access", "{}", "{}"),
+    }
     res
 }

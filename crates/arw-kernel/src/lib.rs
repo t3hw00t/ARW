@@ -3,13 +3,14 @@ use arw_memory_core::{MemoryInsertArgs, MemoryInsertOwned, MemoryStore};
 use chrono::{DateTime, Utc};
 use rusqlite::{params, params_from_iter, types::Value, Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::ops::{Deref, DerefMut};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Condvar, Mutex, Weak};
 use std::thread;
 use std::time::{Duration, Instant};
+use tokio::sync::oneshot;
 
 pub use arw_memory_core::{MemoryGcCandidate, MemoryGcReason};
 
@@ -20,6 +21,7 @@ pub struct Kernel {
     pool: Arc<PoolShared>,
     checkpoint: Option<Arc<CheckpointCtl>>,
     autotune: Option<Arc<AutotuneCtl>>,
+    blocking: BlockingPool,
 }
 
 #[derive(Clone)]
@@ -209,6 +211,165 @@ impl Drop for AutotuneCtl {
     }
 }
 
+type BlockingJob = Box<dyn FnOnce() + Send + 'static>;
+
+#[derive(Clone)]
+struct BlockingPool {
+    state: Arc<BlockingPoolState>,
+}
+
+struct BlockingPoolState {
+    queue: Mutex<VecDeque<BlockingJob>>,
+    cvar: Condvar,
+    shutdown: AtomicBool,
+    workers: Mutex<Vec<thread::JoinHandle<()>>>,
+}
+
+#[derive(Debug)]
+enum BlockingError {
+    ShuttingDown,
+    WorkerExited,
+}
+
+impl std::fmt::Display for BlockingError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            BlockingError::ShuttingDown => write!(f, "blocking pool shutting down"),
+            BlockingError::WorkerExited => write!(f, "blocking pool worker exited unexpectedly"),
+        }
+    }
+}
+
+impl std::error::Error for BlockingError {}
+
+impl BlockingPool {
+    fn new(size: usize) -> Result<Self> {
+        let target = size.max(1);
+        let state = Arc::new(BlockingPoolState {
+            queue: Mutex::new(VecDeque::new()),
+            cvar: Condvar::new(),
+            shutdown: AtomicBool::new(false),
+            workers: Mutex::new(Vec::new()),
+        });
+        for idx in 0..target {
+            let worker_state = Arc::clone(&state);
+            let handle = thread::Builder::new()
+                .name(format!("arw-kernel-blocking-{idx}"))
+                .spawn(move || BlockingPoolState::worker_loop(worker_state))
+                .map_err(|e| anyhow!("failed to spawn kernel blocking worker: {e}"))?;
+            state
+                .workers
+                .lock()
+                .expect("blocking pool workers mutex poisoned")
+                .push(handle);
+        }
+        Ok(Self { state })
+    }
+
+    async fn run<F, R>(&self, job: F) -> Result<R>
+    where
+        F: FnOnce() -> Result<R> + Send + 'static,
+        R: Send + 'static,
+    {
+        let (tx, rx) = oneshot::channel();
+        self.state
+            .enqueue(Box::new(move || {
+                let res = job();
+                let _ = tx.send(res);
+            }))
+            .map_err(|e| anyhow!(e))?;
+        rx.await.map_err(|_| anyhow!(BlockingError::WorkerExited))?
+    }
+}
+
+impl BlockingPoolState {
+    fn worker_loop(state: Arc<Self>) {
+        loop {
+            let job_opt = {
+                let mut guard = state
+                    .queue
+                    .lock()
+                    .expect("blocking pool queue mutex poisoned");
+                loop {
+                    if let Some(job) = guard.pop_front() {
+                        let depth = guard.len();
+                        state.record_depth(depth);
+                        break Some(job);
+                    }
+                    if state.shutdown.load(Ordering::Acquire) {
+                        break None;
+                    }
+                    guard = state
+                        .cvar
+                        .wait(guard)
+                        .expect("blocking pool condvar poisoned");
+                }
+            };
+            match job_opt {
+                Some(job) => {
+                    state.record_dequeued();
+                    job()
+                }
+                None => {
+                    state.record_depth(0);
+                    break;
+                }
+            }
+        }
+    }
+
+    fn enqueue(&self, job: BlockingJob) -> Result<(), BlockingError> {
+        if self.shutdown.load(Ordering::Acquire) {
+            return Err(BlockingError::ShuttingDown);
+        }
+        let mut guard = self
+            .queue
+            .lock()
+            .expect("blocking pool queue mutex poisoned");
+        if self.shutdown.load(Ordering::Acquire) {
+            return Err(BlockingError::ShuttingDown);
+        }
+        guard.push_back(job);
+        let depth = guard.len();
+        drop(guard);
+        self.record_depth(depth);
+        self.record_enqueued();
+        self.cvar.notify_one();
+        Ok(())
+    }
+
+    fn record_depth(&self, depth: usize) {
+        #[cfg(feature = "metrics")]
+        metrics::gauge!("arw_kernel_blocking_queue_depth").set(depth as f64);
+        #[cfg(not(feature = "metrics"))]
+        let _ = depth;
+    }
+
+    fn record_enqueued(&self) {
+        #[cfg(feature = "metrics")]
+        metrics::counter!("arw_kernel_blocking_enqueued").increment(1);
+    }
+
+    fn record_dequeued(&self) {
+        #[cfg(feature = "metrics")]
+        metrics::counter!("arw_kernel_blocking_dequeued").increment(1);
+    }
+}
+
+impl Drop for BlockingPoolState {
+    fn drop(&mut self) {
+        self.shutdown.store(true, Ordering::Release);
+        self.cvar.notify_all();
+        let mut handles = self
+            .workers
+            .lock()
+            .expect("blocking pool workers mutex poisoned");
+        while let Some(handle) = handles.pop() {
+            let _ = handle.join();
+        }
+    }
+}
+
 impl KernelPragmas {
     fn from_env() -> Self {
         let busy_timeout_ms: u64 = std::env::var("ARW_SQLITE_BUSY_MS")
@@ -232,6 +393,18 @@ impl KernelPragmas {
             mmap_bytes,
         }
     }
+}
+
+fn blocking_worker_count() -> usize {
+    std::env::var("ARW_KERNEL_BLOCKING_THREADS")
+        .ok()
+        .and_then(|s| s.parse::<usize>().ok())
+        .filter(|v| *v > 0)
+        .unwrap_or_else(|| {
+            std::thread::available_parallelism()
+                .map(|n| n.get().clamp(2, 16))
+                .unwrap_or(4)
+        })
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -335,12 +508,14 @@ impl Kernel {
             let guard = pool.state.lock().expect("pool mutex poisoned");
             pool.record_metrics(&guard);
         }
+        let blocking = BlockingPool::new(blocking_worker_count())?;
         let mut kernel = Self {
             db_path,
             pragmas,
             pool,
             checkpoint: None,
             autotune: None,
+            blocking,
         };
         if let Ok(secs) = std::env::var("ARW_SQLITE_CHECKPOINT_SEC") {
             if let Ok(interval) = secs.parse::<u64>() {
@@ -644,6 +819,15 @@ impl Kernel {
         Self::checkout_connection(&self.db_path, &self.pragmas, &self.pool)
     }
 
+    async fn run_blocking<F, R>(&self, job: F) -> Result<R>
+    where
+        F: FnOnce(Kernel) -> Result<R> + Send + 'static,
+        R: Send + 'static,
+    {
+        let kernel = self.clone();
+        self.blocking.run(move || job(kernel)).await
+    }
+
     fn checkout_connection(
         db_path: &Path,
         pragmas: &Arc<KernelPragmas>,
@@ -716,7 +900,7 @@ impl Kernel {
 
     pub fn append_event(&self, env: &arw_events::Envelope) -> Result<i64> {
         let conn = self.conn()?;
-        let mut stmt = conn.prepare(
+        let mut stmt = conn.prepare_cached(
             "INSERT INTO events(time,kind,actor,proj,corr_id,payload) VALUES (?,?,?,?,?,?)",
         )?;
         let payload = serde_json::to_string(&env.payload).unwrap_or("{}".to_string());
@@ -739,12 +923,12 @@ impl Kernel {
         let mut stmt_after;
         let mut stmt_all;
         let mut rows = if let Some(aid) = after_id {
-            stmt_after = conn.prepare(
+            stmt_after = conn.prepare_cached(
                 "SELECT id,time,kind,actor,proj,corr_id,payload FROM events WHERE id>? ORDER BY id ASC LIMIT ?",
             )?;
             stmt_after.query(params![aid, limit])?
         } else {
-            stmt_all = conn.prepare(
+            stmt_all = conn.prepare_cached(
                 "SELECT id,time,kind,actor,proj,corr_id,payload FROM events ORDER BY id DESC LIMIT ?",
             )?;
             stmt_all.query(params![limit])?
@@ -765,12 +949,12 @@ impl Kernel {
         let mut stmt_limit;
         let mut stmt_all;
         let mut rows = if let Some(limit) = limit {
-            stmt_limit = conn.prepare(
+            stmt_limit = conn.prepare_cached(
                 "SELECT id,time,kind,actor,proj,corr_id,payload FROM events WHERE corr_id = ? ORDER BY id ASC LIMIT ?",
             )?;
             stmt_limit.query(params![corr_id, limit])?
         } else {
-            stmt_all = conn.prepare(
+            stmt_all = conn.prepare_cached(
                 "SELECT id,time,kind,actor,proj,corr_id,payload FROM events WHERE corr_id = ? ORDER BY id ASC",
             )?;
             stmt_all.query(params![corr_id])?
@@ -1002,11 +1186,9 @@ impl Kernel {
     }
 
     pub async fn delete_actions_by_state_async(&self, state: &str) -> Result<u64> {
-        let k = self.clone();
         let state = state.to_string();
-        tokio::task::spawn_blocking(move || k.delete_actions_by_state(&state))
+        self.run_blocking(move |k| k.delete_actions_by_state(&state))
             .await
-            .map_err(|e| anyhow!("join error: {}", e))?
     }
 
     pub fn update_action_result(
@@ -1097,7 +1279,7 @@ impl Kernel {
 
     pub fn count_actions_by_state(&self, state: &str) -> Result<i64> {
         let conn = self.conn()?;
-        let mut stmt = conn.prepare("SELECT COUNT(1) FROM actions WHERE state=?")?;
+        let mut stmt = conn.prepare_cached("SELECT COUNT(1) FROM actions WHERE state=?")?;
         let n: i64 = stmt.query_row([state], |row| row.get(0))?;
         Ok(n)
     }
@@ -1105,7 +1287,7 @@ impl Kernel {
     pub fn dequeue_one_queued(&self) -> Result<Option<(String, String, serde_json::Value)>> {
         let conn = self.conn()?;
         let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
-        let mut stmt = conn.prepare(
+        let mut stmt = conn.prepare_cached(
             "UPDATE actions SET state='running', updated=? WHERE id = (
                  SELECT id FROM actions WHERE state='queued' ORDER BY created LIMIT 1
              ) RETURNING id, kind, input",
@@ -1575,12 +1757,9 @@ impl Kernel {
         subject: &str,
         capability: &str,
     ) -> Result<Option<serde_json::Value>> {
-        let k = self.clone();
         let s = subject.to_string();
         let c = capability.to_string();
-        tokio::task::spawn_blocking(move || k.find_valid_lease(&s, &c))
-            .await
-            .map_err(|e| anyhow!("join error: {}", e))?
+        self.run_blocking(move |k| k.find_valid_lease(&s, &c)).await
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -1985,30 +2164,26 @@ impl Kernel {
         Ok(out)
     }
 
-    // ---------------- Async wrappers (spawn_blocking) ----------------
-    // These helpers offload rusqlite work from async executors.
+    // ---------------- Async wrappers (blocking pool) ----------------
+    // These helpers offload rusqlite work onto the dedicated blocking pool.
 
     pub async fn insert_memory_async(&self, owned: MemoryInsertOwned) -> Result<String> {
-        let k = self.clone();
-        tokio::task::spawn_blocking(move || {
+        self.run_blocking(move |k| {
             let args = owned.to_args();
             k.insert_memory(&args)
         })
         .await
-        .map_err(|e| anyhow!("join error: {}", e))?
     }
 
     pub async fn insert_memory_with_record_async(
         &self,
         owned: MemoryInsertOwned,
     ) -> Result<(String, serde_json::Value)> {
-        let k = self.clone();
-        tokio::task::spawn_blocking(move || {
+        self.run_blocking(move |k| {
             let args = owned.to_args();
             k.insert_memory_with_record(&args)
         })
         .await
-        .map_err(|e| anyhow!("join error: {}", e))?
     }
 
     pub async fn search_memory_async(
@@ -2017,10 +2192,8 @@ impl Kernel {
         lane: Option<String>,
         limit: i64,
     ) -> Result<Vec<serde_json::Value>> {
-        let k = self.clone();
-        tokio::task::spawn_blocking(move || k.search_memory(&q, lane.as_deref(), limit))
+        self.run_blocking(move |k| k.search_memory(&q, lane.as_deref(), limit))
             .await
-            .map_err(|e| anyhow!("join error: {}", e))?
     }
 
     pub async fn fts_search_memory_async(
@@ -2029,10 +2202,8 @@ impl Kernel {
         lane: Option<String>,
         limit: i64,
     ) -> Result<Vec<serde_json::Value>> {
-        let k = self.clone();
-        tokio::task::spawn_blocking(move || k.fts_search_memory(&q, lane.as_deref(), limit))
+        self.run_blocking(move |k| k.fts_search_memory(&q, lane.as_deref(), limit))
             .await
-            .map_err(|e| anyhow!("join error: {}", e))?
     }
 
     pub async fn search_memory_by_embedding_async(
@@ -2041,12 +2212,8 @@ impl Kernel {
         lane: Option<String>,
         limit: i64,
     ) -> Result<Vec<serde_json::Value>> {
-        let k = self.clone();
-        tokio::task::spawn_blocking(move || {
-            k.search_memory_by_embedding(&embed, lane.as_deref(), limit)
-        })
-        .await
-        .map_err(|e| anyhow!("join error: {}", e))?
+        self.run_blocking(move |k| k.search_memory_by_embedding(&embed, lane.as_deref(), limit))
+            .await
     }
 
     pub async fn select_memory_hybrid_async(
@@ -2056,12 +2223,10 @@ impl Kernel {
         lane: Option<String>,
         limit: i64,
     ) -> Result<Vec<serde_json::Value>> {
-        let k = self.clone();
-        tokio::task::spawn_blocking(move || {
+        self.run_blocking(move |k| {
             k.select_memory_hybrid(q.as_deref(), embed.as_deref(), lane.as_deref(), limit)
         })
         .await
-        .map_err(|e| anyhow!("join error: {}", e))?
     }
 
     pub async fn list_recent_memory_async(
@@ -2069,20 +2234,16 @@ impl Kernel {
         lane: Option<String>,
         limit: i64,
     ) -> Result<Vec<serde_json::Value>> {
-        let k = self.clone();
-        tokio::task::spawn_blocking(move || k.list_recent_memory(lane.as_deref(), limit))
+        self.run_blocking(move |k| k.list_recent_memory(lane.as_deref(), limit))
             .await
-            .map_err(|e| anyhow!("join error: {}", e))?
     }
 
     pub async fn find_memory_by_hash_async(
         &self,
         hash: String,
     ) -> Result<Option<serde_json::Value>> {
-        let k = self.clone();
-        tokio::task::spawn_blocking(move || k.find_memory_by_hash(&hash))
+        self.run_blocking(move |k| k.find_memory_by_hash(&hash))
             .await
-            .map_err(|e| anyhow!("join error: {}", e))?
     }
 
     pub async fn expired_memory_candidates_async(
@@ -2090,10 +2251,8 @@ impl Kernel {
         now: DateTime<Utc>,
         limit: usize,
     ) -> Result<Vec<MemoryGcCandidate>> {
-        let k = self.clone();
-        tokio::task::spawn_blocking(move || k.expired_memory_candidates(now, limit))
+        self.run_blocking(move |k| k.expired_memory_candidates(now, limit))
             .await
-            .map_err(|e| anyhow!("join error: {}", e))?
     }
 
     pub async fn lane_overflow_candidates_async(
@@ -2102,17 +2261,13 @@ impl Kernel {
         cap: usize,
         limit: usize,
     ) -> Result<Vec<MemoryGcCandidate>> {
-        let k = self.clone();
-        tokio::task::spawn_blocking(move || k.lane_overflow_candidates(&lane, cap, limit))
+        self.run_blocking(move |k| k.lane_overflow_candidates(&lane, cap, limit))
             .await
-            .map_err(|e| anyhow!("join error: {}", e))?
     }
 
     pub async fn delete_memory_records_async(&self, ids: Vec<String>) -> Result<usize> {
-        let k = self.clone();
-        tokio::task::spawn_blocking(move || k.delete_memory_records(&ids))
+        self.run_blocking(move |k| k.delete_memory_records(&ids))
             .await
-            .map_err(|e| anyhow!("join error: {}", e))?
     }
 
     pub async fn insert_memory_link_async(
@@ -2122,29 +2277,20 @@ impl Kernel {
         rel: Option<String>,
         weight: Option<f64>,
     ) -> Result<()> {
-        let k = self.clone();
-        tokio::task::spawn_blocking(move || {
-            k.insert_memory_link(&src_id, &dst_id, rel.as_deref(), weight)
-        })
-        .await
-        .map_err(|e| anyhow!("join error: {}", e))?
+        self.run_blocking(move |k| k.insert_memory_link(&src_id, &dst_id, rel.as_deref(), weight))
+            .await
     }
 
     pub async fn backfill_embed_blobs_async(&self, batch_limit: usize) -> Result<usize> {
         if batch_limit == 0 {
             return Ok(0);
         }
-        let k = self.clone();
-        tokio::task::spawn_blocking(move || k.backfill_embed_blobs(batch_limit))
+        self.run_blocking(move |k| k.backfill_embed_blobs(batch_limit))
             .await
-            .map_err(|e| anyhow!("join error: {}", e))?
     }
 
     pub async fn pending_embed_backfill_async(&self) -> Result<u64> {
-        let k = self.clone();
-        tokio::task::spawn_blocking(move || k.pending_embed_backfill())
-            .await
-            .map_err(|e| anyhow!("join error: {}", e))?
+        self.run_blocking(|k| k.pending_embed_backfill()).await
     }
 
     pub async fn list_memory_links_async(
@@ -2152,17 +2298,12 @@ impl Kernel {
         src_id: String,
         limit: i64,
     ) -> Result<Vec<serde_json::Value>> {
-        let k = self.clone();
-        tokio::task::spawn_blocking(move || k.list_memory_links(&src_id, limit))
+        self.run_blocking(move |k| k.list_memory_links(&src_id, limit))
             .await
-            .map_err(|e| anyhow!("join error: {}", e))?
     }
 
     pub async fn get_memory_async(&self, id: String) -> Result<Option<serde_json::Value>> {
-        let k = self.clone();
-        tokio::task::spawn_blocking(move || k.get_memory(&id))
-            .await
-            .map_err(|e| anyhow!("join error: {}", e))?
+        self.run_blocking(move |k| k.get_memory(&id)).await
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -2176,8 +2317,7 @@ impl Kernel {
         budget: Option<f64>,
         policy_ctx: Option<serde_json::Value>,
     ) -> Result<()> {
-        let k = self.clone();
-        tokio::task::spawn_blocking(move || {
+        self.run_blocking(move |k| {
             k.insert_lease(
                 &id,
                 &subject,
@@ -2189,35 +2329,24 @@ impl Kernel {
             )
         })
         .await
-        .map_err(|e| anyhow!("join error: {}", e))?
     }
 
     pub async fn list_leases_async(&self, limit: i64) -> Result<Vec<serde_json::Value>> {
-        let k = self.clone();
-        tokio::task::spawn_blocking(move || k.list_leases(limit))
-            .await
-            .map_err(|e| anyhow!("join error: {}", e))?
+        self.run_blocking(move |k| k.list_leases(limit)).await
     }
 
     pub async fn insert_config_snapshot_async(&self, config: serde_json::Value) -> Result<String> {
-        let k = self.clone();
-        tokio::task::spawn_blocking(move || k.insert_config_snapshot(&config))
+        self.run_blocking(move |k| k.insert_config_snapshot(&config))
             .await
-            .map_err(|e| anyhow!("join error: {}", e))?
     }
 
     pub async fn get_config_snapshot_async(&self, id: String) -> Result<Option<serde_json::Value>> {
-        let k = self.clone();
-        tokio::task::spawn_blocking(move || k.get_config_snapshot(&id))
-            .await
-            .map_err(|e| anyhow!("join error: {}", e))?
+        self.run_blocking(move |k| k.get_config_snapshot(&id)).await
     }
 
     pub async fn list_config_snapshots_async(&self, limit: i64) -> Result<Vec<serde_json::Value>> {
-        let k = self.clone();
-        tokio::task::spawn_blocking(move || k.list_config_snapshots(limit))
+        self.run_blocking(move |k| k.list_config_snapshots(limit))
             .await
-            .map_err(|e| anyhow!("join error: {}", e))?
     }
 
     pub async fn insert_logic_unit_async(
@@ -2226,17 +2355,12 @@ impl Kernel {
         manifest: serde_json::Value,
         status: String,
     ) -> Result<()> {
-        let k = self.clone();
-        tokio::task::spawn_blocking(move || k.insert_logic_unit(&id, &manifest, &status))
+        self.run_blocking(move |k| k.insert_logic_unit(&id, &manifest, &status))
             .await
-            .map_err(|e| anyhow!("join error: {}", e))?
     }
 
     pub async fn list_logic_units_async(&self, limit: i64) -> Result<Vec<serde_json::Value>> {
-        let k = self.clone();
-        tokio::task::spawn_blocking(move || k.list_logic_units(limit))
-            .await
-            .map_err(|e| anyhow!("join error: {}", e))?
+        self.run_blocking(move |k| k.list_logic_units(limit)).await
     }
 
     pub async fn insert_orchestrator_job_async(
@@ -2244,14 +2368,10 @@ impl Kernel {
         goal: &str,
         data: Option<&serde_json::Value>,
     ) -> Result<String> {
-        let k = self.clone();
         let goal_owned = goal.to_string();
         let data_clone = data.cloned();
-        tokio::task::spawn_blocking(move || {
-            k.insert_orchestrator_job(&goal_owned, data_clone.as_ref())
-        })
-        .await
-        .map_err(|e| anyhow!("join error: {}", e))?
+        self.run_blocking(move |k| k.insert_orchestrator_job(&goal_owned, data_clone.as_ref()))
+            .await
     }
 
     pub async fn update_orchestrator_job_async(
@@ -2260,19 +2380,13 @@ impl Kernel {
         status: Option<String>,
         progress: Option<f64>,
     ) -> Result<bool> {
-        let k = self.clone();
-        tokio::task::spawn_blocking(move || {
-            k.update_orchestrator_job(&id, status.as_deref(), progress)
-        })
-        .await
-        .map_err(|e| anyhow!("join error: {}", e))?
+        self.run_blocking(move |k| k.update_orchestrator_job(&id, status.as_deref(), progress))
+            .await
     }
 
     pub async fn list_orchestrator_jobs_async(&self, limit: i64) -> Result<Vec<serde_json::Value>> {
-        let k = self.clone();
-        tokio::task::spawn_blocking(move || k.list_orchestrator_jobs(limit))
+        self.run_blocking(move |k| k.list_orchestrator_jobs(limit))
             .await
-            .map_err(|e| anyhow!("join error: {}", e))?
     }
 
     pub async fn update_action_result_async(
@@ -2281,12 +2395,8 @@ impl Kernel {
         output: Option<serde_json::Value>,
         error: Option<String>,
     ) -> Result<bool> {
-        let k = self.clone();
-        tokio::task::spawn_blocking(move || {
-            k.update_action_result(&id, output.as_ref(), error.as_deref())
-        })
-        .await
-        .map_err(|e| anyhow!("join error: {}", e))?
+        self.run_blocking(move |k| k.update_action_result(&id, output.as_ref(), error.as_deref()))
+            .await
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -2304,9 +2414,8 @@ impl Kernel {
         posture: Option<String>,
         meta: Option<serde_json::Value>,
     ) -> Result<i64> {
-        let k = self.clone();
         let meta = meta.map(std::sync::Arc::new);
-        tokio::task::spawn_blocking(move || {
+        self.run_blocking(move |k| {
             k.append_egress(
                 &decision,
                 reason.as_deref(),
@@ -2322,24 +2431,17 @@ impl Kernel {
             )
         })
         .await
-        .map_err(|e| anyhow!("join error: {}", e))?
     }
 
     pub async fn dequeue_one_queued_async(
         &self,
     ) -> Result<Option<(String, String, serde_json::Value)>> {
-        let k = self.clone();
-        tokio::task::spawn_blocking(move || k.dequeue_one_queued())
-            .await
-            .map_err(|e| anyhow!("join error: {}", e))?
+        self.run_blocking(|k| k.dequeue_one_queued()).await
     }
 
     pub async fn append_event_async(&self, env: &arw_events::Envelope) -> Result<i64> {
-        let k = self.clone();
         let env = env.clone();
-        tokio::task::spawn_blocking(move || k.append_event(&env))
-            .await
-            .map_err(|e| anyhow!("join error: {}", e))?
+        self.run_blocking(move |k| k.append_event(&env)).await
     }
 
     pub async fn recent_events_async(
@@ -2347,10 +2449,8 @@ impl Kernel {
         limit: i64,
         after_id: Option<i64>,
     ) -> Result<Vec<EventRow>> {
-        let k = self.clone();
-        tokio::task::spawn_blocking(move || k.recent_events(limit, after_id))
+        self.run_blocking(move |k| k.recent_events(limit, after_id))
             .await
-            .map_err(|e| anyhow!("join error: {}", e))?
     }
 
     pub async fn events_by_corr_id_async(
@@ -2358,11 +2458,9 @@ impl Kernel {
         corr_id: &str,
         limit: Option<i64>,
     ) -> Result<Vec<EventRow>> {
-        let k = self.clone();
         let cid = corr_id.to_string();
-        tokio::task::spawn_blocking(move || k.events_by_corr_id(&cid, limit))
+        self.run_blocking(move |k| k.events_by_corr_id(&cid, limit))
             .await
-            .map_err(|e| anyhow!("join error: {}", e))?
     }
 
     pub async fn events_by_corr_ids_async(
@@ -2370,10 +2468,8 @@ impl Kernel {
         corr_ids: Vec<String>,
         limit: Option<i64>,
     ) -> Result<HashMap<String, Vec<EventRow>>> {
-        let k = self.clone();
-        tokio::task::spawn_blocking(move || k.events_by_corr_ids(&corr_ids, limit))
+        self.run_blocking(move |k| k.events_by_corr_ids(&corr_ids, limit))
             .await
-            .map_err(|e| anyhow!("join error: {}", e))?
     }
 
     pub async fn tail_events_async(
@@ -2381,26 +2477,19 @@ impl Kernel {
         limit: i64,
         prefixes: Vec<String>,
     ) -> Result<(Vec<EventRow>, i64)> {
-        let k = self.clone();
-        tokio::task::spawn_blocking(move || k.tail_events(limit, &prefixes))
+        self.run_blocking(move |k| k.tail_events(limit, &prefixes))
             .await
-            .map_err(|e| anyhow!("join error: {}", e))?
     }
 
     pub async fn count_actions_by_state_async(&self, state: &str) -> Result<i64> {
-        let k = self.clone();
         let s = state.to_string();
-        tokio::task::spawn_blocking(move || k.count_actions_by_state(&s))
+        self.run_blocking(move |k| k.count_actions_by_state(&s))
             .await
-            .map_err(|e| anyhow!("join error: {}", e))?
     }
 
     pub async fn find_action_by_idem_async(&self, idem: &str) -> Result<Option<String>> {
-        let k = self.clone();
         let s = idem.to_string();
-        tokio::task::spawn_blocking(move || k.find_action_by_idem(&s))
-            .await
-            .map_err(|e| anyhow!("join error: {}", e))?
+        self.run_blocking(move |k| k.find_action_by_idem(&s)).await
     }
 
     pub async fn insert_action_async(
@@ -2412,14 +2501,13 @@ impl Kernel {
         idem_key: Option<&str>,
         state: &str,
     ) -> Result<()> {
-        let k = self.clone();
         let id = id.to_string();
         let kind = kind.to_string();
         let input = input.clone();
         let policy_ctx = policy_ctx.cloned();
         let idem_key = idem_key.map(|s| s.to_string());
         let state_s = state.to_string();
-        tokio::task::spawn_blocking(move || {
+        self.run_blocking(move |k| {
             k.insert_action(
                 &id,
                 &kind,
@@ -2430,24 +2518,18 @@ impl Kernel {
             )
         })
         .await
-        .map_err(|e| anyhow!("join error: {}", e))?
     }
 
     pub async fn get_action_async(&self, id: &str) -> Result<Option<ActionRow>> {
-        let k = self.clone();
         let s = id.to_string();
-        tokio::task::spawn_blocking(move || k.get_action(&s))
-            .await
-            .map_err(|e| anyhow!("join error: {}", e))?
+        self.run_blocking(move |k| k.get_action(&s)).await
     }
 
     pub async fn set_action_state_async(&self, id: &str, state: &str) -> Result<bool> {
-        let k = self.clone();
         let id_s = id.to_string();
         let st = state.to_string();
-        tokio::task::spawn_blocking(move || k.set_action_state(&id_s, &st))
+        self.run_blocking(move |k| k.set_action_state(&id_s, &st))
             .await
-            .map_err(|e| anyhow!("join error: {}", e))?
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -2461,14 +2543,13 @@ impl Kernel {
         proj: Option<&str>,
         meta: Option<&serde_json::Value>,
     ) -> Result<i64> {
-        let k = self.clone();
         let subject = subject.to_string();
         let kind = kind.to_string();
         let unit = unit.to_string();
         let corr_id = corr_id.map(|s| s.to_string());
         let proj = proj.map(|s| s.to_string());
         let meta = meta.cloned();
-        tokio::task::spawn_blocking(move || {
+        self.run_blocking(move |k| {
             k.append_contribution(
                 &subject,
                 &kind,
@@ -2480,7 +2561,6 @@ impl Kernel {
             )
         })
         .await
-        .map_err(|e| anyhow!("join error: {}", e))?
     }
 
     pub async fn upsert_research_watcher_item_async(
@@ -2492,8 +2572,7 @@ impl Kernel {
         url: Option<String>,
         payload: Option<serde_json::Value>,
     ) -> Result<String> {
-        let k = self.clone();
-        tokio::task::spawn_blocking(move || {
+        self.run_blocking(move |k| {
             k.upsert_research_watcher_item(
                 source.as_deref(),
                 source_id.as_deref(),
@@ -2504,7 +2583,6 @@ impl Kernel {
             )
         })
         .await
-        .map_err(|e| anyhow!("join error: {}", e))?
     }
 
     pub async fn list_research_watcher_items_async(
@@ -2512,10 +2590,8 @@ impl Kernel {
         status: Option<String>,
         limit: i64,
     ) -> Result<Vec<serde_json::Value>> {
-        let k = self.clone();
-        tokio::task::spawn_blocking(move || k.list_research_watcher_items(status.as_deref(), limit))
+        self.run_blocking(move |k| k.list_research_watcher_items(status.as_deref(), limit))
             .await
-            .map_err(|e| anyhow!("join error: {}", e))?
     }
 
     pub async fn update_research_watcher_status_async(
@@ -2524,22 +2600,16 @@ impl Kernel {
         status: String,
         note: Option<String>,
     ) -> Result<bool> {
-        let k = self.clone();
-        tokio::task::spawn_blocking(move || {
-            k.update_research_watcher_status(&id, &status, note.as_deref())
-        })
-        .await
-        .map_err(|e| anyhow!("join error: {}", e))?
+        self.run_blocking(move |k| k.update_research_watcher_status(&id, &status, note.as_deref()))
+            .await
     }
 
     pub async fn get_research_watcher_item_async(
         &self,
         id: String,
     ) -> Result<Option<ResearchWatcherItem>> {
-        let k = self.clone();
-        tokio::task::spawn_blocking(move || k.get_research_watcher_item(&id))
+        self.run_blocking(move |k| k.get_research_watcher_item(&id))
             .await
-            .map_err(|e| anyhow!("join error: {}", e))?
     }
 
     pub async fn insert_staging_action_async(
@@ -2550,8 +2620,7 @@ impl Kernel {
         requested_by: Option<String>,
         evidence: Option<serde_json::Value>,
     ) -> Result<String> {
-        let k = self.clone();
-        tokio::task::spawn_blocking(move || {
+        self.run_blocking(move |k| {
             k.insert_staging_action(
                 &action_kind,
                 &action_input,
@@ -2561,7 +2630,6 @@ impl Kernel {
             )
         })
         .await
-        .map_err(|e| anyhow!("join error: {}", e))?
     }
 
     pub async fn list_staging_actions_async(
@@ -2569,17 +2637,12 @@ impl Kernel {
         status: Option<String>,
         limit: i64,
     ) -> Result<Vec<serde_json::Value>> {
-        let k = self.clone();
-        tokio::task::spawn_blocking(move || k.list_staging_actions(status.as_deref(), limit))
+        self.run_blocking(move |k| k.list_staging_actions(status.as_deref(), limit))
             .await
-            .map_err(|e| anyhow!("join error: {}", e))?
     }
 
     pub async fn get_staging_action_async(&self, id: String) -> Result<Option<StagingAction>> {
-        let k = self.clone();
-        tokio::task::spawn_blocking(move || k.get_staging_action(&id))
-            .await
-            .map_err(|e| anyhow!("join error: {}", e))?
+        self.run_blocking(move |k| k.get_staging_action(&id)).await
     }
 
     pub async fn update_staging_action_status_async(
@@ -2591,8 +2654,7 @@ impl Kernel {
         decided_at: Option<String>,
         action_id: Option<String>,
     ) -> Result<bool> {
-        let k = self.clone();
-        tokio::task::spawn_blocking(move || {
+        self.run_blocking(move |k| {
             k.update_staging_action_status(
                 &id,
                 &status,
@@ -2603,31 +2665,23 @@ impl Kernel {
             )
         })
         .await
-        .map_err(|e| anyhow!("join error: {}", e))?
     }
 
     pub async fn list_contributions_async(&self, limit: i64) -> Result<Vec<serde_json::Value>> {
-        let k = self.clone();
-        tokio::task::spawn_blocking(move || k.list_contributions(limit))
+        self.run_blocking(move |k| k.list_contributions(limit))
             .await
-            .map_err(|e| anyhow!("join error: {}", e))?
     }
 
     pub async fn list_actions_async(
         &self,
         opts: ActionListOptions,
     ) -> Result<Vec<serde_json::Value>> {
-        let k = self.clone();
-        tokio::task::spawn_blocking(move || k.list_actions_filtered(&opts))
+        self.run_blocking(move |k| k.list_actions_filtered(&opts))
             .await
-            .map_err(|e| anyhow!("join error: {}", e))?
     }
 
     pub async fn list_egress_async(&self, limit: i64) -> Result<Vec<serde_json::Value>> {
-        let k = self.clone();
-        tokio::task::spawn_blocking(move || k.list_egress(limit))
-            .await
-            .map_err(|e| anyhow!("join error: {}", e))?
+        self.run_blocking(move |k| k.list_egress(limit)).await
     }
 }
 
