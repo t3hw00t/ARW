@@ -3,7 +3,7 @@ title: Memory Abstraction Layer
 ---
 
 # Memory Abstraction Layer
-Updated: 2025-10-12
+Updated: 2025-10-11
 Type: Explanation
 
 Microsummary: The Memory Abstraction Layer (MAL) is the canonical schema and lifecycle for all memories (ephemeral, episodic, semantic, profile) in ARW. The new Memory Overlay Service builds on MAL to provide hybrid retrieval, explainable packing, and model-agnostic context delivery.
@@ -43,7 +43,11 @@ See [memory_overlay_service.md](memory_overlay_service.md#data-model) for full s
 - The `memory_records` table now carries `idx_mem_updated` and `idx_mem_lane_updated` indexes so the hot `ORDER BY updated DESC` scans stay on-disk sorted without temporary tables, maintaining steady-state lookup latency as the corpus grows.
 - Hybrid retrieval trims candidate sorting to the requested limit using an unstable selection pass before the final ordering, avoiding O(n log n) sorts when callers only need the top slice of a large result set. This keeps working-set assembly responsive even with aggressive over-fetching.
 - Candidate hydration now happens only after ranking the thin `id/score` projection, so the top-K slice reuses a single batched `get_memory_many` call instead of re-parsing JSON for every intermediate record.
-- Link expansion batches lookups across all seed IDs (`list_memory_links_many`) and enforces per-seed limits server-side, eliminating the previous N+1 query pattern during context assembly.
+- Link expansion batches lookups across all seed IDs (`list_memory_links_many`) and enforces per-seed limits inside the SQL window plan, eliminating the previous N+1 query pattern and avoiding full-table scans when a seed has deep history.
+- World belief injections respect a configurable cap (`ARW_CONTEXT_WORLD_MAX`, default `max(64, 2×limit)`), prioritising the highest-confidence beliefs first so pathological graphs cannot drown the working-set pipeline.
+- Context assembly now holds a single kernel session per iteration, reusing one SQLite connection for all hybrid pulls/link fetches instead of thrashing the pool with per-lane checkouts.
+- Memory hygiene and other background sweepers share sessions inside their blocking work, then refresh the memory read-model from the same connection, keeping GC runs from spiking pool pressure and reducing reconnection churn.
+- The `kernel_pool_wait` read-model surfaces live `wait_count`, `wait_total_ms`, and average wait time so operators can benchmark pool behaviour before/after tuning.
 - Parsed embeddings are shared through reference-counted slices inside the working-set planner, removing repeat allocations while similarity scoring and MMR diversification iterate over the candidate set.
 - Embeddings persist in an `embed_blob` column (with the legacy JSON string kept as a fallback), so vector comparisons reuse pre-encoded little-endian floats instead of re-parsing text on every query.
 - A background backfill task (`ARW_MEMORY_EMBED_BACKFILL_BATCH` / `ARW_MEMORY_EMBED_BACKFILL_IDLE_SEC`) upgrades legacy rows in place so existing deployments converge on the faster binary path without taking downtime.

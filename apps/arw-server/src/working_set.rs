@@ -1,10 +1,12 @@
 use crate::{util, AppState};
 use anyhow::Result;
+use arw_kernel::KernelSession;
 use chrono::SecondsFormat;
 use metrics::{counter, histogram};
+use rustc_hash::{FxHashMap, FxHashSet};
 use serde_json::{json, Map, Value};
 use std::cmp::Ordering;
-use std::collections::{BTreeMap, BinaryHeap, HashMap, HashSet};
+use std::collections::{BTreeMap, BinaryHeap};
 use std::sync::Arc;
 use std::time::Duration;
 use std::time::Instant;
@@ -345,14 +347,14 @@ pub fn assemble_with_observer<O: WorkingSetObserver>(
     observer: &mut O,
     world_beliefs: Arc<[Value]>,
 ) -> Result<WorkingSet> {
-    let mut builder = WorkingSetBuilder::new(state, spec.clone(), world_beliefs);
+    let mut builder = WorkingSetBuilder::new(state, spec.clone(), world_beliefs)?;
     builder.build(observer)
 }
 
-struct WorkingSetBuilder<'a> {
-    state: &'a AppState,
+struct WorkingSetBuilder {
     spec: WorkingSetSpec,
     world_beliefs: Arc<[Value]>,
+    kernel_session: KernelSession,
 }
 
 struct PendingExpansion {
@@ -361,13 +363,14 @@ struct PendingExpansion {
     link: Value,
 }
 
-impl<'a> WorkingSetBuilder<'a> {
-    fn new(state: &'a AppState, spec: WorkingSetSpec, world_beliefs: Arc<[Value]>) -> Self {
-        Self {
-            state,
+impl WorkingSetBuilder {
+    fn new(state: &AppState, spec: WorkingSetSpec, world_beliefs: Arc<[Value]>) -> Result<Self> {
+        let kernel_session = state.kernel().session()?;
+        Ok(Self {
             spec,
             world_beliefs,
-        }
+            kernel_session,
+        })
     }
 
     fn build<O: WorkingSetObserver>(&mut self, observer: &mut O) -> Result<WorkingSet> {
@@ -392,7 +395,7 @@ impl<'a> WorkingSetBuilder<'a> {
         };
         lanes.dedup_by(|a, b| a.as_ref().map(|s| s.as_str()) == b.as_ref().map(|s| s.as_str()));
 
-        let mut candidates: HashMap<String, Candidate> = HashMap::new();
+        let mut candidates: FxHashMap<String, Candidate> = FxHashMap::default();
         let mut seeds_raw: Vec<Value> = Vec::new();
         let mut expanded_raw: Vec<Value> = Vec::new();
         let mut seed_infos: Vec<SeedInfo> = Vec::new();
@@ -400,7 +403,7 @@ impl<'a> WorkingSetBuilder<'a> {
         let retrieve_start = Instant::now();
         for lane in lanes.iter() {
             let fetch_k = ((spec.limit * 3) + spec.expand_per_seed).max(10) as i64;
-            let mut items = self.state.kernel().select_memory_hybrid(
+            let mut items = self.kernel_session.select_memory_hybrid(
                 spec.query.as_deref(),
                 spec.embed.as_deref(),
                 lane.as_deref(),
@@ -460,12 +463,11 @@ impl<'a> WorkingSetBuilder<'a> {
         if spec.expand_per_seed > 0 && !seed_infos.is_empty() {
             let mut pending: Vec<PendingExpansion> = Vec::new();
             let mut fetch_ids: Vec<String> = Vec::new();
-            let mut seen_dst: HashSet<String> = HashSet::new();
+            let mut seen_dst: FxHashSet<String> = FxHashSet::default();
             let seed_ids_for_links: Vec<String> =
                 seed_infos.iter().map(|seed| seed.id.clone()).collect();
             let links_map = self
-                .state
-                .kernel()
+                .kernel_session
                 .list_memory_links_many(&seed_ids_for_links, spec.expand_per_seed as i64)
                 .unwrap_or_default();
             for seed in seed_infos.iter().cloned() {
@@ -494,8 +496,7 @@ impl<'a> WorkingSetBuilder<'a> {
             }
             if !pending.is_empty() {
                 let fetched = self
-                    .state
-                    .kernel()
+                    .kernel_session
                     .get_memory_many(&fetch_ids)
                     .unwrap_or_default();
                 for entry in pending {
@@ -531,7 +532,14 @@ impl<'a> WorkingSetBuilder<'a> {
         )
         .record(expand_elapsed.as_secs_f64() * 1000.0);
 
-        self.ingest_world_beliefs(&spec, &mut candidates, &mut expanded_raw, observer);
+        let world_cap = world_candidate_cap(&spec);
+        self.ingest_world_beliefs(
+            &spec,
+            &mut candidates,
+            &mut expanded_raw,
+            observer,
+            world_cap,
+        );
 
         let candidate_total = candidates.len();
         let has_above = candidates
@@ -607,26 +615,48 @@ impl<'a> WorkingSetBuilder<'a> {
     fn ingest_world_beliefs<O: WorkingSetObserver>(
         &self,
         spec: &WorkingSetSpec,
-        candidates: &mut HashMap<String, Candidate>,
+        candidates: &mut FxHashMap<String, Candidate>,
         expanded_raw: &mut Vec<Value>,
         observer: &mut O,
+        cap: usize,
     ) {
+        if cap == 0 {
+            return;
+        }
+        let mut world_candidates: Vec<Candidate> = Vec::new();
+        world_candidates.reserve(cap.min(self.world_beliefs.len()));
         for belief in self.world_beliefs.iter() {
             if let Some(candidate) = build_world_candidate(belief, spec.project.as_deref()) {
-                let payload = candidate.value.clone();
-                let lane_for_event = candidate.lane.clone();
-                observer.emit(
-                    STREAM_EVENT_EXPANDED,
-                    json!({
-                        "item": payload.clone(),
-                        "lane": lane_for_event.clone(),
-                        "source": "world",
-                    }),
-                );
-                counter!(METRIC_WORLD_CANDIDATES).increment(1);
-                expanded_raw.push(payload);
-                insert_candidate(candidates, candidate);
+                world_candidates.push(candidate);
             }
+        }
+        if world_candidates.is_empty() {
+            return;
+        }
+        if world_candidates.len() > cap {
+            let nth = cap.saturating_sub(1);
+            world_candidates.select_nth_unstable_by(nth, |a, b| {
+                b.cscore.partial_cmp(&a.cscore).unwrap_or(Ordering::Equal)
+            });
+            world_candidates.truncate(cap);
+        }
+        world_candidates
+            .sort_unstable_by(|a, b| b.cscore.partial_cmp(&a.cscore).unwrap_or(Ordering::Equal));
+
+        for candidate in world_candidates {
+            let payload = candidate.value.clone();
+            let lane_for_event = candidate.lane.clone();
+            observer.emit(
+                STREAM_EVENT_EXPANDED,
+                json!({
+                    "item": payload.clone(),
+                    "lane": lane_for_event.clone(),
+                    "source": "world",
+                }),
+            );
+            counter!(METRIC_WORLD_CANDIDATES).increment(1);
+            expanded_raw.push(payload);
+            insert_candidate(candidates, candidate);
         }
     }
 
@@ -635,7 +665,7 @@ impl<'a> WorkingSetBuilder<'a> {
         spec: &WorkingSetSpec,
         lanes: &[Option<String>],
         seed_infos: &[SeedInfo],
-        candidates: &mut HashMap<String, Candidate>,
+        candidates: &mut FxHashMap<String, Candidate>,
         expanded_raw: &mut Vec<Value>,
         observer: &mut O,
     ) -> Result<usize> {
@@ -647,12 +677,21 @@ impl<'a> WorkingSetBuilder<'a> {
         if seeds_with_embed.is_empty() {
             return Ok(0);
         }
-        seeds_with_embed.sort_by(|a, b| {
+        let top_k = spec.expand_query_top_k.min(seeds_with_embed.len());
+        if top_k == 0 {
+            return Ok(0);
+        }
+        let cmp = |a: &(&SeedInfo, &[f32]), b: &(&SeedInfo, &[f32])| {
             b.0.cscore
                 .partial_cmp(&a.0.cscore)
                 .unwrap_or(Ordering::Equal)
-        });
-        let top_k = spec.expand_query_top_k.min(seeds_with_embed.len());
+        };
+        if seeds_with_embed.len() > top_k {
+            let nth = top_k.saturating_sub(1);
+            seeds_with_embed.select_nth_unstable_by(nth, cmp);
+            seeds_with_embed.truncate(top_k);
+        }
+        seeds_with_embed.sort_unstable_by(cmp);
         let dims = seeds_with_embed[0].1.len();
         if dims == 0 {
             return Ok(0);
@@ -660,8 +699,8 @@ impl<'a> WorkingSetBuilder<'a> {
         let mut avg = vec![0f32; dims];
         let mut weight_sum = 0f32;
         let mut seed_ids: Vec<String> = Vec::new();
-        let mut lane_sums: HashMap<String, (Vec<f32>, f32)> = HashMap::new();
-        let mut lane_seed_ids: HashMap<String, Vec<String>> = HashMap::new();
+        let mut lane_sums: FxHashMap<String, (Vec<f32>, f32)> = FxHashMap::default();
+        let mut lane_seed_ids: FxHashMap<String, Vec<String>> = FxHashMap::default();
         for (seed, embed) in seeds_with_embed.iter().take(top_k) {
             if embed.len() != dims {
                 continue;
@@ -692,7 +731,7 @@ impl<'a> WorkingSetBuilder<'a> {
         for value in avg.iter_mut() {
             *value /= weight_sum;
         }
-        let mut lane_vectors: HashMap<String, Vec<f32>> = HashMap::new();
+        let mut lane_vectors: FxHashMap<String, Vec<f32>> = FxHashMap::default();
         for (lane, (mut sum, weight)) in lane_sums.into_iter() {
             if weight > 0.0 {
                 for value in sum.iter_mut() {
@@ -711,7 +750,7 @@ impl<'a> WorkingSetBuilder<'a> {
                 .as_ref()
                 .and_then(|lane_name| lane_vectors.get(lane_name).map(|vec| vec.as_slice()))
                 .or(global_embed_opt);
-            let mut items = self.state.kernel().select_memory_hybrid(
+            let mut items = self.kernel_session.select_memory_hybrid(
                 spec.query.as_deref(),
                 embed_opt,
                 lane.as_deref(),
@@ -901,7 +940,7 @@ fn select_candidates<O: WorkingSetObserver>(
     let mut lane_counts: BTreeMap<String, usize> = BTreeMap::new();
     let mut slot_counts: BTreeMap<String, usize> = BTreeMap::new();
     let use_slots = !spec.slot_budgets.is_empty();
-    let mut slot_limit_cache: HashMap<String, Option<usize>> = HashMap::new();
+    let mut slot_limit_cache: FxHashMap<String, Option<usize>> = FxHashMap::default();
     let mut resolve_slot_limit = |slot: &str| -> Option<usize> {
         if let Some(limit) = slot_limit_cache.get(slot) {
             *limit
@@ -1320,16 +1359,22 @@ fn build_query_expansion_candidate(
     Some(Candidate::from_value(id, lane, value, cscore))
 }
 
-fn insert_candidate(map: &mut HashMap<String, Candidate>, candidate: Candidate) {
-    match map.entry(candidate.id.clone()) {
-        std::collections::hash_map::Entry::Vacant(v) => {
-            v.insert(candidate);
+fn world_candidate_cap(spec: &WorkingSetSpec) -> usize {
+    std::env::var("ARW_CONTEXT_WORLD_MAX")
+        .ok()
+        .and_then(|s| s.trim().parse::<usize>().ok())
+        .filter(|cap| *cap > 0)
+        .unwrap_or_else(|| spec.limit.saturating_mul(2).max(64))
+}
+
+fn insert_candidate(map: &mut FxHashMap<String, Candidate>, candidate: Candidate) {
+    let id = candidate.id.clone();
+    if let Some(existing) = map.get_mut(&id) {
+        if candidate.cscore > existing.cscore {
+            *existing = candidate;
         }
-        std::collections::hash_map::Entry::Occupied(mut occ) => {
-            if candidate.cscore > occ.get().cscore {
-                occ.insert(candidate);
-            }
-        }
+    } else {
+        map.insert(id, candidate);
     }
 }
 

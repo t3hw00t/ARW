@@ -919,27 +919,51 @@ impl<'c> MemoryStore<'c> {
             return Ok(HashMap::new());
         }
         let placeholders = src_ids.iter().map(|_| "?").collect::<Vec<_>>().join(",");
+        if limit_per < 0 {
+            let sql = format!(
+                "SELECT src_id,dst_id,rel,weight,updated \
+                 FROM memory_links \
+                 WHERE src_id IN ({placeholders}) \
+                 ORDER BY src_id ASC, updated DESC"
+            );
+            let mut stmt = self.conn.prepare(&sql)?;
+            let params = params_from_iter(src_ids.iter().map(|s| s.as_str()));
+            let mut rows = stmt.query(params)?;
+            let mut out: HashMap<String, Vec<Value>> = HashMap::new();
+            while let Some(row) = rows.next()? {
+                let src_id: String = row.get(0)?;
+                out.entry(src_id.clone()).or_default().push(json!({
+                    "dst_id": row.get::<_, String>(1)?,
+                    "rel": row.get::<_, String>(2)?,
+                    "weight": row.get::<_, Option<f64>>(3)?,
+                    "updated": row.get::<_, String>(4)?,
+                }));
+            }
+            return Ok(out);
+        }
+
         let sql = format!(
             "SELECT src_id,dst_id,rel,weight,updated \
-             FROM memory_links \
-             WHERE src_id IN ({placeholders}) \
+             FROM ( \
+                 SELECT src_id,dst_id,rel,weight,updated, \
+                        ROW_NUMBER() OVER (PARTITION BY src_id ORDER BY updated DESC) AS rn \
+                 FROM memory_links \
+                 WHERE src_id IN ({placeholders}) \
+             ) \
+             WHERE rn <= ? \
              ORDER BY src_id ASC, updated DESC"
         );
         let mut stmt = self.conn.prepare(&sql)?;
-        let params = params_from_iter(src_ids.iter().map(|s| s.as_str()));
-        let mut rows = stmt.query(params)?;
+        let mut params: Vec<&dyn rusqlite::ToSql> = Vec::with_capacity(src_ids.len() + 1);
+        for id in src_ids {
+            params.push(id as &dyn rusqlite::ToSql);
+        }
+        let limit_param = limit_per;
+        params.push(&limit_param);
+        let mut rows = stmt.query(&params[..])?;
         let mut out: HashMap<String, Vec<Value>> = HashMap::new();
-        let mut counts: HashMap<String, i64> = HashMap::new();
-        let max_per = limit_per.max(-1);
         while let Some(row) = rows.next()? {
             let src_id: String = row.get(0)?;
-            if max_per > 0 {
-                let count = counts.entry(src_id.clone()).or_insert(0);
-                if *count >= max_per {
-                    continue;
-                }
-                *count += 1;
-            }
             out.entry(src_id.clone()).or_default().push(json!({
                 "dst_id": row.get::<_, String>(1)?,
                 "rel": row.get::<_, String>(2)?,
@@ -1234,24 +1258,40 @@ fn parse_json_string(input: Option<String>) -> Option<Value> {
 }
 
 fn encode_embed_blob(embed: &[f32]) -> Vec<u8> {
-    let mut bytes = Vec::with_capacity(embed.len() * std::mem::size_of::<f32>());
-    for value in embed {
-        bytes.extend_from_slice(&value.to_le_bytes());
+    #[cfg(target_endian = "little")]
+    {
+        bytemuck::cast_slice(embed).to_vec()
     }
-    bytes
+    #[cfg(target_endian = "big")]
+    {
+        let mut bytes = Vec::with_capacity(embed.len() * std::mem::size_of::<f32>());
+        for value in embed {
+            bytes.extend_from_slice(&value.to_le_bytes());
+        }
+        bytes
+    }
 }
 
 fn decode_embed_blob(blob: &[u8]) -> Option<Vec<f32>> {
-    if blob.len() % std::mem::size_of::<f32>() != 0 {
-        return None;
+    #[cfg(target_endian = "little")]
+    {
+        bytemuck::try_cast_slice::<u8, f32>(blob)
+            .ok()
+            .map(|slice| slice.to_vec())
     }
-    let mut out = Vec::with_capacity(blob.len() / std::mem::size_of::<f32>());
-    for chunk in blob.chunks_exact(std::mem::size_of::<f32>()) {
-        let mut buf = [0u8; std::mem::size_of::<f32>()];
-        buf.copy_from_slice(chunk);
-        out.push(f32::from_le_bytes(buf));
+    #[cfg(target_endian = "big")]
+    {
+        if blob.len() % std::mem::size_of::<f32>() != 0 {
+            return None;
+        }
+        let mut out = Vec::with_capacity(blob.len() / std::mem::size_of::<f32>());
+        for chunk in blob.chunks_exact(std::mem::size_of::<f32>()) {
+            let mut buf = [0u8; std::mem::size_of::<f32>()];
+            buf.copy_from_slice(chunk);
+            out.push(f32::from_le_bytes(buf));
+        }
+        Some(out)
     }
-    Some(out)
 }
 
 fn parse_embedding(embed_s: &str) -> Result<Vec<f32>> {
@@ -1478,6 +1518,59 @@ mod tests {
             )
             .unwrap();
         assert_eq!(count, 1);
+    }
+
+    #[test]
+    fn list_memory_links_many_respects_per_source_limit() {
+        let conn = setup_conn();
+        let store = MemoryStore::new(&conn);
+
+        for idx in 0..5 {
+            let updated = format!("2024-01-01T00:00:{idx:02}.000Z");
+            store
+                .insert_memory_link(
+                    "seed-a",
+                    &format!("dst-a-{idx}"),
+                    Some("related"),
+                    Some(idx as f64),
+                )
+                .unwrap();
+            conn.execute(
+                "UPDATE memory_links SET updated=? WHERE src_id='seed-a' AND dst_id=?",
+                params![updated, format!("dst-a-{idx}")],
+            )
+            .unwrap();
+        }
+        for idx in 0..3 {
+            let updated = format!("2024-01-02T00:00:{idx:02}.000Z");
+            store
+                .insert_memory_link(
+                    "seed-b",
+                    &format!("dst-b-{idx}"),
+                    Some("related"),
+                    Some(idx as f64),
+                )
+                .unwrap();
+            conn.execute(
+                "UPDATE memory_links SET updated=? WHERE src_id='seed-b' AND dst_id=?",
+                params![updated, format!("dst-b-{idx}")],
+            )
+            .unwrap();
+        }
+
+        let links = store
+            .list_memory_links_many(&vec!["seed-a".into(), "seed-b".into()], 2)
+            .unwrap();
+
+        let seed_a = links.get("seed-a").expect("seed-a entries");
+        assert_eq!(seed_a.len(), 2);
+        assert_eq!(seed_a[0]["dst_id"], "dst-a-4");
+        assert_eq!(seed_a[1]["dst_id"], "dst-a-3");
+
+        let seed_b = links.get("seed-b").expect("seed-b entries");
+        assert_eq!(seed_b.len(), 2);
+        assert_eq!(seed_b[0]["dst_id"], "dst-b-2");
+        assert_eq!(seed_b[1]["dst_id"], "dst-b-1");
     }
 
     #[test]

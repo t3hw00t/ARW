@@ -60,6 +60,7 @@ ipnet = { workspace = true }
 walkdir = "2"
 pathdiff = "0.2"
 rand = "0.9"
+rustc-hash = "1.1"
 screenshots = { version = "0.8", optional = true }
 image = { version = "0.25", default-features = false, features = ["png","jpeg"], optional = true }
 leptess = { version = "0.14", optional = true }

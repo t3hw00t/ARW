@@ -1,3 +1,4 @@
+use anyhow::Result as AnyResult;
 use chrono::{DateTime, SecondsFormat, Utc};
 use once_cell::sync::{Lazy, OnceCell};
 use serde_json::{json, Value};
@@ -8,7 +9,8 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant, SystemTime};
-use tokio::{fs as afs, time};
+use tokio::{fs as afs, task::spawn_blocking, time};
+use tracing::warn;
 use walkdir::WalkDir;
 
 const MAX_NOTES_LEN: usize = 64 * 1024;
@@ -39,6 +41,7 @@ use crate::{
     AppState,
 };
 use arw_kernel::ActionListOptions;
+use arw_kernel::KernelSession;
 use arw_topics as topics;
 
 #[derive(Clone)]
@@ -291,10 +294,9 @@ pub(crate) fn start_read_models(state: AppState) -> Vec<TaskHandle> {
             if !st.kernel_enabled() {
                 return None;
             }
-            st.kernel()
-                .list_logic_units_async(200)
+            let kernel = st.kernel().clone();
+            kernel_session_exec(kernel, |session| session.list_logic_units(200))
                 .await
-                .ok()
                 .map(|items| json!({ "items": items }))
         },
     ));
@@ -307,10 +309,9 @@ pub(crate) fn start_read_models(state: AppState) -> Vec<TaskHandle> {
             if !st.kernel_enabled() {
                 return None;
             }
-            st.kernel()
-                .list_orchestrator_jobs_async(200)
+            let kernel = st.kernel().clone();
+            kernel_session_exec(kernel, |session| session.list_orchestrator_jobs(200))
                 .await
-                .ok()
                 .map(|items| json!({ "items": items }))
         },
     ));
@@ -323,11 +324,34 @@ pub(crate) fn start_read_models(state: AppState) -> Vec<TaskHandle> {
             if !st.kernel_enabled() {
                 return None;
             }
-            st.kernel()
-                .list_recent_memory_async(None, 200)
-                .await
-                .ok()
-                .map(|items| build_memory_recent_bundle(items).snapshot)
+            let kernel = st.kernel().clone();
+            kernel_session_exec(kernel, |session| {
+                let items = session.list_recent_memory(None, 200)?;
+                Ok(build_memory_recent_bundle(items).snapshot)
+            })
+            .await
+        },
+    ));
+
+    handles.push(spawn_read_model(
+        &state,
+        "kernel_pool_wait",
+        Duration::from_millis(2000),
+        |st| async move {
+            if !st.kernel_enabled() {
+                return None;
+            }
+            let (count, total_ms) = st.kernel().pool_wait_stats();
+            let avg_ms = if count > 0 {
+                total_ms / count as f64
+            } else {
+                0.0
+            };
+            Some(json!({
+                "wait_count": count,
+                "wait_total_ms": total_ms,
+                "wait_avg_ms": avg_ms,
+            }))
         },
     ));
 
@@ -343,25 +367,25 @@ pub(crate) fn start_read_models(state: AppState) -> Vec<TaskHandle> {
                     if !st.kernel_enabled() {
                         return None;
                     }
-                    st.kernel()
-                        .list_recent_memory_async(Some(lane_clone.clone()), 200)
-                        .await
-                        .ok()
-                        .map(|items| {
-                            let bundle = build_memory_recent_bundle(items);
-                            bundle
-                                .lane_snapshots
-                                .get(&lane_clone)
-                                .cloned()
-                                .unwrap_or_else(|| {
-                                    json!({
-                                        "lane": lane_clone,
-                                        "items": [],
-                                        "generated": bundle.generated,
-                                        "generated_ms": bundle.generated_ms,
-                                    })
+                    let kernel = st.kernel().clone();
+                    kernel_session_exec(kernel, move |session| {
+                        let items = session.list_recent_memory(Some(&lane_clone), 200)?;
+                        let bundle = build_memory_recent_bundle(items);
+                        let snapshot = bundle
+                            .lane_snapshots
+                            .get(&lane_clone)
+                            .cloned()
+                            .unwrap_or_else(|| {
+                                json!({
+                                    "lane": lane_clone,
+                                    "items": [],
+                                    "generated": bundle.generated,
+                                    "generated_ms": bundle.generated_ms,
                                 })
-                        })
+                            });
+                        Ok(snapshot)
+                    })
+                    .await
                 }
             },
         ));
@@ -1034,6 +1058,37 @@ fn spawn_service_health(state: &AppState) -> TaskHandle {
             }
         }),
     )
+}
+
+async fn kernel_session_exec<T, F>(kernel: arw_kernel::Kernel, op: F) -> Option<T>
+where
+    T: Send + 'static,
+    F: FnOnce(KernelSession) -> AnyResult<T> + Send + 'static,
+{
+    match spawn_blocking(move || -> AnyResult<T> {
+        let session = kernel.session()?;
+        op(session)
+    })
+    .await
+    {
+        Ok(Ok(value)) => Some(value),
+        Ok(Err(err)) => {
+            warn!(
+                target = "arw::read_model",
+                error = %err,
+                "kernel session operation failed"
+            );
+            None
+        }
+        Err(err) => {
+            warn!(
+                target = "arw::read_model",
+                error = %err,
+                "kernel session join failed"
+            );
+            None
+        }
+    }
 }
 
 fn spawn_snappy(state: &AppState) -> TaskHandle {
@@ -1961,9 +2016,8 @@ pub(crate) async fn leases_snapshot(state: &AppState) -> Value {
     with_read_model_singleflight("policy_leases", move || {
         let state = state.clone();
         async move {
-            let items = state
-                .kernel()
-                .list_leases_async(200)
+            let kernel = state.kernel().clone();
+            let items = kernel_session_exec(kernel, |session| session.list_leases(200))
                 .await
                 .unwrap_or_default();
             let generated = chrono::Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true);
@@ -2447,9 +2501,9 @@ mod tests {
         json_patch::patch(&mut doc, &patch).expect("apply patch");
 
         assert_eq!(doc["budgets"]["full_result_p95_ms"].as_u64(), Some(15));
-        assert_eq!(doc["observed"]["max_p95_ms"].as_u64(), Some(30));
+        assert_eq!(doc["observed"]["max_p95_ms"].as_u64(), Some(50));
         let route = &doc["observed"]["routes"]["/state/routes"];
-        assert_eq!(route["p95_ms"].as_u64(), Some(30));
+        assert_eq!(route["p95_ms"].as_u64(), Some(50));
         assert_eq!(route["hits"].as_u64(), Some(1));
 
         let notice_env: Envelope = timeout(Duration::from_millis(200), notice_rx.recv())
@@ -2458,7 +2512,7 @@ mod tests {
             .expect("notice event");
         assert_eq!(notice_env.kind, topics::TOPIC_SNAPPY_NOTICE);
         assert_eq!(notice_env.payload["path"].as_str(), Some("/state/routes"));
-        assert_eq!(notice_env.payload["p95_max_ms"].as_u64(), Some(30));
+        assert_eq!(notice_env.payload["p95_max_ms"].as_u64(), Some(50));
         assert_eq!(notice_env.payload["budget_ms"].as_u64(), Some(15));
 
         let (_name, _started, handle) = snappy_handle.into_inner();

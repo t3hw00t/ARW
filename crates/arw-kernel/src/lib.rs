@@ -24,6 +24,10 @@ pub struct Kernel {
     blocking: BlockingPool,
 }
 
+pub struct KernelSession {
+    conn: ManagedConnection,
+}
+
 #[derive(Clone)]
 struct KernelPragmas {
     journal_mode: String,
@@ -817,6 +821,10 @@ impl Kernel {
 
     fn conn(&self) -> Result<ManagedConnection> {
         Self::checkout_connection(&self.db_path, &self.pragmas, &self.pool)
+    }
+
+    pub fn session(&self) -> Result<KernelSession> {
+        Ok(KernelSession { conn: self.conn()? })
     }
 
     async fn run_blocking<F, R>(&self, job: F) -> Result<R>
@@ -1989,6 +1997,15 @@ impl Kernel {
         store.list_recent_memory(lane, limit)
     }
 
+    pub fn pool_wait_stats(&self) -> (u64, f64) {
+        let stats = self
+            .pool
+            .wait_stats
+            .lock()
+            .expect("pool wait stats mutex poisoned");
+        (stats.count, stats.total_ms)
+    }
+
     // ---------- Config snapshots ----------
     pub fn insert_config_snapshot(&self, config: &serde_json::Value) -> Result<String> {
         let conn = self.conn()?;
@@ -2722,6 +2739,153 @@ impl ActionListOptions {
 
     pub fn clamped_limit(&self) -> i64 {
         self.limit.clamp(1, 2000)
+    }
+}
+
+impl KernelSession {
+    fn store(&self) -> MemoryStore<'_> {
+        MemoryStore::new(&self.conn)
+    }
+
+    pub fn select_memory_hybrid(
+        &self,
+        query: Option<&str>,
+        embed: Option<&[f32]>,
+        lane: Option<&str>,
+        limit: i64,
+    ) -> Result<Vec<serde_json::Value>> {
+        self.store().select_memory_hybrid(query, embed, lane, limit)
+    }
+
+    pub fn list_memory_links_many(
+        &self,
+        src_ids: &[String],
+        limit_per: i64,
+    ) -> Result<HashMap<String, Vec<serde_json::Value>>> {
+        self.store().list_memory_links_many(src_ids, limit_per)
+    }
+
+    pub fn get_memory_many(&self, ids: &[String]) -> Result<HashMap<String, serde_json::Value>> {
+        if ids.is_empty() {
+            return Ok(HashMap::new());
+        }
+        self.store().get_memory_many(ids)
+    }
+
+    pub fn expired_memory_candidates(
+        &self,
+        now: DateTime<Utc>,
+        limit: usize,
+    ) -> Result<Vec<MemoryGcCandidate>> {
+        self.store().expired_candidates(now, limit)
+    }
+
+    pub fn lane_overflow_candidates(
+        &self,
+        lane: &str,
+        cap: usize,
+        limit: usize,
+    ) -> Result<Vec<MemoryGcCandidate>> {
+        self.store().lane_overflow_candidates(lane, cap, limit)
+    }
+
+    pub fn delete_memory_records(&self, ids: &[String]) -> Result<usize> {
+        self.store().delete_records(ids)
+    }
+
+    pub fn list_recent_memory(
+        &self,
+        lane: Option<&str>,
+        limit: i64,
+    ) -> Result<Vec<serde_json::Value>> {
+        self.store().list_recent_memory(lane, limit)
+    }
+
+    pub fn list_logic_units(&self, limit: i64) -> Result<Vec<serde_json::Value>> {
+        let conn: &Connection = &self.conn;
+        let mut stmt = conn.prepare(
+            "SELECT id,manifest,status,created,updated \
+             FROM logic_units ORDER BY updated DESC LIMIT ?",
+        )?;
+        let mut rows = stmt.query([limit])?;
+        let mut out = Vec::new();
+        while let Some(r) = rows.next()? {
+            let mf_s: String = r.get(1)?;
+            let mf_v =
+                serde_json::from_str::<serde_json::Value>(&mf_s).unwrap_or(serde_json::json!({}));
+            out.push(serde_json::json!({
+                "id": r.get::<_, String>(0)?,
+                "manifest": mf_v,
+                "status": r.get::<_, String>(2)?,
+                "created": r.get::<_, String>(3)?,
+                "updated": r.get::<_, String>(4)?,
+            }));
+        }
+        Ok(out)
+    }
+
+    pub fn list_orchestrator_jobs(&self, limit: i64) -> Result<Vec<serde_json::Value>> {
+        let conn: &Connection = &self.conn;
+        let mut stmt = conn.prepare(
+            "SELECT id,status,goal,data,progress,created,updated \
+             FROM orchestrator_jobs ORDER BY updated DESC LIMIT ?",
+        )?;
+        let mut rows = stmt.query([limit])?;
+        let mut out = Vec::new();
+        while let Some(r) = rows.next()? {
+            let status_raw: String = r.get::<_, String>(1)?;
+            let (status_slug, status_label) = Kernel::normalize_orchestrator_status(&status_raw);
+            let mut payload = serde_json::json!({
+                "id": r.get::<_, String>(0)?,
+                "status": status_raw,
+                "status_slug": status_slug,
+                "status_label": status_label,
+                "goal": r.get::<_, Option<String>>(2)?,
+                "progress": r.get::<_, Option<f64>>(4)?,
+                "created": r.get::<_, String>(5)?,
+                "updated": r.get::<_, String>(6)?,
+            });
+            let data_raw: Option<String> = r.get(3)?;
+            if let Some(data_raw) = data_raw {
+                if let Ok(val) = serde_json::from_str::<serde_json::Value>(&data_raw) {
+                    if !val.is_null() {
+                        if let serde_json::Value::Object(ref mut map) = payload {
+                            map.insert("data".into(), val);
+                        }
+                    }
+                }
+            }
+            out.push(payload);
+        }
+        Ok(out)
+    }
+
+    pub fn list_leases(&self, limit: i64) -> Result<Vec<serde_json::Value>> {
+        let conn: &Connection = &self.conn;
+        let mut stmt = conn.prepare(
+            "SELECT id,subject,capability,scope,ttl_until,budget,policy_ctx,created,updated \
+             FROM leases ORDER BY updated DESC LIMIT ?",
+        )?;
+        let mut rows = stmt.query([limit])?;
+        let mut out = Vec::new();
+        while let Some(r) = rows.next()? {
+            let policy_s: Option<String> = r.get(6)?;
+            let policy_v = policy_s
+                .and_then(|s| serde_json::from_str::<serde_json::Value>(&s).ok())
+                .unwrap_or(serde_json::json!({}));
+            out.push(serde_json::json!({
+                "id": r.get::<_, String>(0)?,
+                "subject": r.get::<_, String>(1)?,
+                "capability": r.get::<_, String>(2)?,
+                "scope": r.get::<_, Option<String>>(3)?,
+                "ttl_until": r.get::<_, String>(4)?,
+                "budget": r.get::<_, Option<f64>>(5)?,
+                "policy": policy_v,
+                "created": r.get::<_, String>(7)?,
+                "updated": r.get::<_, String>(8)?,
+            }));
+        }
+        Ok(out)
     }
 }
 

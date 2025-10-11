@@ -4,7 +4,8 @@ use std::time::Duration;
 use anyhow::{Context, Result};
 use chrono::Utc;
 use metrics::counter;
-use serde_json::json;
+use serde_json::{json, Value};
+use tokio::task::spawn_blocking;
 use tokio::time::{interval, MissedTickBehavior};
 
 use crate::{read_models, tasks::TaskHandle, tools, AppState};
@@ -52,64 +53,72 @@ async fn sweep_once(state: &AppState) -> Result<()> {
     }
 
     let now = Utc::now();
-    let mut removed = Vec::new();
-    let mut reasons = Vec::new();
-    let mut seen = HashSet::new();
+    let lane_caps = lane_caps_from_env();
+    let kernel = state.kernel().clone();
 
-    let expired = state
-        .kernel()
-        .expired_memory_candidates_async(now, limit)
-        .await
-        .context("collect expired memory entries")?;
-    for cand in expired {
-        if seen.insert(cand.id.clone()) {
-            let id = cand.id.clone();
-            removed.push(id);
-            reasons.push(cand);
-        }
-    }
+    let (reasons, snapshot_items) =
+        spawn_blocking(move || -> Result<(Vec<MemoryGcCandidate>, Vec<Value>)> {
+            let session = kernel.session()?;
+            let mut seen = HashSet::new();
+            let mut reasons = Vec::new();
+            let mut removed_ids: Vec<String> = Vec::new();
 
-    let mut remaining = limit.saturating_sub(removed.len());
-    if remaining > 0 {
-        let caps = lane_caps_from_env();
-        for (lane, cap) in caps {
-            if cap == 0 || remaining == 0 {
-                continue;
-            }
-            let candidates = state
-                .kernel()
-                .lane_overflow_candidates_async(lane.clone(), cap, remaining)
-                .await
-                .with_context(|| format!("collect overflow for lane {lane}"))?;
-            for cand in candidates {
+            let expired = session
+                .expired_memory_candidates(now, limit)
+                .context("collect expired memory entries")?;
+            for cand in expired {
                 if seen.insert(cand.id.clone()) {
-                    remaining = remaining.saturating_sub(1);
-                    let id = cand.id.clone();
-                    removed.push(id);
+                    removed_ids.push(cand.id.clone());
                     reasons.push(cand);
+                }
+            }
+
+            let mut remaining = limit.saturating_sub(removed_ids.len());
+            if remaining > 0 {
+                for (lane, cap) in lane_caps.iter() {
+                    if *cap == 0 || remaining == 0 {
+                        continue;
+                    }
+                    let candidates = session
+                        .lane_overflow_candidates(lane.as_str(), *cap, remaining)
+                        .with_context(|| format!("collect overflow for lane {lane}"))?;
+                    for cand in candidates {
+                        if seen.insert(cand.id.clone()) {
+                            remaining = remaining.saturating_sub(1);
+                            removed_ids.push(cand.id.clone());
+                            reasons.push(cand);
+                            if remaining == 0 {
+                                break;
+                            }
+                        }
+                    }
                     if remaining == 0 {
                         break;
                     }
                 }
             }
-            if remaining == 0 {
-                break;
-            }
-        }
-    }
 
-    if removed.is_empty() {
+            if removed_ids.is_empty() {
+                return Ok((Vec::new(), Vec::new()));
+            }
+
+            session
+                .delete_memory_records(&removed_ids)
+                .context("delete reclaimed memory records")?;
+            let items = session
+                .list_recent_memory(None, 200)
+                .context("refresh memory recent read-model")?;
+            Ok((reasons, items))
+        })
+        .await??;
+
+    if reasons.is_empty() {
         return Ok(());
     }
 
-    state
-        .kernel()
-        .delete_memory_records_async(removed.clone())
-        .await
-        .context("delete reclaimed memory records")?;
-
     publish_events(state, &reasons);
-    update_read_model(state).await?;
+    let bundle = read_models::build_memory_recent_bundle(snapshot_items);
+    read_models::publish_memory_bundle(&state.bus(), &bundle);
 
     let expired_count = reasons
         .iter()
@@ -167,17 +176,6 @@ fn publish_events(state: &AppState, candidates: &[MemoryGcCandidate]) {
         tools::ensure_corr(&mut payload);
         bus.publish(topics::TOPIC_MEMORY_ITEM_EXPIRED, &payload);
     }
-}
-
-async fn update_read_model(state: &AppState) -> Result<()> {
-    let items = state
-        .kernel()
-        .list_recent_memory_async(None, 200)
-        .await
-        .context("refresh memory recent read-model")?;
-    let bundle = read_models::build_memory_recent_bundle(items);
-    read_models::publish_memory_bundle(&state.bus(), &bundle);
-    Ok(())
 }
 
 fn gc_interval_secs() -> u64 {
