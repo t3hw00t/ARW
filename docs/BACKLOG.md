@@ -4,7 +4,7 @@ title: Backlog
 
 # Backlog
 
-Updated: 2025-10-07
+Updated: 2025-10-11
 Type: Reference
 
 This backlog captures concrete work items and near-term priorities. The Roadmap focuses on higher‑level themes and time horizons; see About → Roadmap for strategic context.
@@ -39,7 +39,7 @@ Complexity Collapse (Cross-cutting)
 - **Recently shipped:** Legacy feature migration (Phases A–E); Snappy Governor verification; Event Spine patch streaming; Phase A handoff (see `docs/RESTRUCTURE.md` and tasks `t-phase-a-01..03`).
 
 Managed Runtime Supervisor (Priority One)
-- [Kernel] Runtime Matrix Phase 1: land health reasons, restart budgets, and accessible status strings; add CPU/GPU smoke tests exercising llama.cpp integration — in_progress (health strings + restart budgets landed; stubbed llama smoke via `just runtime-smoke`; GPU-backed runs still outstanding).
+- [Kernel] Runtime Matrix Phase 1: land health reasons, restart budgets, and accessible status strings; add CPU/GPU smoke tests exercising llama.cpp integration — in_progress (health strings + restart budgets landed; stubbed llama smoke via `just runtime-smoke`; CI now runs a simulated GPU smoke via `scripts/dev.sh verify --ci` while real GPU runs remain outstanding).
 - [Kernel] Supervisor Core Phase 2: finalize `RuntimeRegistry` adapter trait, lease-gated start/stop APIs, structured logs, and policy simulator coverage — plan (structured log stream with heartbeat dedupe, plus `state_label`/`severity_label` exposed to clients, landed).
 - [Pack: Collaboration][Kernel] Launcher runtime panels: expose profiles, consent cues, and start/stop controls with keyboard parity; publish operator runbook excerpt in Launcher help cards — plan.
 - [Kernel] Supply-chain readiness for bundled runtimes: sign binary manifests, document update cadence, and ship rollback checklist — plan.

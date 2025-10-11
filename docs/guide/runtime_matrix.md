@@ -3,7 +3,7 @@ title: Runtime Matrix
 ---
 
 # Runtime Matrix
-Updated: 2025-10-09
+Updated: 2025-10-11
 Type: Blueprint
 Status: In progress
 
@@ -23,6 +23,7 @@ ARW seeds a runtime matrix read-model from `runtime.health` events. Today it mer
 - Smoke check: `just runtime-smoke` launches a stub llama endpoint, points the server at it, and verifies `chat.respond` flows end-to-end without needing model weights (extend with MODE=real once hardware-backed smoke rigs land). The helper exits automatically after `RUNTIME_SMOKE_TIMEOUT_SECS` seconds (defaults to the shared `SMOKE_TIMEOUT_SECS`, falling back to 600). Set either knob to `0` to disable the guard during manual debugging.
   - The smoke now also fetches `/state/runtime_matrix` and asserts every snapshot carries the accessible status strings (`label`, `detail`, `aria_hint`, `severity_label`) plus a fresh `runtime.updated` timestamp and positive `ttl_seconds`, catching regressions in the matrix feed before they escape CI.
   - To exercise a real llama.cpp build: `MODE=real LLAMA_SERVER_BIN=/path/to/server LLAMA_MODEL_PATH=/path/to/model.gguf just runtime-smoke`. Optionally pass `LLAMA_SERVER_ARGS="--your --flags"` or `LLAMA_SERVER_PORT=XXXX` to match your deployment.
+  - CI parity (`scripts/dev.sh verify --ci`) runs both the stub path and a simulated GPU mode (`LLAMA_GPU_SIMULATE=1 MODE=gpu`) to keep the accelerator detection and log parsing code paths covered even when real GPUs are absent.
 - Vision smoke: `ARW_SERVER_BIN=target/debug/arw-server just runtime-smoke-vision` uses the managed supervisor to launch a stub llava runtime from a generated manifest, probes `/describe`, forces a restore, and watches `/state/runtime_matrix` for the vision runtime to cycle back to Ready. The helper sets `ARW_SMOKE_MODE=vision` so only the runtimes/read-models needed for the smoke are launched and writes under `.smoke/vision/run.XXXX/` by default; export `VISION_SMOKE_ROOT=/path/to/cache` if you want to redirect or reuse the working directory between runs.
 
 ### Example payload
