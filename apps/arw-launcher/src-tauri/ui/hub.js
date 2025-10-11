@@ -1011,6 +1011,14 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (!txt || sticky) return;
     setTimeout(()=>{ if (elRunsStat.textContent===txt) elRunsStat.textContent=''; }, 1200);
   }
+  function describeRunsStat(count){
+    const parts = [`Episodes: ${count}`];
+    if (curProj) parts.push(`project=${curProj}`);
+    const actorValue = elRunActor && elRunActor.value ? elRunActor.value : '';
+    if (actorValue) parts.push(`actor=${actorValue}`);
+    if (elRunErrOnly && elRunErrOnly.checked) parts.push('errors only');
+    return parts.join(' · ');
+  }
   function normArr(v){ return Array.isArray(v) ? v : []; }
   function parseMillis(ts){ try{ const ms = Date.parse(ts); return Number.isFinite(ms) ? ms : null; }catch{return null;} }
   function isErrorEvent(ev){
@@ -1295,6 +1303,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       if (!haystack.trim()) return false;
       return haystack.includes(q);
     });
+    setRunsStat(describeRunsStat(rows.length), true);
     elRunsTbl.innerHTML='';
     for (const r of rows){
       const tr = document.createElement('tr');
@@ -2026,6 +2035,8 @@ document.addEventListener('DOMContentLoaded', async () => {
       const params = new URLSearchParams();
       params.set('limit', '200');
       if (curProj) params.set('project', curProj);
+      const actorValue = elRunActor && typeof elRunActor.value === 'string' ? elRunActor.value.trim() : '';
+      if (actorValue) params.set('actor', actorValue);
       if (elRunErrOnly && elRunErrOnly.checked) params.set('errors_only', 'true');
       const path = params.toString() ? `/state/episodes?${params.toString()}` : '/state/episodes';
       await fetchReadModel('episodes', path, {
@@ -2085,7 +2096,10 @@ document.addEventListener('DOMContentLoaded', async () => {
   document.getElementById('btnRunsRefresh')?.addEventListener('click', ()=>{ refreshEpisodesSnapshot(); });
   // Do not persist filters; just render on change
   elRunFilter?.addEventListener('input', ()=>{ renderRuns(); });
-  elRunActor?.addEventListener('change', ()=>{ renderRuns(); });
+  elRunActor?.addEventListener('change', ()=>{
+    renderRuns();
+    refreshEpisodesSnapshot();
+  });
   elRunKind?.addEventListener('change', ()=>{ renderRuns(); });
   elRunErrOnly?.addEventListener('change', ()=>{ refreshEpisodesSnapshot(); });
   btnRunCopy?.addEventListener('click', ()=>{ if (runSnapshot) ARW.copy(JSON.stringify(runSnapshot, null, 2)); });
@@ -2101,7 +2115,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         runDetailsOpen.delete(id);
       }
     }
-    setRunsStat(`Episodes: ${runsCache.length}`, true);
+    setRunsStat(describeRunsStat(runsCache.length), true);
     updateRunFilterOptions();
     renderRuns();
   };

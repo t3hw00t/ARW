@@ -88,6 +88,8 @@ pub struct EpisodesQuery {
     pub limit: Option<usize>,
     /// Filter to episodes that include the specified project id.
     pub project: Option<String>,
+    /// Filter to episodes that include the specified actor (case-insensitive).
+    pub actor: Option<String>,
     /// Return only episodes that contain error events.
     pub errors_only: Option<bool>,
     /// Keep episodes whose kinds start with this prefix (e.g. `tasks.`).
@@ -134,6 +136,32 @@ impl EpisodeRollup {
 
     fn matches_kind_prefix(&self, prefix: &str) -> bool {
         self.kinds.iter().any(|k| k.starts_with(prefix))
+    }
+
+    fn matches_actor(&self, actor: &str) -> bool {
+        let needle = actor.trim();
+        if needle.is_empty() {
+            return false;
+        }
+        if self.actors.iter().any(|a| a.eq_ignore_ascii_case(needle)) {
+            return true;
+        }
+        self.events.iter().any(|event| {
+            if event
+                .get("actor")
+                .and_then(|v| v.as_str())
+                .map(|val| val.eq_ignore_ascii_case(needle))
+                .unwrap_or(false)
+            {
+                return true;
+            }
+            event
+                .get("payload")
+                .and_then(|payload| payload.get("actor"))
+                .and_then(|v| v.as_str())
+                .map(|val| val.eq_ignore_ascii_case(needle))
+                .unwrap_or(false)
+        })
     }
 
     fn matches_since(&self, since: DateTime<Utc>) -> bool {
@@ -410,6 +438,9 @@ pub async fn state_episodes(
 
     if let Some(project) = query.project.as_ref() {
         episodes.retain(|ep| ep.matches_project(project));
+    }
+    if let Some(actor) = query.actor.as_ref() {
+        episodes.retain(|ep| ep.matches_actor(actor));
     }
     if query.errors_only.unwrap_or(false) {
         episodes.retain(|ep| ep.errors > 0);
@@ -1456,7 +1487,7 @@ mod tests {
             arw_events::Envelope {
                 time: t0.to_rfc3339_opts(SecondsFormat::Millis, true),
                 kind: "tasks.started".to_string(),
-                payload: json!({"corr_id": corr_demo, "step": "start", "proj": "demo"}),
+                payload: json!({"corr_id": corr_demo, "step": "start", "proj": "demo", "actor": "demo-bot"}),
                 policy: None,
                 ce: None,
             },
@@ -1464,7 +1495,7 @@ mod tests {
                 time: (t0 + chrono::Duration::milliseconds(5))
                     .to_rfc3339_opts(SecondsFormat::Millis, true),
                 kind: "tasks.failed".to_string(),
-                payload: json!({"corr_id": corr_demo, "step": "error", "proj": "demo"}),
+                payload: json!({"corr_id": corr_demo, "step": "error", "proj": "demo", "actor": "demo-bot"}),
                 policy: None,
                 ce: None,
             },
@@ -1472,7 +1503,7 @@ mod tests {
                 time: (t0 + chrono::Duration::milliseconds(10))
                     .to_rfc3339_opts(SecondsFormat::Millis, true),
                 kind: "tasks.started".to_string(),
-                payload: json!({"corr_id": corr_other, "step": "start", "proj": "other"}),
+                payload: json!({"corr_id": corr_other, "step": "start", "proj": "other", "actor": "other-bot"}),
                 policy: None,
                 ce: None,
             },
@@ -1480,7 +1511,7 @@ mod tests {
                 time: (t0 + chrono::Duration::milliseconds(15))
                     .to_rfc3339_opts(SecondsFormat::Millis, true),
                 kind: "tasks.completed".to_string(),
-                payload: json!({"corr_id": corr_other, "step": "end", "proj": "other"}),
+                payload: json!({"corr_id": corr_other, "step": "end", "proj": "other", "actor": "other-bot"}),
                 policy: None,
                 ce: None,
             },
@@ -1499,6 +1530,7 @@ mod tests {
         let query = EpisodesQuery {
             limit: Some(5),
             project: Some("demo".to_string()),
+            actor: Some("DEMO-bot".to_string()),
             errors_only: Some(true),
             kind_prefix: Some("tasks.".to_string()),
             since: Some(since),
@@ -1568,6 +1600,7 @@ mod tests {
         let query = EpisodesQuery {
             limit: Some(10),
             project: Some("de".to_string()),
+            actor: None,
             errors_only: None,
             kind_prefix: None,
             since: None,
@@ -1588,6 +1621,7 @@ mod tests {
         let query_exact = EpisodesQuery {
             limit: Some(10),
             project: Some(" demo ".to_string()),
+            actor: None,
             errors_only: None,
             kind_prefix: None,
             since: None,

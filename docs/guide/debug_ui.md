@@ -4,7 +4,7 @@ title: Debug UI Overview
 
 # Debug UI Overview
 
-Updated: 2025-10-09
+Updated: 2025-10-11
 Type: How‑to
 
 The Debug UI (served by the Tauri Launcher or via `/admin`) is a lightweight control panel for ARW. It exposes a live event stream, useful admin actions, and compact insight panels. This page highlights two high‑leverage areas you’ll likely use often: Context Assembly and Experiments.
@@ -64,7 +64,7 @@ The UI exposes two complementary areas:
 ## Episodes Timeline
 
 - The Episodes card groups recent events by correlation id and now remembers your preferred **Details** state. Checking the global details box expands every entry until you switch it off; individual toggles update their own `aria-expanded` state for assistive tech.
-- Filters persist locally: project slugs or prefixes, kind prefixes, RFC3339 `since`, substring search, limit, and the `errors only` toggle all restore after a reload. The Reset action clears everything without touching other panels.
+- Filters persist locally: project slugs or prefixes, actor ids (case-insensitive), kind prefixes, RFC3339 `since`, substring search, limit, and the `errors only` toggle all restore after a reload. The Reset action clears everything without touching other panels.
 - Quick presets (15 min, 1h, 6h, 24h) sit beside the `since` picker so you can jump to recent windows without typing; switching to manual instantly reverts the select to `custom`.
 - A live summary line reports how many episodes are in view, how many include errors, and which filters are active. If filters hide every episode you get an explicit hint instead of a blank list.
 - Requests reuse conditional ETags when the default view is active, and any new filter cancels in-flight HTTP calls so you never see stale rollups. The toast and summary rows are announced via `aria-live` for screen readers.
