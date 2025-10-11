@@ -15,7 +15,7 @@ arw-core = { path = "../../crates/arw-core", version = "0.2.0-dev", features = [
 chrono = { workspace = true }
 
 [dependencies.async-nats]
-version = "0.44.1"
+version = "0.44.2"
 optional = true
 default-features = false
 features = ["ring"]
