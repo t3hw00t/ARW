@@ -41,7 +41,7 @@ Example (counts will vary as new endpoints land)
   "tagline": "Your private AI control room that can scale and share when you choose.",
   "description": "Agent Hub (ARW) lets you run your own team of AI helpers on your computer to research, plan, write, and build—while you stay in charge.",
   "service": "arw-server",
-  "version": "0.1.4",
+  "version": "0.2.0-dev",
   "role": "Home",
   "docs_url": "https://t3hw00t.github.io/ARW/",
   "counts": { "public": 62, "admin": 48, "total": 110 },
@@ -90,7 +90,7 @@ Example (truncated for brevity):
 ```json
 {
   "service": "arw-server",
-  "version": "0.1.4",
+  "version": "0.2.0-dev",
   "http": { "bind": "127.0.0.1", "port": 8091 },
   "docs_url": "https://t3hw00t.github.io/ARW/",
   "security_posture": null,

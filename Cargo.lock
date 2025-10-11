@@ -353,7 +353,7 @@ dependencies = [
 
 [[package]]
 name = "arw-cli"
-version = "0.1.4"
+version = "0.2.0-dev"
 dependencies = [
  "anyhow",
  "arw-core",
@@ -381,7 +381,7 @@ dependencies = [
 
 [[package]]
 name = "arw-connector"
-version = "0.1.4"
+version = "0.2.0-dev"
 dependencies = [
  "anyhow",
  "arw-core",
@@ -396,7 +396,7 @@ dependencies = [
 
 [[package]]
 name = "arw-core"
-version = "0.1.4"
+version = "0.2.0-dev"
 dependencies = [
  "anyhow",
  "arrow",
@@ -430,7 +430,7 @@ dependencies = [
 
 [[package]]
 name = "arw-events"
-version = "0.1.4"
+version = "0.2.0-dev"
 dependencies = [
  "arw-protocol",
  "async-nats",
@@ -444,7 +444,7 @@ dependencies = [
 
 [[package]]
 name = "arw-heuristics"
-version = "0.1.4"
+version = "0.2.0-dev"
 dependencies = [
  "serde",
  "serde_json",
@@ -452,7 +452,7 @@ dependencies = [
 
 [[package]]
 name = "arw-kernel"
-version = "0.1.4"
+version = "0.2.0-dev"
 dependencies = [
  "anyhow",
  "arw-events",
@@ -471,7 +471,7 @@ dependencies = [
 
 [[package]]
 name = "arw-launcher"
-version = "0.1.4"
+version = "0.2.0-dev"
 dependencies = [
  "anyhow",
  "arw-core",
@@ -491,7 +491,7 @@ dependencies = [
 
 [[package]]
 name = "arw-macros"
-version = "0.1.4"
+version = "0.2.0-dev"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -500,7 +500,7 @@ dependencies = [
 
 [[package]]
 name = "arw-memory-core"
-version = "0.1.4"
+version = "0.2.0-dev"
 dependencies = [
  "anyhow",
  "bytemuck",
@@ -515,7 +515,7 @@ dependencies = [
 
 [[package]]
 name = "arw-otel"
-version = "0.1.4"
+version = "0.2.0-dev"
 dependencies = [
  "arw-core",
  "metrics-exporter-opentelemetry",
@@ -531,7 +531,7 @@ dependencies = [
 
 [[package]]
 name = "arw-policy"
-version = "0.1.4"
+version = "0.2.0-dev"
 dependencies = [
  "anyhow",
  "cedar-policy",
@@ -541,7 +541,7 @@ dependencies = [
 
 [[package]]
 name = "arw-protocol"
-version = "0.1.4"
+version = "0.2.0-dev"
 dependencies = [
  "schemars 0.8.22",
  "serde",
@@ -551,7 +551,7 @@ dependencies = [
 
 [[package]]
 name = "arw-runtime"
-version = "0.1.4"
+version = "0.2.0-dev"
 dependencies = [
  "async-trait",
  "chrono",
@@ -562,7 +562,7 @@ dependencies = [
 
 [[package]]
 name = "arw-server"
-version = "0.1.4"
+version = "0.2.0-dev"
 dependencies = [
  "anyhow",
  "arw-core",
@@ -641,7 +641,7 @@ dependencies = [
 
 [[package]]
 name = "arw-tauri"
-version = "0.1.4"
+version = "0.2.0-dev"
 dependencies = [
  "anyhow",
  "directories",
@@ -660,11 +660,11 @@ dependencies = [
 
 [[package]]
 name = "arw-topics"
-version = "0.1.4"
+version = "0.2.0-dev"
 
 [[package]]
 name = "arw-wasi"
-version = "0.1.4"
+version = "0.2.0-dev"
 dependencies = [
  "anyhow",
  "arw-core",
@@ -7669,7 +7669,7 @@ dependencies = [
 
 [[package]]
 name = "snappy-bench"
-version = "0.1.4"
+version = "0.2.0-dev"
 dependencies = [
  "anyhow",
  "clap",

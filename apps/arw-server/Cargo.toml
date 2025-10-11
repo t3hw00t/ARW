@@ -1,6 +1,6 @@
 [package]
 name = "arw-server"
-version = "0.1.4"
+version = "0.2.0-dev"
 edition = "2021"
 license.workspace = true
 
@@ -15,18 +15,18 @@ serde_json = "1"
 chrono = { version = "0.4", features = ["serde"] }
 tracing = "0.1"
 metrics = "0.24"
-arw-kernel = { path = "../../crates/arw-kernel", version = "0.1.4", features = ["metrics"] }
-arw-events = { path = "../../crates/arw-events", version = "0.1.4" }
-arw-policy = { path = "../../crates/arw-policy", version = "0.1.4" }
-arw-wasi = { path = "../../crates/arw-wasi", version = "0.1.4" }
-arw-otel = { path = "../../crates/arw-otel", version = "0.1.4" }
-arw-core = { path = "../../crates/arw-core", version = "0.1.4" }
-arw-macros = { path = "../../crates/arw-macros", version = "0.1.4" }
-arw-topics = { path = "../../crates/arw-topics", version = "0.1.4" }
-arw-protocol = { path = "../../crates/arw-protocol", version = "0.1.4" }
-arw-heuristics = { path = "../../crates/arw-heuristics", version = "0.1.4" }
-arw-memory-core = { path = "../../crates/arw-memory-core", version = "0.1.4" }
-arw-runtime = { path = "../../crates/arw-runtime", version = "0.1.4" }
+arw-kernel = { path = "../../crates/arw-kernel", version = "0.2.0-dev", features = ["metrics"] }
+arw-events = { path = "../../crates/arw-events", version = "0.2.0-dev" }
+arw-policy = { path = "../../crates/arw-policy", version = "0.2.0-dev" }
+arw-wasi = { path = "../../crates/arw-wasi", version = "0.2.0-dev" }
+arw-otel = { path = "../../crates/arw-otel", version = "0.2.0-dev" }
+arw-core = { path = "../../crates/arw-core", version = "0.2.0-dev" }
+arw-macros = { path = "../../crates/arw-macros", version = "0.2.0-dev" }
+arw-topics = { path = "../../crates/arw-topics", version = "0.2.0-dev" }
+arw-protocol = { path = "../../crates/arw-protocol", version = "0.2.0-dev" }
+arw-heuristics = { path = "../../crates/arw-heuristics", version = "0.2.0-dev" }
+arw-memory-core = { path = "../../crates/arw-memory-core", version = "0.2.0-dev" }
+arw-runtime = { path = "../../crates/arw-runtime", version = "0.2.0-dev" }
 uuid = { version = "1", features = ["v4"] }
 tokio-stream = { version = "0.1", features = ["sync"] }
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }

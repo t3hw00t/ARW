@@ -4,7 +4,7 @@ Type: Reference
 
 Microsummary: Pointers to releases, changelog, and upgrade notes. Stable.
 
-- GitHub Releases: https://github.com/t3hw00t/ARW/releases
+- Historical downloads prior to `v0.1.4` have been removed from the tree; the GitHub Releases page remains read-only while `main` tracks the `0.2.0-dev` pre-release.
 - Changelog: see [CHANGELOG.md](https://github.com/t3hw00t/ARW/blob/main/CHANGELOG.md) in the repository root (follows Keep a Changelog + SemVer).
 - Upgrade notes: breaking changes and config/schema migrations are called out per release.
 

@@ -1,6 +1,6 @@
 [package]
 name = "arw-otel"
-version = "0.1.4"
+version = "0.2.0-dev"
 edition = "2021"
 license.workspace = true
 
@@ -19,7 +19,7 @@ tracing = { workspace = true }
 tracing-subscriber = { workspace = true, features = ["env-filter"] }
 tracing-appender = "0.2"
 once_cell = { workspace = true }
-arw-core = { path = "../arw-core", version = "0.1.4" }
+arw-core = { path = "../arw-core", version = "0.2.0-dev" }
 
 [dependencies.opentelemetry]
 version = "0.31"

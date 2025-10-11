@@ -8,7 +8,7 @@
 [![Container](https://img.shields.io/badge/ghcr-arw--server-blue?logo=docker)](https://ghcr.io/t3hw00t/arw-server)
 [![npm](https://img.shields.io/npm/v/%40arw%2Fclient?label=%40arw%2Fclient)](https://www.npmjs.com/package/@arw/client)
 [![License](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-informational)](#licensing)
-[![Release](https://img.shields.io/github/v/release/t3hw00t/ARW?display_name=tag)](https://github.com/t3hw00t/ARW/releases)
+[![Status](https://img.shields.io/badge/status-pre--release-purple)](#release-status)
 [![Windows x64 Installer](https://img.shields.io/badge/Windows%20x64-Installer-blue?logo=windows)](docs/guide/windows_install.md#installer-status)
 [![Windows ARM64 Installer](https://img.shields.io/badge/Windows%20ARM64-Installer-blue?logo=windows)](docs/guide/windows_install.md#installer-status)
 
@@ -29,9 +29,14 @@ Assistant quickstart → [Agent Onboarding](docs/ai/AGENT_ONBOARDING.md)
 - [Repo Map](docs/ai/REPO_MAP.md) - Directory overview for retrieval and navigation.
 - [Documentation Home](docs/index.md) - Product overview, guides, and reference docs.
 
+## Release Status
+- Legacy release bundles (<= `v0.1.4`) have been retired; no prebuilt downloads are published while we refocus on the next milestone.
+- The `main` branch now tracks the `0.2.0-dev` pre-release; GitHub Releases remain frozen until the next milestone cut.
+- Prefer source builds (or local packaging scripts) for testing and development during the pre-release cycle.
+
 ## Getting Started
 - Clone the repo and install Rust 1.90+ via `rustup`.
-- For a packaged install, download the latest release archive from GitHub Releases and run `scripts/first-run.{sh,ps1}`.
+- Prebuilt installers are currently unavailable; build locally with `scripts/dev.{sh,ps1} setup` or produce a bundle via `scripts/package.{sh,ps1}` if you need a portable archive.
 - For source builds, run `scripts/dev.{sh,ps1} setup` (defaults to headless + non-interactive `-Yes`) or follow docs/guide/quickstart.md; pass `--with-launcher` / `-WithLauncher` when desktop UI prerequisites are ready.
 - Prefer an all-in-one toolchain bootstrap? Install [mise](https://mise.jdx.dev) and run `mise install` to pin Rust 1.90, Python 3.12, Node.js 18, jq, and ripgrep; `mise run verify`, `mise run verify:fast`, and `mise run verify:ci` wrap the guardrail helpers.
 
@@ -45,7 +50,7 @@ Assistant quickstart → [Agent Onboarding](docs/ai/AGENT_ONBOARDING.md)
 - Docs: `mkdocs build --strict`, `scripts/dev.{sh,ps1} docs`, or `just docs-build` (requires Bash). Windows without Bash: `pwsh -ExecutionPolicy Bypass -File scripts\docgen.ps1` followed by `mkdocs build --strict`. Prefer task wrappers? Use `mise run docs:check` or `mise run docs:check:fast`.
 - Docs metadata: `python scripts/update_doc_metadata.py docs/<path>.md` refreshes the `Updated:` stamp after edits (add `--dry-run` to preview changes).
 - Docs toolchain: `mise run bootstrap:docs` (or `bash scripts/bootstrap_docs.sh`) installs the pinned MkDocs/Material stack. Generate an offline wheel bundle with `mise run docs:cache:build` (archive lands in `dist/docs-wheels.tar.gz`), then reuse it via `mise run bootstrap:docs -- --wheel-dir <path>`.
-- Release attachments include `docs-wheels.tar.gz`; download and extract to reuse with `scripts/bootstrap_docs.sh --wheel-dir <dir>` when mirroring the published bundle.
+- Need offline docs? Generate `docs-wheels.tar.gz` locally with `mise run docs:cache:build` (or `scripts/dev.sh docs-cache`) and reuse it via `scripts/bootstrap_docs.sh --wheel-dir <dir>`.
 
 ## Repository Layout
 - `crates/` - Core Rust libraries (protocol, kernel, policy, runtime, etc.).

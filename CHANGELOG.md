@@ -4,6 +4,7 @@ This project follows Keep a Changelog and Semantic Versioning. All notable chang
 
 ## [Unreleased]
 
+- Retired all published bundles through `v0.1.4`, refreshed the workspace to the `0.2.0-dev` pre-release train, and removed legacy artifacts from the tree.
 - Hardened bus fan-out to survive broadcast lag (SSE replay, metrics, and state observers now recover after channel overflows) and tightened filtered subscriber logging.
 - Auto-scale the action worker pool (defaults to roughly 2× host cores, configurable via `ARW_WORKERS` with an optional `ARW_WORKERS_MAX` cap) and added SQLite indexes for the actions table to keep queue drains fast as workloads grow.
 - Memory overlay persists embeddings in both JSON and a new binary `embed_blob` column; a background backfill task (`ARW_MEMORY_EMBED_BACKFILL_BATCH`) upgrades legacy rows in place, surfaces progress metrics, and keeps hybrid/vector searches from reparsing floats.

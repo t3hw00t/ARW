@@ -1,6 +1,6 @@
 [package]
 name = "arw-cli"
-version = "0.1.4"
+version = "0.2.0-dev"
 edition = "2021"
 license.workspace = true
 
@@ -8,8 +8,8 @@ license.workspace = true
 anyhow = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true, features = ["env-filter"] }
-arw-core = { path = "../../crates/arw-core", version = "0.1.4" }
-arw-runtime = { path = "../../crates/arw-runtime", version = "0.1.4" }
+arw-core = { path = "../../crates/arw-core", version = "0.2.0-dev" }
+arw-runtime = { path = "../../crates/arw-runtime", version = "0.2.0-dev" }
 serde_json = { workspace = true }
 serde = { workspace = true }
 base64 = { workspace = true }

@@ -43,16 +43,18 @@ scripts\dev.ps1 setup-agent
 
 This path pins `--headless --minimal --no-docs`, exports `ARW_DOCGEN_SKIP_BUILDS=1`, and compiles `arw-server` in the debug profile to keep turnaround short for autonomous runs (append `--with-cli` / `-WithCli` when you also need `arw-cli`). It also installs PyYAML via `pip` (setting `PIP_BREAK_SYSTEM_PACKAGES=1` when the host enforces PEP 668) so `scripts/dev.{sh,ps1} verify` can run without extra manual steps.
 
-### Option 1 — Portable bundle (fastest)
+### Option 1 — Portable bundle (self-built)
 
-1. Download the latest release archive from [GitHub Releases](https://github.com/t3hw00t/ARW/releases).
-2. Extract it and run the bundled helper:
+1. Build a bundle locally:
+   - Linux / macOS: `bash scripts/package.sh`
+   - Windows: `pwsh -ExecutionPolicy Bypass -File scripts\package.ps1`
+2. Extract the generated archive in `dist/` and run the bundled helper:
    - Linux / macOS: `./first-run.sh`
    - Windows: `pwsh -ExecutionPolicy Bypass -File .\first-run.ps1`
-     (use `Unblock-File .\first-run.ps1` first if Windows marks the download as blocked)
+     (run `Unblock-File .\first-run.ps1` first if Windows marks the download as blocked)
 3. The helper generates (or reuses) `state/admin-token.txt`, starts `arw-server`, and prints the Home view/Debug URLs. Append `--launcher` / `-Launcher` to launch the desktop Home view when the launcher binary is present, or `--new-token` / `-NewToken` to rotate credentials on demand.
 
-This path skips the Rust toolchain—perfect for quick evaluations or air-gapped installs that prefer prebuilt artifacts.
+No official bundles are published during the `0.2.0-dev` cycle, so this path is the quickest way to produce a portable archive without maintaining a full toolchain on the target machine.
 
 ### Option 2 — Build from source (Rust toolchain)
 

@@ -39,7 +39,7 @@ powershell -ExecutionPolicy Bypass -File scripts\start.ps1 -ServiceOnly -WaitHea
 - If the launcher isn’t built yet, the script attempts a `cargo build -p arw-launcher`.
 - If WebView2 is missing, you’ll see a friendly warning and the launcher may prompt to install it.
 - Service console: starts minimized by default to dodge antivirus heuristics; use `-HideWindow` to keep it fully hidden like previous versions.
-- Want to skip the toolchain entirely? Grab the latest portable `.zip` (and MSI when available) from [GitHub Releases](https://github.com/t3hw00t/ARW/releases), extract, and run `bin\arw-launcher.exe` / `bin\arw-server.exe`.
+- Want to skip the toolchain entirely? Generate a portable bundle with `pwsh -ExecutionPolicy Bypass -File scripts\package.ps1`, extract the archive under `dist/`, and run `bin\arw-launcher.exe` / `bin\arw-server.exe`.
 
 ## Install WebView2 (if needed)
 
@@ -74,7 +74,7 @@ This creates `dist/arw-<version>-windows-<arch>.zip` with:
   - `arw-launcher-x64.msi`
   - `arw-launcher-arm64.msi` (when built)
   Each MSI includes `arw-server.exe` and `arw-cli.exe` so the launcher can start the service out-of-the-box.
-- Current release status (2025-10-03): the latest tagged release (`v0.1.4` at the time of writing) publishes portable `.zip` bundles while the Windows installer gate is tightened. Check [GitHub Releases](https://github.com/t3hw00t/ARW/releases) for the newest tag. Generate an installer locally with `cargo dist build --target x86_64-pc-windows-msvc --installer --no-confirm` (or the ARM64 target) and run `scripts/windows-advanced-gate.ps1` to validate until signed MSIs return to the release page.
+- Current release status (2025-10-11): no public downloads are published while `main` tracks the `0.2.0-dev` pre-release. Generate installers locally with `cargo dist build --target x86_64-pc-windows-msvc --installer --no-confirm` (or the ARM64 target) and run `scripts/windows-advanced-gate.ps1` to validate during the freeze.
 - Signing: Code signing is supported in CI when a certificate is provided via secrets; unsigned packages still work but may show SmartScreen prompts. Always record the SHA-256 hash before distribution, for example: `Get-FileHash (Resolve-Path target\dist\*.msi) -Algorithm SHA256`.
 
 ## Winget (optional)

@@ -19,7 +19,7 @@ The cluster surfaces remain **preview**: APIs are admin-gated, subject to change
 - **Cluster Topics** – events like `cluster.node.advertise` and `cluster.node.changed` broadcast node state; subscribe via SSE for live dashboards.
 
 ## Prerequisites
-- Unified server version `>= 0.1.4` on all nodes. Build from the same commit or release tag.
+- Unified server version `0.2.0-dev` (or newer) on all nodes. Build from the same commit or archived tag when replaying older snapshots.
 - Stable network path between Home and Workers (direct TCP on `8091` or via reverse proxy). Optional NATS broker reachable if you plan to use shared queues/events.
 - Strong admin token exported on each node: `export ARW_ADMIN_TOKEN=$(openssl rand -hex 32)`.
 - Config overrides writable on each machine (for example `configs/default.toml` beside the binaries or `${ARW_STATE_DIR}/config.toml`).

@@ -32,7 +32,7 @@ bash scripts/start.sh --wait-health
 - `scripts/setup.sh` compiles `arw-server` (headless) and the Tauri launcher. The first build can take several minutes on a cold toolchain.
 - `scripts/start.sh` reuses `state/admin-token.txt` (or generates a token automatically), launches the service, waits for `/healthz`, and then opens the Home view if the launcher is available. Pass `--service-only` to skip the launcher, or `--admin-token` when you need to supply a specific credential.
 - The script exports `ARW_EGRESS_PROXY_ENABLE=1` and `ARW_DNS_GUARD_ENABLE=1` by default. Override them if you need a fully offline profile.
-- Prefer to skip compiling? Download the latest macOS portable `.zip` from [GitHub Releases](https://github.com/t3hw00t/ARW/releases), extract, and run `bin/arw-server` / `bin/arw-launcher`.
+- Prefer to skip compiling? Build a portable bundle with `bash scripts/package.sh`, then run `bin/arw-server` / `bin/arw-launcher` from the generated archive in `dist/`.
 
 ## Home view (Launcher) highlights
 
