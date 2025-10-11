@@ -4,7 +4,7 @@ title: Autonomy Lane Charter
 
 # Autonomy Lane Charter
 
-Updated: 2025-10-09
+Updated: 2025-10-11
 Type: Decision record
 Status: Accepted
 
@@ -29,7 +29,7 @@ Give trusted operators a predictable, high-signal way to let helpers run without
 
 ## Lane Contract
 
-- **Budgets** — The kernel enforces wall-clock, token, and spend budgets per run. Breaches emit `autonomy.budget.close_to_limit` events; hard stops emit `autonomy.budget.exhausted` followed by `autonomy.run.paused`. Update budgets through `POST /admin/autonomy/{lane}/budgets` (`dry_run:true` previews the change).
+- **Budgets** — The kernel enforces wall-clock, token, and spend budgets per run. Breaches emit `autonomy.budget.close_to_limit` events; hard stops emit `autonomy.budget.exhausted` followed by `autonomy.run.paused`. Update budgets through `arw-cli admin autonomy budgets --lane <lane_id> [...]` (falls back to `POST /admin/autonomy/{lane}/budgets`; include `dry_run:true` / `--dry-run` to preview the change).
 - **Destinations & I/O** — Destinations come from a manifest (`configs/autonomy/destinations.yaml`) that the lane references. DNS guard and the egress proxy enforce host/port limits; filesystem scope is restricted to the project workspace and declared mount points.
 - **Runtime & tools** — Runs may claim runtimes tagged `autonomy_ready=true`. The orchestrator denies tools without `tool.contract.autonomy=true` metadata or missing safety notes. High-risk logic units must declare rollback hooks before they can execute autonomously.
 - **Observation surface** — Every run streams a live ticker (objective, latest action, next planned step) and writes deltas to the shared event spine (`autonomy.tick.*`). Helpers document why decisions were taken via `world.belief` annotations.
@@ -37,9 +37,8 @@ Give trusted operators a predictable, high-signal way to let helpers run without
 
 ## Operator Controls
 
-- **Pause / Resume** — Trial Control Center exposes a single pause toggle wiring into `scheduler.pause_lane(lane_id)`. Resume requires operator authentication plus reason logging.
-- **Stop & Snapshot** — `Stop` flushes outstanding jobs. Operators capture a project snapshot manually (see the Autonomy Rollback Playbook) and record an `autonomy.run.stopped` event with the operator ID until the dedicated endpoint returns.
-- **Stop & Snapshot** — `Stop` flushes outstanding jobs via `POST /admin/autonomy/{lane}/stop` (records operator + reason and emits `autonomy.run.stopped`). Operators capture a fresh snapshot via `POST /projects/{proj}/snapshot` and record an `autonomy.run.stopped` event with the operator ID.
+- **Pause / Resume** — Trial Control Center exposes a single pause toggle wiring into `scheduler.pause_lane(lane_id)`. Resume requires operator authentication plus reason logging. Terminal-oriented operators can run `arw-cli admin autonomy pause --lane <lane_id>` and `arw-cli admin autonomy resume --lane <lane_id> [--mode guided|autonomous]` to record the same actions with explicit operator/reason metadata.
+- **Stop & Snapshot** — `Stop` flushes outstanding jobs whether triggered from Trial Control Center, `POST /admin/autonomy/{lane}/stop`, or `arw-cli admin autonomy stop --lane <lane_id> --operator <you> --reason <text>` (which records operator + reason and emits `autonomy.run.stopped`). Operators capture a fresh snapshot via `POST /projects/{proj}/snapshot` (or the Launcher shortcut) and record an `autonomy.run.stopped` event with the operator ID until the dedicated endpoint returns.
 - **Rollback** — Control bar links directly to the Runbook (see [ops/trials/autonomy_rollback_playbook.md](../ops/trials/autonomy_rollback_playbook.md)). Operators can invoke the automated recipe or the manual checklist.
 - **Escalation** — Pager channel receives structured alerts (`autonomy.alert.*`). Playbook lists escalation tree (primary operator → owner → security liaison).
 

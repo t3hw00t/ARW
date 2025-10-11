@@ -12,6 +12,7 @@ use csv::WriterBuilder;
 use json_patch::{patch as apply_json_patch, Patch as JsonPatch};
 use rand::RngCore;
 use reqwest::{blocking::Client, header::ACCEPT, StatusCode};
+use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Map as JsonMap, Value as JsonValue};
 use sha2::{Digest, Sha256};
@@ -243,6 +244,29 @@ enum AdminCmd {
         #[command(subcommand)]
         cmd: AdminIdentityCmd,
     },
+    /// Autonomy lane controls
+    Autonomy {
+        #[command(subcommand)]
+        cmd: AdminAutonomyCmd,
+    },
+}
+
+#[derive(Subcommand)]
+enum AdminAutonomyCmd {
+    /// List autonomy lanes
+    Lanes(AdminAutonomyListArgs),
+    /// Show details for a specific lane
+    Lane(AdminAutonomyShowArgs),
+    /// Pause a lane (halts scheduling and running jobs)
+    Pause(AdminAutonomyActionArgs),
+    /// Resume a lane (guided or autonomous mode)
+    Resume(AdminAutonomyResumeArgs),
+    /// Stop a lane and flush queued + in-flight jobs
+    Stop(AdminAutonomyActionArgs),
+    /// Flush queued or running jobs without changing mode
+    Flush(AdminAutonomyFlushArgs),
+    /// Update or clear lane budgets
+    Budgets(AdminAutonomyBudgetsArgs),
 }
 
 #[derive(Subcommand)]
@@ -489,6 +513,132 @@ enum AdminIdentityCmd {
     Rotate(AdminIdentityRotateArgs),
     /// Show the tenants manifest content
     Show(AdminIdentityShowArgs),
+}
+
+#[derive(Args, Clone)]
+struct AdminAutonomyBaseArgs {
+    /// Base URL of the service (e.g., http://127.0.0.1:8091)
+    #[arg(long, default_value = "http://127.0.0.1:8091")]
+    base: String,
+    /// Admin token; falls back to ARW_ADMIN_TOKEN env
+    #[arg(long)]
+    admin_token: Option<String>,
+    /// Timeout seconds when calling the API
+    #[arg(long, default_value_t = 5)]
+    timeout: u64,
+}
+
+impl AdminAutonomyBaseArgs {
+    fn base_url(&self) -> &str {
+        self.base.trim_end_matches('/')
+    }
+}
+
+#[derive(Args, Clone)]
+struct AdminAutonomyListArgs {
+    #[command(flatten)]
+    base: AdminAutonomyBaseArgs,
+    /// Emit raw JSON
+    #[arg(long)]
+    json: bool,
+    /// Pretty-print JSON output (requires --json)
+    #[arg(long, requires = "json")]
+    pretty: bool,
+}
+
+#[derive(Args, Clone)]
+struct AdminAutonomyShowArgs {
+    #[command(flatten)]
+    base: AdminAutonomyBaseArgs,
+    /// Lane identifier
+    #[arg(long)]
+    lane: String,
+    /// Emit raw JSON
+    #[arg(long)]
+    json: bool,
+    /// Pretty-print JSON output (requires --json)
+    #[arg(long, requires = "json")]
+    pretty: bool,
+}
+
+#[derive(Args, Clone)]
+struct AdminAutonomyActionArgs {
+    #[command(flatten)]
+    base: AdminAutonomyBaseArgs,
+    /// Lane identifier
+    #[arg(long)]
+    lane: String,
+    /// Operator identifier to record
+    #[arg(long)]
+    operator: Option<String>,
+    /// Reason for the action
+    #[arg(long)]
+    reason: Option<String>,
+}
+
+#[derive(Copy, Clone, ValueEnum)]
+enum AutonomyResumeMode {
+    Guided,
+    Autonomous,
+}
+
+#[derive(Args, Clone)]
+struct AdminAutonomyResumeArgs {
+    #[command(flatten)]
+    action: AdminAutonomyActionArgs,
+    /// Target mode after resuming
+    #[arg(long, value_enum, default_value_t = AutonomyResumeMode::Guided)]
+    mode: AutonomyResumeMode,
+}
+
+#[derive(Copy, Clone, ValueEnum)]
+enum AutonomyFlushState {
+    All,
+    Queued,
+    #[value(name = "in_flight")]
+    InFlight,
+}
+
+#[derive(Args, Clone)]
+struct AdminAutonomyFlushArgs {
+    #[command(flatten)]
+    base: AdminAutonomyBaseArgs,
+    /// Lane identifier
+    #[arg(long)]
+    lane: String,
+    /// Which jobs to flush
+    #[arg(long, value_enum, default_value_t = AutonomyFlushState::All)]
+    state: AutonomyFlushState,
+}
+
+#[derive(Args, Clone)]
+struct AdminAutonomyBudgetsArgs {
+    #[command(flatten)]
+    base: AdminAutonomyBaseArgs,
+    /// Lane identifier
+    #[arg(long)]
+    lane: String,
+    /// Remaining wall clock seconds budget
+    #[arg(long)]
+    wall_clock_secs: Option<u64>,
+    /// Remaining tokens budget
+    #[arg(long)]
+    tokens: Option<u64>,
+    /// Remaining spend budget (in cents)
+    #[arg(long)]
+    spend_cents: Option<u64>,
+    /// Clear budgets instead of updating them
+    #[arg(long)]
+    clear: bool,
+    /// Preview without persisting
+    #[arg(long)]
+    dry_run: bool,
+    /// Emit raw JSON
+    #[arg(long)]
+    json: bool,
+    /// Pretty-print JSON output (requires --json)
+    #[arg(long, requires = "json")]
+    pretty: bool,
 }
 
 #[derive(Args, Clone)]
@@ -1907,6 +2057,50 @@ fn main() {
                     }
                 },
             },
+            AdminCmd::Autonomy { cmd } => match cmd {
+                AdminAutonomyCmd::Lanes(args) => {
+                    if let Err(e) = cmd_admin_autonomy_lanes(&args) {
+                        eprintln!("{}", e);
+                        std::process::exit(1);
+                    }
+                }
+                AdminAutonomyCmd::Lane(args) => {
+                    if let Err(e) = cmd_admin_autonomy_lane(&args) {
+                        eprintln!("{}", e);
+                        std::process::exit(1);
+                    }
+                }
+                AdminAutonomyCmd::Pause(args) => {
+                    if let Err(e) = cmd_admin_autonomy_pause(&args) {
+                        eprintln!("{}", e);
+                        std::process::exit(1);
+                    }
+                }
+                AdminAutonomyCmd::Resume(args) => {
+                    if let Err(e) = cmd_admin_autonomy_resume(&args) {
+                        eprintln!("{}", e);
+                        std::process::exit(1);
+                    }
+                }
+                AdminAutonomyCmd::Stop(args) => {
+                    if let Err(e) = cmd_admin_autonomy_stop(&args) {
+                        eprintln!("{}", e);
+                        std::process::exit(1);
+                    }
+                }
+                AdminAutonomyCmd::Flush(args) => {
+                    if let Err(e) = cmd_admin_autonomy_flush(&args) {
+                        eprintln!("{}", e);
+                        std::process::exit(1);
+                    }
+                }
+                AdminAutonomyCmd::Budgets(args) => {
+                    if let Err(e) = cmd_admin_autonomy_budgets(&args) {
+                        eprintln!("{}", e);
+                        std::process::exit(1);
+                    }
+                }
+            },
             AdminCmd::Review { cmd } => match cmd {
                 AdminReviewCmd::Quarantine { cmd } => match cmd {
                     AdminReviewQuarantineCmd::List(args) => {
@@ -2686,6 +2880,532 @@ fn cmd_admin_identity_show(args: &AdminIdentityShowArgs) -> Result<()> {
     };
     render_identity_snapshot(&snapshot);
     Ok(())
+}
+
+fn cmd_admin_autonomy_lanes(args: &AdminAutonomyListArgs) -> Result<()> {
+    let token = resolve_admin_token(&args.base.admin_token);
+    let client = Client::builder()
+        .timeout(Duration::from_secs(args.base.timeout))
+        .build()
+        .context("building HTTP client")?;
+    let base = args.base.base_url();
+    let lanes = fetch_autonomy_lanes(&client, base, token.as_deref())?;
+    if args.json {
+        let value = serde_json::to_value(&lanes).context("serializing autonomy lanes to JSON")?;
+        if args.pretty {
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&value).unwrap_or_else(|_| value.to_string())
+            );
+        } else {
+            println!(
+                "{}",
+                serde_json::to_string(&value).unwrap_or_else(|_| value.to_string())
+            );
+        }
+        return Ok(());
+    }
+    render_autonomy_lane_list(&lanes.lanes);
+    Ok(())
+}
+
+fn cmd_admin_autonomy_lane(args: &AdminAutonomyShowArgs) -> Result<()> {
+    let token = resolve_admin_token(&args.base.admin_token);
+    let client = Client::builder()
+        .timeout(Duration::from_secs(args.base.timeout))
+        .build()
+        .context("building HTTP client")?;
+    let base = args.base.base_url();
+    let lane = fetch_autonomy_lane(&client, base, token.as_deref(), &args.lane)?;
+    if args.json {
+        let value = serde_json::to_value(&lane).context("serializing autonomy lane to JSON")?;
+        if args.pretty {
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&value).unwrap_or_else(|_| value.to_string())
+            );
+        } else {
+            println!(
+                "{}",
+                serde_json::to_string(&value).unwrap_or_else(|_| value.to_string())
+            );
+        }
+        return Ok(());
+    }
+    render_autonomy_lane_detail(&lane.lane);
+    Ok(())
+}
+
+fn cmd_admin_autonomy_pause(args: &AdminAutonomyActionArgs) -> Result<()> {
+    let token = resolve_admin_token(&args.base.admin_token);
+    let client = Client::builder()
+        .timeout(Duration::from_secs(args.base.timeout))
+        .build()
+        .context("building HTTP client")?;
+    let base = args.base.base_url();
+    let mut payload = JsonMap::new();
+    if let Some(operator) = sanitize_option_string(&args.operator) {
+        payload.insert("operator".into(), JsonValue::String(operator));
+    }
+    if let Some(reason) = sanitize_option_string(&args.reason) {
+        payload.insert("reason".into(), JsonValue::String(reason));
+    }
+    let lane = post_autonomy_action(
+        &client,
+        base,
+        token.as_deref(),
+        &args.lane,
+        "pause",
+        payload,
+    )?;
+    println!("Lane '{}' paused.", lane.lane_id);
+    render_autonomy_lane_detail(&lane);
+    Ok(())
+}
+
+fn cmd_admin_autonomy_resume(args: &AdminAutonomyResumeArgs) -> Result<()> {
+    let token = resolve_admin_token(&args.action.base.admin_token);
+    let client = Client::builder()
+        .timeout(Duration::from_secs(args.action.base.timeout))
+        .build()
+        .context("building HTTP client")?;
+    let base = args.action.base.base_url();
+    let mut payload = JsonMap::new();
+    if let Some(operator) = sanitize_option_string(&args.action.operator) {
+        payload.insert("operator".into(), JsonValue::String(operator));
+    }
+    if let Some(reason) = sanitize_option_string(&args.action.reason) {
+        payload.insert("reason".into(), JsonValue::String(reason));
+    }
+    let mode_str = match args.mode {
+        AutonomyResumeMode::Guided => "guided",
+        AutonomyResumeMode::Autonomous => "autonomous",
+    };
+    payload.insert("mode".into(), JsonValue::String(mode_str.to_string()));
+    let lane = post_autonomy_action(
+        &client,
+        base,
+        token.as_deref(),
+        &args.action.lane,
+        "resume",
+        payload,
+    )?;
+    println!("Lane '{}' resumed (mode: {}).", lane.lane_id, lane.mode);
+    render_autonomy_lane_detail(&lane);
+    Ok(())
+}
+
+fn cmd_admin_autonomy_stop(args: &AdminAutonomyActionArgs) -> Result<()> {
+    let token = resolve_admin_token(&args.base.admin_token);
+    let client = Client::builder()
+        .timeout(Duration::from_secs(args.base.timeout))
+        .build()
+        .context("building HTTP client")?;
+    let base = args.base.base_url();
+    let mut payload = JsonMap::new();
+    if let Some(operator) = sanitize_option_string(&args.operator) {
+        payload.insert("operator".into(), JsonValue::String(operator));
+    }
+    if let Some(reason) = sanitize_option_string(&args.reason) {
+        payload.insert("reason".into(), JsonValue::String(reason));
+    }
+    let lane = post_autonomy_action(&client, base, token.as_deref(), &args.lane, "stop", payload)?;
+    println!(
+        "Lane '{}' stopped and remaining jobs flushed.",
+        lane.lane_id
+    );
+    render_autonomy_lane_detail(&lane);
+    Ok(())
+}
+
+fn cmd_admin_autonomy_flush(args: &AdminAutonomyFlushArgs) -> Result<()> {
+    let token = resolve_admin_token(&args.base.admin_token);
+    let client = Client::builder()
+        .timeout(Duration::from_secs(args.base.timeout))
+        .build()
+        .context("building HTTP client")?;
+    let base = args.base.base_url();
+    let lane = delete_autonomy_jobs(&client, base, token.as_deref(), &args.lane, args.state)?;
+    let scope = match args.state {
+        AutonomyFlushState::All => "all",
+        AutonomyFlushState::Queued => "queued",
+        AutonomyFlushState::InFlight => "in_flight",
+    };
+    println!("Lane '{}' flush complete (scope: {}).", lane.lane_id, scope);
+    render_autonomy_lane_detail(&lane);
+    Ok(())
+}
+
+fn cmd_admin_autonomy_budgets(args: &AdminAutonomyBudgetsArgs) -> Result<()> {
+    if !args.clear
+        && args.wall_clock_secs.is_none()
+        && args.tokens.is_none()
+        && args.spend_cents.is_none()
+    {
+        bail!("provide at least one budget flag (--wall-clock-secs, --tokens, --spend-cents) or --clear");
+    }
+
+    let token = resolve_admin_token(&args.base.admin_token);
+    let client = Client::builder()
+        .timeout(Duration::from_secs(args.base.timeout))
+        .build()
+        .context("building HTTP client")?;
+    let base = args.base.base_url();
+
+    let mut payload = JsonMap::new();
+    if args.clear {
+        payload.insert("clear".into(), JsonValue::Bool(true));
+    } else {
+        if let Some(value) = args.wall_clock_secs {
+            payload.insert("wall_clock_secs".into(), JsonValue::from(value));
+        }
+        if let Some(value) = args.tokens {
+            payload.insert("tokens".into(), JsonValue::from(value));
+        }
+        if let Some(value) = args.spend_cents {
+            payload.insert("spend_cents".into(), JsonValue::from(value));
+        }
+    }
+    if args.dry_run {
+        payload.insert("dry_run".into(), JsonValue::Bool(true));
+    }
+
+    let response = post_autonomy_budgets(
+        &client,
+        base,
+        token.as_deref(),
+        &args.lane,
+        JsonValue::Object(payload),
+    )?;
+
+    if args.json {
+        let value =
+            serde_json::to_value(&response).context("serializing autonomy budgets response")?;
+        if args.pretty {
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&value).unwrap_or_else(|_| value.to_string())
+            );
+        } else {
+            println!(
+                "{}",
+                serde_json::to_string(&value).unwrap_or_else(|_| value.to_string())
+            );
+        }
+        return Ok(());
+    }
+
+    if response.dry_run {
+        println!(
+            "Dry-run preview for lane '{}'; no budgets persisted.",
+            response.lane
+        );
+    } else {
+        println!("Budgets updated for lane '{}'.", response.lane);
+    }
+    if let Some(snapshot) = response.snapshot {
+        render_autonomy_lane_detail(&snapshot);
+    } else {
+        println!("(No lane snapshot returned by the server.)");
+    }
+    Ok(())
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct CliAutonomyBudgets {
+    #[serde(default)]
+    wall_clock_remaining_secs: Option<u64>,
+    #[serde(default)]
+    tokens_remaining: Option<u64>,
+    #[serde(default)]
+    spend_remaining_cents: Option<u64>,
+}
+
+fn default_autonomy_mode() -> String {
+    "guided".to_string()
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct CliAutonomyLane {
+    lane_id: String,
+    #[serde(default = "default_autonomy_mode")]
+    mode: String,
+    #[serde(default)]
+    active_jobs: u64,
+    #[serde(default)]
+    queued_jobs: u64,
+    #[serde(default)]
+    last_event: Option<String>,
+    #[serde(default)]
+    last_operator: Option<String>,
+    #[serde(default)]
+    last_reason: Option<String>,
+    #[serde(default)]
+    updated_ms: Option<u64>,
+    #[serde(default)]
+    budgets: Option<CliAutonomyBudgets>,
+    #[serde(default)]
+    alerts: Vec<String>,
+    #[serde(default)]
+    last_budget_update_ms: Option<u64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct CliAutonomyLanesResponse {
+    lanes: Vec<CliAutonomyLane>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct CliAutonomyLaneEnvelope {
+    lane: CliAutonomyLane,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct CliAutonomyBudgetsEnvelope {
+    ok: bool,
+    lane: String,
+    #[serde(default)]
+    snapshot: Option<CliAutonomyLane>,
+    #[serde(default)]
+    dry_run: bool,
+}
+
+fn fetch_autonomy_lanes(
+    client: &Client,
+    base: &str,
+    token: Option<&str>,
+) -> Result<CliAutonomyLanesResponse> {
+    let url = format!("{}/state/autonomy/lanes", base);
+    let mut req = client.get(&url);
+    req = with_admin_headers(req, token);
+    let resp = req.send().with_context(|| format!("requesting {}", url))?;
+    let status = resp.status();
+    let body = resp.text().context("reading autonomy lanes response")?;
+    parse_admin_response(status, body, &url)
+}
+
+fn fetch_autonomy_lane(
+    client: &Client,
+    base: &str,
+    token: Option<&str>,
+    lane: &str,
+) -> Result<CliAutonomyLaneEnvelope> {
+    let url = format!("{}/state/autonomy/lanes/{}", base, lane);
+    let mut req = client.get(&url);
+    req = with_admin_headers(req, token);
+    let resp = req.send().with_context(|| format!("requesting {}", url))?;
+    let status = resp.status();
+    let body = resp.text().context("reading autonomy lane response")?;
+    parse_admin_response(status, body, &url)
+}
+
+fn post_autonomy_action(
+    client: &Client,
+    base: &str,
+    token: Option<&str>,
+    lane: &str,
+    action: &str,
+    payload: JsonMap<String, JsonValue>,
+) -> Result<CliAutonomyLane> {
+    let url = format!("{}/admin/autonomy/{}/{}", base, lane, action);
+    let mut req = client.post(&url);
+    req = with_admin_headers(req, token);
+    let req = req.json(&JsonValue::Object(payload));
+    let resp = req.send().with_context(|| format!("requesting {}", url))?;
+    let status = resp.status();
+    let body = resp.text().context("reading autonomy action response")?;
+    let envelope: CliAutonomyLaneEnvelope = parse_admin_response(status, body, &url)?;
+    Ok(envelope.lane)
+}
+
+fn delete_autonomy_jobs(
+    client: &Client,
+    base: &str,
+    token: Option<&str>,
+    lane: &str,
+    scope: AutonomyFlushState,
+) -> Result<CliAutonomyLane> {
+    let scope_param = match scope {
+        AutonomyFlushState::All => "all",
+        AutonomyFlushState::Queued => "queued",
+        AutonomyFlushState::InFlight => "in_flight",
+    };
+    let url = format!(
+        "{}/admin/autonomy/{}/jobs?state={}",
+        base, lane, scope_param
+    );
+    let mut req = client.delete(&url);
+    req = with_admin_headers(req, token);
+    let resp = req.send().with_context(|| format!("requesting {}", url))?;
+    let status = resp.status();
+    let body = resp.text().context("reading autonomy flush response")?;
+    let envelope: CliAutonomyLaneEnvelope = parse_admin_response(status, body, &url)?;
+    Ok(envelope.lane)
+}
+
+fn post_autonomy_budgets(
+    client: &Client,
+    base: &str,
+    token: Option<&str>,
+    lane: &str,
+    payload: JsonValue,
+) -> Result<CliAutonomyBudgetsEnvelope> {
+    let url = format!("{}/admin/autonomy/{}/budgets", base, lane);
+    let mut req = client.post(&url);
+    req = with_admin_headers(req, token);
+    let req = req.json(&payload);
+    let resp = req.send().with_context(|| format!("requesting {}", url))?;
+    let status = resp.status();
+    let body = resp.text().context("reading autonomy budgets response")?;
+    parse_admin_response(status, body, &url)
+}
+
+fn parse_admin_response<T>(status: StatusCode, body: String, url: &str) -> Result<T>
+where
+    T: DeserializeOwned,
+{
+    if status == StatusCode::UNAUTHORIZED {
+        bail!("unauthorized: provide --admin-token or set ARW_ADMIN_TOKEN");
+    }
+    if !status.is_success() {
+        bail!("{} returned {}: {}", url, status, body);
+    }
+    serde_json::from_str(&body).with_context(|| format!("parsing response from {}", url))
+}
+
+fn sanitize_option_string(value: &Option<String>) -> Option<String> {
+    value
+        .as_ref()
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty())
+        .map(|s| s.to_string())
+}
+
+fn render_autonomy_lane_list(lanes: &[CliAutonomyLane]) {
+    if lanes.is_empty() {
+        println!("No autonomy lanes tracked yet.");
+        return;
+    }
+    let mut rows = lanes.to_vec();
+    rows.sort_by(|a, b| a.lane_id.cmp(&b.lane_id));
+    println!(
+        "{:<24} {:<11} {:>6} {:>6} {:<18} {:<20} Alerts / Budgets",
+        "Lane", "Mode", "Active", "Queued", "Last Event", "Updated"
+    );
+    for lane in rows {
+        let last_event = lane.last_event.as_deref().unwrap_or("-");
+        let updated = format_timestamp_ms(lane.updated_ms);
+        let mut summary_parts: Vec<String> = Vec::new();
+        if !lane.alerts.is_empty() {
+            summary_parts.push(format!("alerts: {}", lane.alerts.join("; ")));
+        }
+        if let Some(budgets) = lane.budgets.as_ref() {
+            let text = budgets_summary(budgets);
+            if text != "n/a" {
+                summary_parts.push(format!("budgets {}", text));
+            }
+        }
+        let summary = if summary_parts.is_empty() {
+            "-".to_string()
+        } else {
+            summary_parts.join(" | ")
+        };
+        println!(
+            "{:<24} {:<11} {:>6} {:>6} {:<18} {:<20} {}",
+            lane.lane_id,
+            lane.mode,
+            lane.active_jobs,
+            lane.queued_jobs,
+            last_event,
+            updated,
+            summary
+        );
+    }
+}
+
+fn render_autonomy_lane_detail(lane: &CliAutonomyLane) {
+    println!("Lane           : {}", lane.lane_id);
+    println!("Mode           : {}", lane.mode);
+    println!("Active jobs    : {}", lane.active_jobs);
+    println!("Queued jobs    : {}", lane.queued_jobs);
+    println!(
+        "Last event     : {}",
+        lane.last_event.as_deref().unwrap_or("-")
+    );
+    println!(
+        "Last operator  : {}",
+        lane.last_operator.as_deref().unwrap_or("-")
+    );
+    println!(
+        "Last reason    : {}",
+        lane.last_reason.as_deref().unwrap_or("-")
+    );
+    println!("Updated        : {}", format_timestamp_ms(lane.updated_ms));
+    if !lane.alerts.is_empty() {
+        println!("Alerts         : {}", lane.alerts.join("; "));
+    } else {
+        println!("Alerts         : none");
+    }
+    if let Some(budgets) = lane.budgets.as_ref() {
+        println!("Budgets        : {}", budgets_summary(budgets));
+        println!(
+            "  Wall clock    : {}",
+            budgets
+                .wall_clock_remaining_secs
+                .map(|v| format!("{}s", v))
+                .unwrap_or_else(|| "n/a".into())
+        );
+        println!(
+            "  Tokens        : {}",
+            budgets
+                .tokens_remaining
+                .map(|v| v.to_string())
+                .unwrap_or_else(|| "n/a".into())
+        );
+        println!(
+            "  Spend         : {}",
+            budgets
+                .spend_remaining_cents
+                .map(format_spend_cents)
+                .unwrap_or_else(|| "n/a".into())
+        );
+        println!(
+            "  Updated at    : {}",
+            format_timestamp_ms(lane.last_budget_update_ms)
+        );
+    } else {
+        println!("Budgets        : none");
+    }
+}
+
+fn format_timestamp_ms(ms: Option<u64>) -> String {
+    ms.and_then(|value| Local.timestamp_millis_opt(value as i64).single())
+        .map(|dt| dt.format("%Y-%m-%d %H:%M:%S").to_string())
+        .unwrap_or_else(|| "-".into())
+}
+
+fn budgets_summary(budgets: &CliAutonomyBudgets) -> String {
+    let mut parts: Vec<String> = Vec::new();
+    if let Some(value) = budgets.wall_clock_remaining_secs {
+        parts.push(format!("wall={}s", value));
+    }
+    if let Some(value) = budgets.tokens_remaining {
+        parts.push(format!("tokens={}", value));
+    }
+    if let Some(value) = budgets.spend_remaining_cents {
+        parts.push(format!("spend={}", format_spend_cents(value)));
+    }
+    if parts.is_empty() {
+        "n/a".to_string()
+    } else {
+        parts.join(" ")
+    }
+}
+
+fn format_spend_cents(cents: u64) -> String {
+    let dollars = cents / 100;
+    let remainder = cents % 100;
+    format!("${}.{:02}", dollars, remainder)
 }
 
 fn cmd_admin_egress_scopes(args: &AdminEgressScopesArgs) -> Result<()> {
@@ -10266,5 +10986,45 @@ mod tests {
         assert!(summary.contains("max 45 s"));
         assert!(summary.contains("limit 1.0 MB"));
         assert!(summary.contains("payload>limit 2"));
+    }
+
+    #[test]
+    fn budgets_summary_reports_n_a_when_empty() {
+        let budgets = CliAutonomyBudgets {
+            wall_clock_remaining_secs: None,
+            tokens_remaining: None,
+            spend_remaining_cents: None,
+        };
+        assert_eq!(budgets_summary(&budgets), "n/a");
+    }
+
+    #[test]
+    fn budgets_summary_formats_present_fields() {
+        let budgets = CliAutonomyBudgets {
+            wall_clock_remaining_secs: Some(90),
+            tokens_remaining: Some(12),
+            spend_remaining_cents: Some(1_505),
+        };
+        assert_eq!(budgets_summary(&budgets), "wall=90s tokens=12 spend=$15.05");
+    }
+
+    #[test]
+    fn format_spend_cents_formats_two_decimal_places() {
+        assert_eq!(format_spend_cents(0), "$0.00");
+        assert_eq!(format_spend_cents(7), "$0.07");
+        assert_eq!(format_spend_cents(150), "$1.50");
+        assert_eq!(format_spend_cents(12_305), "$123.05");
+    }
+
+    #[test]
+    fn format_timestamp_ms_handles_some_and_none() {
+        let expected = Local
+            .timestamp_millis_opt(0)
+            .single()
+            .expect("timestamp")
+            .format("%Y-%m-%d %H:%M:%S")
+            .to_string();
+        assert_eq!(format_timestamp_ms(Some(0)), expected);
+        assert_eq!(format_timestamp_ms(None), "-");
     }
 }

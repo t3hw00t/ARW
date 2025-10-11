@@ -3,7 +3,7 @@ title: CLI Guide
 ---
 
 # CLI Guide
-Updated: 2025-10-09
+Updated: 2025-10-11
 Type: How‑to
 
 Goal-oriented tasks using the `arw-cli` binary. This guide shows common commands with copy‑pasteable examples and flags you’re likely to want.
@@ -88,6 +88,17 @@ Policy Capsules
   - Preview: `arw-cli capsule teardown --id capsule-http --dry-run`
   - Remove all: `arw-cli capsule teardown --all --reason "reset misconfigured policy"`
   - Combine with `--json` to capture audit log entries.
+
+Autonomy Lanes
+- List current lanes and summaries: `arw-cli admin autonomy lanes --base http://127.0.0.1:8091 --admin-token $ARW_ADMIN_TOKEN`
+- Inspect a specific lane (JSON ready): `arw-cli admin autonomy lane --lane trial-g4-autonomy --base http://127.0.0.1:8091 --admin-token $ARW_ADMIN_TOKEN --json --pretty`
+- Pause and resume with operator metadata:
+  - Pause: `arw-cli admin autonomy pause --lane trial-g4-autonomy --operator sevi --reason "Investigating drift"`
+  - Resume to guided mode: `arw-cli admin autonomy resume --lane trial-g4-autonomy --mode guided --operator sevi --reason "Rollback complete"`
+- Stop and flush all queued/in-flight jobs: `arw-cli admin autonomy stop --lane trial-g4-autonomy --operator sevi --reason "Budget exhausted"`
+- Flush only queued jobs (leave running work for investigation): `arw-cli admin autonomy flush --lane trial-g4-autonomy --state queued`
+- Preview updated budgets without persisting: `arw-cli admin autonomy budgets --lane trial-g4-autonomy --wall-clock-secs 600 --tokens 25000 --dry-run`
+- Apply new budgets with spend guardrails: `arw-cli admin autonomy budgets --lane trial-g4-autonomy --wall-clock-secs 900 --tokens 30000 --spend-cents 1500 --base http://127.0.0.1:8091 --admin-token $ARW_ADMIN_TOKEN`
 
 Shell Completions
 - Generate completions for your shell and either print to stdout or write to a directory:

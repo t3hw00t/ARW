@@ -1,5 +1,5 @@
 # CLI Reference
-Updated: 2025-10-07
+Updated: 2025-10-11
 Type: Reference
 
 Microsummary: Commands, subcommands, and flags for `arw-cli` with pointers to tutorials. Beta.
@@ -26,6 +26,13 @@ Commands (summary)
 - `arw-cli runtime bundles install [--dir PATH] [--remote] [--dest DIR] [--artifact-kind KIND] [--artifact-format FORMAT] [--force] [--dry-run] <bundle-id>...` — download bundle artifacts into the managed runtime directory (defaults to `<state_dir>/runtime/bundles`)
 - `arw-cli runtime bundles import --bundle <id> [--dest DIR] [--metadata FILE] [--force] [--dry-run] <path>...` — copy local archives or directories into the managed runtime directory for offline installs
 - `arw-cli runtime bundles rollback --bundle <id> [--dest DIR] [--revision REV] [--list] [--dry-run] [--json {--pretty}]` — list available revisions and restore a bundle from the local history snapshot (JSON mode works for both `--list` and rollback actions)
+- `arw-cli admin autonomy lanes [--json {--pretty}]` — list autonomy lanes with alert and budget summaries.
+- `arw-cli admin autonomy lane --lane <id> [--json {--pretty}]` — inspect a specific lane for current mode, jobs, alerts, and budgets.
+- `arw-cli admin autonomy pause --lane <id> [--operator NAME] [--reason TEXT]` — pause scheduling and running jobs under a lane.
+- `arw-cli admin autonomy resume --lane <id> [--mode guided|autonomous] [--operator NAME] [--reason TEXT]` — resume a lane in guided or autonomous mode.
+- `arw-cli admin autonomy stop --lane <id> [--operator NAME] [--reason TEXT]` — stop a lane and flush queued + in-flight jobs.
+- `arw-cli admin autonomy flush --lane <id> [--state all|queued|in_flight]` — clear queued or running jobs without changing the lane mode.
+- `arw-cli admin autonomy budgets --lane <id> [--wall-clock-secs N] [--tokens N] [--spend-cents N] [--clear] [--dry-run] [--json {--pretty}]` — preview or persist lane budgets.
 
 See the [CLI Guide](../guide/cli.md) for examples. Use `--help` on any command for details.
 

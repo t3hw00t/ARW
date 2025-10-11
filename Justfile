@@ -419,8 +419,8 @@ release-tag v:
   echo "Done. CI will build/publish artifacts for $v.";
   '
 
-# Meta: verify workspace (fmt, clippy, tests, docs, event kinds)
-verify:
+# Meta: manual workspace verify (fmt, clippy, tests, docs, event kinds)
+verify-manual:
   cargo fmt --all -- --check
   cargo clippy --workspace --all-targets -- -D warnings
   cargo test --workspace --locked
