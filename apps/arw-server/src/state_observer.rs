@@ -4,6 +4,7 @@ use once_cell::sync::OnceCell;
 use serde_json::{json, Value};
 use std::collections::VecDeque;
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::RwLock;
 
@@ -55,9 +56,9 @@ pub(crate) fn observations_version_value() -> u64 {
     observations_version().load(Ordering::Relaxed)
 }
 
-fn beliefs_store() -> &'static RwLock<Vec<Value>> {
-    static BELIEFS: OnceCell<RwLock<Vec<Value>>> = OnceCell::new();
-    BELIEFS.get_or_init(|| RwLock::new(Vec::new()))
+fn beliefs_store() -> &'static RwLock<Arc<[Value]>> {
+    static BELIEFS: OnceCell<RwLock<Arc<[Value]>>> = OnceCell::new();
+    BELIEFS.get_or_init(|| RwLock::new(Arc::new([])))
 }
 
 fn beliefs_version() -> &'static AtomicU64 {
@@ -137,7 +138,7 @@ async fn update_beliefs(env: &Envelope) {
             list.push(env.payload.clone());
         }
         let mut guard = beliefs_store().write().await;
-        *guard = list;
+        *guard = Arc::from(list);
         beliefs_version().fetch_add(1, Ordering::Relaxed);
     }
 }
@@ -246,7 +247,7 @@ impl StoredObservation {
     }
 }
 
-pub(crate) async fn beliefs_snapshot() -> (u64, Vec<Value>) {
+pub(crate) async fn beliefs_snapshot() -> (u64, Arc<[Value]>) {
     let version = beliefs_version().load(Ordering::Relaxed);
     let items = beliefs_store().read().await.clone();
     (version, items)
@@ -285,9 +286,9 @@ pub(crate) async fn reset_for_tests() {
         guard.clear();
     }
 
-    async fn clear_vec_store(lock: &RwLock<Vec<Value>>) {
+    async fn clear_vec_store(lock: &RwLock<Arc<[Value]>>) {
         let mut guard = lock.write().await;
-        guard.clear();
+        *guard = Arc::new([]);
     }
 
     clear_store(observations_store()).await;

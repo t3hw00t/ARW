@@ -749,11 +749,26 @@ mod tests {
             ..Default::default()
         }
         .into_insert_owned();
-        state
+        let (inserted_id, inserted_record) = state
             .kernel()
-            .insert_memory_async(insert_owned)
+            .insert_memory_with_record_async(insert_owned)
             .await
             .expect("insert memory");
+        assert_eq!(
+            inserted_record.get("id").and_then(Value::as_str),
+            Some(inserted_id.as_str()),
+        );
+        assert_eq!(
+            inserted_record.get("lane").and_then(Value::as_str),
+            Some("semantic"),
+        );
+        assert_eq!(
+            inserted_record
+                .get("value")
+                .and_then(|v| v.get("text"))
+                .and_then(Value::as_str),
+            Some("focus test"),
+        );
 
         let app = Router::new()
             .route("/state/memory/recent", get(state_memory_recent))
@@ -829,11 +844,23 @@ mod tests {
             ..Default::default()
         }
         .into_insert_owned();
-        state
+        let (inserted_id, inserted_record) = state
             .kernel()
-            .insert_memory_async(insert_owned)
+            .insert_memory_with_record_async(insert_owned)
             .await
             .expect("insert memory");
+        assert_eq!(
+            inserted_record.get("id").and_then(Value::as_str),
+            Some(inserted_id.as_str()),
+        );
+        assert_eq!(
+            inserted_record.get("lane").and_then(Value::as_str),
+            Some("short_term"),
+        );
+        assert!(inserted_record
+            .get("value")
+            .and_then(|v| v.get("payload_summary"))
+            .is_some());
 
         let app = Router::new()
             .route("/state/memory/modular", get(state_memory_modular))
@@ -873,11 +900,19 @@ mod tests {
             ..Default::default()
         }
         .into_insert_owned();
-        state
+        let (short_id, short_record) = state
             .kernel()
-            .insert_memory_async(insert_short)
+            .insert_memory_with_record_async(insert_short)
             .await
             .expect("insert short-term memory");
+        assert_eq!(
+            short_record.get("id").and_then(Value::as_str),
+            Some(short_id.as_str()),
+        );
+        assert_eq!(
+            short_record.get("lane").and_then(Value::as_str),
+            Some("short_term"),
+        );
 
         let insert_semantic = memory_service::MemoryUpsertInput {
             lane: "semantic".to_string(),
@@ -886,11 +921,19 @@ mod tests {
             ..Default::default()
         }
         .into_insert_owned();
-        state
+        let (semantic_id, semantic_record) = state
             .kernel()
-            .insert_memory_async(insert_semantic)
+            .insert_memory_with_record_async(insert_semantic)
             .await
             .expect("insert semantic memory");
+        assert_eq!(
+            semantic_record.get("id").and_then(Value::as_str),
+            Some(semantic_id.as_str()),
+        );
+        assert_eq!(
+            semantic_record.get("lane").and_then(Value::as_str),
+            Some("semantic"),
+        );
 
         let app = Router::new()
             .route("/state/memory/lane/{lane}", get(state_memory_lane))
@@ -935,11 +978,23 @@ mod tests {
             ..Default::default()
         }
         .into_insert_owned();
-        let _ = state
+        let (inserted_id, inserted_record) = state
             .kernel()
-            .insert_memory_async(insert_owned)
+            .insert_memory_with_record_async(insert_owned)
             .await
             .expect("insert memory");
+        assert_eq!(
+            inserted_record.get("id").and_then(Value::as_str),
+            Some(inserted_id.as_str()),
+        );
+        assert_eq!(
+            inserted_record
+                .get("tags")
+                .and_then(Value::as_array)
+                .map(|tags| tags.len())
+                .unwrap_or_default(),
+            1,
+        );
 
         let snapshot_now = state
             .kernel()
@@ -1030,11 +1085,20 @@ mod tests {
             ..Default::default()
         }
         .into_insert_owned();
-        let _ = state
+        let (second_id, second_record) = state
             .kernel()
-            .insert_memory_async(insert_owned)
+            .insert_memory_with_record_async(insert_owned)
             .await
             .expect("insert second memory");
+        assert_eq!(
+            second_record.get("id").and_then(Value::as_str),
+            Some(second_id.as_str()),
+        );
+        assert!(second_record
+            .get("value")
+            .and_then(|v| v.get("text"))
+            .and_then(Value::as_str)
+            .is_some());
 
         let mut updated_snapshot = state
             .kernel()

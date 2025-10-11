@@ -3,6 +3,7 @@ use arw_memory_core::{MemoryInsertArgs, MemoryInsertOwned, MemoryStore};
 use chrono::{DateTime, Utc};
 use rusqlite::{params, params_from_iter, types::Value, Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::ops::{Deref, DerefMut};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
@@ -1601,6 +1602,15 @@ impl Kernel {
         store.insert_memory(args)
     }
 
+    pub fn insert_memory_with_record(
+        &self,
+        args: &MemoryInsertArgs<'_>,
+    ) -> Result<(String, serde_json::Value)> {
+        let conn = self.conn()?;
+        let store = MemoryStore::new(&conn);
+        store.insert_memory_with_record(args)
+    }
+
     pub fn search_memory(
         &self,
         q: &str,
@@ -1668,6 +1678,15 @@ impl Kernel {
         let conn = self.conn()?;
         let store = MemoryStore::new(&conn);
         store.get_memory(id)
+    }
+
+    pub fn get_memory_many(&self, ids: &[String]) -> Result<HashMap<String, serde_json::Value>> {
+        if ids.is_empty() {
+            return Ok(HashMap::new());
+        }
+        let conn = self.conn()?;
+        let store = MemoryStore::new(&conn);
+        store.get_memory_many(ids)
     }
 
     pub fn find_memory_by_hash(&self, hash: &str) -> Result<Option<serde_json::Value>> {
@@ -1906,6 +1925,19 @@ impl Kernel {
         tokio::task::spawn_blocking(move || {
             let args = owned.to_args();
             k.insert_memory(&args)
+        })
+        .await
+        .map_err(|e| anyhow!("join error: {}", e))?
+    }
+
+    pub async fn insert_memory_with_record_async(
+        &self,
+        owned: MemoryInsertOwned,
+    ) -> Result<(String, serde_json::Value)> {
+        let k = self.clone();
+        tokio::task::spawn_blocking(move || {
+            let args = owned.to_args();
+            k.insert_memory_with_record(&args)
         })
         .await
         .map_err(|e| anyhow!("join error: {}", e))?

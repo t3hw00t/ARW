@@ -3,11 +3,12 @@
 
 use anyhow::{anyhow, Result};
 use chrono::{DateTime, Duration, Utc};
-use rusqlite::{params, Connection};
+use rusqlite::{params, params_from_iter, Connection};
 use serde::Serialize;
 use serde_json::{json, Map, Value};
 use sha2::{Digest, Sha256};
 use std::cmp::Ordering;
+use std::collections::HashMap;
 use uuid::Uuid;
 
 const SELECT_COLUMN_LIST: &[&str] = &[
@@ -277,6 +278,14 @@ impl<'c> MemoryStore<'c> {
     }
 
     pub fn insert_memory(&self, args: &MemoryInsertArgs<'_>) -> Result<String> {
+        let (id, _) = self.insert_memory_with_record(args)?;
+        Ok(id)
+    }
+
+    pub fn insert_memory_with_record(
+        &self,
+        args: &MemoryInsertArgs<'_>,
+    ) -> Result<(String, Value)> {
         let now = Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
         let value_s = serde_json::to_string(args.value).unwrap_or_else(|_| "{}".to_string());
         let embed_s = args.embed.map(|v| {
@@ -300,9 +309,9 @@ impl<'c> MemoryStore<'c> {
                 args.lane,
                 args.kind,
                 args.key,
-                value_s,
+                value_s.clone(),
                 tags_joined.clone(),
-                hash,
+                hash.clone(),
                 embed_s,
                 args.embed_hint,
                 args.score,
@@ -314,13 +323,13 @@ impl<'c> MemoryStore<'c> {
                 args.trust,
                 args.privacy,
                 args.ttl_s,
-                keywords_joined,
+                keywords_joined.clone(),
                 args.entities.and_then(|v| serde_json::to_string(v).ok()),
                 args.source.and_then(|v| serde_json::to_string(v).ok()),
                 args.links.and_then(|v| serde_json::to_string(v).ok()),
                 args.extra.and_then(|v| serde_json::to_string(v).ok()),
-                now,
-                now,
+                now.clone(),
+                now.clone(),
             ],
         )?;
         let _ = self
@@ -329,14 +338,89 @@ impl<'c> MemoryStore<'c> {
         let _ = self.conn.execute(
             "INSERT INTO memory_fts(id,lane,key,value,tags) VALUES(?,?,?,?,?)",
             params![
-                id,
+                &id,
                 args.lane,
                 args.key.unwrap_or(""),
-                value_s,
-                tags_joined.unwrap_or_default(),
+                &value_s,
+                tags_joined.clone().unwrap_or_default(),
             ],
         );
-        Ok(id)
+
+        let mut map = Map::new();
+        map.insert("id".into(), json!(id.clone()));
+        map.insert("lane".into(), json!(args.lane));
+        if let Some(kind) = args.kind {
+            map.insert("kind".into(), json!(kind));
+        }
+        if let Some(key) = args.key {
+            map.insert("key".into(), json!(key));
+        }
+        map.insert("value".into(), args.value.clone());
+
+        let tags_array = tags_joined
+            .as_ref()
+            .map(|s| split_list(s))
+            .unwrap_or_default();
+        map.insert("tags".into(), Value::Array(tags_array));
+        map.insert("hash".into(), json!(hash));
+
+        if let Some(embed) = args.embed {
+            if !embed.is_empty() {
+                map.insert("embed".into(), json!(embed.to_vec()));
+            }
+        }
+        if let Some(hint) = args.embed_hint {
+            map.insert("embed_hint".into(), json!(hint));
+        }
+        if let Some(score) = args.score {
+            map.insert("score".into(), json!(score));
+        }
+        if let Some(prob) = args.prob {
+            map.insert("prob".into(), json!(prob));
+        }
+        map.insert("created".into(), json!(now.clone()));
+        map.insert("updated".into(), json!(now));
+        if let Some(agent) = args.agent_id {
+            map.insert("agent_id".into(), json!(agent));
+        }
+        if let Some(project) = args.project_id {
+            map.insert("project_id".into(), json!(project));
+        }
+        if let Some(text) = args.text {
+            map.insert("text".into(), json!(text));
+        }
+        if let Some(durability) = args.durability {
+            map.insert("durability".into(), json!(durability));
+        }
+        if let Some(trust) = args.trust {
+            map.insert("trust".into(), json!(trust));
+        }
+        if let Some(privacy) = args.privacy {
+            map.insert("privacy".into(), json!(privacy));
+        }
+        if let Some(ttl) = args.ttl_s {
+            map.insert("ttl_s".into(), json!(ttl));
+        }
+        if let Some(keywords) = keywords_joined {
+            let kw = split_list(&keywords);
+            if !kw.is_empty() {
+                map.insert("keywords".into(), Value::Array(kw));
+            }
+        }
+        if let Some(entities) = args.entities.cloned() {
+            map.insert("entities".into(), entities);
+        }
+        if let Some(source) = args.source.cloned() {
+            map.insert("source".into(), source);
+        }
+        if let Some(links) = args.links.cloned() {
+            map.insert("links".into(), links);
+        }
+        if let Some(extra) = args.extra.cloned() {
+            map.insert("extra".into(), extra);
+        }
+
+        Ok((id, Value::Object(map)))
     }
 
     pub fn search_memory(&self, query: &str, lane: Option<&str>, limit: i64) -> Result<Vec<Value>> {
@@ -743,6 +827,28 @@ impl<'c> MemoryStore<'c> {
         } else {
             Ok(None)
         }
+    }
+
+    pub fn get_memory_many(&self, ids: &[String]) -> Result<HashMap<String, Value>> {
+        if ids.is_empty() {
+            return Ok(HashMap::new());
+        }
+        let placeholders = ids.iter().map(|_| "?").collect::<Vec<_>>().join(",");
+        let sql = format!(
+            "SELECT {cols} FROM memory_records WHERE id IN ({placeholders})",
+            cols = select_columns(None)
+        );
+        let mut stmt = self.conn.prepare(&sql)?;
+        let params = params_from_iter(ids.iter().map(|s| s.as_str()));
+        let mut rows = stmt.query(params)?;
+        let mut out = HashMap::with_capacity(ids.len());
+        while let Some(row) = rows.next()? {
+            let record = row_to_value_full(row)?;
+            if let Some(id) = record.get("id").and_then(|v| v.as_str()) {
+                out.insert(id.to_string(), record);
+            }
+        }
+        Ok(out)
     }
 
     pub fn list_recent_memory(&self, lane: Option<&str>, limit: i64) -> Result<Vec<Value>> {

@@ -254,11 +254,19 @@ async fn persist_summary(state: &AppState, summary: CascadeSummary) -> Result<()
     };
     let hash = record.compute_hash();
     record.hash = Some(hash.clone());
-    state
+    let (inserted_id, inserted_record) = state
         .kernel()
-        .insert_memory_async(record)
+        .insert_memory_with_record_async(record)
         .await
         .context("insert cascade summary into memory")?;
+    debug_assert_eq!(inserted_id, summary.record_id);
+    debug_assert_eq!(
+        inserted_record
+            .get("lane")
+            .and_then(|v| v.as_str())
+            .unwrap_or_default(),
+        SUMMARY_LANE,
+    );
 
     state.bus().publish(
         arw_topics::TOPIC_CONTEXT_CASCADE_UPDATED,

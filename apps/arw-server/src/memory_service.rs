@@ -1,4 +1,4 @@
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Map, Value};
 use std::collections::BTreeMap;
@@ -213,18 +213,11 @@ pub async fn upsert_memory(
         }
     }
 
-    let id = state
+    let (id, record) = state
         .kernel()
-        .insert_memory_async(insert_owned.clone())
+        .insert_memory_with_record_async(insert_owned)
         .await
         .context("insert memory")?;
-
-    let record = state
-        .kernel()
-        .get_memory_async(id.clone())
-        .await
-        .context("reload memory")?
-        .ok_or_else(|| anyhow!("memory insert returned no record"))?;
 
     let mut record_event = build_memory_record_event(&record);
     util::attach_memory_ptr(&mut record_event);
@@ -319,10 +312,12 @@ pub async fn pack_memory(state: &AppState, input: MemoryPackInput) -> Result<Mem
 
     let state_clone = state.clone();
     let spec_for_block = spec.clone();
-    let working =
-        tokio::task::spawn_blocking(move || working_set::assemble(&state_clone, &spec_for_block))
-            .await
-            .context("pack_memory assemble join failed")??;
+    let world_beliefs = crate::state_observer::beliefs_snapshot().await.1;
+    let working = tokio::task::spawn_blocking(move || {
+        working_set::assemble(&state_clone, &spec_for_block, world_beliefs)
+    })
+    .await
+    .context("pack_memory assemble join failed")??;
     let spec_snapshot = spec.snapshot();
 
     let mut items = working.items;

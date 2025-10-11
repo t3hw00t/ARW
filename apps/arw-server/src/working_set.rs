@@ -5,9 +5,9 @@ use metrics::{counter, histogram};
 use serde_json::{json, Map, Value};
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, HashMap, HashSet};
+use std::sync::Arc;
 use std::time::Duration;
 use std::time::Instant;
-use tokio::runtime::Handle;
 
 use arw_topics as topics;
 
@@ -330,40 +330,39 @@ where
 }
 
 #[allow(dead_code)]
-pub fn assemble(state: &AppState, spec: &WorkingSetSpec) -> Result<WorkingSet> {
+pub fn assemble(
+    state: &AppState,
+    spec: &WorkingSetSpec,
+    world_beliefs: Arc<[Value]>,
+) -> Result<WorkingSet> {
     let mut observer = (); // no-op
-    assemble_with_observer(state, spec, &mut observer)
+    assemble_with_observer(state, spec, &mut observer, world_beliefs)
 }
 
 pub fn assemble_with_observer<O: WorkingSetObserver>(
     state: &AppState,
     spec: &WorkingSetSpec,
     observer: &mut O,
+    world_beliefs: Arc<[Value]>,
 ) -> Result<WorkingSet> {
-    let mut builder = WorkingSetBuilder::new(state, spec.clone());
+    let mut builder = WorkingSetBuilder::new(state, spec.clone(), world_beliefs);
     builder.build(observer)
-}
-
-fn load_world_beliefs_blocking() -> Vec<Value> {
-    if let Ok(handle) = Handle::try_current() {
-        handle.block_on(async {
-            let (_, items) = crate::state_observer::beliefs_snapshot().await;
-            items
-        })
-    } else {
-        Vec::new()
-    }
 }
 
 struct WorkingSetBuilder<'a> {
     state: &'a AppState,
     spec: WorkingSetSpec,
-    world_beliefs: Vec<Value>,
+    world_beliefs: Arc<[Value]>,
+}
+
+struct PendingExpansion {
+    dst_id: String,
+    seed: SeedInfo,
+    link: Value,
 }
 
 impl<'a> WorkingSetBuilder<'a> {
-    fn new(state: &'a AppState, spec: WorkingSetSpec) -> Self {
-        let world_beliefs = load_world_beliefs_blocking();
+    fn new(state: &'a AppState, spec: WorkingSetSpec, world_beliefs: Arc<[Value]>) -> Self {
         Self {
             state,
             spec,
@@ -459,7 +458,10 @@ impl<'a> WorkingSetBuilder<'a> {
 
         let expand_start = Instant::now();
         if spec.expand_per_seed > 0 {
-            for seed in seed_infos.clone() {
+            let mut pending: Vec<PendingExpansion> = Vec::new();
+            let mut fetch_ids: Vec<String> = Vec::new();
+            let mut seen_dst: HashSet<String> = HashSet::new();
+            for seed in seed_infos.iter().cloned() {
                 let links = self
                     .state
                     .kernel()
@@ -473,27 +475,46 @@ impl<'a> WorkingSetBuilder<'a> {
                         if candidates.contains_key(dst_id) {
                             continue;
                         }
-                        if let Ok(Some(record)) = self.state.kernel().get_memory(dst_id) {
-                            if let Some(candidate) = build_expansion_candidate(
-                                record,
-                                &seed,
-                                &link,
-                                spec.project.as_deref(),
-                            ) {
-                                let payload = candidate.value.clone();
-                                let lane_for_event = candidate.lane.clone();
-                                observer.emit(
-                                    STREAM_EVENT_EXPANDED,
-                                    json!({"item": payload.clone(), "lane": lane_for_event.clone()}),
-                                );
-                                counter!(
-                                    "arw_context_link_expansion_total",
-                                    "lane" => lane_for_event.unwrap_or_else(|| "unknown".into())
-                                )
-                                .increment(1);
-                                expanded_raw.push(payload);
-                                insert_candidate(&mut candidates, candidate);
-                            }
+                        let dst_owned = dst_id.to_string();
+                        if !seen_dst.insert(dst_owned.clone()) {
+                            continue;
+                        }
+                        pending.push(PendingExpansion {
+                            dst_id: dst_owned.clone(),
+                            seed: seed.clone(),
+                            link,
+                        });
+                        fetch_ids.push(dst_owned);
+                    }
+                }
+            }
+            if !pending.is_empty() {
+                let fetched = self
+                    .state
+                    .kernel()
+                    .get_memory_many(&fetch_ids)
+                    .unwrap_or_default();
+                for entry in pending {
+                    if let Some(record) = fetched.get(&entry.dst_id) {
+                        if let Some(candidate) = build_expansion_candidate(
+                            record.clone(),
+                            &entry.seed,
+                            &entry.link,
+                            spec.project.as_deref(),
+                        ) {
+                            let payload = candidate.value.clone();
+                            let lane_for_event = candidate.lane.clone();
+                            observer.emit(
+                                STREAM_EVENT_EXPANDED,
+                                json!({"item": payload.clone(), "lane": lane_for_event.clone()}),
+                            );
+                            counter!(
+                                "arw_context_link_expansion_total",
+                                "lane" => lane_for_event.unwrap_or_else(|| "unknown".into())
+                            )
+                            .increment(1);
+                            expanded_raw.push(payload);
+                            insert_candidate(&mut candidates, candidate);
                         }
                     }
                 }
@@ -585,7 +606,7 @@ impl<'a> WorkingSetBuilder<'a> {
         expanded_raw: &mut Vec<Value>,
         observer: &mut O,
     ) {
-        for belief in &self.world_beliefs {
+        for belief in self.world_beliefs.iter() {
             if let Some(candidate) = build_world_candidate(belief, spec.project.as_deref()) {
                 let payload = candidate.value.clone();
                 let lane_for_event = candidate.lane.clone();
@@ -745,7 +766,7 @@ struct Candidate {
     embed: Option<Vec<f32>>,
     cscore: f32,
     value: Value,
-    slot: Option<String>,
+    slot_key: String,
 }
 
 #[derive(Clone)]
@@ -834,24 +855,36 @@ fn select_candidates<O: WorkingSetObserver>(
     let mut selected: Vec<Candidate> = Vec::new();
     let mut lane_counts: BTreeMap<String, usize> = BTreeMap::new();
     let mut slot_counts: BTreeMap<String, usize> = BTreeMap::new();
+    let use_slots = !spec.slot_budgets.is_empty();
+    let mut slot_limit_cache: HashMap<String, Option<usize>> = HashMap::new();
+    let mut resolve_slot_limit = |slot: &str| -> Option<usize> {
+        if let Some(limit) = slot_limit_cache.get(slot) {
+            *limit
+        } else {
+            let limit = spec.slot_limit(slot);
+            slot_limit_cache.insert(slot.to_string(), limit);
+            limit
+        }
+    };
     while !candidates.is_empty() && selected.len() < spec.limit {
         let mut best_idx: Option<usize> = None;
         let mut best_score = f32::MIN;
+        let ctx = SelectionContext {
+            spec,
+            selected: &selected,
+            lane_counts: &lane_counts,
+            require_threshold: has_above,
+        };
         for (idx, cand) in candidates.iter().enumerate() {
-            if let Some(slot_key) = cand.slot_key() {
-                if let Some(limit) = spec.slot_limit(&slot_key) {
-                    let current = slot_counts.get(&slot_key).copied().unwrap_or(0);
+            if use_slots {
+                let slot_key = cand.slot_key();
+                if let Some(limit) = resolve_slot_limit(slot_key) {
+                    let current = slot_counts.get(slot_key).copied().unwrap_or(0);
                     if current >= limit {
                         continue;
                     }
                 }
             }
-            let ctx = SelectionContext {
-                spec,
-                selected: &selected,
-                lane_counts: &lane_counts,
-                require_threshold: has_above,
-            };
             let score = scorer.score(cand, &ctx);
             if score.is_finite() && (best_idx.is_none() || score > best_score) {
                 best_idx = Some(idx);
@@ -863,19 +896,19 @@ fn select_candidates<O: WorkingSetObserver>(
             None => break,
         };
         let cand = candidates.swap_remove(idx);
-        if let Some(slot_key) = cand.slot_key() {
-            if let Some(limit) = spec.slot_limit(&slot_key) {
-                let current = slot_counts.get(&slot_key).copied().unwrap_or(0);
+        if use_slots {
+            let slot_key = cand.slot_key();
+            if let Some(limit) = resolve_slot_limit(slot_key) {
+                let current = slot_counts.get(slot_key).copied().unwrap_or(0);
                 if current >= limit {
-                    // Slot is at capacity; skip this candidate and continue.
                     continue;
                 }
+                *slot_counts.entry(slot_key.to_string()).or_insert(0) += 1;
             }
-            *slot_counts.entry(slot_key).or_insert(0) += 1;
         }
-        let lane_key = cand.lane.clone().unwrap_or_else(|| "unknown".to_string());
-        *lane_counts.entry(lane_key.clone()).or_insert(0) += 1;
-        counter!("arw_context_selected_total", "lane" => lane_key).increment(1);
+        let lane_label = cand.lane_label().to_string();
+        *lane_counts.entry(lane_label.clone()).or_insert(0) += 1;
+        counter!("arw_context_selected_total", "lane" => lane_label).increment(1);
         observer.emit(
             STREAM_EVENT_SELECTED,
             json!({
@@ -1317,6 +1350,11 @@ impl Candidate {
         if let (Some(slot_name), Some(obj)) = (slot.as_ref(), value.as_object_mut()) {
             obj.insert("slot".into(), json!(slot_name));
         }
+        let slot_key = slot
+            .as_deref()
+            .map(|s| s.trim().to_ascii_lowercase())
+            .filter(|s| !s.is_empty())
+            .unwrap_or_else(|| "unslotted".to_string());
         util::attach_memory_ptr(&mut value);
         Candidate {
             id,
@@ -1326,18 +1364,16 @@ impl Candidate {
             embed,
             cscore,
             value,
-            slot,
+            slot_key,
         }
     }
 
-    fn slot_key(&self) -> Option<String> {
-        let normalized = self
-            .slot
-            .as_ref()
-            .map(|s| s.trim().to_ascii_lowercase())
-            .filter(|s| !s.is_empty())
-            .unwrap_or_else(|| "unslotted".to_string());
-        Some(normalized)
+    fn slot_key(&self) -> &str {
+        &self.slot_key
+    }
+
+    fn lane_label(&self) -> &str {
+        self.lane.as_deref().unwrap_or("unknown")
     }
 }
 
@@ -1972,7 +2008,7 @@ mod tests {
         assert_eq!(slot_counts.get("evidence"), Some(&2));
         let selected_instructions = selected
             .iter()
-            .filter(|c| c.slot.as_deref() == Some("instructions"))
+            .filter(|c| c.slot_key() == "instructions")
             .count();
         assert_eq!(selected_instructions, 1);
         assert!(selected.len() <= spec.limit);

@@ -216,12 +216,14 @@ async fn run_context_iteration(
     let iteration_start = Instant::now();
     let corr_for_payload = corr_id.clone();
     let spec_for_payload = spec.clone();
+    let (_, world_beliefs) = crate::state_observer::beliefs_snapshot().await;
 
     let join = tokio::task::spawn_blocking({
         let state_for_block = state.clone();
         let bus_for_block = bus.clone();
         let corr_for_block = corr_id.clone();
         let sender_for_block = stream_sender.clone();
+        let beliefs_for_block = world_beliefs.clone();
         move || {
             let spec_for_block = spec;
             let bus_observer = working_set::BusObserver::new(
@@ -240,6 +242,7 @@ async fn run_context_iteration(
                         &state_for_block,
                         &spec_for_block,
                         &mut observer,
+                        beliefs_for_block.clone(),
                     )
                 }
                 None => {
@@ -248,6 +251,7 @@ async fn run_context_iteration(
                         &state_for_block,
                         &spec_for_block,
                         &mut observer,
+                        beliefs_for_block.clone(),
                     )
                 }
             };
