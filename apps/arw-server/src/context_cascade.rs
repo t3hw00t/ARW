@@ -131,12 +131,22 @@ async fn run_once(state: &AppState) -> Result<CascadeStats> {
     let mut skipped = 0usize;
     let mut latest_event_time: Option<DateTime<Utc>> = None;
 
+    let corr_batch: Vec<String> = pairs.iter().map(|(corr, _)| corr.clone()).collect();
+    let mut events_batch = state
+        .kernel()
+        .events_by_corr_ids_async(corr_batch, Some(per_episode_limit as i64))
+        .await
+        .context("load events for candidate correlations")?;
+
     for (corr_id, _) in pairs {
-        let events = state
-            .kernel()
-            .events_by_corr_id_async(&corr_id, Some(per_episode_limit as i64))
-            .await
-            .with_context(|| format!("load events for corr_id {corr_id}"))?;
+        let events = match events_batch.remove(&corr_id) {
+            Some(events) => events,
+            None => state
+                .kernel()
+                .events_by_corr_id_async(&corr_id, Some(per_episode_limit as i64))
+                .await
+                .with_context(|| format!("load events for corr_id {corr_id}"))?,
+        };
         if events.is_empty() {
             skipped += 1;
             continue;

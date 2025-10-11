@@ -362,7 +362,7 @@ pub async fn patch_apply(
         } else {
             cfg.clone()
         };
-        match std::fs::read(schema_path) {
+        match tokio::fs::read(schema_path).await {
             Ok(bytes) => match serde_json::from_slice::<Value>(&bytes) {
                 Ok(schema_json) => match JSONSchema::options()
                     .with_draft(Draft::Draft7)

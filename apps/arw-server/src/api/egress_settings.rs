@@ -278,7 +278,11 @@ pub async fn egress_settings_update(
     }
     // persist to config_state under "egress" with schema validation
     let schema_path = "spec/schemas/egress_settings.json";
-    let schema_json = match std::fs::read(schema_path).ok().and_then(|b| serde_json::from_slice::<serde_json::Value>(&b).ok()) {
+    let schema_json = match tokio::fs::read(schema_path)
+        .await
+        .ok()
+        .and_then(|b| serde_json::from_slice::<serde_json::Value>(&b).ok())
+    {
         Some(v) => v,
         None => return (axum::http::StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"type":"about:blank","title":"Error","status":500, "detail":"missing egress schema"}))).into_response(),
     };

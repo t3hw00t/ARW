@@ -4,7 +4,7 @@ use axum::middleware::Next;
 use axum::response::Response;
 use serde::Serialize;
 use serde_json::{json, Value};
-use std::collections::{BTreeMap, VecDeque};
+use std::collections::BTreeMap;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
@@ -13,7 +13,6 @@ use arw_events::BusStats;
 
 use crate::tool_cache::ToolCacheStats;
 
-const SAMPLE_WINDOW: usize = 50;
 const EWMA_ALPHA: f64 = 0.2;
 
 fn now_rfc3339() -> String {
@@ -141,9 +140,7 @@ struct RouteStat {
     hits: u64,
     errors: u64,
     ewma_ms: f64,
-    p95_ms: u64,
     max_ms: u64,
-    sample: VecDeque<u64>,
     hist: Vec<u64>,
     total_ms: u128,
 }
@@ -154,9 +151,7 @@ impl RouteStat {
             hits: 0,
             errors: 0,
             ewma_ms: 0.0,
-            p95_ms: 0,
             max_ms: 0,
-            sample: VecDeque::with_capacity(SAMPLE_WINDOW),
             hist: vec![0; hist_size],
             total_ms: 0,
         }
@@ -174,21 +169,10 @@ impl RouteStat {
             (1.0 - EWMA_ALPHA) * self.ewma_ms + EWMA_ALPHA * value
         };
         self.max_ms = self.max_ms.max(ms);
-        if self.sample.len() >= SAMPLE_WINDOW {
-            self.sample.pop_front();
-        }
-        self.sample.push_back(ms);
         if let Some(bin) = self.hist.get_mut(bucket) {
             *bin = bin.saturating_add(1);
         }
         self.total_ms = self.total_ms.saturating_add(ms as u128);
-        if !self.sample.is_empty() {
-            let mut tmp: Vec<u64> = self.sample.iter().copied().collect();
-            tmp.sort_unstable();
-            let idx = ((tmp.len() as f64) * 0.95).ceil() as usize;
-            let idx = idx.saturating_sub(1).min(tmp.len() - 1);
-            self.p95_ms = tmp[idx];
-        }
     }
 
     fn summary(&self, bounds_ms: &[u64]) -> RouteSummary {
@@ -215,14 +199,35 @@ impl RouteStat {
                 buckets,
             })
         };
+        let p95 = self.percentile_from_hist(0.95, bounds_ms);
         RouteSummary {
             hits: self.hits,
             errors: self.errors,
             ewma_ms: (self.ewma_ms * 10.0).round() / 10.0,
-            p95_ms: self.p95_ms,
+            p95_ms: p95,
             max_ms: self.max_ms,
             latency_histogram: histogram,
         }
+    }
+
+    fn percentile_from_hist(&self, percentile: f64, bounds_ms: &[u64]) -> u64 {
+        if self.hits == 0 {
+            return 0;
+        }
+        let percentile = percentile.clamp(0.0, 1.0);
+        let rank = ((self.hits as f64) * percentile).ceil().max(1.0) as u64;
+        let mut cumulative = 0u64;
+        for (idx, count) in self.hist.iter().enumerate() {
+            cumulative = cumulative.saturating_add(*count);
+            if cumulative >= rank {
+                return if idx < bounds_ms.len() {
+                    bounds_ms[idx]
+                } else {
+                    self.max_ms
+                };
+            }
+        }
+        self.max_ms
     }
 }
 

@@ -805,12 +805,79 @@ async fn build_crashlog_snapshot() -> Value {
     serde_json::json!({"items": items, "count": items.len()})
 }
 
-static READ_MODEL_CACHE: OnceCell<Mutex<HashMap<String, Value>>> = OnceCell::new();
+#[derive(Default)]
+struct ReadModelCache {
+    entries: HashMap<String, CacheEntry>,
+}
+
+struct CacheEntry {
+    version: u64,
+    value: Value,
+}
+
+impl ReadModelCache {
+    fn load_with(&self, id: &str, override_prev: Option<Value>) -> (Value, u64) {
+        if let Some(prev) = override_prev {
+            let version = self.entries.get(id).map(|entry| entry.version).unwrap_or(0);
+            return (prev, version);
+        }
+        match self.entries.get(id) {
+            Some(entry) => (entry.value.clone(), entry.version),
+            None => (json!({}), 0),
+        }
+    }
+
+    fn set(&mut self, id: &str, value: Value) {
+        self.entries
+            .entry(id.to_string())
+            .and_modify(|entry| entry.value = value.clone())
+            .or_insert(CacheEntry { version: 0, value });
+    }
+
+    fn set_if_version(&mut self, id: &str, expected: u64, value: Value) -> bool {
+        match self.entries.get_mut(id) {
+            Some(entry) if entry.version == expected => {
+                entry.value = value;
+                true
+            }
+            None if expected == 0 => {
+                self.entries
+                    .insert(id.to_string(), CacheEntry { version: 0, value });
+                true
+            }
+            _ => false,
+        }
+    }
+
+    fn replace_if_version(&mut self, id: &str, expected: u64, value: Value) -> Result<u64, u64> {
+        let entry = self.entries.entry(id.to_string()).or_insert(CacheEntry {
+            version: 0,
+            value: Value::Null,
+        });
+        if entry.version != expected {
+            return Err(entry.version);
+        }
+        entry.version = entry.version.saturating_add(1);
+        entry.value = value;
+        Ok(entry.version)
+    }
+
+    fn get(&self, id: &str) -> Option<Value> {
+        self.entries.get(id).map(|entry| entry.value.clone())
+    }
+
+    #[cfg(test)]
+    fn remove(&mut self, id: &str) {
+        self.entries.remove(id);
+    }
+}
+
+static READ_MODEL_CACHE: OnceCell<Mutex<ReadModelCache>> = OnceCell::new();
 
 fn store_read_model_value(id: &str, value: &Value) {
-    let map = READ_MODEL_CACHE.get_or_init(|| Mutex::new(HashMap::new()));
+    let map = READ_MODEL_CACHE.get_or_init(|| Mutex::new(ReadModelCache::default()));
     if let Ok(mut guard) = map.lock() {
-        guard.insert(id.to_string(), value.clone());
+        guard.set(id, value.clone());
     }
 }
 
@@ -858,32 +925,63 @@ pub(crate) fn publish_read_model_patch_with_previous(
     previous: Option<Value>,
     value: &Value,
 ) {
-    let map = READ_MODEL_CACHE.get_or_init(|| Mutex::new(HashMap::new()));
-    let mut guard = map.lock().expect("read model cache lock");
-    let prev = match previous {
-        Some(prev) => prev,
-        None => guard.get(id).cloned().unwrap_or_else(|| json!({})),
-    };
-    let patch = json_patch::diff(&prev, value);
-    if patch.is_empty() {
-        guard.insert(id.to_string(), value.clone());
-        return;
+    let cache = READ_MODEL_CACHE.get_or_init(|| Mutex::new(ReadModelCache::default()));
+    let mut prev_override = previous;
+
+    loop {
+        let override_value = prev_override.take();
+        let (prev, version) = {
+            let guard = cache.lock().expect("read model cache lock poisoned");
+            guard.load_with(id, override_value)
+        };
+
+        if prev == *value {
+            if let Ok(mut guard) = cache.lock() {
+                if guard.set_if_version(id, version, value.clone()) {
+                    return;
+                }
+            }
+            prev_override = None;
+            continue;
+        }
+
+        let patch = json_patch::diff(&prev, value);
+        if patch.is_empty() {
+            if let Ok(mut guard) = cache.lock() {
+                if guard.set_if_version(id, version, value.clone()) {
+                    return;
+                }
+            }
+            prev_override = None;
+            continue;
+        }
+
+        let patch_val = serde_json::to_value(&patch).unwrap_or_else(|_| json!([]));
+        let mut guard = cache.lock().expect("read model cache lock poisoned");
+        match guard.replace_if_version(id, version, value.clone()) {
+            Ok(_) => {
+                drop(guard);
+                bus.publish(
+                    topics::TOPIC_READMODEL_PATCH,
+                    &json!({
+                        "id": id,
+                        "patch": patch_val
+                    }),
+                );
+                break;
+            }
+            Err(_) => {
+                prev_override = None;
+                continue;
+            }
+        }
     }
-    let patch_val = serde_json::to_value(patch).unwrap_or_else(|_| json!([]));
-    bus.publish(
-        topics::TOPIC_READMODEL_PATCH,
-        &json!({
-            "id": id,
-            "patch": patch_val
-        }),
-    );
-    guard.insert(id.to_string(), value.clone());
 }
 
 pub(crate) fn cached_read_model(id: &str) -> Option<Value> {
     READ_MODEL_CACHE
         .get()
-        .and_then(|map| map.lock().ok().and_then(|guard| guard.get(id).cloned()))
+        .and_then(|map| map.lock().ok().and_then(|guard| guard.get(id)))
 }
 
 fn spawn_service_health(state: &AppState) -> TaskHandle {

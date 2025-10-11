@@ -90,9 +90,9 @@ pub async fn spec_index() -> impl IntoResponse {
     let schemas_dir = base.join("schemas");
     let mut schemas: Vec<String> = vec![];
     if schemas_dir.exists() {
-        if let Ok(rd) = std::fs::read_dir(&schemas_dir) {
-            for ent in rd.flatten() {
-                if let Some(name) = ent.file_name().to_str() {
+        if let Ok(mut rd) = tokio::fs::read_dir(&schemas_dir).await {
+            while let Ok(Some(entry)) = rd.next_entry().await {
+                if let Some(name) = entry.file_name().to_str() {
                     if name.ends_with(".json") {
                         schemas.push(name.to_string());
                     }
@@ -142,8 +142,8 @@ pub async fn spec_health() -> impl IntoResponse {
     let schemas_dir = base.join("schemas");
     let (schemas_exists, schema_files) = if schemas_dir.exists() {
         let mut names = Vec::new();
-        if let Ok(rd) = std::fs::read_dir(&schemas_dir) {
-            for entry in rd.flatten() {
+        if let Ok(mut rd) = tokio::fs::read_dir(&schemas_dir).await {
+            while let Ok(Some(entry)) = rd.next_entry().await {
                 if let Some(name) = entry.file_name().to_str() {
                     if name.ends_with(".json") {
                         names.push(name.to_string());

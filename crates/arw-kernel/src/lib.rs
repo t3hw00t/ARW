@@ -782,6 +782,59 @@ impl Kernel {
         Ok(out)
     }
 
+    pub fn events_by_corr_ids(
+        &self,
+        corr_ids: &[String],
+        limit: Option<i64>,
+    ) -> Result<HashMap<String, Vec<EventRow>>> {
+        let mut ids: Vec<String> = corr_ids
+            .iter()
+            .map(|id| id.trim())
+            .filter(|id| !id.is_empty())
+            .map(|id| id.to_string())
+            .collect();
+        ids.sort();
+        ids.dedup();
+        if ids.is_empty() {
+            return Ok(HashMap::new());
+        }
+        let conn = self.conn()?;
+        let placeholders = ids
+            .iter()
+            .map(|_| "?".to_string())
+            .collect::<Vec<_>>()
+            .join(",");
+        let base_sql = format!(
+            "SELECT id,time,kind,actor,proj,corr_id,payload,\n                    ROW_NUMBER() OVER (PARTITION BY corr_id ORDER BY id ASC) AS rn\n             FROM events\n             WHERE corr_id IN ({})",
+            placeholders
+        );
+        let sql = if limit.is_some() {
+            format!(
+                "SELECT id,time,kind,actor,proj,corr_id,payload\n                 FROM ({base})\n                 WHERE rn <= ?\n                 ORDER BY corr_id ASC, id ASC",
+                base = base_sql
+            )
+        } else {
+            format!(
+                "SELECT id,time,kind,actor,proj,corr_id,payload\n                 FROM ({base})\n                 ORDER BY corr_id ASC, id ASC",
+                base = base_sql
+            )
+        };
+        let mut params: Vec<Value> = ids.iter().map(|id| Value::from(id.clone())).collect();
+        if let Some(limit) = limit {
+            params.push(Value::from(limit));
+        }
+        let mut stmt = conn.prepare(&sql)?;
+        let mut rows = stmt.query(params_from_iter(params.iter()))?;
+        let mut grouped: HashMap<String, Vec<EventRow>> = HashMap::with_capacity(ids.len());
+        while let Some(row) = rows.next()? {
+            let event = Self::map_event_row(row)?;
+            if let Some(corr) = event.corr_id.clone() {
+                grouped.entry(corr).or_default().push(event);
+            }
+        }
+        Ok(grouped)
+    }
+
     pub fn tail_events(&self, limit: i64, prefixes: &[String]) -> Result<(Vec<EventRow>, i64)> {
         let conn = self.conn()?;
         let sanitized: Vec<String> = prefixes
@@ -2308,6 +2361,17 @@ impl Kernel {
         let k = self.clone();
         let cid = corr_id.to_string();
         tokio::task::spawn_blocking(move || k.events_by_corr_id(&cid, limit))
+            .await
+            .map_err(|e| anyhow!("join error: {}", e))?
+    }
+
+    pub async fn events_by_corr_ids_async(
+        &self,
+        corr_ids: Vec<String>,
+        limit: Option<i64>,
+    ) -> Result<HashMap<String, Vec<EventRow>>> {
+        let k = self.clone();
+        tokio::task::spawn_blocking(move || k.events_by_corr_ids(&corr_ids, limit))
             .await
             .map_err(|e| anyhow!("join error: {}", e))?
     }

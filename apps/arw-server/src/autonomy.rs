@@ -2,13 +2,14 @@ use std::collections::HashMap;
 use std::io::ErrorKind;
 use std::path::PathBuf;
 use std::sync::Arc;
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use arw_events::Bus;
 use arw_topics as topics;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use tokio::sync::{broadcast, RwLock};
+use tokio::sync::{broadcast, mpsc, RwLock};
+use tokio::time::timeout;
 use tracing::warn;
 use utoipa::ToSchema;
 
@@ -16,6 +17,8 @@ use crate::{metrics, responses};
 
 const ALERT_BUDGET_NEAR: &str = "Budgets nearing limit";
 const ALERT_BUDGET_EXHAUSTED: &str = "Budgets exhausted";
+const PERSIST_DEBOUNCE: Duration = Duration::from_millis(120);
+const PERSIST_RETRY_DELAY: Duration = Duration::from_millis(500);
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize, ToSchema, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -144,6 +147,7 @@ pub struct AutonomyRegistry {
     path: PathBuf,
     interrupts: broadcast::Sender<AutonomySignal>,
     metrics: Arc<metrics::Metrics>,
+    persist_tx: mpsc::Sender<()>,
 }
 
 impl AutonomyRegistry {
@@ -171,13 +175,18 @@ impl AutonomyRegistry {
             Self::normalize_alerts(lane);
         }
 
-        Arc::new(Self {
+        let (persist_tx, persist_rx) = mpsc::channel(16);
+        let (interrupts, _) = broadcast::channel(32);
+        let registry = Arc::new(Self {
             bus,
             lanes: RwLock::new(initial),
             path,
-            interrupts: broadcast::channel(32).0,
+            interrupts,
             metrics,
-        })
+            persist_tx,
+        });
+        registry.spawn_persist_worker(persist_rx);
+        registry
     }
 
     pub async fn lanes(&self) -> Vec<AutonomyLaneSnapshot> {
@@ -228,7 +237,7 @@ impl AutonomyRegistry {
                 lane.last_reason = reason_clone.clone();
             })
             .await;
-        self.persist().await;
+        self.schedule_persist().await;
 
         let topic = match mode {
             AutonomyMode::Paused => topics::TOPIC_AUTONOMY_RUN_PAUSED,
@@ -307,7 +316,7 @@ impl AutonomyRegistry {
                 }
             })
             .await;
-        self.persist().await;
+        self.schedule_persist().await;
 
         let scope_reason = match scope {
             FlushScope::All => Some("all".to_string()),
@@ -332,6 +341,7 @@ impl AutonomyRegistry {
         self.metrics
             .record_autonomy_interrupt(metric_reason_for_scope(scope));
         self.emit_signal(lane_id, AutonomySignalKind::Flush { scope });
+        self.schedule_persist().await;
         snapshot
     }
 
@@ -353,7 +363,7 @@ impl AutonomyRegistry {
                     .get_or_insert_with(|| "jobs_updated".to_string());
             })
             .await;
-        self.persist().await;
+        self.schedule_persist().await;
         snapshot
     }
 
@@ -372,7 +382,7 @@ impl AutonomyRegistry {
                 lane.last_budget_update_ms = Some(now_ms());
             })
             .await;
-        self.persist().await;
+        self.schedule_persist().await;
 
         if snapshot.budgets.is_none() {
             return snapshot;
@@ -396,6 +406,16 @@ impl AutonomyRegistry {
         snapshot
     }
 
+    async fn schedule_persist(&self) {
+        if let Err(err) = self.persist_tx.send(()).await {
+            warn!(
+                target: "autonomy",
+                ?err,
+                "failed to schedule autonomy state persist"
+            );
+        }
+    }
+
     async fn update_lane<F>(&self, lane_id: &str, mut apply: F) -> AutonomyLaneSnapshot
     where
         F: FnMut(&mut AutonomyLaneSnapshot),
@@ -410,25 +430,49 @@ impl AutonomyRegistry {
         lane.clone()
     }
 
-    async fn persist(&self) {
+    async fn persist_snapshot(&self) -> Result<(), std::io::Error> {
         let snapshot = {
             let guard = self.lanes.read().await;
             guard.values().cloned().collect::<Vec<_>>()
         };
         if let Some(parent) = self.path.parent() {
-            if let Err(err) = tokio::fs::create_dir_all(parent).await {
-                warn!(?err, path=%self.path.display(), "failed to create autonomy state dir");
-                return;
-            }
+            tokio::fs::create_dir_all(parent).await?;
         }
-        match serde_json::to_vec_pretty(&snapshot) {
-            Ok(bytes) => {
-                if let Err(err) = tokio::fs::write(&self.path, bytes).await {
-                    warn!(?err, path=%self.path.display(), "failed to persist autonomy lanes");
+        let bytes = serde_json::to_vec(&snapshot)
+            .map_err(|err| std::io::Error::new(std::io::ErrorKind::InvalidData, err))?;
+        tokio::fs::write(&self.path, bytes).await
+    }
+
+    fn spawn_persist_worker(self: &Arc<Self>, mut rx: mpsc::Receiver<()>) {
+        let this = Arc::clone(self);
+        tokio::spawn(async move {
+            while let Some(_) = rx.recv().await {
+                let mut channel_closed = false;
+                loop {
+                    match timeout(PERSIST_DEBOUNCE, rx.recv()).await {
+                        Ok(Some(_)) => continue,
+                        Ok(None) => {
+                            channel_closed = true;
+                            break;
+                        }
+                        Err(_) => break,
+                    }
+                }
+                if let Err(err) = this.persist_snapshot().await {
+                    warn!(
+                        target: "autonomy",
+                        ?err,
+                        "failed to persist autonomy lanes; will retry"
+                    );
+                    tokio::time::sleep(PERSIST_RETRY_DELAY).await;
+                    let tx = this.persist_tx.clone();
+                    let _ = tx.try_send(());
+                }
+                if channel_closed {
+                    break;
                 }
             }
-            Err(err) => warn!(?err, "failed to serialize autonomy lanes"),
-        }
+        });
     }
 
     fn publish_event(

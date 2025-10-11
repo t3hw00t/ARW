@@ -13,6 +13,7 @@ use arw_topics::{
 };
 use chrono::{DateTime, Duration as ChronoDuration, SecondsFormat, Utc};
 use serde_json::{json, Value};
+use sha2::{Digest, Sha256};
 use tokio::fs as afs;
 use tokio::sync::{Mutex as TokioMutex, RwLock};
 use tracing::{info, warn};
@@ -134,6 +135,7 @@ pub(crate) struct RuntimeRegistry {
     bus: Bus,
     storage: Option<Arc<RuntimeStorage>>,
     restart_config: Arc<RestartBudgetConfig>,
+    snapshot_cache: Arc<RwLock<Option<SnapshotCache>>>,
     supervisor: Arc<RwLock<Option<Weak<RuntimeSupervisor>>>>,
 }
 
@@ -148,6 +150,7 @@ impl RuntimeRegistry {
             bus,
             storage,
             restart_config: Arc::new(config),
+            snapshot_cache: Arc::new(RwLock::new(None)),
             supervisor: Arc::new(RwLock::new(None)),
         }
     }
@@ -323,11 +326,53 @@ impl RuntimeRegistry {
 
     async fn publish_snapshot(&self) {
         let snapshot = self.snapshot().await;
-        if let Ok(value) = serde_json::to_value(&snapshot) {
-            read_models::publish_read_model_patch(&self.bus, READ_MODEL_KEY, &value);
+        let bytes = match serde_json::to_vec(&snapshot) {
+            Ok(bytes) => bytes,
+            Err(err) => {
+                warn!(
+                    target: "arw::runtime",
+                    error = %err,
+                    "failed to serialize runtime snapshot; skipping publish"
+                );
+                return;
+            }
+        };
+        let digest = Sha256::digest(&bytes);
+        let mut hash = [0u8; 32];
+        hash.copy_from_slice(&digest);
+
+        {
+            let cache = self.snapshot_cache.read().await;
+            if let Some(existing) = cache.as_ref() {
+                if existing.hash == hash {
+                    return;
+                }
+            }
         }
+
+        {
+            let mut cache = self.snapshot_cache.write().await;
+            *cache = Some(SnapshotCache { hash });
+        }
+
+        let value: Value = match serde_json::from_slice(&bytes) {
+            Ok(val) => val,
+            Err(err) => {
+                warn!(
+                    target: "arw::runtime",
+                    error = %err,
+                    "failed to deserialize runtime snapshot for read model patch"
+                );
+                serde_json::json!({})
+            }
+        };
+        read_models::publish_read_model_patch(&self.bus, READ_MODEL_KEY, &value);
         if let Some(storage) = &self.storage {
-            if let Err(err) = storage.persist(&snapshot).await {
+            let mut file_bytes = bytes;
+            if !file_bytes.ends_with(b"\n") {
+                file_bytes.push(b'\n');
+            }
+            if let Err(err) = storage.persist_bytes(&file_bytes).await {
                 let path = storage.path.clone();
                 warn!(
                     target: "arw::runtime",
@@ -552,10 +597,19 @@ impl RuntimeRegistry {
         let Some(snapshot) = maybe_snapshot else {
             return Ok(());
         };
+        let bytes = serde_json::to_vec(&snapshot)
+            .map_err(|err| std::io::Error::new(std::io::ErrorKind::InvalidData, err))?;
+        let digest = Sha256::digest(&bytes);
+        let mut hash = [0u8; 32];
+        hash.copy_from_slice(&digest);
+        let RegistrySnapshot {
+            updated_at,
+            runtimes,
+        } = snapshot;
         let mut guard = self.state.write().await;
         guard.desired.clear();
         guard.statuses.clear();
-        for record in snapshot.runtimes {
+        for record in runtimes {
             guard
                 .desired
                 .insert(record.descriptor.id.clone(), record.descriptor);
@@ -563,7 +617,10 @@ impl RuntimeRegistry {
             status.refresh_labels();
             guard.statuses.insert(status.id.clone(), status);
         }
-        guard.updated_at = snapshot.updated_at;
+        guard.updated_at = updated_at;
+        drop(guard);
+        let mut cache = self.snapshot_cache.write().await;
+        *cache = Some(SnapshotCache { hash });
         Ok(())
     }
 }
@@ -602,15 +659,22 @@ impl RuntimeStorage {
         }
     }
 
+    #[allow(dead_code)]
     async fn persist(&self, snapshot: &RegistrySnapshot) -> Result<(), std::io::Error> {
+        let mut json_bytes = serde_json::to_vec(snapshot)
+            .map_err(|err| std::io::Error::new(std::io::ErrorKind::InvalidData, err))?;
+        if !json_bytes.ends_with(b"\n") {
+            json_bytes.push(b'\n');
+        }
+        self.persist_bytes(&json_bytes).await
+    }
+
+    async fn persist_bytes(&self, json_bytes: &[u8]) -> Result<(), std::io::Error> {
         let _guard = self.lock.lock().await;
         if let Some(parent) = self.path.parent() {
             afs::create_dir_all(parent).await?;
         }
-        let mut json_bytes = serde_json::to_vec_pretty(snapshot)
-            .map_err(|err| std::io::Error::new(std::io::ErrorKind::InvalidData, err))?;
-        json_bytes.push(b'\n');
-        write_atomic(self.path.as_path(), &json_bytes).await
+        write_atomic(self.path.as_path(), json_bytes).await
     }
 }
 
@@ -628,6 +692,10 @@ async fn write_atomic(path: &Path, bytes: &[u8]) -> Result<(), std::io::Error> {
             result
         }
     }
+}
+
+struct SnapshotCache {
+    hash: [u8; 32],
 }
 
 fn format_budget_hint(budget: &RuntimeRestartBudget) -> String {

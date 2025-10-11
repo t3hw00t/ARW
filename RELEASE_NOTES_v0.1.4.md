@@ -26,6 +26,7 @@ Adds durable request correlation, safer default headers, CSP controls, and riche
 - Dockerfile: multi-stage, `libxcb1`/`curl`, healthcheck, `spec/` and `interfaces/` copied; README quickstart.
 - Helm: values expose `ARW_TRUST_FORWARD_HEADERS`, `ARW_ACCESS_*`, `ARW_CSP_*`; deployment envs updated.
 - Docs: Docker (with rolling logs), Kubernetes (helm flags), Reverse Proxy (trusted headers), Security Hardening (headers/CSP/logs), Systemd Service.
+- Performance: runtime snapshots skip redundant writes and reuse hashed caches, autonomy lane persistence runs through a debounced async worker, read-model patching avoids long mutex holds, and context cascade reads batch correlation queries.
 
 ## Compatibility
 - No breaking API/SSE changes. Defaults:
