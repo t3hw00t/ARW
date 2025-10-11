@@ -23,6 +23,8 @@ pub const STREAM_EVENT_COMPLETED: &str = topics::TOPIC_WORKING_SET_COMPLETED;
 const METRIC_WORLD_CANDIDATES: &str = "arw_context_world_candidates_total";
 const DEFAULT_WORLD_LANE: &str = "world";
 
+type SharedValue = Arc<Value>;
+
 #[derive(Clone, Debug)]
 pub struct WorkingSetSpec {
     pub query: Option<String>,
@@ -148,10 +150,10 @@ impl WorkingSetSpec {
 
 #[derive(Debug)]
 pub struct WorkingSet {
-    pub items: Vec<Value>,
-    pub seeds: Vec<Value>,
-    pub expanded: Vec<Value>,
-    pub diagnostics: Value,
+    pub items: Vec<SharedValue>,
+    pub seeds: Vec<SharedValue>,
+    pub expanded: Vec<SharedValue>,
+    pub diagnostics: SharedValue,
     pub summary: WorkingSetSummary,
 }
 
@@ -216,15 +218,15 @@ impl WorkingSetSummary {
 pub struct WorkingSetStreamEvent {
     pub iteration: usize,
     pub kind: String,
-    pub payload: Value,
+    pub payload: SharedValue,
 }
 
 pub trait WorkingSetObserver {
-    fn emit(&mut self, kind: &'static str, payload: Value);
+    fn emit(&mut self, kind: &'static str, payload: SharedValue);
 }
 
 impl WorkingSetObserver for () {
-    fn emit(&mut self, _kind: &'static str, _payload: Value) {}
+    fn emit(&mut self, _kind: &'static str, _payload: SharedValue) {}
 }
 
 pub struct ChannelObserver {
@@ -239,7 +241,13 @@ impl ChannelObserver {
 }
 
 impl WorkingSetObserver for ChannelObserver {
-    fn emit(&mut self, kind: &'static str, payload: Value) {
+    fn emit(&mut self, kind: &'static str, payload: SharedValue) {
+        counter!(
+            "arw_context_observer_emit_total",
+            "observer" => "channel",
+            "event" => kind
+        )
+        .increment(1);
         let evt = WorkingSetStreamEvent {
             iteration: self.iteration,
             kind: kind.to_string(),
@@ -275,12 +283,12 @@ impl BusObserver {
         }
     }
 
-    fn enrich_value(&self, payload: Value) -> Value {
+    fn enrich_value(&self, payload: &Value) -> Value {
         let mut map: Map<String, Value> = match payload {
-            Value::Object(map) => map,
+            Value::Object(map) => map.clone(),
             other => {
                 let mut map = Map::new();
-                map.insert("value".into(), other);
+                map.insert("value".into(), other.clone());
                 map
             }
         };
@@ -303,8 +311,14 @@ impl BusObserver {
 }
 
 impl WorkingSetObserver for BusObserver {
-    fn emit(&mut self, kind: &'static str, payload: Value) {
-        let enriched = self.enrich_value(payload);
+    fn emit(&mut self, kind: &'static str, payload: SharedValue) {
+        counter!(
+            "arw_context_observer_emit_total",
+            "observer" => "bus",
+            "event" => kind
+        )
+        .increment(1);
+        let enriched = self.enrich_value(payload.as_ref());
         self.publish_enriched(kind, &enriched);
     }
 }
@@ -324,10 +338,17 @@ impl<A> WorkingSetObserver for CompositeObserver<A>
 where
     A: WorkingSetObserver,
 {
-    fn emit(&mut self, kind: &'static str, payload: Value) {
-        let enriched = self.second.enrich_value(payload);
-        self.first.emit(kind, enriched.clone());
-        self.second.publish_enriched(kind, &enriched);
+    fn emit(&mut self, kind: &'static str, payload: SharedValue) {
+        counter!(
+            "arw_context_observer_emit_total",
+            "observer" => "composite",
+            "event" => kind
+        )
+        .increment(1);
+        let enriched = self.second.enrich_value(payload.as_ref());
+        let shared = Arc::new(enriched);
+        self.first.emit(kind, Arc::clone(&shared));
+        self.second.publish_enriched(kind, shared.as_ref());
     }
 }
 
@@ -380,10 +401,10 @@ impl WorkingSetBuilder {
         let scorer = resolve_scorer(Some(scorer_label.as_str()));
         observer.emit(
             STREAM_EVENT_STARTED,
-            json!({
+            Arc::new(json!({
                 "spec": spec.snapshot(),
                 "scorer": scorer.name(),
-            }),
+            })),
         );
         counter!("arw_context_scorer_used_total", "scorer" => scorer.name()).increment(1);
 
@@ -396,13 +417,18 @@ impl WorkingSetBuilder {
         lanes.dedup_by(|a, b| a.as_ref().map(|s| s.as_str()) == b.as_ref().map(|s| s.as_str()));
 
         let mut candidates: FxHashMap<String, Candidate> = FxHashMap::default();
-        let mut seeds_raw: Vec<Value> = Vec::new();
-        let mut expanded_raw: Vec<Value> = Vec::new();
+        let mut seeds_raw: Vec<SharedValue> = Vec::new();
+        let mut expanded_raw: Vec<SharedValue> = Vec::new();
         let mut seed_infos: Vec<SeedInfo> = Vec::new();
 
         let retrieve_start = Instant::now();
+        let effective_lane_count = if lanes.len() == 1 && lanes[0].is_none() {
+            1
+        } else {
+            lanes.len().max(1)
+        };
         for lane in lanes.iter() {
-            let fetch_k = ((spec.limit * 3) + spec.expand_per_seed).max(10) as i64;
+            let fetch_k = self.compute_retrieve_limit(spec, lane, effective_lane_count);
             let mut items = self.kernel_session.select_memory_hybrid(
                 spec.query.as_deref(),
                 spec.embed.as_deref(),
@@ -418,11 +444,14 @@ impl WorkingSetBuilder {
                 if let Some((candidate, seed)) =
                     build_seed_candidate(item, lane_override, spec.project.as_deref())
                 {
-                    let payload = candidate.value.clone();
+                    let payload = Arc::clone(&candidate.value);
                     let lane_for_event = candidate.lane.clone();
                     observer.emit(
                         STREAM_EVENT_SEED,
-                        json!({"item": payload.clone(), "lane": lane_for_event.clone()}),
+                        Arc::new(json!({
+                            "item": payload.as_ref().clone(),
+                            "lane": lane_for_event.clone(),
+                        })),
                     );
                     counter!(
                         "arw_context_seed_candidates_total",
@@ -507,11 +536,14 @@ impl WorkingSetBuilder {
                             &entry.link,
                             spec.project.as_deref(),
                         ) {
-                            let payload = candidate.value.clone();
+                            let payload = Arc::clone(&candidate.value);
                             let lane_for_event = candidate.lane.clone();
                             observer.emit(
                                 STREAM_EVENT_EXPANDED,
-                                json!({"item": payload.clone(), "lane": lane_for_event.clone()}),
+                                Arc::new(json!({
+                                    "item": payload.as_ref().clone(),
+                                    "lane": lane_for_event.clone(),
+                                })),
                             );
                             counter!(
                                 "arw_context_link_expansion_total",
@@ -557,7 +589,7 @@ impl WorkingSetBuilder {
         )
         .record(select_elapsed.as_secs_f64() * 1000.0);
 
-        let items: Vec<Value> = selected.iter().map(|c| c.value.clone()).collect();
+        let items: Vec<SharedValue> = selected.iter().map(|c| Arc::clone(&c.value)).collect();
         let summary = WorkingSetSummary::from_selection(
             &spec,
             &selected,
@@ -575,7 +607,7 @@ impl WorkingSetBuilder {
         )
         .record(total_elapsed.as_secs_f64() * 1000.0);
 
-        let diagnostics = build_diagnostics(
+        let diagnostics = Arc::new(build_diagnostics(
             &spec,
             &seed_infos,
             &expanded_raw,
@@ -590,18 +622,16 @@ impl WorkingSetBuilder {
             select_elapsed,
             total_elapsed,
             scorer.name(),
-        );
+        ));
 
-        observer.emit(
-            STREAM_EVENT_COMPLETED,
-            json!({
-                "items": items.clone(),
-                "seeds": seeds_raw.clone(),
-                "expanded": expanded_raw.clone(),
-                "summary": summary.to_json(),
-                "diagnostics": diagnostics.clone(),
-            }),
-        );
+        let completed_payload = Arc::new(json!({
+            "items": clone_shared_values(&items),
+            "seeds": clone_shared_values(&seeds_raw),
+            "expanded": clone_shared_values(&expanded_raw),
+            "summary": summary.to_json(),
+            "diagnostics": diagnostics.as_ref().clone(),
+        }));
+        observer.emit(STREAM_EVENT_COMPLETED, Arc::clone(&completed_payload));
 
         Ok(WorkingSet {
             items,
@@ -616,7 +646,7 @@ impl WorkingSetBuilder {
         &self,
         spec: &WorkingSetSpec,
         candidates: &mut FxHashMap<String, Candidate>,
-        expanded_raw: &mut Vec<Value>,
+        expanded_raw: &mut Vec<SharedValue>,
         observer: &mut O,
         cap: usize,
     ) {
@@ -624,35 +654,25 @@ impl WorkingSetBuilder {
             return;
         }
         let mut world_candidates: Vec<Candidate> = Vec::new();
-        world_candidates.reserve(cap.min(self.world_beliefs.len()));
         for belief in self.world_beliefs.iter() {
             if let Some(candidate) = build_world_candidate(belief, spec.project.as_deref()) {
-                world_candidates.push(candidate);
+                insert_ranked_candidate(&mut world_candidates, candidate, cap);
             }
         }
         if world_candidates.is_empty() {
             return;
         }
-        if world_candidates.len() > cap {
-            let nth = cap.saturating_sub(1);
-            world_candidates.select_nth_unstable_by(nth, |a, b| {
-                b.cscore.partial_cmp(&a.cscore).unwrap_or(Ordering::Equal)
-            });
-            world_candidates.truncate(cap);
-        }
-        world_candidates
-            .sort_unstable_by(|a, b| b.cscore.partial_cmp(&a.cscore).unwrap_or(Ordering::Equal));
 
         for candidate in world_candidates {
-            let payload = candidate.value.clone();
+            let payload = Arc::clone(&candidate.value);
             let lane_for_event = candidate.lane.clone();
             observer.emit(
                 STREAM_EVENT_EXPANDED,
-                json!({
-                    "item": payload.clone(),
+                Arc::new(json!({
+                    "item": payload.as_ref().clone(),
                     "lane": lane_for_event.clone(),
                     "source": "world",
-                }),
+                })),
             );
             counter!(METRIC_WORLD_CANDIDATES).increment(1);
             expanded_raw.push(payload);
@@ -666,7 +686,7 @@ impl WorkingSetBuilder {
         lanes: &[Option<String>],
         seed_infos: &[SeedInfo],
         candidates: &mut FxHashMap<String, Candidate>,
-        expanded_raw: &mut Vec<Value>,
+        expanded_raw: &mut Vec<SharedValue>,
         observer: &mut O,
     ) -> Result<usize> {
         let seed_pool = seed_infos.len();
@@ -776,15 +796,15 @@ impl WorkingSetBuilder {
                     if candidates.contains_key(&candidate.id) {
                         continue;
                     }
-                    let payload = candidate.value.clone();
+                    let payload = Arc::clone(&candidate.value);
                     let lane_for_event = candidate.lane.clone();
                     observer.emit(
                         STREAM_EVENT_QUERY_EXPANDED,
-                        json!({
-                            "item": payload.clone(),
+                        Arc::new(json!({
+                            "item": payload.as_ref().clone(),
                             "lane": lane_for_event.clone(),
                             "seeds_used": seeds_for_lane,
-                        }),
+                        })),
                     );
                     counter!(
                         "arw_context_query_expansion_candidates_total",
@@ -809,7 +829,7 @@ struct Candidate {
     tags: Vec<String>,
     embed: Option<Arc<[f32]>>,
     cscore: f32,
-    value: Value,
+    value: SharedValue,
     slot_key: String,
 }
 
@@ -1023,12 +1043,12 @@ fn select_candidates<O: WorkingSetObserver>(
         counter!("arw_context_selected_total", "lane" => lane_label).increment(1);
         observer.emit(
             STREAM_EVENT_SELECTED,
-            json!({
+            Arc::new(json!({
                 "rank": selected.len(),
-                "item": cand.value.clone(),
+                "item": cand.value.as_ref().clone(),
                 "score": cand.cscore,
                 "scorer": scorer.name(),
-            }),
+            })),
         );
         selected.push(cand);
         state_epoch = state_epoch.saturating_add(1);
@@ -1367,6 +1387,10 @@ fn world_candidate_cap(spec: &WorkingSetSpec) -> usize {
         .unwrap_or_else(|| spec.limit.saturating_mul(2).max(64))
 }
 
+fn clone_shared_values(values: &[SharedValue]) -> Vec<Value> {
+    values.iter().map(|v| v.as_ref().clone()).collect()
+}
+
 fn insert_candidate(map: &mut FxHashMap<String, Candidate>, candidate: Candidate) {
     let id = candidate.id.clone();
     if let Some(existing) = map.get_mut(&id) {
@@ -1378,11 +1402,68 @@ fn insert_candidate(map: &mut FxHashMap<String, Candidate>, candidate: Candidate
     }
 }
 
+impl WorkingSetBuilder {
+    fn compute_retrieve_limit(
+        &self,
+        spec: &WorkingSetSpec,
+        lane: &Option<String>,
+        lane_count: usize,
+    ) -> i64 {
+        let mut fetch = self.estimate_lane_goal(spec, lane, lane_count);
+        fetch = fetch.saturating_mul(3);
+        fetch = fetch.saturating_add(spec.expand_per_seed);
+        let mut min_fetch = spec.limit.saturating_add(spec.expand_per_seed).max(10);
+        if let Some(cap) = fetch_cap_override() {
+            fetch = fetch.min(cap);
+            min_fetch = min_fetch.min(cap);
+        }
+        fetch = fetch.max(min_fetch);
+        let legacy = ((spec.limit * 3) + spec.expand_per_seed).max(10);
+        fetch = fetch.min(legacy);
+        fetch as i64
+    }
+
+    fn estimate_lane_goal(
+        &self,
+        spec: &WorkingSetSpec,
+        _lane: &Option<String>,
+        lane_count: usize,
+    ) -> usize {
+        if lane_count <= 1 || _lane.is_none() {
+            return spec.limit.max(1);
+        }
+        spec.limit.div_ceil(lane_count).max(1)
+    }
+}
+
+fn insert_ranked_candidate(candidates: &mut Vec<Candidate>, candidate: Candidate, cap: usize) {
+    if cap == 0 {
+        return;
+    }
+    let pos = candidates
+        .iter()
+        .position(|existing| candidate.cscore > existing.cscore);
+    match pos {
+        Some(idx) => candidates.insert(idx, candidate),
+        None => candidates.push(candidate),
+    }
+    if candidates.len() > cap {
+        candidates.pop();
+    }
+}
+
+fn fetch_cap_override() -> Option<usize> {
+    std::env::var("ARW_CONTEXT_FETCH_MAX")
+        .ok()
+        .and_then(|raw| raw.trim().parse::<usize>().ok())
+        .filter(|cap| *cap > 0)
+}
+
 #[allow(clippy::too_many_arguments)]
 fn build_diagnostics(
     spec: &WorkingSetSpec,
     seeds: &[SeedInfo],
-    expanded: &[Value],
+    expanded: &[SharedValue],
     lane_counts: &BTreeMap<String, usize>,
     slot_counts: &BTreeMap<String, usize>,
     selected: usize,
@@ -1497,7 +1578,7 @@ impl Candidate {
             tags,
             embed,
             cscore,
-            value,
+            value: Arc::new(value),
             slot_key,
         }
     }
@@ -1927,6 +2008,66 @@ mod tests {
     use crate::test_support::env as test_env;
     use chrono::{SecondsFormat, Utc};
     use serde_json::json;
+    use std::sync::{Arc as StdArc, Mutex};
+
+    #[tokio::test]
+    async fn channel_observer_reuses_payload_arc() {
+        let (tx, mut rx) = tokio::sync::mpsc::channel(1);
+        let mut observer = ChannelObserver::new(7, tx);
+        let payload = Arc::new(json!({"value": 1}));
+
+        observer.emit("test.event", Arc::clone(&payload));
+
+        let event = rx.recv().await.expect("channel event");
+        assert!(StdArc::ptr_eq(&payload, &event.payload));
+        assert_eq!(event.iteration, 7);
+    }
+
+    #[derive(Clone, Default)]
+    struct RecordingObserver {
+        events: StdArc<Mutex<Vec<SharedValue>>>,
+    }
+
+    impl RecordingObserver {
+        fn new() -> Self {
+            Self::default()
+        }
+
+        fn events(&self) -> StdArc<Mutex<Vec<SharedValue>>> {
+            StdArc::clone(&self.events)
+        }
+    }
+
+    impl WorkingSetObserver for RecordingObserver {
+        fn emit(&mut self, _kind: &'static str, payload: SharedValue) {
+            self.events.lock().unwrap().push(payload);
+        }
+    }
+
+    #[tokio::test]
+    async fn composite_observer_shares_payload_with_inner_observer() {
+        let bus = arw_events::Bus::new(16);
+        let mut bus_rx = bus.subscribe();
+
+        let recorder = RecordingObserver::new();
+        let events = recorder.events();
+
+        let bus_observer = BusObserver::new(bus.clone(), 0, None, None, None);
+        let mut composite = CompositeObserver::new(recorder, bus_observer);
+
+        let payload = Arc::new(json!({"foo": "bar"}));
+        composite.emit("custom.event", Arc::clone(&payload));
+
+        let stored = events.lock().unwrap();
+        assert_eq!(stored.len(), 1);
+        assert!(StdArc::ptr_eq(&payload, &stored[0]));
+        drop(stored);
+
+        let envelope = bus_rx.recv().await.expect("bus event");
+        assert_eq!(envelope.kind, "custom.event");
+        assert_eq!(envelope.payload.get("iteration"), Some(&json!(0)));
+        assert_eq!(envelope.payload.get("foo"), Some(&json!("bar")));
+    }
 
     fn context_env_guard() -> test_env::EnvGuard {
         let mut guard = test_env::guard();

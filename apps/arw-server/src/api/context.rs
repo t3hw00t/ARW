@@ -10,6 +10,7 @@ use serde_json::{json, Value};
 use std::collections::BTreeMap;
 use std::convert::Infallible;
 use std::future::ready;
+use std::sync::Arc;
 use tokio::sync::mpsc;
 use tokio_stream::wrappers::ReceiverStream;
 use tokio_stream::StreamExt;
@@ -241,7 +242,7 @@ async fn stream_working_set(
         {
             return None;
         }
-        let mut payload = evt.payload;
+        let mut payload = evt.payload.as_ref().clone();
         let corr_meta = payload.as_object().and_then(|m| m.get("corr_id")).cloned();
         let project_meta = payload.as_object().and_then(|m| m.get("project")).cloned();
         let query_meta = payload.as_object().and_then(|m| m.get("query")).cloned();
@@ -310,14 +311,16 @@ fn build_context_response(params: ContextResponseInputs<'_>) -> Value {
         summary,
     } = working_set;
 
-    let preview = build_context_preview(&items);
-
     let item_count = items.len();
     let seed_count = seeds.len();
     let expanded_count = expanded.len();
 
+    let items_json = clone_shared_values(&items);
+
+    let preview = build_context_preview(&items_json);
+
     let mut working = json!({
-        "items": items,
+        "items": items_json,
         "counts": {
             "items": item_count,
             "seeds": seed_count,
@@ -332,11 +335,11 @@ fn build_context_response(params: ContextResponseInputs<'_>) -> Value {
     working["iterations"] = Value::Array(iterations_meta);
     working["final_spec"] = final_spec.snapshot();
     if include_sources || debug {
-        working["seeds"] = json!(seeds);
-        working["expanded"] = json!(expanded);
+        working["seeds"] = json!(clone_shared_values(&seeds));
+        working["expanded"] = json!(clone_shared_values(&expanded));
     }
     if debug {
-        working["diagnostics"] = diagnostics;
+        working["diagnostics"] = diagnostics.as_ref().clone();
     }
 
     let beliefs = working.get("items").cloned().unwrap_or_else(|| json!([]));
@@ -373,6 +376,10 @@ fn build_context_response(params: ContextResponseInputs<'_>) -> Value {
     body
 }
 
+fn clone_shared_values(values: &[Arc<Value>]) -> Vec<Value> {
+    values.iter().map(|v| v.as_ref().clone()).collect()
+}
+
 fn build_context_preview(items: &[Value]) -> Option<String> {
     const MAX_LINES: usize = 5;
     const LINE_MAX: usize = 160;
@@ -394,12 +401,13 @@ fn build_context_preview(items: &[Value]) -> Option<String> {
         let text = candidate
             .map(|s| s.to_string())
             .unwrap_or_else(|| serde_json::to_string(item).unwrap_or_default());
-        let normalized = text.split_whitespace().collect::<Vec<_>>().join(" ");
-        let trimmed = normalized.trim();
-        if trimmed.is_empty() {
+        let Some(normalized) = normalize_whitespace(&text) else {
+            continue;
+        };
+        if normalized.is_empty() {
             continue;
         }
-        let mut line = trimmed.to_string();
+        let mut line = normalized;
         if line.len() > LINE_MAX {
             line.truncate(LINE_MAX);
             line.push('…');
@@ -417,6 +425,166 @@ fn build_context_preview(items: &[Value]) -> Option<String> {
         preview.push('…');
     }
     Some(preview)
+}
+
+fn normalize_whitespace(input: &str) -> Option<String> {
+    let mut parts = input.split_whitespace();
+    let first = parts.next()?;
+    let mut normalized = String::from(first);
+    for part in parts {
+        normalized.push(' ');
+        normalized.push_str(part);
+    }
+    Some(normalized)
+}
+
+#[cfg(test)]
+mod context_response_tests {
+    use super::*;
+
+    fn sample_spec() -> working_set::WorkingSetSpec {
+        working_set::WorkingSetSpec {
+            query: None,
+            embed: None,
+            lanes: vec!["semantic".into()],
+            limit: 3,
+            expand_per_seed: 0,
+            diversity_lambda: 0.5,
+            min_score: 0.2,
+            project: None,
+            lane_bonus: 0.0,
+            scorer: Some("mmr".into()),
+            expand_query: false,
+            expand_query_top_k: 1,
+            slot_budgets: BTreeMap::new(),
+        }
+    }
+
+    fn sample_summary() -> working_set::WorkingSetSummary {
+        working_set::WorkingSetSummary {
+            target_limit: 3,
+            lanes_requested: 1,
+            selected: 1,
+            avg_cscore: 0.4,
+            max_cscore: 0.6,
+            min_cscore: 0.2,
+            threshold_hits: 1,
+            total_candidates: 2,
+            lane_counts: BTreeMap::new(),
+            slot_counts: BTreeMap::new(),
+            slot_budgets: BTreeMap::new(),
+            min_score: 0.2,
+            scorer: "mmr".into(),
+        }
+    }
+
+    fn sample_request() -> AssembleReq {
+        AssembleReq {
+            proj: None,
+            q: Some("demo".into()),
+            embed: None,
+            lanes: None,
+            limit: None,
+            expand_per_seed: None,
+            diversity_lambda: None,
+            min_score: None,
+            lane_bonus: None,
+            scorer: None,
+            expand_query: None,
+            expand_query_top_k: None,
+            include_sources: None,
+            debug: None,
+            stream: None,
+            max_iterations: None,
+            corr_id: None,
+            slot_budgets: None,
+        }
+    }
+
+    fn sample_working_set() -> working_set::WorkingSet {
+        working_set::WorkingSet {
+            items: vec![Arc::new(json!({"id": 1, "text": "hello"}))],
+            seeds: vec![Arc::new(json!({"id": "seed-1"}))],
+            expanded: vec![Arc::new(json!({"id": "expanded-1"}))],
+            diagnostics: Arc::new(json!({"phase": "retrieve"})),
+            summary: sample_summary(),
+        }
+    }
+
+    #[test]
+    fn hides_sources_and_diagnostics_when_disabled() {
+        let request = sample_request();
+        let base_spec = sample_spec();
+        let final_spec = base_spec.clone();
+        let working_set = sample_working_set();
+        let verdict = coverage::CoverageVerdict::satisfied();
+
+        let response = build_context_response(ContextResponseInputs {
+            request: &request,
+            base_spec: &base_spec,
+            final_spec: &final_spec,
+            verdict: &verdict,
+            working_set,
+            iterations_meta: Vec::new(),
+            include_sources: false,
+            debug: false,
+            max_iterations: 4,
+            corr_id: None,
+        });
+
+        assert!(response
+            .get("working_set")
+            .and_then(|ws| ws.get("seeds"))
+            .is_none());
+        assert!(response
+            .get("working_set")
+            .and_then(|ws| ws.get("expanded"))
+            .is_none());
+        assert!(response
+            .get("working_set")
+            .and_then(|ws| ws.get("diagnostics"))
+            .is_none());
+        assert_eq!(response["working_set"]["counts"]["items"].as_u64(), Some(1));
+    }
+
+    #[test]
+    fn exposes_sources_and_diagnostics_when_enabled() {
+        let mut request = sample_request();
+        request.corr_id = Some("corr-1".into());
+        let base_spec = sample_spec();
+        let final_spec = base_spec.clone();
+        let working_set = sample_working_set();
+        let verdict = coverage::CoverageVerdict::satisfied();
+
+        let response = build_context_response(ContextResponseInputs {
+            request: &request,
+            base_spec: &base_spec,
+            final_spec: &final_spec,
+            verdict: &verdict,
+            working_set,
+            iterations_meta: Vec::new(),
+            include_sources: true,
+            debug: true,
+            max_iterations: 4,
+            corr_id: request.corr_id.as_deref(),
+        });
+
+        assert_eq!(
+            response["working_set"]["seeds"].as_array().map(|a| a.len()),
+            Some(1)
+        );
+        assert_eq!(
+            response["working_set"]["expanded"]
+                .as_array()
+                .map(|a| a.len()),
+            Some(1)
+        );
+        assert_eq!(
+            response["working_set"]["diagnostics"],
+            json!({"phase": "retrieve"})
+        );
+        assert_eq!(response["corr_id"], json!("corr-1"));
+    }
 }
 
 fn build_spec(req: &AssembleReq) -> working_set::WorkingSetSpec {

@@ -45,6 +45,7 @@ See [memory_overlay_service.md](memory_overlay_service.md#data-model) for full s
 - Candidate hydration now happens only after ranking the thin `id/score` projection, so the top-K slice reuses a single batched `get_memory_many` call instead of re-parsing JSON for every intermediate record.
 - Link expansion batches lookups across all seed IDs (`list_memory_links_many`) and enforces per-seed limits inside the SQL window plan, eliminating the previous N+1 query pattern and avoiding full-table scans when a seed has deep history.
 - World belief injections respect a configurable cap (`ARW_CONTEXT_WORLD_MAX`, default `max(64, 2×limit)`), prioritising the highest-confidence beliefs first so pathological graphs cannot drown the working-set pipeline.
+- Lane-aware retrieve sizing obeys `ARW_CONTEXT_FETCH_MAX` (default derives from per-lane budgets) to prevent hybrid pulls from over-fetching when many lanes participate in a single iteration.
 - Context assembly now holds a single kernel session per iteration, reusing one SQLite connection for all hybrid pulls/link fetches instead of thrashing the pool with per-lane checkouts.
 - Memory hygiene and other background sweepers share sessions inside their blocking work, then refresh the memory read-model from the same connection, keeping GC runs from spiking pool pressure and reducing reconnection churn.
 - The `kernel_pool_wait` read-model surfaces live `wait_count`, `wait_total_ms`, and average wait time so operators can benchmark pool behaviour before/after tuning.

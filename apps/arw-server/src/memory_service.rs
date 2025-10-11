@@ -1,4 +1,5 @@
 use anyhow::{Context, Result};
+use rustc_hash::FxHashSet;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Map, Value};
 use std::collections::BTreeMap;
@@ -320,12 +321,20 @@ pub async fn pack_memory(state: &AppState, input: MemoryPackInput) -> Result<Mem
     .context("pack_memory assemble join failed")??;
     let spec_snapshot = spec.snapshot();
 
-    let mut items = working.items;
+    let mut items: Vec<Value> = working
+        .items
+        .into_iter()
+        .map(|value| value.as_ref().clone())
+        .collect();
     attach_memory_ptrs(&mut items);
 
     let include_sources = input.include_sources.unwrap_or(false);
     let mut seeds = if include_sources {
-        working.seeds
+        working
+            .seeds
+            .into_iter()
+            .map(|value| value.as_ref().clone())
+            .collect::<Vec<Value>>()
     } else {
         Vec::new()
     };
@@ -333,7 +342,11 @@ pub async fn pack_memory(state: &AppState, input: MemoryPackInput) -> Result<Mem
         attach_memory_ptrs(&mut seeds);
     }
     let mut expanded = if include_sources {
-        working.expanded
+        working
+            .expanded
+            .into_iter()
+            .map(|value| value.as_ref().clone())
+            .collect::<Vec<Value>>()
     } else {
         Vec::new()
     };
@@ -342,7 +355,7 @@ pub async fn pack_memory(state: &AppState, input: MemoryPackInput) -> Result<Mem
     }
 
     let diagnostics = if input.debug.unwrap_or(false) {
-        Some(working.diagnostics)
+        Some(working.diagnostics.as_ref().clone())
     } else {
         None
     };
@@ -380,15 +393,14 @@ pub fn attach_memory_ptrs(items: &mut [Value]) {
 
 fn normalize_tags(tags: &[String]) -> Vec<String> {
     let mut out: Vec<String> = Vec::new();
+    let mut seen: FxHashSet<String> = FxHashSet::default();
     for tag in tags {
         let trimmed = tag.trim();
         if trimmed.is_empty() {
             continue;
         }
-        if !out
-            .iter()
-            .any(|existing| existing.eq_ignore_ascii_case(trimmed))
-        {
+        let lower = trimmed.to_ascii_lowercase();
+        if seen.insert(lower) {
             out.push(trimmed.to_string());
         }
     }

@@ -60,13 +60,14 @@ mod tests {
     use crate::working_set::{WorkingSet, WorkingSetSummary};
     use serde_json::json;
     use std::collections::BTreeMap;
+    use std::sync::Arc;
 
     fn empty_ws(summary: WorkingSetSummary) -> WorkingSet {
         WorkingSet {
             items: Vec::new(),
             seeds: Vec::new(),
             expanded: Vec::new(),
-            diagnostics: json!({}),
+            diagnostics: Arc::new(json!({})),
             summary,
         }
     }

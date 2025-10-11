@@ -84,6 +84,12 @@ Snappy publishes a read-model (`id="snappy"`) that surfaces the worst protected 
 - Cross-link the panel description to the Hub’s Metrics sidecar (“Snappy detail”) so operators can jump from dashboards to the live SSE feed when triaging spikes.
 - Recent builds add per-route hit/error counts and worker queue depth to the `snappy` read-model; surface these alongside p95 so responders can spot traffic spikes or backlog immediately.
 
+### Context Loop Observability
+
+- Counter `arw_context_observer_emit_total{observer, event}` tracks how often each working-set observer (channel, bus, composite) forwards payloads. Plot it alongside iteration duration to confirm the new shared payload plumbing keeps clone volume flat while load increases.
+- When the counter's composite series grows faster than the channel series, investigate consumer fan-out — it signals downstream listeners are emitting extra events (or failing fast and triggering retries).
+- Pair the counter with existing `arw_context_iteration_duration_ms` histograms to correlate emit spikes with slow iterations during incident reviews.
+
 ## Staging checklist
 
 Before cutting any legacy traffic, verify in staging:

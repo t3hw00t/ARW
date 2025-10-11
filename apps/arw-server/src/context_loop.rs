@@ -3,6 +3,7 @@ use metrics::{counter, gauge, histogram};
 use serde_json::{json, Map, Number, Value};
 use std::collections::HashSet;
 use std::future::Future;
+use std::sync::Arc;
 use std::time::Instant;
 use tokio::sync::mpsc;
 use tokio::task::JoinError;
@@ -13,7 +14,7 @@ pub(crate) enum ContextIterationEvent {
     Summary {
         iteration: usize,
         payload: Value,
-        diagnostics: Option<Value>,
+        diagnostics: Option<Arc<Value>>,
     },
     Error {
         iteration: usize,
@@ -51,7 +52,7 @@ impl SyncIterationCollector {
                 let mut entry = payload.as_object().cloned().unwrap_or_default();
                 if self.debug {
                     if let Some(diag) = diagnostics {
-                        entry.insert("diagnostics".into(), diag.clone());
+                        entry.insert("diagnostics".into(), diag.as_ref().clone());
                     }
                 }
                 self.entries.push(Value::Object(entry));
@@ -85,7 +86,7 @@ impl StreamIterationEmitter {
                         .send(working_set::WorkingSetStreamEvent {
                             iteration,
                             kind: topics::TOPIC_WORKING_SET_ITERATION_SUMMARY.into(),
-                            payload,
+                            payload: Arc::new(payload),
                         })
                         .await;
                 }
@@ -96,7 +97,7 @@ impl StreamIterationEmitter {
                         .send(working_set::WorkingSetStreamEvent {
                             iteration,
                             kind: topics::TOPIC_WORKING_SET_ERROR.into(),
-                            payload,
+                            payload: Arc::new(payload),
                         })
                         .await;
                 }
@@ -139,7 +140,7 @@ where
             IterationOutcome::Success(success) => {
                 let success = *success;
                 let diagnostics = if capture_diagnostics {
-                    Some(success.working_set.diagnostics.clone())
+                    Some(Arc::clone(&success.working_set.diagnostics))
                 } else {
                     None
                 };
@@ -461,9 +462,9 @@ mod tests {
     fn working_set_with_summary(summary: WorkingSetSummary) -> WorkingSet {
         WorkingSet {
             items: Vec::new(),
-            seeds: vec![json!({"lane": "analysis"})],
-            expanded: vec![json!({"lane": "code"})],
-            diagnostics: json!({}),
+            seeds: vec![Arc::new(json!({"lane": "analysis"}))],
+            expanded: vec![Arc::new(json!({"lane": "code"}))],
+            diagnostics: Arc::new(json!({})),
             summary,
         }
     }
@@ -700,7 +701,7 @@ mod tests {
             "streamed summary count should match collector",
         );
         for (summary, streamed) in summary_payloads.iter().zip(streamed_payloads.iter()) {
-            assert_eq!(summary, streamed);
+            assert_eq!(summary, streamed.as_ref());
         }
     }
 }
@@ -1122,10 +1123,25 @@ pub mod harness {
 
         pub fn build(&self) -> working_set::WorkingSet {
             working_set::WorkingSet {
-                items: self.items.clone(),
-                seeds: self.seeds.clone(),
-                expanded: self.expanded.clone(),
-                diagnostics: self.diagnostics.clone(),
+                items: self
+                    .items
+                    .iter()
+                    .cloned()
+                    .map(|value| Arc::new(value))
+                    .collect(),
+                seeds: self
+                    .seeds
+                    .iter()
+                    .cloned()
+                    .map(|value| Arc::new(value))
+                    .collect(),
+                expanded: self
+                    .expanded
+                    .iter()
+                    .cloned()
+                    .map(|value| Arc::new(value))
+                    .collect(),
+                diagnostics: Arc::new(self.diagnostics.clone()),
                 summary: self.summary.clone(),
             }
         }
@@ -1296,7 +1312,10 @@ pub mod harness {
                             duration_ms,
                         );
 
-                        let diagnostics = success.diagnostics.clone();
+                        let diagnostics = success
+                            .diagnostics
+                            .as_ref()
+                            .map(|diag| Arc::new(diag.clone()));
                         events.push(ContextIterationEvent::Summary {
                             iteration,
                             payload: summary_payload,
