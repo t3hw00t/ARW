@@ -15,6 +15,8 @@ This project follows Keep a Changelog and Semantic Versioning. All notable chang
 - Launcher sidecar: accessible lane toggles, smarter lane-aware subscriptions/cleanup, EventSource stale detection, and a dedicated `sidecar.js` module with expanded tests keep UI state responsive even with customised layouts.
 - Launcher sidecar approvals lane: initialise sort/filter state defensively, avoid post-dispose render crashes, and extend tests to cover approvals workflows.
 - Context loop and memory packing now reuse shared `Arc` snapshots for beliefs and batch linked-memory lookups, slashing blocking-lane clones and SQLite round-trips; SQLite helpers expose `get_memory_many` plus record-returning inserts so callers can emit events without extra queries. Working-set selection also precomputes slot labels and caches slot limits to reduce per-iteration string churn.
+- Hybrid memory retrieval now honours the caller’s requested limit (instead of always pulling 400 rows) and fast-path parses `updated` timestamps, trimming SQLite and chrono overhead during memory searches.
+- Working-set candidate selection switched to a lazy recomputing heap that avoids O(n²) rescoring, yielding lower CPU cost when context expansion returns large candidate sets.
 
 ## [0.1.4] - 2025-09-15
 

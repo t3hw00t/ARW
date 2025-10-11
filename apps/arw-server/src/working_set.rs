@@ -4,7 +4,7 @@ use chrono::SecondsFormat;
 use metrics::{counter, histogram};
 use serde_json::{json, Map, Value};
 use std::cmp::Ordering;
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::{BTreeMap, BinaryHeap, HashMap, HashSet};
 use std::sync::Arc;
 use std::time::Duration;
 use std::time::Instant;
@@ -841,8 +841,47 @@ fn resolve_scorer(name: Option<&str>) -> Box<dyn CandidateScorer + Send + Sync> 
     }
 }
 
+#[derive(Clone)]
+struct HeapEntry {
+    score: f32,
+    idx: usize,
+    epoch: u64,
+}
+
+impl HeapEntry {
+    fn new(score: f32, idx: usize, epoch: u64) -> Self {
+        Self { score, idx, epoch }
+    }
+}
+
+impl PartialEq for HeapEntry {
+    fn eq(&self, other: &Self) -> bool {
+        self.idx == other.idx
+            && self.epoch == other.epoch
+            && self.score.to_bits() == other.score.to_bits()
+    }
+}
+
+impl Eq for HeapEntry {}
+
+impl Ord for HeapEntry {
+    fn cmp(&self, other: &Self) -> Ordering {
+        match self.score.partial_cmp(&other.score) {
+            Some(Ordering::Equal) => other.idx.cmp(&self.idx),
+            Some(ord) => ord,
+            None => Ordering::Equal,
+        }
+    }
+}
+
+impl PartialOrd for HeapEntry {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
 fn select_candidates<O: WorkingSetObserver>(
-    mut candidates: Vec<Candidate>,
+    candidates: Vec<Candidate>,
     spec: &WorkingSetSpec,
     has_above: bool,
     scorer: &dyn CandidateScorer,
@@ -852,6 +891,7 @@ fn select_candidates<O: WorkingSetObserver>(
     BTreeMap<String, usize>,
     BTreeMap<String, usize>,
 ) {
+    let mut storage: Vec<Option<Candidate>> = candidates.into_iter().map(Some).collect();
     let mut selected: Vec<Candidate> = Vec::new();
     let mut lane_counts: BTreeMap<String, usize> = BTreeMap::new();
     let mut slot_counts: BTreeMap<String, usize> = BTreeMap::new();
@@ -861,50 +901,78 @@ fn select_candidates<O: WorkingSetObserver>(
         if let Some(limit) = slot_limit_cache.get(slot) {
             *limit
         } else {
-            let limit = spec.slot_limit(slot);
-            slot_limit_cache.insert(slot.to_string(), limit);
-            limit
+            let resolved = spec.slot_limit(slot);
+            slot_limit_cache.insert(slot.to_string(), resolved);
+            resolved
         }
     };
-    while !candidates.is_empty() && selected.len() < spec.limit {
-        let mut best_idx: Option<usize> = None;
-        let mut best_score = f32::MIN;
-        let ctx = SelectionContext {
-            spec,
-            selected: &selected,
-            lane_counts: &lane_counts,
-            require_threshold: has_above,
+    let mut heap: BinaryHeap<HeapEntry> = BinaryHeap::new();
+    let mut versions: Vec<u64> = vec![0; storage.len()];
+    let mut state_epoch: u64 = 0;
+
+    let score_candidate =
+        |candidate: &Candidate, selected: &[Candidate], lane_counts: &BTreeMap<String, usize>| {
+            let ctx = SelectionContext {
+                spec,
+                selected,
+                lane_counts,
+                require_threshold: has_above,
+            };
+            scorer.score(candidate, &ctx)
         };
-        for (idx, cand) in candidates.iter().enumerate() {
-            if use_slots {
-                let slot_key = cand.slot_key();
-                if let Some(limit) = resolve_slot_limit(slot_key) {
-                    let current = slot_counts.get(slot_key).copied().unwrap_or(0);
-                    if current >= limit {
-                        continue;
-                    }
-                }
-            }
-            let score = scorer.score(cand, &ctx);
-            if score.is_finite() && (best_idx.is_none() || score > best_score) {
-                best_idx = Some(idx);
-                best_score = score;
-            }
+
+    for idx in 0..storage.len() {
+        if let Some(candidate) = storage[idx].as_ref() {
+            let score = score_candidate(candidate, &selected, &lane_counts);
+            versions[idx] = state_epoch;
+            heap.push(HeapEntry::new(score, idx, state_epoch));
         }
-        let idx = match best_idx {
-            Some(i) => i,
+    }
+    while selected.len() < spec.limit {
+        let entry = match heap.pop() {
+            Some(entry) => entry,
             None => break,
         };
-        let cand = candidates.swap_remove(idx);
-        if use_slots {
-            let slot_key = cand.slot_key();
-            if let Some(limit) = resolve_slot_limit(slot_key) {
-                let current = slot_counts.get(slot_key).copied().unwrap_or(0);
+        if entry.idx >= storage.len() {
+            continue;
+        }
+        if versions[entry.idx] != entry.epoch {
+            continue;
+        }
+        let candidate_ref = match storage[entry.idx].as_ref() {
+            Some(candidate) => candidate,
+            None => continue,
+        };
+        if entry.epoch != state_epoch {
+            let score = score_candidate(candidate_ref, &selected, &lane_counts);
+            versions[entry.idx] = state_epoch;
+            heap.push(HeapEntry::new(score, entry.idx, state_epoch));
+            continue;
+        }
+        if !entry.score.is_finite() {
+            storage[entry.idx] = None;
+            continue;
+        }
+        let slot_key = if use_slots {
+            Some(candidate_ref.slot_key().to_string())
+        } else {
+            None
+        };
+        if let (true, Some(ref key)) = (use_slots, slot_key.as_ref()) {
+            if let Some(limit) = resolve_slot_limit(key.as_str()) {
+                let current = slot_counts.get(key.as_str()).copied().unwrap_or(0);
                 if current >= limit {
+                    storage[entry.idx] = None;
                     continue;
                 }
-                *slot_counts.entry(slot_key.to_string()).or_insert(0) += 1;
             }
+        }
+        let cand = match storage[entry.idx].take() {
+            Some(cand) => cand,
+            None => continue,
+        };
+        if let Some(ref key) = slot_key {
+            *slot_counts.entry(key.clone()).or_insert(0) += 1;
         }
         let lane_label = cand.lane_label().to_string();
         *lane_counts.entry(lane_label.clone()).or_insert(0) += 1;
@@ -919,6 +987,7 @@ fn select_candidates<O: WorkingSetObserver>(
             }),
         );
         selected.push(cand);
+        state_epoch = state_epoch.saturating_add(1);
     }
     (selected, lane_counts, slot_counts)
 }

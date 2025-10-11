@@ -2,7 +2,7 @@
 //! hybrid retrieval primitives, and lightweight ranking utilities.
 
 use anyhow::{anyhow, Result};
-use chrono::{DateTime, Duration, Utc};
+use chrono::{DateTime, Duration, NaiveDate, NaiveDateTime, NaiveTime, TimeZone, Utc};
 use rusqlite::{params, params_from_iter, Connection};
 use serde::Serialize;
 use serde_json::{json, Map, Value};
@@ -550,6 +550,7 @@ impl<'c> MemoryStore<'c> {
         limit: i64,
     ) -> Result<Vec<Value>> {
         let mut candidates: Vec<Value> = Vec::new();
+        let fetch_cap = limit.max(1);
         if let Some(qs) = query {
             if !qs.is_empty() {
                 let sql = if lane.is_some() {
@@ -557,23 +558,23 @@ impl<'c> MemoryStore<'c> {
                         "SELECT {cols}
                          FROM memory_records r JOIN memory_fts f ON f.id=r.id
                          WHERE f.memory_fts MATCH ? AND f.lane=?
-                         ORDER BY r.updated DESC LIMIT 400",
-                        cols = select_columns(Some("r"))
+                         ORDER BY r.updated DESC LIMIT ?",
+                        cols = select_columns(Some("r")),
                     )
                 } else {
                     format!(
                         "SELECT {cols}
                          FROM memory_records r JOIN memory_fts f ON f.id=r.id
                          WHERE f.memory_fts MATCH ?
-                         ORDER BY r.updated DESC LIMIT 400",
-                        cols = select_columns(Some("r"))
+                         ORDER BY r.updated DESC LIMIT ?",
+                        cols = select_columns(Some("r")),
                     )
                 };
                 let mut stmt = self.conn.prepare(&sql)?;
                 let mut rows = if let Some(l) = lane {
-                    stmt.query(params![qs, l])?
+                    stmt.query(params![qs, l, fetch_cap])?
                 } else {
-                    stmt.query(params![qs])?
+                    stmt.query(params![qs, fetch_cap])?
                 };
                 while let Some(r) = rows.next()? {
                     let mut record = row_to_value_full(r)?;
@@ -587,20 +588,20 @@ impl<'c> MemoryStore<'c> {
         if candidates.is_empty() {
             let sql = if lane.is_some() {
                 format!(
-                    "SELECT {cols} FROM memory_records WHERE lane=? ORDER BY updated DESC LIMIT 400",
-                    cols = select_columns(None)
+                    "SELECT {cols} FROM memory_records WHERE lane=? ORDER BY updated DESC LIMIT ?",
+                    cols = select_columns(None),
                 )
             } else {
                 format!(
-                    "SELECT {cols} FROM memory_records ORDER BY updated DESC LIMIT 400",
-                    cols = select_columns(None)
+                    "SELECT {cols} FROM memory_records ORDER BY updated DESC LIMIT ?",
+                    cols = select_columns(None),
                 )
             };
             let mut stmt = self.conn.prepare(&sql)?;
             let mut rows = if let Some(l) = lane {
-                stmt.query(params![l])?
+                stmt.query(params![l, fetch_cap])?
             } else {
-                stmt.query([])?
+                stmt.query(params![fetch_cap])?
             };
             while let Some(r) = rows.next()? {
                 let mut record = row_to_value_full(r)?;
@@ -634,12 +635,9 @@ impl<'c> MemoryStore<'c> {
             let recency = item
                 .get("updated")
                 .and_then(|v| v.as_str())
-                .and_then(|s| DateTime::parse_from_rfc3339(s).ok())
+                .and_then(parse_timestamp)
                 .map(|t| {
-                    let age = now
-                        .signed_duration_since(t.with_timezone(&Utc))
-                        .num_seconds()
-                        .max(0) as f64;
+                    let age = now.signed_duration_since(t).num_seconds().max(0) as f64;
                     let hl = 6.0f64 * 3600.0f64;
                     ((-age / hl).exp()) as f32
                 })
@@ -911,9 +909,72 @@ fn build_gc_candidate(
 }
 
 fn parse_timestamp(raw: &str) -> Option<DateTime<Utc>> {
-    DateTime::parse_from_rfc3339(raw)
-        .map(|dt| dt.with_timezone(&Utc))
-        .ok()
+    parse_timestamp_fast(raw).or_else(|| {
+        DateTime::parse_from_rfc3339(raw)
+            .map(|dt| dt.with_timezone(&Utc))
+            .ok()
+    })
+}
+
+fn parse_timestamp_fast(raw: &str) -> Option<DateTime<Utc>> {
+    let bytes = raw.as_bytes();
+    if bytes.len() < 20 {
+        return None;
+    }
+    // Fast path only handles canonical RFC3339 with millisecond precision (e.g. 2024-12-31T23:59:59.123Z)
+    // produced by to_rfc3339_opts(..., true). Fallback handles edge cases.
+    if matches!(
+        (
+            bytes.get(4),
+            bytes.get(7),
+            bytes.get(10),
+            bytes.get(13),
+            bytes.get(16)
+        ),
+        (Some(b'-'), Some(b'-'), Some(b'T'), Some(b':'), Some(b':'))
+    ) {
+        let year = raw.get(0..4)?.parse::<i32>().ok()?;
+        let month = raw.get(5..7)?.parse::<u32>().ok()?;
+        let day = raw.get(8..10)?.parse::<u32>().ok()?;
+        let hour = raw.get(11..13)?.parse::<u32>().ok()?;
+        let minute = raw.get(14..16)?.parse::<u32>().ok()?;
+        let second = raw.get(17..19)?.parse::<u32>().ok()?;
+
+        let mut cursor = 19usize;
+        let mut nanos: u32 = 0;
+        if matches!(bytes.get(cursor), Some(b'.')) {
+            cursor += 1;
+            let start = cursor;
+            while cursor < bytes.len() && bytes[cursor].is_ascii_digit() {
+                cursor += 1;
+            }
+            let frac = raw.get(start..cursor)?;
+            if frac.is_empty() || frac.len() > 9 {
+                return None;
+            }
+            let parsed = frac.parse::<u32>().ok()?;
+            let scale = 10u32.checked_pow(9u32.saturating_sub(frac.len() as u32))?;
+            nanos = parsed.checked_mul(scale)?;
+        }
+
+        match bytes.get(cursor)? {
+            b'Z' => {
+                cursor += 1;
+            }
+            _ => return None,
+        }
+
+        if cursor != bytes.len() {
+            return None;
+        }
+
+        let date = NaiveDate::from_ymd_opt(year, month, day)?;
+        let time = NaiveTime::from_hms_nano_opt(hour, minute, second, nanos)?;
+        let naive = NaiveDateTime::new(date, time);
+        return Some(Utc.from_utc_datetime(&naive));
+    }
+
+    None
 }
 
 fn row_to_value(row: &rusqlite::Row<'_>) -> Result<Value> {
