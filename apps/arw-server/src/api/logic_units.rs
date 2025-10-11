@@ -103,7 +103,7 @@ pub async fn logic_units_install(
     if !state.kernel_enabled() {
         return crate::responses::kernel_disabled();
     }
-    capsule_guard::refresh_capsules(&state).await;
+    let _ = capsule_guard::refresh_capsules_if_needed(&state).await;
     let id = manifest
         .get("id")
         .and_then(|v| v.as_str())
@@ -148,7 +148,7 @@ pub async fn logic_units_apply(
     if !state.kernel_enabled() {
         return crate::responses::kernel_disabled();
     }
-    capsule_guard::refresh_capsules(&state).await;
+    let _ = capsule_guard::refresh_capsules_if_needed(&state).await;
     if let Err(errs) = validate_patch_value(&body) {
         return (
             axum::http::StatusCode::BAD_REQUEST,
@@ -367,7 +367,7 @@ pub async fn logic_units_revert(
     if !state.kernel_enabled() {
         return crate::responses::kernel_disabled();
     }
-    capsule_guard::refresh_capsules(&state).await;
+    let _ = capsule_guard::refresh_capsules_if_needed(&state).await;
     let snap = body
         .get("snapshot_id")
         .and_then(|v| v.as_str())

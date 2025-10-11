@@ -52,7 +52,7 @@ pub(crate) async fn submit_action(
     state: &AppState,
     req: ActionReq,
 ) -> Result<ActionSubmitOutcome, SubmitActionError> {
-    capsule_guard::refresh_capsules(state).await;
+    let _ = capsule_guard::refresh_capsules_if_needed(state).await;
     if !state.kernel_enabled() {
         return Err(SubmitActionError::KernelDisabled);
     }

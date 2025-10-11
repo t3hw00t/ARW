@@ -66,7 +66,7 @@ fn publish_cache_hit(
 }
 
 pub async fn run_tool(state: &AppState, id: &str, input: Value) -> Result<Value, ToolError> {
-    capsule_guard::refresh_capsules(state).await;
+    let _ = capsule_guard::refresh_capsules_if_needed(state).await;
     let start = Instant::now();
     let bus = state.bus();
     let cache = state.tool_cache();

@@ -162,7 +162,7 @@ async fn proxy_handler(
     client: reqwest::Client,
     req: Request<IncomingBody>,
 ) -> Result<Response<ProxyBody>, Infallible> {
-    capsule_guard::refresh_capsules(&state).await;
+    let _ = capsule_guard::refresh_capsules_if_needed(&state).await;
     if req.method() == Method::CONNECT {
         return Ok(handle_connect(state, req).await);
     }

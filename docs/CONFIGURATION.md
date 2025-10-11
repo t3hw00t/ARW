@@ -302,8 +302,9 @@ When the budget is exhausted, `/state/runtime_matrix` and `runtime.state.changed
   - `ARW_GUARDRAILS_URL`: optional base URL for an HTTP guardrails service exposing `POST /check` (tool `guardrails.check`).
  - `ARW_GUARDRAILS_ALLOWLIST`: comma‑separated hostnames considered safe for URL checks (e.g., `example.com, arxiv.org`).
  - `ARW_PATCH_SAFETY`: when set to `1`, `true`, or `enforce`, reject config/logic-unit patches that trip the built-in red-team heuristics (permission widening, SSRF markers, prompt-injection bait, secret keywords). When unset, findings are reported in responses and events but do not block writes.
- - `ARW_CAPSULE_REFRESH_SECS`: upper bound (seconds) between background capsule sweeps (default `5`).
- - `ARW_CAPSULE_REFRESH_MS`: optional millisecond override for the sweep ceiling; use when capsules carry very short leases. When unset, the scheduler derives sub-second sleeps automatically from the earliest lease renewal or hop countdown and clamps to the `ARW_CAPSULE_REFRESH_SECS` ceiling.
+- `ARW_CAPSULE_REFRESH_SECS`: upper bound (seconds) between background capsule sweeps (default `5`).
+- `ARW_CAPSULE_REFRESH_MS`: optional millisecond override for the sweep ceiling; use when capsules carry very short leases. When unset, the scheduler derives sub-second sleeps automatically from the earliest lease renewal or hop countdown and clamps to the `ARW_CAPSULE_REFRESH_SECS` ceiling.
+- `ARW_CAPSULE_REQUEST_REFRESH_MS`: maximum staleness tolerated on request paths before a best-effort capsule refresh is forced (defaults to the derived sweep ceiling). Relax this for high-throughput deployments once the background refresher is enabled; tighten it for smoke-test setups that rely solely on on-demand refreshes.
 
 ## Tuning Hints
 - `ARW_HTTP_TIMEOUT_SECS`: runtime-adjustable HTTP timeout applied across built-in HTTP clients; governor hints persist updates back to this environment variable.

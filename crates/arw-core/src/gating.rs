@@ -3,6 +3,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::RwLock;
 
 use tracing::Level;
@@ -18,6 +19,7 @@ pub struct GateState {
 static STATE: OnceCell<RwLock<GateState>> = OnceCell::new();
 static CONTRACTS: OnceCell<RwLock<Vec<Contract>>> = OnceCell::new();
 static RUNTIME: OnceCell<RwLock<RuntimeState>> = OnceCell::new();
+static VERSION: AtomicU64 = AtomicU64::new(1);
 const MAX_CONTRACTS: usize = 2048;
 
 fn cell() -> &'static RwLock<GateState> {
@@ -41,6 +43,14 @@ fn runtime_cell() -> &'static RwLock<RuntimeState> {
     RUNTIME.get_or_init(|| RwLock::new(RuntimeState::default()))
 }
 
+fn bump_version() {
+    VERSION.fetch_add(1, Ordering::Relaxed);
+}
+
+pub fn version() -> u64 {
+    VERSION.load(Ordering::Relaxed)
+}
+
 #[derive(Clone)]
 struct CapsuleRuntime {
     denies: Vec<String>,
@@ -49,7 +59,7 @@ struct CapsuleRuntime {
 }
 
 impl RuntimeState {
-    fn prune_expired(&mut self, now: u64) {
+    fn prune_expired(&mut self, now: u64) -> bool {
         let expired: Vec<String> = self
             .capsules
             .iter()
@@ -58,9 +68,13 @@ impl RuntimeState {
                 _ => None,
             })
             .collect();
+        if expired.is_empty() {
+            return false;
+        }
         for id in expired {
             self.capsules.remove(&id);
         }
+        true
     }
 }
 
@@ -165,20 +179,35 @@ fn gate_denied(key: &str, source: &str, pattern: Option<&str>) -> bool {
 /// Initialize immutable user policy denies from a TOML file and env var.
 pub fn init_from_config(path: &str) {
     let (deny_user, contracts) = load_config_entries(path);
+    let mut changed = false;
     if !deny_user.is_empty() {
         let mut st = cell().write().unwrap();
+        let before = st.deny_user.len();
         st.deny_user.extend(deny_user);
+        if st.deny_user.len() != before {
+            changed = true;
+        }
     }
     if !contracts.is_empty() {
         *contracts_cell().write().unwrap() = contracts;
+        changed = true;
+    }
+    if changed {
+        bump_version();
     }
 }
 
 /// Set immutable user policy denies at runtime; adding only.
 pub fn deny_user<I: IntoIterator<Item = String>>(keys: I) {
     let mut st = cell().write().unwrap();
+    let mut changed = false;
     for k in keys {
-        st.deny_user.insert(k);
+        if st.deny_user.insert(k) {
+            changed = true;
+        }
+    }
+    if changed {
+        bump_version();
     }
 }
 
@@ -244,13 +273,20 @@ pub fn reload_from_config(path: &str) {
             .budgets
             .retain(|(id, _), _| contract_ids.contains(id));
     }
+    bump_version();
 }
 
 /// Set immutable hierarchy denies at runtime; adding only.
 pub fn deny_hierarchy<I: IntoIterator<Item = String>>(keys: I) {
     let mut st = cell().write().unwrap();
+    let mut changed = false;
     for k in keys {
-        st.deny_hier.insert(k);
+        if st.deny_hier.insert(k) {
+            changed = true;
+        }
+    }
+    if changed {
+        bump_version();
     }
 }
 
@@ -273,7 +309,10 @@ pub fn allowed(key: &str) -> bool {
     }
     // Runtime capsules (lease-based denies/contracts)
     let mut runtime = runtime_cell().write().unwrap();
-    runtime.prune_expired(now);
+    let expired = runtime.prune_expired(now);
+    if expired {
+        bump_version();
+    }
     for cap in runtime.capsules.values() {
         for p in &cap.denies {
             if wildcard_match(p, key) {
@@ -443,6 +482,7 @@ pub fn add_contract_cfg(c: ContractCfg) {
         }
         list.push(newc);
     }
+    bump_version();
 }
 
 /// Adopt a GatingCapsule from the wire (policy propagation). Trust policy is caller's responsibility.
@@ -478,6 +518,7 @@ pub fn adopt_capsule(cap: &arw_protocol::GatingCapsule) -> CapsuleLeaseState {
             lease_until_ms: lease_until,
         },
     );
+    bump_version();
 
     CapsuleLeaseState {
         lease_until_ms: lease_until,
@@ -536,7 +577,9 @@ pub fn __test_reset() {
         let mut rt = runtime_cell().write().unwrap();
         rt.expires.clear();
         rt.budgets.clear();
+        rt.capsules.clear();
     }
+    VERSION.store(1, Ordering::Relaxed);
 }
 
 #[cfg(test)]
@@ -624,5 +667,34 @@ mod tests {
             quota_window_secs: None,
         });
         assert!(!allowed("events:task.completed"));
+    }
+
+    #[test]
+    #[serial]
+    fn version_bumps_on_capsule_lifecycle() {
+        __test_reset();
+        let start = super::version();
+        let cap = arw_protocol::GatingCapsule {
+            id: "capsule-version-test".into(),
+            version: "1".into(),
+            issued_at_ms: super::now_ms(),
+            issuer: None,
+            hop_ttl: None,
+            propagate: None,
+            denies: Vec::new(),
+            contracts: Vec::new(),
+            lease_duration_ms: Some(0),
+            renew_within_ms: None,
+            signature: None,
+        };
+        super::adopt_capsule(&cap);
+        let after_adopt = super::version();
+        assert!(after_adopt > start, "version should bump after adopt");
+        assert!(super::allowed("tools:run"));
+        let after_prune = super::version();
+        assert!(
+            after_prune > after_adopt,
+            "version should bump after pruning expired capsule"
+        );
     }
 }

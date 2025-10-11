@@ -1,5 +1,5 @@
 use moka::future::Cache;
-use once_cell::sync::Lazy;
+use once_cell::sync::{Lazy, OnceCell};
 #[cfg(test)]
 use serde_json::json;
 use serde_json::{Map, Value};
@@ -149,15 +149,35 @@ fn canonicalize_json(value: &Value) -> Value {
 }
 
 fn tool_version(tool_id: &str) -> &'static str {
-    for info in arw_core::introspect_tools() {
-        if info.id == tool_id {
-            return info.version;
-        }
+    fn tool_versions_map() -> &'static HashMap<&'static str, &'static str> {
+        static CACHE: OnceCell<HashMap<&'static str, &'static str>> = OnceCell::new();
+        CACHE.get_or_init(|| {
+            let mut map = HashMap::new();
+            for info in arw_core::introspect_tools() {
+                map.insert(info.id, info.version);
+            }
+            map
+        })
     }
-    "0.0.0"
+    tool_versions_map().get(tool_id).copied().unwrap_or("0.0.0")
 }
 
 fn env_signature() -> String {
+    static CACHE: OnceCell<Mutex<Option<(u64, String)>>> = OnceCell::new();
+    let version = arw_core::gating::version();
+    let cache = CACHE.get_or_init(|| Mutex::new(None));
+    let mut guard = cache.lock().expect("env signature cache poisoned");
+    if let Some((cached_version, cached)) = guard.as_ref() {
+        if *cached_version == version {
+            return cached.clone();
+        }
+    }
+    let computed = build_env_signature(version);
+    *guard = Some((version, computed.clone()));
+    computed
+}
+
+fn build_env_signature(gating_version: u64) -> String {
     let mut pairs: Vec<(String, String)> = Vec::new();
     let capture = |key: &str, acc: &mut Vec<(String, String)>| {
         if let Ok(val) = std::env::var(key) {
@@ -180,12 +200,7 @@ fn env_signature() -> String {
         capture(key, &mut pairs);
     }
 
-    let gating = arw_core::gating::snapshot();
-    if let Ok(bytes) = serde_json::to_vec(&gating) {
-        let mut hasher = Sha256::new();
-        hasher.update(&bytes);
-        pairs.push(("GATING".into(), format!("{:x}", hasher.finalize())));
-    }
+    pairs.push(("GATING_VER".into(), gating_version.to_string()));
 
     pairs.sort_by(|a, b| a.0.cmp(&b.0));
     let mut out = String::new();
@@ -978,5 +993,26 @@ mod tests {
         ctx.env.set("ARW_TOOLS_CACHE_MAX_PAYLOAD_BYTES", "0");
         let cache_zero = ToolCache::new();
         assert_eq!(cache_zero.stats().max_payload_bytes, None);
+    }
+
+    #[test]
+    fn env_signature_tracks_gating_version() {
+        let baseline = super::env_signature();
+        let cap = arw_protocol::GatingCapsule {
+            id: "env-sig-test".into(),
+            version: "1".into(),
+            issued_at_ms: 0,
+            issuer: None,
+            hop_ttl: None,
+            propagate: None,
+            denies: Vec::new(),
+            contracts: Vec::new(),
+            lease_duration_ms: Some(0),
+            renew_within_ms: None,
+            signature: None,
+        };
+        arw_core::gating::adopt_capsule(&cap);
+        let refreshed = super::env_signature();
+        assert_ne!(baseline, refreshed);
     }
 }

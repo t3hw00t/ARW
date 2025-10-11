@@ -1,4 +1,5 @@
 use std::collections::{hash_map::Entry, HashMap, HashSet};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 
 use axum::body::Body;
@@ -225,6 +226,7 @@ impl CapsuleSnapshot {
 #[derive(Clone)]
 pub struct CapsuleStore {
     inner: Arc<Mutex<HashMap<String, CapsuleEntry>>>,
+    last_refresh_ms: Arc<AtomicU64>,
 }
 
 pub struct AdoptOutcome {
@@ -242,6 +244,7 @@ impl CapsuleStore {
     pub fn new() -> Self {
         Self {
             inner: Arc::new(Mutex::new(HashMap::new())),
+            last_refresh_ms: Arc::new(AtomicU64::new(0)),
         }
     }
 
@@ -250,7 +253,7 @@ impl CapsuleStore {
         let fingerprint = fingerprint_capsule(capsule);
         let remaining_hops = remaining_hops_after_adopt(capsule);
         let mut guard = self.inner.lock().await;
-        match guard.entry(capsule.id.clone()) {
+        let outcome = match guard.entry(capsule.id.clone()) {
             Entry::Occupied(mut occ) => {
                 let entry = occ.get_mut();
                 let changed = entry.fingerprint != fingerprint
@@ -291,7 +294,9 @@ impl CapsuleStore {
                     notify: true,
                 }
             }
-        }
+        };
+        self.last_refresh_ms.store(now_ms, Ordering::Relaxed);
+        outcome
     }
 
     pub async fn snapshot(&self) -> serde_json::Value {
@@ -418,6 +423,7 @@ impl CapsuleStore {
         drop(guard);
 
         if apply.is_empty() {
+            self.last_refresh_ms.store(now, Ordering::Relaxed);
             return ReplayOutcome {
                 expired,
                 changed,
@@ -446,6 +452,8 @@ impl CapsuleStore {
                 }
             }
         }
+        drop(guard);
+        self.last_refresh_ms.store(now, Ordering::Relaxed);
         ReplayOutcome {
             expired,
             changed,
@@ -485,6 +493,18 @@ impl CapsuleStore {
             }
         }
         soonest
+    }
+
+    pub fn last_refresh_ms(&self) -> u64 {
+        self.last_refresh_ms.load(Ordering::Relaxed)
+    }
+
+    pub fn is_fresh(&self, now_ms: u64, max_stale_ms: u64) -> bool {
+        let last = self.last_refresh_ms();
+        if last == 0 {
+            return false;
+        }
+        now_ms.saturating_sub(last) <= max_stale_ms
     }
 }
 
@@ -530,6 +550,15 @@ pub async fn refresh_capsules(state: &AppState) -> ReplayOutcome {
         read_models::publish_read_model_patch(&state.bus(), "policy_capsules", &snapshot);
     }
     replay
+}
+
+pub async fn refresh_capsules_if_needed(state: &AppState) -> Option<ReplayOutcome> {
+    let max_stale = request_refresh_stale_ms();
+    let now = now_ms();
+    if state.capsules().is_fresh(now, max_stale) {
+        return None;
+    }
+    Some(refresh_capsules(state).await)
 }
 
 pub async fn emergency_teardown(
@@ -592,6 +621,14 @@ fn refresh_max_wait_ms() -> u64 {
         .map(|secs| secs.max(1) * 1_000)
         .unwrap_or(DEFAULT_REFRESH_SECS * 1_000)
         .max(MIN_REFRESH_MS)
+}
+
+fn request_refresh_stale_ms() -> u64 {
+    std::env::var("ARW_CAPSULE_REQUEST_REFRESH_MS")
+        .ok()
+        .and_then(|raw| raw.trim().parse::<u64>().ok())
+        .filter(|value| *value > 0)
+        .unwrap_or_else(|| refresh_max_wait_ms().max(2 * MIN_REFRESH_MS))
 }
 
 pub fn start_refresh_task(state: AppState) -> TaskHandle {
