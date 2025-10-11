@@ -6,7 +6,7 @@ title: Workspace Status
 
 <!-- GENERATED FILE: scripts/docgen_core.py; do not edit by hand -->
 
-Generated: 2025-10-11 10:05 UTC
+Generated: 2025-10-11 22:47 UTC
 
 ## Libraries
 - **arw-core**: 0.2.0-dev — [crates/arw-core/Cargo.toml](https://github.com/t3hw00t/ARW/blob/main/crates/arw-core/Cargo.toml)
