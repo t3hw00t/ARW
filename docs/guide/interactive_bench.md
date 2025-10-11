@@ -3,7 +3,7 @@ title: Interactive Performance Bench
 ---
 
 # Interactive Performance Bench
-Updated: 2025-10-09
+Updated: 2025-10-12
 Type: How‑to
 
 Status: **Ready.** The unified bench lives at `apps/snappy-bench` and ships as a
@@ -59,6 +59,8 @@ safe to drop into CI once a health target is available.
   `2000`).
 - `--budget-queue-ms`: override `ARW_SNAPPY_I2F_P95_MS` (default `50`).
 - `--wait-timeout-secs`: maximum time to wait for completions (default `60`).
+- `--json-out`: path to write a JSON summary (latency stats, throughput, failures);
+  helpful for CI and regression dashboards.
 
 The tool prints aggregate stats (avg, p50, p95, max) for total latency, queue
 wait, simulated run time, and HTTP acknowledgement time. Failures are listed
@@ -94,7 +96,8 @@ A lightweight sanity run executes as part of the default GitHub Actions CI
 (`scripts/ci_snappy_bench.sh`). It builds release binaries if needed, starts
 `arw-server`, issues 60 echo actions
 with concurrency 6, and fails if p95 totals exceed the configured budgets (queue
-budget defaults to 500 ms for CI) or if any request fails. Tune via `ARW_BENCH_*`
-env vars when invoking the script
+budget defaults to 500 ms for CI) or if any request fails. Each run also emits a
+machine-readable JSON summary so workflows can archive or plot the results. Tune
+via `ARW_BENCH_*` env vars when invoking the script
 locally (see script header). For heavier profiling, run the bench manually with
 larger request counts/concurrency.

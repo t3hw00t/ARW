@@ -114,6 +114,13 @@ jobs:
       - name: Snappy bench (sanity)
         run: bash scripts/ci_snappy_bench.sh
 
+      - name: Upload snappy bench summary
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: snappy-bench-summary
+          path: ${{ runner.temp }}/snappy-bench-*.json
+
       - name: Trial triad smoke
         run: bash scripts/triad_smoke.sh
 

@@ -1,7 +1,7 @@
 //! Core SQLite helpers backing ARW's memory overlay: schema migrations,
 //! hybrid retrieval primitives, and lightweight ranking utilities.
 
-use anyhow::{anyhow, Result};
+use anyhow::Result;
 use chrono::{DateTime, Duration, NaiveDate, NaiveDateTime, NaiveTime, TimeZone, Utc};
 use rusqlite::{params, params_from_iter, Connection};
 use serde::Serialize;
@@ -195,6 +195,58 @@ impl MemoryInsertOwned {
 
     pub fn compute_hash(&self) -> String {
         self.to_args().compute_hash()
+    }
+}
+
+#[derive(Clone)]
+struct RankedCandidate {
+    id: String,
+    cscore: f32,
+    sim: f32,
+    fts_hit: bool,
+}
+
+fn build_ranked_candidate(
+    id: String,
+    updated: Option<String>,
+    score: Option<f64>,
+    embed_text: Option<String>,
+    embed_blob: Option<Vec<u8>>,
+    embed: Option<&[f32]>,
+    now: &DateTime<Utc>,
+    fts_hit: bool,
+) -> RankedCandidate {
+    let embed_vec = match embed_blob {
+        Some(blob) => decode_embed_blob(&blob),
+        None => embed_text.and_then(|s| parse_embedding(s.as_str()).ok()),
+    };
+    let mut sim = 0f32;
+    if let (Some(candidate_embed), Some(target_embed)) = (embed_vec.as_ref(), embed) {
+        if candidate_embed.len() == target_embed.len() && !target_embed.is_empty() {
+            sim = cosine_sim(target_embed, candidate_embed);
+        }
+    }
+    let recency = updated
+        .as_deref()
+        .and_then(parse_timestamp)
+        .map(|t| {
+            let age = now.signed_duration_since(t).num_seconds().max(0) as f64;
+            let hl = 6.0f64 * 3600.0f64;
+            ((-age / hl).exp()) as f32
+        })
+        .unwrap_or(0.5);
+    let util = score.map(|s| s.clamp(0.0, 1.0) as f32).unwrap_or(0.0);
+    let w_sim = 0.5f32;
+    let w_fts = 0.2f32;
+    let w_rec = 0.2f32;
+    let w_util = 0.1f32;
+    let fts_score = if fts_hit { 1.0 } else { 0.0 };
+    let cscore = w_sim * sim + w_fts * fts_score + w_rec * recency + w_util * util;
+    RankedCandidate {
+        id,
+        cscore,
+        sim,
+        fts_hit,
     }
 }
 
@@ -504,65 +556,77 @@ impl<'c> MemoryStore<'c> {
         Ok(out)
     }
 
+    fn hydrate_ranked(&self, ranked: Vec<RankedCandidate>) -> Result<Vec<Value>> {
+        if ranked.is_empty() {
+            return Ok(Vec::new());
+        }
+        let ids: Vec<String> = ranked.iter().map(|c| c.id.clone()).collect();
+        let mut records = self.get_memory_many(&ids)?;
+        let mut ordered = Vec::with_capacity(ranked.len());
+        for candidate in ranked {
+            if let Some(mut value) = records.remove(&candidate.id) {
+                if let Some(obj) = value.as_object_mut() {
+                    obj.insert("cscore".into(), json!(candidate.cscore));
+                    obj.insert("sim".into(), json!(candidate.sim));
+                    obj.insert("_fts_hit".into(), Value::Bool(candidate.fts_hit));
+                }
+                ordered.push(value);
+            }
+        }
+        Ok(ordered)
+    }
+
     pub fn search_memory_by_embedding(
         &self,
         embed: &[f32],
         lane: Option<&str>,
         limit: i64,
     ) -> Result<Vec<Value>> {
-        if embed.is_empty() {
+        if embed.is_empty() || limit <= 0 {
             return Ok(Vec::new());
         }
+        let limit_usize = limit as usize;
         let sql = if lane.is_some() {
-            format!(
-                "SELECT {cols} FROM memory_records WHERE lane=? ORDER BY updated DESC LIMIT 1000",
-                cols = select_columns(None)
-            )
+            "SELECT id,updated,score,embed,embed_blob \
+             FROM memory_records \
+             WHERE lane=? ORDER BY updated DESC LIMIT 1000"
         } else {
-            format!(
-                "SELECT {cols} FROM memory_records ORDER BY updated DESC LIMIT 1000",
-                cols = select_columns(None)
-            )
+            "SELECT id,updated,score,embed,embed_blob \
+             FROM memory_records ORDER BY updated DESC LIMIT 1000"
         };
-        let mut stmt = self.conn.prepare(sql.as_str())?;
+        let mut stmt = self.conn.prepare(sql)?;
         let mut rows = if let Some(l) = lane {
             stmt.query(params![l])?
         } else {
             stmt.query([])?
         };
-        let mut scored: Vec<(f32, Value)> = Vec::new();
-        while let Some(r) = rows.next()? {
-            let embed_vec = match r.get::<_, Option<Vec<u8>>>(8)? {
-                Some(blob) => decode_embed_blob(&blob),
-                None => {
-                    let embed_s: Option<String> = r.get(7)?;
-                    embed_s.and_then(|s| parse_embedding(s.as_str()).ok())
-                }
-            };
-            if let Some(embed_vec) = embed_vec {
-                if embed_vec.len() == embed.len() && !embed_vec.is_empty() {
-                    if let Ok(sim) = cosine_similarity(embed, &embed_vec) {
-                        let mut item = row_to_value_full(r)?;
-                        if let Some(obj) = item.as_object_mut() {
-                            obj.insert("sim".into(), json!(sim));
-                        }
-                        scored.push((sim, item));
-                    }
-                }
-            }
+        let mut ranked: Vec<RankedCandidate> = Vec::new();
+        let now = Utc::now();
+        while let Some(row) = rows.next()? {
+            let id: String = row.get(0)?;
+            let updated: Option<String> = row.get(1)?;
+            let score: Option<f64> = row.get(2)?;
+            let embed_text: Option<String> = row.get(3)?;
+            let embed_blob: Option<Vec<u8>> = row.get(4)?;
+            ranked.push(build_ranked_candidate(
+                id,
+                updated,
+                score,
+                embed_text,
+                embed_blob,
+                Some(embed),
+                &now,
+                false,
+            ));
         }
-        let limit_usize = if limit <= 0 { 0 } else { limit as usize };
-        if limit_usize == 0 {
-            return Ok(Vec::new());
-        }
-        if scored.len() > limit_usize {
-            scored.select_nth_unstable_by(limit_usize.saturating_sub(1), |a, b| {
-                b.0.partial_cmp(&a.0).unwrap_or(Ordering::Equal)
+        if ranked.len() > limit_usize {
+            ranked.select_nth_unstable_by(limit_usize.saturating_sub(1), |a, b| {
+                b.cscore.partial_cmp(&a.cscore).unwrap_or(Ordering::Equal)
             });
-            scored.truncate(limit_usize);
+            ranked.truncate(limit_usize);
         }
-        scored.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(Ordering::Equal));
-        Ok(scored.into_iter().map(|(_, v)| v).collect())
+        ranked.sort_by(|a, b| b.cscore.partial_cmp(&a.cscore).unwrap_or(Ordering::Equal));
+        self.hydrate_ranked(ranked)
     }
 
     pub fn select_memory_hybrid(
@@ -572,128 +636,81 @@ impl<'c> MemoryStore<'c> {
         lane: Option<&str>,
         limit: i64,
     ) -> Result<Vec<Value>> {
-        let mut candidates: Vec<Value> = Vec::new();
+        if limit <= 0 {
+            return Ok(Vec::new());
+        }
+        let limit_usize = limit as usize;
         let fetch_cap = limit.max(1);
+        let mut ranked: Vec<RankedCandidate> = Vec::new();
+        let now = Utc::now();
+
         if let Some(qs) = query {
             if !qs.is_empty() {
                 let sql = if lane.is_some() {
-                    format!(
-                        "SELECT {cols}
-                         FROM memory_records r JOIN memory_fts f ON f.id=r.id
-                         WHERE f.memory_fts MATCH ? AND f.lane=?
-                         ORDER BY r.updated DESC LIMIT ?",
-                        cols = select_columns(Some("r")),
-                    )
+                    "SELECT r.id,r.updated,r.score,r.embed,r.embed_blob \
+                     FROM memory_records r JOIN memory_fts f ON f.id=r.id \
+                     WHERE f.memory_fts MATCH ? AND f.lane=? \
+                     ORDER BY r.updated DESC LIMIT ?"
                 } else {
-                    format!(
-                        "SELECT {cols}
-                         FROM memory_records r JOIN memory_fts f ON f.id=r.id
-                         WHERE f.memory_fts MATCH ?
-                         ORDER BY r.updated DESC LIMIT ?",
-                        cols = select_columns(Some("r")),
-                    )
+                    "SELECT r.id,r.updated,r.score,r.embed,r.embed_blob \
+                     FROM memory_records r JOIN memory_fts f ON f.id=r.id \
+                     WHERE f.memory_fts MATCH ? \
+                     ORDER BY r.updated DESC LIMIT ?"
                 };
-                let mut stmt = self.conn.prepare(&sql)?;
-                let mut rows = if let Some(l) = lane {
-                    stmt.query(params![qs, l, fetch_cap])?
+                let mut stmt = self.conn.prepare(sql)?;
+                let mut rows = if let Some(lane_name) = lane {
+                    stmt.query(params![qs, lane_name, fetch_cap])?
                 } else {
                     stmt.query(params![qs, fetch_cap])?
                 };
-                while let Some(r) = rows.next()? {
-                    let mut record = row_to_value_full(r)?;
-                    if let Some(obj) = record.as_object_mut() {
-                        obj.insert("_fts_hit".into(), Value::Bool(true));
-                    }
-                    candidates.push(record);
+                while let Some(row) = rows.next()? {
+                    let id: String = row.get(0)?;
+                    let updated: Option<String> = row.get(1)?;
+                    let score: Option<f64> = row.get(2)?;
+                    let embed_text: Option<String> = row.get(3)?;
+                    let embed_blob: Option<Vec<u8>> = row.get(4)?;
+                    ranked.push(build_ranked_candidate(
+                        id, updated, score, embed_text, embed_blob, embed, &now, true,
+                    ));
                 }
             }
         }
-        if candidates.is_empty() {
+
+        if ranked.is_empty() {
             let sql = if lane.is_some() {
-                format!(
-                    "SELECT {cols} FROM memory_records WHERE lane=? ORDER BY updated DESC LIMIT ?",
-                    cols = select_columns(None),
-                )
+                "SELECT id,updated,score,embed,embed_blob \
+                 FROM memory_records WHERE lane=? \
+                 ORDER BY updated DESC LIMIT ?"
             } else {
-                format!(
-                    "SELECT {cols} FROM memory_records ORDER BY updated DESC LIMIT ?",
-                    cols = select_columns(None),
-                )
+                "SELECT id,updated,score,embed,embed_blob \
+                 FROM memory_records ORDER BY updated DESC LIMIT ?"
             };
-            let mut stmt = self.conn.prepare(&sql)?;
-            let mut rows = if let Some(l) = lane {
-                stmt.query(params![l, fetch_cap])?
+            let mut stmt = self.conn.prepare(sql)?;
+            let mut rows = if let Some(lane_name) = lane {
+                stmt.query(params![lane_name, fetch_cap])?
             } else {
                 stmt.query(params![fetch_cap])?
             };
-            while let Some(r) = rows.next()? {
-                let mut record = row_to_value_full(r)?;
-                if let Some(obj) = record.as_object_mut() {
-                    obj.insert("_fts_hit".into(), Value::Bool(false));
-                }
-                candidates.push(record);
+            while let Some(row) = rows.next()? {
+                let id: String = row.get(0)?;
+                let updated: Option<String> = row.get(1)?;
+                let score: Option<f64> = row.get(2)?;
+                let embed_text: Option<String> = row.get(3)?;
+                let embed_blob: Option<Vec<u8>> = row.get(4)?;
+                ranked.push(build_ranked_candidate(
+                    id, updated, score, embed_text, embed_blob, embed, &now, false,
+                ));
             }
         }
-        let now = Utc::now();
-        let mut scored: Vec<(f32, Value)> = Vec::new();
-        for mut item in candidates {
-            let mut sim = 0f32;
-            if let (Some(embed_values), Some(e)) = (item.get("embed"), embed) {
-                if let Some(arr) = embed_values.as_array() {
-                    let mut v2: Vec<f32> = Vec::with_capacity(arr.len());
-                    for v in arr.iter() {
-                        if let Some(f) = v.as_f64() {
-                            v2.push(f as f32);
-                        }
-                    }
-                    if v2.len() == e.len() && !e.is_empty() {
-                        sim = cosine_sim(e, &v2);
-                    }
-                }
-            }
-            let fts_hit = item
-                .get("_fts_hit")
-                .and_then(|v| v.as_bool())
-                .unwrap_or(false);
-            let recency = item
-                .get("updated")
-                .and_then(|v| v.as_str())
-                .and_then(parse_timestamp)
-                .map(|t| {
-                    let age = now.signed_duration_since(t).num_seconds().max(0) as f64;
-                    let hl = 6.0f64 * 3600.0f64;
-                    ((-age / hl).exp()) as f32
-                })
-                .unwrap_or(0.5);
-            let util = item
-                .get("score")
-                .and_then(|v| v.as_f64())
-                .map(|s| s.clamp(0.0, 1.0) as f32)
-                .unwrap_or(0.0);
-            let w_sim = 0.5f32;
-            let w_fts = 0.2f32;
-            let w_rec = 0.2f32;
-            let w_util = 0.1f32;
-            let fts_score = if fts_hit { 1.0 } else { 0.0 };
-            let cscore = w_sim * sim + w_fts * fts_score + w_rec * recency + w_util * util;
-            if let Some(obj) = item.as_object_mut() {
-                obj.insert("cscore".into(), serde_json::json!(cscore));
-                obj.insert("sim".into(), serde_json::json!(sim));
-            }
-            scored.push((cscore, item));
-        }
-        let limit_usize = if limit <= 0 { 0 } else { limit as usize };
-        if limit_usize == 0 {
-            return Ok(Vec::new());
-        }
-        if scored.len() > limit_usize {
-            scored.select_nth_unstable_by(limit_usize.saturating_sub(1), |a, b| {
-                b.0.partial_cmp(&a.0).unwrap_or(Ordering::Equal)
+
+        if ranked.len() > limit_usize {
+            ranked.select_nth_unstable_by(limit_usize.saturating_sub(1), |a, b| {
+                b.cscore.partial_cmp(&a.cscore).unwrap_or(Ordering::Equal)
             });
-            scored.truncate(limit_usize);
+            ranked.truncate(limit_usize);
         }
-        scored.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(Ordering::Equal));
-        Ok(scored.into_iter().map(|(_, v)| v).collect())
+        ranked.sort_by(|a, b| b.cscore.partial_cmp(&a.cscore).unwrap_or(Ordering::Equal));
+        self.hydrate_ranked(ranked)
     }
 
     pub fn expired_candidates(
@@ -888,6 +905,46 @@ impl<'c> MemoryStore<'c> {
                 "rel": r.get::<_, String>(1)?,
                 "weight": r.get::<_, Option<f64>>(2)?,
                 "updated": r.get::<_, String>(3)?,
+            }));
+        }
+        Ok(out)
+    }
+
+    pub fn list_memory_links_many(
+        &self,
+        src_ids: &[String],
+        limit_per: i64,
+    ) -> Result<HashMap<String, Vec<Value>>> {
+        if src_ids.is_empty() || limit_per == 0 {
+            return Ok(HashMap::new());
+        }
+        let placeholders = src_ids.iter().map(|_| "?").collect::<Vec<_>>().join(",");
+        let sql = format!(
+            "SELECT src_id,dst_id,rel,weight,updated \
+             FROM memory_links \
+             WHERE src_id IN ({placeholders}) \
+             ORDER BY src_id ASC, updated DESC"
+        );
+        let mut stmt = self.conn.prepare(&sql)?;
+        let params = params_from_iter(src_ids.iter().map(|s| s.as_str()));
+        let mut rows = stmt.query(params)?;
+        let mut out: HashMap<String, Vec<Value>> = HashMap::new();
+        let mut counts: HashMap<String, i64> = HashMap::new();
+        let max_per = limit_per.max(-1);
+        while let Some(row) = rows.next()? {
+            let src_id: String = row.get(0)?;
+            if max_per > 0 {
+                let count = counts.entry(src_id.clone()).or_insert(0);
+                if *count >= max_per {
+                    continue;
+                }
+                *count += 1;
+            }
+            out.entry(src_id.clone()).or_default().push(json!({
+                "dst_id": row.get::<_, String>(1)?,
+                "rel": row.get::<_, String>(2)?,
+                "weight": row.get::<_, Option<f64>>(3)?,
+                "updated": row.get::<_, String>(4)?,
             }));
         }
         Ok(out)
@@ -1207,19 +1264,6 @@ fn parse_embedding(embed_s: &str) -> Result<Vec<f32>> {
         .map(|s| s.trim().parse::<f32>())
         .collect::<std::result::Result<Vec<_>, _>>()?;
     Ok(values)
-}
-
-fn cosine_similarity(a: &[f32], b: &[f32]) -> Result<f32> {
-    if a.is_empty() || b.is_empty() || a.len() != b.len() {
-        return Err(anyhow!("invalid embeddings for cosine similarity"));
-    }
-    let dot = a.iter().zip(b.iter()).map(|(x, y)| x * y).sum::<f32>();
-    let norm_a = a.iter().map(|x| x * x).sum::<f32>().sqrt();
-    let norm_b = b.iter().map(|x| x * x).sum::<f32>().sqrt();
-    if norm_a == 0.0 || norm_b == 0.0 {
-        return Err(anyhow!("zero norm embeddings"));
-    }
-    Ok(dot / (norm_a * norm_b))
 }
 
 fn cosine_sim(a: &[f32], b: &[f32]) -> f32 {

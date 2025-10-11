@@ -1,14 +1,14 @@
-use std::collections::HashMap;
 use std::fs;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use anyhow::{anyhow, Context, Result};
 use clap::Parser;
+use dashmap::DashMap;
 use futures_util::StreamExt;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use tokio::sync::{mpsc, Mutex, Notify};
+use tokio::sync::{mpsc, Notify};
 
 #[derive(Parser, Debug, Clone)]
 #[command(
@@ -52,6 +52,9 @@ struct Args {
     /// Override queue wait p95 budget (ms). Defaults to ARW_SNAPPY_I2F_P95_MS or 50ms.
     #[arg(long)]
     budget_queue_ms: Option<f64>,
+    /// Write a JSON summary report to the provided path
+    #[arg(long)]
+    json_out: Option<String>,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -60,7 +63,7 @@ enum FinishKind {
     Failed,
 }
 
-#[derive(Default, Debug)]
+#[derive(Default, Debug, Clone)]
 struct Timeline {
     start: Option<Instant>,
     http_accepted: Option<Instant>,
@@ -92,6 +95,8 @@ impl Timeline {
         ActionResult::from_timeline(id, timeline)
     }
 }
+
+type TimelineMap = DashMap<String, Timeline>;
 
 #[derive(Debug)]
 struct ActionResult {
@@ -167,6 +172,48 @@ impl ActionResult {
     fn reason(&self) -> Option<&str> {
         self.raw_reason.as_deref()
     }
+}
+
+#[derive(Serialize)]
+struct BenchBudgets {
+    queue_p95_ms: f64,
+    full_p95_ms: f64,
+}
+
+#[derive(Serialize, Default)]
+struct BenchLatencyStats {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    total: Option<StatSummary>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    queue: Option<StatSummary>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    run: Option<StatSummary>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    http: Option<StatSummary>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    submit: Option<StatSummary>,
+}
+
+#[derive(Serialize)]
+struct BenchFailure {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    reason: Option<String>,
+}
+
+#[derive(Serialize)]
+struct BenchSummary {
+    requests: usize,
+    completed: usize,
+    failed: usize,
+    elapsed_seconds: f64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    throughput_per_sec: Option<f64>,
+    budgets_ms: BenchBudgets,
+    latency_ms: BenchLatencyStats,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    failures: Vec<BenchFailure>,
 }
 
 #[derive(Default)]
@@ -257,7 +304,7 @@ async fn main() -> Result<()> {
     anyhow::ensure!(args.requests > 0, "requests must be > 0");
     anyhow::ensure!(args.concurrency > 0, "concurrency must be > 0");
 
-    let payload = load_payload(&args)?;
+    let payload = Arc::new(load_payload(&args)?);
     let base = args.base.trim_end_matches('/').to_string();
     let admin_token = args
         .admin_token
@@ -270,7 +317,7 @@ async fn main() -> Result<()> {
         .build()
         .context("build HTTP client")?;
 
-    let timeline = Arc::new(Mutex::new(HashMap::new()));
+    let timeline = Arc::new(TimelineMap::new());
     let (result_tx, mut result_rx) =
         mpsc::channel::<ActionResult>((args.requests as usize).max(32));
     let ready = Arc::new(Notify::new());
@@ -280,10 +327,10 @@ async fn main() -> Result<()> {
         let client = client.clone();
         let base = base.clone();
         let token = admin_token.clone();
-        let timeline = timeline.clone();
+        let timeline = Arc::clone(&timeline);
         let result_tx = result_tx.clone();
-        let ready = ready.clone();
-        let stop = stop.clone();
+        let ready = Arc::clone(&ready);
+        let stop = Arc::clone(&stop);
         tokio::spawn(async move {
             if let Err(err) =
                 listen_events(client, base, token, timeline, result_tx, ready, stop).await
@@ -331,10 +378,10 @@ async fn main() -> Result<()> {
 
     // Drain any still-pending timelines as failures
     if results.len() < args.requests as usize {
-        let mut guard = timeline.lock().await;
-        if !guard.is_empty() {
-            let now = Instant::now();
-            for (id, mut tl) in guard.drain() {
+        let now = Instant::now();
+        let pending: Vec<String> = timeline.iter().map(|entry| entry.key().clone()).collect();
+        for id in pending {
+            if let Some((_, mut tl)) = timeline.remove(&id) {
                 if tl.finished.is_none() {
                     tl.finished = Some(now);
                 }
@@ -362,13 +409,19 @@ async fn main() -> Result<()> {
         .or_else(|| env_f64("ARW_SNAPPY_I2F_P95_MS"))
         .unwrap_or(50.0);
 
-    let exit_code = summarize(
+    let (exit_code, summary) = summarize(
         &results,
         args.requests as usize,
         elapsed,
         budget_full,
         budget_queue,
     );
+    if let Some(path) = args.json_out.as_deref() {
+        let data = serde_json::to_vec_pretty(&summary).context("serialize snappy bench summary")?;
+        fs::write(path, &data)
+            .with_context(|| format!("write snappy bench summary to {}", path))?;
+        println!("- JSON summary written to {}", path);
+    }
     if exit_code != 0 {
         std::process::exit(exit_code);
     }
@@ -383,8 +436,8 @@ async fn dispatch_requests(
     base: String,
     token: Option<String>,
     kind: String,
-    payload: Value,
-    timeline: Arc<Mutex<HashMap<String, Timeline>>>,
+    payload: Arc<Value>,
+    timeline: Arc<TimelineMap>,
     result_tx: mpsc::Sender<ActionResult>,
 ) -> Result<()> {
     use std::sync::atomic::{AtomicU32, Ordering};
@@ -394,10 +447,10 @@ async fn dispatch_requests(
         let client = client.clone();
         let base = base.clone();
         let token = token.clone();
-        let timeline = timeline.clone();
-        let payload = payload.clone();
+        let timeline = Arc::clone(&timeline);
+        let payload = Arc::clone(&payload);
         let kind = kind.clone();
-        let counter = counter.clone();
+        let counter = Arc::clone(&counter);
         let result_tx = result_tx.clone();
         let handle = tokio::spawn(async move {
             loop {
@@ -410,7 +463,7 @@ async fn dispatch_requests(
                     &base,
                     token.as_deref(),
                     &kind,
-                    &payload,
+                    Arc::clone(&payload),
                     &timeline,
                     &result_tx,
                 )
@@ -434,14 +487,14 @@ async fn send_one(
     base: &str,
     token: Option<&str>,
     kind: &str,
-    payload: &Value,
-    timeline: &Arc<Mutex<HashMap<String, Timeline>>>,
+    payload: Arc<Value>,
+    timeline: &Arc<TimelineMap>,
     result_tx: &mpsc::Sender<ActionResult>,
 ) -> Result<()> {
     let start = Instant::now();
     let body = serde_json::json!({
         "kind": kind,
-        "input": payload,
+        "input": payload.as_ref(),
     });
     let mut req = client.post(format!("{}/actions", base));
     if let Some(tok) = token {
@@ -465,19 +518,17 @@ async fn send_one(
         .and_then(|v| v.as_str())
         .ok_or_else(|| anyhow!("response missing id"))?
         .to_string();
-    let mut finished = None;
-    {
-        let mut guard = timeline.lock().await;
-        let entry = guard.entry(id.clone()).or_default();
+    let ready = {
+        let mut entry = timeline.entry(id.clone()).or_insert_with(Timeline::default);
         entry.start.get_or_insert(start);
         entry.http_accepted.get_or_insert(http_accepted);
-        if entry.ready() {
-            finished = guard.remove(&id);
+        entry.ready()
+    };
+    if ready {
+        if let Some((_, entry)) = timeline.remove(&id) {
+            let result = entry.into_result(Some(id));
+            let _ = result_tx.send(result).await;
         }
-    }
-    if let Some(entry) = finished {
-        let result = entry.into_result(Some(id));
-        let _ = result_tx.send(result).await;
     }
     Ok(())
 }
@@ -486,7 +537,7 @@ async fn listen_events(
     client: reqwest::Client,
     base: String,
     token: Option<String>,
-    timeline: Arc<Mutex<HashMap<String, Timeline>>>,
+    timeline: Arc<TimelineMap>,
     result_tx: mpsc::Sender<ActionResult>,
     ready: Arc<Notify>,
     stop: Arc<Notify>,
@@ -542,7 +593,7 @@ async fn listen_events(
 
 async fn handle_sse_message(
     msg: SseMessage,
-    timeline: &Arc<Mutex<HashMap<String, Timeline>>>,
+    timeline: &Arc<TimelineMap>,
     result_tx: &mpsc::Sender<ActionResult>,
 ) -> Result<()> {
     if msg.data.trim().is_empty() {
@@ -560,10 +611,8 @@ async fn handle_sse_message(
         None => return Ok(()),
     };
     let now = Instant::now();
-    let mut finished = None;
-    {
-        let mut guard = timeline.lock().await;
-        let entry = guard.entry(id.clone()).or_default();
+    let ready = {
+        let mut entry = timeline.entry(id.clone()).or_insert_with(Timeline::default);
         match envelope.kind.as_str() {
             "actions.submitted" => {
                 entry.submitted.get_or_insert(now);
@@ -588,13 +637,13 @@ async fn handle_sse_message(
             }
             _ => {}
         }
-        if entry.ready() {
-            finished = guard.remove(&id);
+        entry.ready()
+    };
+    if ready {
+        if let Some((_, entry)) = timeline.remove(&id) {
+            let result = entry.into_result(Some(id));
+            let _ = result_tx.send(result).await;
         }
-    }
-    if let Some(entry) = finished {
-        let result = entry.into_result(Some(id));
-        let _ = result_tx.send(result).await;
     }
     Ok(())
 }
@@ -605,7 +654,7 @@ fn summarize(
     elapsed: Duration,
     budget_full_ms: f64,
     budget_queue_ms: f64,
-) -> i32 {
+) -> (i32, BenchSummary) {
     let completed: Vec<&ActionResult> = results
         .iter()
         .filter(|r| matches!(r.status, ActionStatus::Completed))
@@ -639,27 +688,36 @@ fn summarize(
     }
 
     println!("Snappy Bench Summary");
+    let elapsed_secs = elapsed.as_secs_f64();
     println!("- Requests: {}", expected);
     println!("- Completed: {}", completed.len());
     println!("- Failed: {}", failed.len());
-    println!("- Elapsed: {:.2}s", elapsed.as_secs_f64());
-    if elapsed.as_secs_f64() > 0.0 {
-        println!(
-            "- Throughput: {:.2} actions/s",
-            completed.len() as f64 / elapsed.as_secs_f64()
-        );
+    println!("- Elapsed: {:.2}s", elapsed_secs);
+    let throughput = if elapsed_secs > 0.0 {
+        let value = completed.len() as f64 / elapsed_secs;
+        println!("- Throughput: {:.2} actions/s", value);
+        Some(value)
+    } else {
+        None
+    };
+
+    let stats_total = compute_stats(&total);
+    let stats_queue = compute_stats(&queue);
+    let stats_run = compute_stats(&run);
+    let stats_http = compute_stats(&http);
+    let stats_submit = compute_stats(&submit);
+
+    if let Some(ref stats) = stats_total {
+        print_stats("Total", stats);
     }
-    if let Some(stats) = compute_stats(&total) {
-        print_stats("Total", &stats);
+    if let Some(ref stats) = stats_queue {
+        print_stats("Queue wait", stats);
     }
-    if let Some(stats) = compute_stats(&queue) {
-        print_stats("Queue wait", &stats);
+    if let Some(ref stats) = stats_run {
+        print_stats("Run", stats);
     }
-    if let Some(stats) = compute_stats(&run) {
-        print_stats("Run", &stats);
-    }
-    if let Some(stats) = compute_stats(&http) {
-        print_stats("HTTP ack", &stats);
+    if let Some(ref stats) = stats_http {
+        print_stats("HTTP ack", stats);
     }
 
     if !failed.is_empty() {
@@ -679,7 +737,7 @@ fn summarize(
     }
 
     let mut exit_code = 0;
-    if let Some(stats) = compute_stats(&total) {
+    if let Some(ref stats) = stats_total {
         if stats.p95 > budget_full_ms {
             println!(
                 "! Budget breach: total p95 {:.1} ms > {:.1} ms",
@@ -688,7 +746,7 @@ fn summarize(
             exit_code = exit_code.max(1);
         }
     }
-    if let Some(stats) = compute_stats(&queue) {
+    if let Some(ref stats) = stats_queue {
         if stats.p95 > budget_queue_ms {
             println!(
                 "! Budget breach: queue p95 {:.1} ms > {:.1} ms",
@@ -700,9 +758,38 @@ fn summarize(
     if !failed.is_empty() {
         exit_code = exit_code.max(2);
     }
-    exit_code
+    let failures: Vec<BenchFailure> = failed
+        .iter()
+        .take(10)
+        .map(|item| BenchFailure {
+            id: item.id.clone(),
+            reason: item.reason().map(|s| s.to_string()),
+        })
+        .collect();
+
+    let summary = BenchSummary {
+        requests: expected,
+        completed: completed.len(),
+        failed: failed.len(),
+        elapsed_seconds: elapsed_secs,
+        throughput_per_sec: throughput,
+        budgets_ms: BenchBudgets {
+            queue_p95_ms: budget_queue_ms,
+            full_p95_ms: budget_full_ms,
+        },
+        latency_ms: BenchLatencyStats {
+            total: stats_total.clone(),
+            queue: stats_queue.clone(),
+            run: stats_run.clone(),
+            http: stats_http.clone(),
+            submit: stats_submit.clone(),
+        },
+        failures,
+    };
+    (exit_code, summary)
 }
 
+#[derive(Clone, Serialize)]
 struct StatSummary {
     avg: f64,
     p50: f64,

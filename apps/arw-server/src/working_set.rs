@@ -371,8 +371,8 @@ impl<'a> WorkingSetBuilder<'a> {
     }
 
     fn build<O: WorkingSetObserver>(&mut self, observer: &mut O) -> Result<WorkingSet> {
-        let mut spec = self.spec.clone();
-        spec.normalize();
+        self.spec.normalize();
+        let spec = &self.spec;
         let scorer_label = spec.scorer_label();
         let scorer = resolve_scorer(Some(scorer_label.as_str()));
         observer.emit(
@@ -457,34 +457,38 @@ impl<'a> WorkingSetBuilder<'a> {
         }
 
         let expand_start = Instant::now();
-        if spec.expand_per_seed > 0 {
+        if spec.expand_per_seed > 0 && !seed_infos.is_empty() {
             let mut pending: Vec<PendingExpansion> = Vec::new();
             let mut fetch_ids: Vec<String> = Vec::new();
             let mut seen_dst: HashSet<String> = HashSet::new();
+            let seed_ids_for_links: Vec<String> =
+                seed_infos.iter().map(|seed| seed.id.clone()).collect();
+            let links_map = self
+                .state
+                .kernel()
+                .list_memory_links_many(&seed_ids_for_links, spec.expand_per_seed as i64)
+                .unwrap_or_default();
             for seed in seed_infos.iter().cloned() {
-                let links = self
-                    .state
-                    .kernel()
-                    .list_memory_links(&seed.id, spec.expand_per_seed as i64)
-                    .unwrap_or_default();
-                for link in links {
-                    if let Some(dst_id) = link.get("dst_id").and_then(|v| v.as_str()) {
-                        if dst_id == seed.id {
-                            continue;
+                if let Some(links) = links_map.get(&seed.id) {
+                    for link in links.iter().cloned() {
+                        if let Some(dst_id) = link.get("dst_id").and_then(|v| v.as_str()) {
+                            if dst_id == seed.id {
+                                continue;
+                            }
+                            if candidates.contains_key(dst_id) {
+                                continue;
+                            }
+                            let dst_owned = dst_id.to_string();
+                            if !seen_dst.insert(dst_owned.clone()) {
+                                continue;
+                            }
+                            pending.push(PendingExpansion {
+                                dst_id: dst_owned.clone(),
+                                seed: seed.clone(),
+                                link,
+                            });
+                            fetch_ids.push(dst_owned);
                         }
-                        if candidates.contains_key(dst_id) {
-                            continue;
-                        }
-                        let dst_owned = dst_id.to_string();
-                        if !seen_dst.insert(dst_owned.clone()) {
-                            continue;
-                        }
-                        pending.push(PendingExpansion {
-                            dst_id: dst_owned.clone(),
-                            seed: seed.clone(),
-                            link,
-                        });
-                        fetch_ids.push(dst_owned);
                     }
                 }
             }
@@ -636,9 +640,9 @@ impl<'a> WorkingSetBuilder<'a> {
         observer: &mut O,
     ) -> Result<usize> {
         let seed_pool = seed_infos.len();
-        let mut seeds_with_embed: Vec<(&SeedInfo, &Vec<f32>)> = seed_infos
+        let mut seeds_with_embed: Vec<(&SeedInfo, &[f32])> = seed_infos
             .iter()
-            .filter_map(|seed| seed.embed.as_ref().map(|embed| (seed, embed)))
+            .filter_map(|seed| seed.embed.as_deref().map(|embed| (seed, embed)))
             .collect();
         if seeds_with_embed.is_empty() {
             return Ok(0);
@@ -764,7 +768,7 @@ struct Candidate {
     lane: Option<String>,
     key: Option<String>,
     tags: Vec<String>,
-    embed: Option<Vec<f32>>,
+    embed: Option<Arc<[f32]>>,
     cscore: f32,
     value: Value,
     slot_key: String,
@@ -775,7 +779,7 @@ struct SeedInfo {
     id: String,
     cscore: f32,
     lane: Option<String>,
-    embed: Option<Vec<f32>>,
+    embed: Option<Arc<[f32]>>,
 }
 
 trait CandidateScorer: Send + Sync {
@@ -1019,7 +1023,7 @@ fn mmr_score(candidate: &Candidate, selected: &[Candidate], lambda: f32, lane_bo
 
 fn candidate_similarity(a: &Candidate, b: &Candidate) -> f32 {
     if let (Some(ref ea), Some(ref eb)) = (&a.embed, &b.embed) {
-        let sim = cosine(ea, eb);
+        let sim = cosine(ea.as_ref(), eb.as_ref());
         if sim.is_finite() {
             return sim;
         }
@@ -1071,6 +1075,7 @@ fn build_seed_candidate(
     let util = value.get("score").and_then(|v| v.as_f64()).unwrap_or(0.0) as f32;
     let affinity = project.map(|p| project_affinity(&value, p)).unwrap_or(1.0);
     let cscore = (base_score * affinity).clamp(0.0, 1.0);
+    let embed = parse_embed(&value);
     if let Some(obj) = value.as_object_mut() {
         obj.insert("source".into(), json!("seed"));
         obj.insert(
@@ -1090,8 +1095,8 @@ fn build_seed_candidate(
         );
         obj.insert("cscore".into(), json!(cscore));
     }
-    let embed = parse_embed(&value);
-    let candidate = Candidate::from_value(id.clone(), lane.clone(), value, cscore);
+    let candidate =
+        Candidate::from_value_with_embed(id.clone(), lane.clone(), value, cscore, embed.clone());
     let seed = SeedInfo {
         id,
         cscore,
@@ -1398,13 +1403,23 @@ fn build_diagnostics(
 }
 
 impl Candidate {
-    fn from_value(id: String, lane: Option<String>, mut value: Value, cscore: f32) -> Self {
+    fn from_value(id: String, lane: Option<String>, value: Value, cscore: f32) -> Self {
+        Self::from_value_with_embed(id, lane, value, cscore, None)
+    }
+
+    fn from_value_with_embed(
+        id: String,
+        lane: Option<String>,
+        mut value: Value,
+        cscore: f32,
+        embed_override: Option<Arc<[f32]>>,
+    ) -> Self {
         let key = value
             .get("key")
             .and_then(|v| v.as_str())
             .map(|s| s.to_string())
             .filter(|s| !s.is_empty());
-        let tags = value
+        let mut tags = value
             .get("tags")
             .and_then(|v| v.as_str())
             .map(|s| {
@@ -1415,7 +1430,11 @@ impl Candidate {
                     .collect::<Vec<_>>()
             })
             .unwrap_or_default();
-        let embed = parse_embed(&value);
+        if !tags.is_empty() {
+            tags.sort_unstable();
+            tags.dedup();
+        }
+        let embed = embed_override.or_else(|| parse_embed(&value));
         let slot = extract_slot(&value);
         if let (Some(slot_name), Some(obj)) = (slot.as_ref(), value.as_object_mut()) {
             obj.insert("slot".into(), json!(slot_name));
@@ -1471,16 +1490,9 @@ fn extract_slot(value: &Value) -> Option<String> {
     Some(slot.to_ascii_lowercase())
 }
 
-fn parse_embed(value: &Value) -> Option<Vec<f32>> {
-    let raw = value.get("embed")?;
-    if let Some(s) = raw.as_str() {
-        if let Ok(v) = serde_json::from_str::<Value>(s) {
-            return parse_embed(&v);
-        }
-        return None;
-    }
-    match raw {
-        Value::Array(arr) => {
+fn parse_embed(value: &Value) -> Option<Arc<[f32]>> {
+    fn from_array(raw: &Value) -> Option<Arc<[f32]>> {
+        if let Value::Array(arr) = raw {
             let mut out = Vec::with_capacity(arr.len());
             for v in arr {
                 if let Some(f) = v.as_f64() {
@@ -1490,11 +1502,21 @@ fn parse_embed(value: &Value) -> Option<Vec<f32>> {
             if out.is_empty() {
                 None
             } else {
-                Some(out)
+                Some(Arc::from(out.into_boxed_slice()))
             }
+        } else {
+            None
         }
-        _ => None,
     }
+
+    let raw = value.get("embed")?;
+    if let Some(s) = raw.as_str() {
+        if let Ok(parsed) = serde_json::from_str::<Value>(s) {
+            return from_array(&parsed);
+        }
+        return None;
+    }
+    from_array(raw)
 }
 
 fn cosine(a: &[f32], b: &[f32]) -> f32 {
@@ -1519,20 +1541,33 @@ fn jaccard(a: &[String], b: &[String]) -> f32 {
     if a.is_empty() || b.is_empty() {
         return 0.0;
     }
-    let mut set_a: HashSet<&str> = HashSet::new();
-    for t in a {
-        set_a.insert(t.as_str());
+    let mut i = 0usize;
+    let mut j = 0usize;
+    let mut intersection = 0usize;
+    let mut union = 0usize;
+    while i < a.len() && j < b.len() {
+        match a[i].cmp(&b[j]) {
+            Ordering::Less => {
+                union += 1;
+                i += 1;
+            }
+            Ordering::Greater => {
+                union += 1;
+                j += 1;
+            }
+            Ordering::Equal => {
+                intersection += 1;
+                union += 1;
+                i += 1;
+                j += 1;
+            }
+        }
     }
-    let mut set_b: HashSet<&str> = HashSet::new();
-    for t in b {
-        set_b.insert(t.as_str());
-    }
-    let inter = set_a.intersection(&set_b).count() as f32;
-    let union = set_a.union(&set_b).count() as f32;
-    if union <= f32::EPSILON {
+    union += a.len().saturating_sub(i) + b.len().saturating_sub(j);
+    if union == 0 {
         0.0
     } else {
-        inter / union
+        intersection as f32 / union as f32
     }
 }
 

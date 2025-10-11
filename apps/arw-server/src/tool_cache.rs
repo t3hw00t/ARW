@@ -239,7 +239,7 @@ fn build_env_signature(gating_version: u64) -> String {
 
 fn compute_digest(bytes: &[u8]) -> String {
     let mut hasher = Sha256::new();
-    hasher.update(bytes);
+    Digest::update(&mut hasher, bytes);
     format!("{:x}", hasher.finalize())
 }
 
@@ -457,19 +457,19 @@ impl ToolCache {
     pub fn action_key(&self, tool_id: &str, input: &Value) -> String {
         let version = tool_version(tool_id);
         let mut hasher = Sha256::new();
-        hasher.update(tool_id.as_bytes());
-        hasher.update(b"@\0");
-        hasher.update(version.as_bytes());
-        hasher.update(b"\0");
+        Digest::update(&mut hasher, tool_id.as_bytes());
+        Digest::update(&mut hasher, b"@\0");
+        Digest::update(&mut hasher, version.as_bytes());
+        Digest::update(&mut hasher, b"\0");
         let env_sig = env_signature();
-        hasher.update(b"env:\0");
-        hasher.update(env_sig.as_bytes());
-        hasher.update(b"\0");
+        Digest::update(&mut hasher, b"env:\0");
+        Digest::update(&mut hasher, env_sig.as_bytes());
+        Digest::update(&mut hasher, b"\0");
         let canon = canonicalize_json(input);
         let mut writer = HashWriter::new(&mut hasher);
         if serde_json::to_writer(&mut writer, &canon).is_err() {
             if let Ok(bytes) = serde_json::to_vec(&canon) {
-                hasher.update(&bytes);
+                Digest::update(&mut hasher, &bytes);
             }
         }
         format!("{:x}", hasher.finalize())

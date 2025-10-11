@@ -82,6 +82,7 @@ Snappy publishes a read-model (`id="snappy"`) that surfaces the worst protected 
 - Add a stat panel keyed to `arw_snappy_breach_total` (exposed via `/metrics`) for an at-a-glance breach indicator.
 - Layer in the histogram export for real percentile math: `histogram_quantile(0.95, sum by (path, le)(rate(arw_route_latency_seconds_bucket{path=~"/admin/debug|/state/.*"}[5m])))`. Keep the result next to `arw_route_p95_ms` so ops can compare the streaming p95 with the Prometheus-calculated percentile.
 - Cross-link the panel description to the Hub’s Metrics sidecar (“Snappy detail”) so operators can jump from dashboards to the live SSE feed when triaging spikes.
+- Recent builds add per-route hit/error counts and worker queue depth to the `snappy` read-model; surface these alongside p95 so responders can spot traffic spikes or backlog immediately.
 
 ## Staging checklist
 

@@ -3,7 +3,7 @@ title: Memory Abstraction Layer
 ---
 
 # Memory Abstraction Layer
-Updated: 2025-10-11
+Updated: 2025-10-12
 Type: Explanation
 
 Microsummary: The Memory Abstraction Layer (MAL) is the canonical schema and lifecycle for all memories (ephemeral, episodic, semantic, profile) in ARW. The new Memory Overlay Service builds on MAL to provide hybrid retrieval, explainable packing, and model-agnostic context delivery.
@@ -42,6 +42,9 @@ See [memory_overlay_service.md](memory_overlay_service.md#data-model) for full s
 ## Retrieval performance guardrails
 - The `memory_records` table now carries `idx_mem_updated` and `idx_mem_lane_updated` indexes so the hot `ORDER BY updated DESC` scans stay on-disk sorted without temporary tables, maintaining steady-state lookup latency as the corpus grows.
 - Hybrid retrieval trims candidate sorting to the requested limit using an unstable selection pass before the final ordering, avoiding O(n log n) sorts when callers only need the top slice of a large result set. This keeps working-set assembly responsive even with aggressive over-fetching.
+- Candidate hydration now happens only after ranking the thin `id/score` projection, so the top-K slice reuses a single batched `get_memory_many` call instead of re-parsing JSON for every intermediate record.
+- Link expansion batches lookups across all seed IDs (`list_memory_links_many`) and enforces per-seed limits server-side, eliminating the previous N+1 query pattern during context assembly.
+- Parsed embeddings are shared through reference-counted slices inside the working-set planner, removing repeat allocations while similarity scoring and MMR diversification iterate over the candidate set.
 - Embeddings persist in an `embed_blob` column (with the legacy JSON string kept as a fallback), so vector comparisons reuse pre-encoded little-endian floats instead of re-parsing text on every query.
 - A background backfill task (`ARW_MEMORY_EMBED_BACKFILL_BATCH` / `ARW_MEMORY_EMBED_BACKFILL_IDLE_SEC`) upgrades legacy rows in place so existing deployments converge on the faster binary path without taking downtime.
 - `memory.upsert` accepts `dedupe=true` to reuse existing IDs when the hash matches; events include `dedupe: true` for audit trails.

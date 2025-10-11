@@ -1906,6 +1906,16 @@ impl Kernel {
         store.list_memory_links(src_id, limit)
     }
 
+    pub fn list_memory_links_many(
+        &self,
+        src_ids: &[String],
+        limit_per: i64,
+    ) -> Result<HashMap<String, Vec<serde_json::Value>>> {
+        let conn = self.conn()?;
+        let store = MemoryStore::new(&conn);
+        store.list_memory_links_many(src_ids, limit_per)
+    }
+
     pub fn get_memory(&self, id: &str) -> Result<Option<serde_json::Value>> {
         let conn = self.conn()?;
         let store = MemoryStore::new(&conn);
@@ -2299,6 +2309,15 @@ impl Kernel {
         limit: i64,
     ) -> Result<Vec<serde_json::Value>> {
         self.run_blocking(move |k| k.list_memory_links(&src_id, limit))
+            .await
+    }
+
+    pub async fn list_memory_links_many_async(
+        &self,
+        src_ids: Vec<String>,
+        limit_per: i64,
+    ) -> Result<HashMap<String, Vec<serde_json::Value>>> {
+        self.run_blocking(move |k| k.list_memory_links_many(&src_ids, limit_per))
             .await
     }
 

@@ -1152,6 +1152,11 @@ struct SnappySnapshot {
     routes: BTreeMap<String, metrics::RouteSummary>,
     max_path: Option<String>,
     max_p95_ms: u64,
+    total_hits: u64,
+    total_errors: u64,
+    worker_queue_depth: u64,
+    worker_busy: u64,
+    worker_configured: u64,
     budgets: SnappyBudgets,
     protected_prefixes: Vec<String>,
 }
@@ -1159,8 +1164,12 @@ struct SnappySnapshot {
 impl SnappySnapshot {
     fn from_metrics(config: &SnappyConfig, summary: &metrics::MetricsSummary) -> Self {
         let mut routes = BTreeMap::new();
+        let mut total_hits = 0u64;
+        let mut total_errors = 0u64;
         for (path, stat) in summary.routes.by_path.iter() {
             if config.matches(path) {
+                total_hits = total_hits.saturating_add(stat.hits);
+                total_errors = total_errors.saturating_add(stat.errors);
                 routes.insert(path.clone(), stat.clone());
             }
         }
@@ -1176,6 +1185,11 @@ impl SnappySnapshot {
             routes,
             max_path,
             max_p95_ms: max_p95,
+            total_hits,
+            total_errors,
+            worker_queue_depth: summary.worker.queue_depth,
+            worker_busy: summary.worker.busy,
+            worker_configured: summary.worker.configured,
             budgets: config.budgets(),
             protected_prefixes: config.protected_prefixes.clone(),
         }
@@ -1210,6 +1224,20 @@ impl SnappySnapshot {
                 "max_path": self.max_path,
                 "max_p95_ms": self.max_p95_ms,
                 "routes": Value::Object(routes),
+                "totals": {
+                    "hits": self.total_hits,
+                    "errors": self.total_errors,
+                    "error_rate": if self.total_hits > 0 {
+                        self.total_errors as f64 / self.total_hits as f64
+                    } else {
+                        0.0
+                    },
+                },
+                "workers": {
+                    "queue_depth": self.worker_queue_depth,
+                    "busy": self.worker_busy,
+                    "configured": self.worker_configured,
+                }
             },
             "breach": {
                 "full_result": self.breach_full_result(),
@@ -1235,12 +1263,29 @@ impl SnappySnapshot {
             return None;
         }
         let mut map = serde_json::Map::new();
+        let mut p95_only = serde_json::Map::new();
         for (path, stat) in &self.routes {
-            map.insert(path.clone(), json!(stat.p95_ms));
+            map.insert(
+                path.clone(),
+                json!({
+                    "p95_ms": stat.p95_ms,
+                    "ewma_ms": stat.ewma_ms,
+                    "max_ms": stat.max_ms,
+                    "hits": stat.hits,
+                    "errors": stat.errors,
+                    "error_rate": if stat.hits > 0 {
+                        stat.errors as f64 / stat.hits as f64
+                    } else {
+                        0.0
+                    }
+                }),
+            );
+            p95_only.insert(path.clone(), json!(stat.p95_ms));
         }
         Some(json!({
             "generated": self.generated,
-            "p95_by_path": Value::Object(map),
+            "routes": Value::Object(map),
+            "p95_by_path": Value::Object(p95_only),
         }))
     }
 }
