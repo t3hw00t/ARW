@@ -4,13 +4,13 @@ title: Vision Runtime Preview
 
 # Vision Runtime Preview
 
-Updated: 2025-10-09
+Updated: 2025-10-11
 Type: Guide (Preview)
 
 This guide shows how to stage the preview vision runtimes (llava.cpp and Moondream) under the managed runtime supervisor. It focuses on a privacy-first, accessibility-aware setup that you can opt into today while the signed bundles are still in flight.
 
 ## Prerequisites
-- `arw-server` built with the runtime supervisor enabled (`ARW_RUNTIME_SUPERVISOR=1`).
+- `arw-server` built from the current main branch (the managed runtime supervisor ships enabled by default; no additional env flag needed).
 - NVIDIA GPU with CUDA ≥ 12.2 (preview bundle target); alternate accelerators arrive later.
 - `configs/runtime/bundles.vision.json` present (ships with the repo as a placeholder catalog).
 - `arw-cli` available for quick runtime inspections.

@@ -4,7 +4,7 @@ title: Cluster Runbook
 
 # Cluster Runbook
 
-Updated: 2025-10-09
+Updated: 2025-10-11
 Type: Runbook
 
 This runbook walks through bringing remote workers into an Agent Hub (ARW) installation and operating the preview federation stack. It assumes you already run the unified server (`arw-server`) locally and want to offload work or invite peers under policy control.
@@ -33,11 +33,19 @@ The cluster surfaces remain **preview**: APIs are admin-gated, subject to change
 [cluster]
 enabled = true
 # Optional:
-# role = "home"         # default role is edge (Home).
 # node_id = "my-worker" # defaults to hostname.
 # bus = "nats"          # keep "local" when no broker is present.
 # queue = "nats"
 # nats_url = "nats://127.0.0.1:4222"
+```
+
+Set the node role via the hierarchy admin API instead of config files:
+
+```bash
+curl -sS -X POST http://127.0.0.1:8091/admin/hierarchy/role \
+  -H "Authorization: Bearer $ARW_ADMIN_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"role":"home"}'
 ```
 
 2. **Set stable identifiers** using environment variables if you prefer:

@@ -4,7 +4,7 @@ title: Managed Runtime Supervisor
 
 # Managed Runtime Supervisor
 
-Updated: 2025-10-09
+Updated: 2025-10-11
 Type: Blueprint
 Status: Priority One
 
@@ -53,7 +53,7 @@ Promote the runtime manager from proposal to a first-class kernel capability. Th
 - **Integration tests** – CI job subset that boots supervisor with llama.cpp CPU build, checks `/state/runtime_matrix`, and simulates crash recovery.
 - **Hardware matrix smoke tests** – optional nightly job that runs GPU-enabled builds on hosted runners (CUDA, Metal) and collects throughput metrics.
 - **Failure drills** – scripted tests that revoke leases mid-run, exhaust restart budgets, and validate guardrail-ledger entries.
-- **Roll-forward plan** – supervisor ships disabled-by-default behind `ARW_RUNTIME_SUPERVISOR=1` until Phase 2 exit criteria pass; maintain migration guide for existing manual setups.
+- **Roll-forward plan** – supervisor now ships enabled-by-default; keep migration guidance for earlier manual setups and clearly flag any optional gating envs in release notes as they are introduced.
 
 ## Accessibility & UX Notes
 

@@ -3,7 +3,7 @@ title: macOS Install & Launcher
 ---
 
 # macOS Install & Launcher
-Updated: 2025-10-10
+Updated: 2025-10-11
 Type: How‑to
 
 This guide walks through installing Agent Hub (ARW) on macOS with both the unified service and the desktop launcher. The launcher uses the system WebKit view (no extra runtime required) and now includes inline token verification so you can confirm access before opening the workspaces.
@@ -25,11 +25,12 @@ bash scripts/setup.sh --headless
 bash scripts/start.sh --wait-health
 ```
 
-- Use `bash scripts/setup.sh --minimal` if you only need the core binaries (`arw-server`, `arw-cli`, `arw-launcher`) and want to skip doc generation and packaging on the first run. Drop `--headless` once you’re ready to build the desktop Home view locally (WebKit is bundled with macOS).
+- `--headless` keeps the bootstrap fast by skipping the Tauri launcher build. When you want the desktop Home view, rerun the setup without `--headless` or add `--with-launcher` to compile it explicitly.
+- Use `bash scripts/setup.sh --minimal` if you only need the core binaries (`arw-server`, `arw-cli`) and want to skip doc generation and packaging on the first run. Combine with `--with-launcher` when you want a minimal build that still produces the desktop UI.
 
 - Prefer to stay headless? Append `--service-only` to `scripts/start.sh` and open `http://127.0.0.1:8091/admin/ui/control/` in Safari/Chrome instead of launching the desktop Home view.
 
-- `scripts/setup.sh` compiles `arw-server` (headless) and the Tauri launcher. The first build can take several minutes on a cold toolchain.
+- `scripts/setup.sh` builds `arw-server` (and `arw-cli` when not skipped). The Tauri launcher is only compiled when you omit `--headless` or pass `--with-launcher`. The first build can take several minutes on a cold toolchain.
 - `scripts/start.sh` reuses `state/admin-token.txt` (or generates a token automatically), launches the service, waits for `/healthz`, and then opens the Home view if the launcher is available. Pass `--service-only` to skip the launcher, or `--admin-token` when you need to supply a specific credential.
 - The script exports `ARW_EGRESS_PROXY_ENABLE=1` and `ARW_DNS_GUARD_ENABLE=1` by default. Override them if you need a fully offline profile.
 - Prefer to skip compiling? Build a portable bundle with `bash scripts/package.sh`, then run `bin/arw-server` / `bin/arw-launcher` from the generated archive in `dist/`.

@@ -30,8 +30,8 @@ build-launcher:
 tauri-launcher-build:
   cargo build -p arw-launcher
 
-tauri-launcher-run:
-  cargo run -p arw-launcher
+tauri-launcher-run *args:
+  cargo run -p arw-launcher -- {{args}}
 
 tauri-deps-linux:
   bash scripts/install-tauri-deps.sh
