@@ -48,7 +48,7 @@ Managed Runtime Supervisor (Priority One)
 - [Kernel] Supervisor bundle resolver: integrate bundle registry with `RuntimeSupervisor`, enforce preset mapping + accelerator detection, and expose bundle info via `/state/runtimes` — in_progress (bundle inventory exposed; supervisor now auto-registers staged bundles while preset/channel signing work continues) (Expert Alignment Plan §1B).
 - [Pack: Collaboration][Kernel] Launcher runtime wizard: guided install + consent flow with keyboard parity, hardware probe recommendations, and health toasts — plan (Expert Alignment Plan §1C).
 - [Kernel] Accessibility smoke harness for managed runtimes: automate NVDA/VoiceOver + high-contrast checks across Launcher runtime tabs — plan (Expert Alignment Plan §1C/§4).
-- [Kernel] Vision runtime smoke: wire `just runtime-smoke-vision` into CI to exercise supervisor restore loops for llava-style adapters — done (stub manifest + describe probe + restart cycle now part of the smoke helper).
+- [Kernel] Vision runtime smoke: wire `just runtime-smoke-vision` into CI to exercise supervisor restore loops for llava-style adapters — done (helper now auto-builds the server when needed and `scripts/dev.sh --ci` runs the stub manifest + describe probe + restart cycle).
 
 Never‑Out‑Of‑Context (High Priority)
 - [Pack: Research] [t-250912143009-0003] Retrieval: add MMR-style selector across vector/graph mounts and world beliefs — done (world belief snapshots now flow through the mmrd selector alongside hybrid memory lanes)

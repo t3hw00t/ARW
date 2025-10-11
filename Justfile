@@ -175,7 +175,7 @@ runtime-smoke-gpu-sim:
   LLAMA_GPU_SIMULATE=1 MODE=gpu bash scripts/runtime_llama_smoke.sh
 
 runtime-smoke-vision:
-  # Requires ARW_SERVER_BIN to point at a pre-built arw-server binary.
+  # Uses ARW_SERVER_BIN when provided; auto-builds arw-server otherwise.
   bash scripts/runtime_vision_smoke.sh
 
 runtime-weights *args:

@@ -37,7 +37,7 @@ struct NotesSnapshot {
 
 use crate::singleflight::Singleflight;
 use crate::{
-    memory_service, metrics, project_snapshots, state_observer, tasks::TaskHandle, training,
+    memory_service, metrics, project_snapshots, state_observer, tasks::TaskHandle, training, util,
     AppState,
 };
 use arw_kernel::ActionListOptions;
@@ -285,6 +285,10 @@ pub(crate) fn publish_memory_bundle(bus: &arw_events::Bus, bundle: &MemoryRecent
 }
 
 pub(crate) fn start_read_models(state: AppState) -> Vec<TaskHandle> {
+    if util::smoke_profile_enabled() {
+        return start_read_models_smoke(state);
+    }
+
     let mut handles = Vec::new();
     handles.push(spawn_read_model(
         &state,
@@ -433,7 +437,7 @@ pub(crate) fn start_read_models(state: AppState) -> Vec<TaskHandle> {
     handles.push(spawn_read_model(
         &state,
         "route_stats",
-        Duration::from_millis(2000),
+        Duration::from_millis(4000),
         |st| async move {
             let summary = st.metrics().snapshot();
             let bus = st.bus().stats();
@@ -445,7 +449,7 @@ pub(crate) fn start_read_models(state: AppState) -> Vec<TaskHandle> {
     handles.push(spawn_read_model(
         &state,
         "background_tasks",
-        Duration::from_millis(3000),
+        Duration::from_millis(5000),
         |st| async move {
             let (version, tasks) = st.metrics().tasks_snapshot_with_version();
             Some(json!({ "version": version, "tasks": tasks }))
@@ -478,7 +482,7 @@ pub(crate) fn start_read_models(state: AppState) -> Vec<TaskHandle> {
     handles.push(spawn_read_model(
         &state,
         "runtime_bundles",
-        Duration::from_millis(5000),
+        Duration::from_millis(8000),
         |st| async move { Some(st.runtime_bundles().snapshot().await) },
     ));
 
@@ -702,6 +706,43 @@ pub(crate) fn start_read_models(state: AppState) -> Vec<TaskHandle> {
 
     // Service health aggregator from service.health events
     handles.push(spawn_service_health(&state));
+
+    handles
+}
+
+fn start_read_models_smoke(state: AppState) -> Vec<TaskHandle> {
+    let mut handles = Vec::new();
+    handles.push(spawn_read_model(
+        &state,
+        "route_stats",
+        Duration::from_millis(4_000),
+        |st| async move {
+            let summary = st.metrics().snapshot();
+            let bus = st.bus().stats();
+            let cache = st.tool_cache().stats();
+            Some(metrics::route_stats_snapshot(&summary, &bus, &cache))
+        },
+    ));
+
+    handles.push(spawn_read_model(
+        &state,
+        "background_tasks",
+        Duration::from_millis(5_000),
+        |st| async move {
+            let (version, tasks) = st.metrics().tasks_snapshot_with_version();
+            Some(json!({ "version": version, "tasks": tasks }))
+        },
+    ));
+
+    handles.push(spawn_read_model(
+        &state,
+        "runtime_bundles",
+        Duration::from_millis(8_000),
+        |st| async move { Some(st.runtime_bundles().snapshot().await) },
+    ));
+
+    handles.push(spawn_service_health(&state));
+    handles.push(spawn_snappy(&state));
 
     handles
 }

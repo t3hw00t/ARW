@@ -85,12 +85,22 @@ Watch `/state/runtime_matrix` (SSE or `arw-cli runtime matrix`) for:
 With the manifest in place you can exercise the automated supervisor check:
 
 ```bash
-ARW_SERVER_BIN=target/debug/arw-server just runtime-smoke-vision
+just runtime-smoke-vision
 ```
 
-The helper spins up `arw-server` with the managed supervisor, launches a stub vision runtime via the manifest, verifies `/state/runtime_matrix`, runs a describe probe, and forces a restore to ensure the process restarts cleanly. By default it writes to `.smoke/vision/run.XXXX/` inside the repo so files stay stable even if `/tmp` is cleared; set `VISION_SMOKE_ROOT=/path/to/cache` if you want those runs to live elsewhere or persist between executions. Logs live under `./scripts/runtime_vision_smoke.sh` if you need to adapt it for real hardware.
+The helper spins up `arw-server` with the managed supervisor, launches a stub vision runtime via the manifest, verifies `/state/runtime_matrix`, runs a describe probe, and forces a restore to ensure the process restarts cleanly. By default it writes to `.smoke/vision/run.XXXX/` inside the repo so files stay stable even if `/tmp` is cleared; set `VISION_SMOKE_ROOT=/path/to/cache` if you want those runs to live elsewhere or persist between executions. If you already have a custom server build, export `ARW_SERVER_BIN=/path/to/arw-server` before running the command; otherwise the helper builds `arw-server` automatically. Logs live under `./scripts/runtime_vision_smoke.sh` if you need to adapt it for real hardware.
 
-> **Heads up** The script sets `ARW_SMOKE_MODE=vision`, which tells `arw-server` to skip non-essential background services (training, research watcher, distill, etc.). This keeps resource usage low while we only exercise the runtime supervisor.
+> **Heads up** The script sets `ARW_SMOKE_MODE=vision`, which tells `arw-server` to skip non-essential background services (training, research watcher, distill, etc.) and keeps the heavy read-model sweep disabled. Only the runtime matrix and light telemetry polls stay active, so the stub run remains friendly to low-memory dev kits.
+
+On lower-memory machines, export `VISION_CARGO_JOBS=1` before running the smoke to force a single-job `cargo build`. The helper streams build output into `.smoke/vision/run.XXXX/cargo-build.log`, and it reuses the compiled binary on subsequent runs.
+
+Need to inspect the generated manifest or logs after the run? Set `VISION_SMOKE_KEEP_TMP=1` to keep the temporary directory instead of cleaning it up automatically.
+
+The helper now fails fast if `/state/runtime_matrix` is missing accessible strings (`label`, `severity_label`, `aria_hint`, descriptive `detail` rows) or ships a non-positive `ttl_seconds`, catching regressions before they land in CI dashboards.
+
+Runtime smoke mode also bypasses the state observer bus subscriber, so event fan-out does not accumulate while the stub runtime is cycling. If you do hit slow networking (for example in nested containers), tweak the health/describe probes via `VISION_CURL_MAX_TIME`, `VISION_CURL_CONNECT_TIMEOUT`, and the retry knobs (`VISION_CURL_RETRY`, `VISION_CURL_RETRY_DELAY`); the script now applies them across every `curl` call.
+
+Repeated local runs drop their artifacts under `.smoke/vision/`; the helper now auto-prunes older directories (keeping the latest six or any runs newer than a week). Override the knobs with `VISION_SMOKE_KEEP_RECENT`, `VISION_SMOKE_RETENTION_SECS`, or disable pruning entirely via `VISION_SMOKE_DISABLE_PRUNE=1`. Touch `.keep` inside a run directory if you want to pin it between runs.
 
 ## Accessibility Checklist
 - Launcher overlays must expose keyboard focus, captions, and high-contrast outlines before enabling capture.

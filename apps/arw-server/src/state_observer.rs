@@ -8,7 +8,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::RwLock;
 
-use crate::{tasks::TaskHandle, AppState};
+use crate::{tasks::TaskHandle, util, AppState};
 
 const OBS_CAP: usize = 256;
 const INTENTS_CAP: usize = 256;
@@ -99,6 +99,9 @@ pub(crate) fn actions_version_value() -> u64 {
 }
 
 pub(crate) fn start(state: AppState) -> Vec<TaskHandle> {
+    if util::smoke_profile_enabled() {
+        return Vec::new();
+    }
     let handle = tokio::spawn(async move {
         let bus = state.bus();
         let mut rx = bus.subscribe();

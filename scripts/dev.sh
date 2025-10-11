@@ -298,6 +298,9 @@ PY
     echo "[verify] LLAMA_GPU_SIMULATE=1 MODE=gpu bash scripts/runtime_llama_smoke.sh"
     if ! LLAMA_GPU_SIMULATE=1 MODE=gpu bash "$REPO_ROOT/scripts/runtime_llama_smoke.sh"; then ok=1; fi
 
+    echo "[verify] ARW_SERVER_BIN=$REPO_ROOT/target/debug/arw-server bash scripts/runtime_vision_smoke.sh"
+    if ! ARW_SERVER_BIN="$REPO_ROOT/target/debug/arw-server" bash "$REPO_ROOT/scripts/runtime_vision_smoke.sh"; then ok=1; fi
+
     echo "[verify] ARW_LEGACY_CHECK_WAIT_SECS=30 bash scripts/check_legacy_surface.sh"
     if ! ARW_LEGACY_CHECK_WAIT_SECS=30 bash "$REPO_ROOT/scripts/check_legacy_surface.sh"; then ok=1; fi
   fi

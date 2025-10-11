@@ -4,7 +4,7 @@ use std::sync::Arc;
 use serde_json::Value;
 use tracing::{info, warn};
 
-use arw_runtime::RuntimeDescriptor;
+use arw_runtime::{RuntimeDescriptor, RuntimeModality};
 
 use crate::runtime_bundles::{RuntimeBundleInstallation, RuntimeBundleStore};
 use crate::runtime_supervisor::{ManagedRuntimeDefinition, RuntimeSupervisor, SupervisorError};

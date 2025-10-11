@@ -114,6 +114,17 @@ pub fn attach_memory_ptr(value: &mut Value) {
     }
 }
 
+pub fn smoke_profile_enabled() -> bool {
+    static ENABLED: OnceCell<bool> = OnceCell::new();
+    *ENABLED.get_or_init(|| {
+        std::env::var("ARW_SMOKE_MODE")
+            .ok()
+            .map(|raw| raw.trim().to_ascii_lowercase())
+            .map(|value| matches!(value.as_str(), "1" | "true" | "yes" | "smoke" | "vision"))
+            .unwrap_or(false)
+    })
+}
+
 /// Receive the next bus event, handling lag/backpressure transparently.
 /// Returns `None` when the channel is closed.
 pub async fn next_bus_event(

@@ -8,6 +8,76 @@ source "$SCRIPT_DIR/lib/smoke_timeout.sh"
 RUNTIME_ID="${VISION_RUNTIME_ID:-vision.llava.preview}"
 SMOKE_ROOT="${VISION_SMOKE_ROOT:-$PROJECT_ROOT/.smoke/vision}"
 mkdir -p "$SMOKE_ROOT"
+
+prune_old_runs() {
+  if [[ "${VISION_SMOKE_KEEP_TMP:-0}" = "1" ]] || [[ "${VISION_SMOKE_DISABLE_PRUNE:-0}" = "1" ]]; then
+    return
+  fi
+  local root="$1"
+  local keep="${VISION_SMOKE_KEEP_RECENT:-6}"
+  local ttl="${VISION_SMOKE_RETENTION_SECS:-604800}"
+  local removed
+  removed=$(python3 - "$root" "$keep" "$ttl" <<'PY') || return
+import shutil
+import sys
+import time
+from pathlib import Path
+
+root = Path(sys.argv[1])
+try:
+    keep = max(0, int(sys.argv[2]))
+except ValueError:
+    keep = 0
+try:
+    ttl = max(0, int(sys.argv[3]))
+except ValueError:
+    ttl = 0
+
+if not root.exists():
+    raise SystemExit(0)
+
+entries = []
+for entry in root.iterdir():
+    if not entry.is_dir():
+        continue
+    if not entry.name.startswith("run."):
+        continue
+    keep_marker = entry / ".keep"
+    if keep_marker.exists():
+        continue
+    try:
+        stat = entry.stat()
+    except OSError:
+        continue
+    entries.append((stat.st_mtime, entry))
+
+entries.sort(key=lambda item: item[0], reverse=True)
+now = time.time()
+removed = []
+for index, (mtime, entry) in enumerate(entries):
+    should_remove = False
+    if index >= keep:
+        should_remove = True
+    if ttl > 0 and (now - mtime) > ttl:
+        should_remove = True
+    if not should_remove:
+        continue
+    try:
+        shutil.rmtree(entry)
+        removed.append(entry.name)
+    except OSError:
+        pass
+
+if removed:
+    print(" ".join(removed))
+PY
+)
+  if [[ -n "$removed" ]]; then
+    echo "[vision-smoke] pruned old runs: $removed" >&2
+  fi
+}
+
+prune_old_runs "$SMOKE_ROOT"
 TMP_DIR=$(mktemp -d "$SMOKE_ROOT/run.XXXXXX")
 SERVER_LOG="$TMP_DIR/arw-server.log"
 MATRIX_JSON="$TMP_DIR/runtime-matrix.json"
@@ -25,12 +95,30 @@ TMP_SUBDIR="$TMP_DIR/tmp"
 mkdir -p "$TMP_SUBDIR"
 export TMPDIR="$TMP_SUBDIR"
 
+CURL_MAX_TIME="${VISION_CURL_MAX_TIME:-5}"
+CURL_CONNECT_TIMEOUT="${VISION_CURL_CONNECT_TIMEOUT:-3}"
+CURL_RETRY="${VISION_CURL_RETRY:-2}"
+CURL_RETRY_DELAY="${VISION_CURL_RETRY_DELAY:-1}"
+CURL_ARGS_BASE=(-f -sS --max-time "$CURL_MAX_TIME")
+if [[ "${CURL_CONNECT_TIMEOUT}" =~ ^[0-9]+([.][0-9]+)?$ ]]; then
+  CURL_ARGS_BASE+=(--connect-timeout "$CURL_CONNECT_TIMEOUT")
+fi
+if [[ "${CURL_RETRY}" =~ ^[0-9]+$ && "${CURL_RETRY}" -gt 0 ]]; then
+  CURL_ARGS_BASE+=(--retry "$CURL_RETRY")
+  CURL_ARGS_BASE+=(--retry-connrefused)
+  if [[ "${CURL_RETRY_DELAY}" =~ ^[0-9]+$ && "${CURL_RETRY_DELAY}" -gt 0 ]]; then
+    CURL_ARGS_BASE+=(--retry-delay "$CURL_RETRY_DELAY")
+  fi
+fi
+
 cleanup() {
   local status=$?
   status=$(smoke_timeout::cleanup "$status")
   if [[ -n "$SERVER_PID" ]]; then
     kill "$SERVER_PID" 2>/dev/null || true
     wait "$SERVER_PID" 2>/dev/null || true
+    smoke_timeout::unregister_child "$SERVER_PID"
+    SERVER_PID=""
   fi
   if [[ -n "${STUB_SCRIPT:-}" ]]; then
     pkill -f "$STUB_SCRIPT" 2>/dev/null || true
@@ -43,7 +131,11 @@ cleanup() {
       tail -n 200 "$STUB_LOG" >&2 || true
     fi
   fi
-  rm -rf "$TMP_DIR"
+  if [[ "${VISION_SMOKE_KEEP_TMP:-0}" = "1" ]]; then
+    echo "[vision-smoke] preserving run directory at ${TMP_DIR}" >&2
+  else
+    rm -rf "$TMP_DIR"
+  fi
   return "$status"
 }
 trap cleanup EXIT
@@ -52,6 +144,47 @@ if [[ "${ARW_SMOKE_USE_SYNTHETIC:-0}" = "1" ]]; then
   echo "[vision-smoke] ARW_SMOKE_USE_SYNTHETIC=1 — skipping (no local sockets)." >&2
   exit 0
 fi
+
+ensure_server_bin() {
+  local candidate="${ARW_SERVER_BIN:-}"
+  if [[ -n "$candidate" ]]; then
+    if [[ ! -x "$candidate" ]]; then
+      echo "[vision-smoke] ARW_SERVER_BIN points to ${candidate}, but it is not executable." >&2
+      exit 1
+    fi
+    printf '%s\n' "$candidate"
+    return 0
+  fi
+
+  candidate="${PROJECT_ROOT}/target/debug/arw-server"
+  if [[ ! -x "$candidate" ]]; then
+    if ! command -v cargo >/dev/null 2>&1; then
+      echo "[vision-smoke] cargo not found; set ARW_SERVER_BIN to a pre-built arw-server binary." >&2
+      exit 1
+    fi
+    local build_log="$TMP_DIR/cargo-build.log"
+    local cargo_args=(-p arw-server)
+    if [[ -n "${VISION_CARGO_PROFILE:-}" ]]; then
+      cargo_args+=(--profile "${VISION_CARGO_PROFILE}")
+    fi
+    if [[ -n "${VISION_CARGO_JOBS:-}" ]]; then
+      cargo_args+=(--jobs "${VISION_CARGO_JOBS}")
+    fi
+    echo "[vision-smoke] building arw-server binary (cargo build ${cargo_args[*]})" >&2
+    if ! (cd "$PROJECT_ROOT" && cargo build "${cargo_args[@]}" &>"$build_log"); then
+      echo "[vision-smoke] cargo build failed; see ${build_log} for details." >&2
+      tail -n 200 "$build_log" >&2 || true
+      echo "[vision-smoke] supply ARW_SERVER_BIN to reuse an existing build or adjust VISION_CARGO_JOBS." >&2
+      exit 1
+    fi
+  fi
+
+  if [[ ! -x "$candidate" ]]; then
+    echo "[vision-smoke] unable to locate arw-server binary at ${candidate}; set ARW_SERVER_BIN." >&2
+    exit 1
+  fi
+  printf '%s\n' "$candidate"
+}
 
 pick_port() {
   python3 -c 'import socket;
@@ -198,18 +331,17 @@ export ARW_RUNTIME_RESTART_MAX="${ARW_RUNTIME_RESTART_MAX:-2}"
 export ARW_RUNTIME_RESTART_WINDOW_SEC="${ARW_RUNTIME_RESTART_WINDOW_SEC:-120}"
 export ARW_RUNTIME_MATRIX_TTL_SEC="${ARW_RUNTIME_MATRIX_TTL_SEC:-20}"
 
-  local server_bin="${ARW_SERVER_BIN:-}"
-  if [[ -z "$server_bin" ]]; then
-    echo "[vision-smoke] ARW_SERVER_BIN must point to an existing arw-server binary; refusing to auto-build to avoid resource spikes." >&2
-    exit 1
-  fi
+  local server_bin
+  server_bin="$(ensure_server_bin)"
+  export ARW_SERVER_BIN="$server_bin"
 
   "$server_bin" >"$SERVER_LOG" 2>&1 &
   SERVER_PID=$!
+  smoke_timeout::register_child "$SERVER_PID"
 
   local healthz="http://127.0.0.1:${ARW_PORT}/healthz"
   for _ in {1..240}; do
-    if curl -fsS "$healthz" >/dev/null 2>&1; then
+    if curl "${CURL_ARGS_BASE[@]}" "$healthz" >/dev/null 2>&1; then
       echo "[vision-smoke] arw-server ready on port ${ARW_PORT}"
       return 0
     fi
@@ -221,7 +353,7 @@ export ARW_RUNTIME_MATRIX_TTL_SEC="${ARW_RUNTIME_MATRIX_TTL_SEC:-20}"
 
 fetch_runtime_matrix() {
   local base="http://127.0.0.1:${ARW_PORT}"
-  curl -fsS "$base/state/runtime_matrix" \
+  curl "${CURL_ARGS_BASE[@]}" "$base/state/runtime_matrix" \
     -H "X-ARW-Admin: ${ARW_ADMIN_TOKEN}" \
     -H "Authorization: Bearer ${ARW_ADMIN_TOKEN}" \
     -H "Accept: application/json" \
@@ -249,9 +381,27 @@ if not isinstance(code, str):
     raise SystemExit(1)
 if code.lower() != expected.lower():
     raise SystemExit(1)
-detail = status.get("detail") or []
-if not detail:
+detail = status.get("detail")
+if not isinstance(detail, list) or not detail:
     raise SystemExit("runtime status missing detail entries")
+if not all(isinstance(item, str) and item.strip() for item in detail):
+    raise SystemExit("runtime status detail entries must be non-empty strings")
+aria_hint = status.get("aria_hint")
+if not isinstance(aria_hint, str) or not aria_hint.strip():
+    raise SystemExit("runtime status missing aria_hint")
+label = status.get("label")
+if not isinstance(label, str) or not label.strip():
+    raise SystemExit("runtime status missing label")
+severity_label = status.get("severity_label")
+if not isinstance(severity_label, str) or not severity_label.strip():
+    raise SystemExit("runtime status missing severity_label")
+runtime_meta = entry.get("runtime") or {}
+updated = runtime_meta.get("updated")
+if not isinstance(updated, str) or not updated.strip():
+    raise SystemExit("runtime metadata missing updated timestamp")
+ttl = data.get("ttl_seconds")
+if not isinstance(ttl, (int, float)) or ttl <= 0:
+    raise SystemExit("runtime matrix missing positive ttl_seconds")
 print(f"{runtime_id} -> {code}")
 PY
     then
@@ -290,7 +440,7 @@ PY
 
 describe_probe() {
   local payload='{"image": "stub.jpg"}'
-  if ! curl -fsS -X POST "http://127.0.0.1:${VISION_PORT}/describe" \
+  if ! curl "${CURL_ARGS_BASE[@]}" -X POST "http://127.0.0.1:${VISION_PORT}/describe" \
     -H "Content-Type: application/json" \
     -d "$payload" >"$CHAT_LOG"; then
     echo "[vision-smoke] failed to call stub describe endpoint" >&2
@@ -312,7 +462,7 @@ PY
 
 request_restore() {
   local base="http://127.0.0.1:${ARW_PORT}"
-  curl -fsS -X POST "$base/orchestrator/runtimes/${RUNTIME_ID}/restore" \
+  curl "${CURL_ARGS_BASE[@]}" -X POST "$base/orchestrator/runtimes/${RUNTIME_ID}/restore" \
     -H "X-ARW-Admin: ${ARW_ADMIN_TOKEN}" \
     -H "Authorization: Bearer ${ARW_ADMIN_TOKEN}" \
     -H "Content-Type: application/json" \
