@@ -91,6 +91,7 @@ just docs-deprecations
 # generate interface release notes (BASE_REF=... override)
 just docs-release-notes
 just check-enums            # verify models.download.progress status/code enums match the server
+python3 scripts/validate_runtime_consent.py  # ensure runtime bundle catalogs include consent metadata
 
 # Design tokens (single source)
 just tokens-sync            # copy assets/design tokens to docs and launcher UI
@@ -116,4 +117,7 @@ cargo msrv verify --release=stable
 
 # Event naming (dot.case)
 just lint-events      # or: python3 scripts/lint_event_names.py [--self-test]
+
+# Runtime bundle consent annotations
+python3 scripts/validate_runtime_consent.py
 ```

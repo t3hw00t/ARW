@@ -24,6 +24,9 @@ Promote the runtime manager from proposal to a first-class kernel capability. Th
 - Bundle resolver auto-registers staged runtimes and prunes descriptors when bundles are removed; Launcher surfaces start/stop/restart controls alongside restart budgets for managed bundles.
 - Runtime supervisor start/restore/shutdown endpoints now enforce the `runtime:manage` capability. Lease checks run before launches, denied attempts emit `policy_decision` events, and operators satisfy the gate via standard `POST /leases` flows.
 - Preview bundle catalogs live in `configs/runtime/bundles.llama.json`, `configs/runtime/bundles.vision.json`, and `configs/runtime/bundles.audio.json`; inspect available entries with `arw-cli runtime bundles list` (add `--remote` to query a running server, `--json/--pretty` for scripting). Artifact URLs remain placeholders until the signing pipeline lands.
+- Launcher runtime panel now presents consent cues, accelerator recommendations, and accessible keyboard routing in addition to start/stop controls and restart budgets, using live announcements to flag hardware gaps before operators trigger restores. Operators can launch deep-links to the consent ledger and hardware checklist runbooks directly from the panel hints for fast reference.
+- Bundle catalogs now declare consent metadata under `metadata.consent`; the supervisor promotes those hints into runtime tags so Launcher can highlight overlay requirements or warn when annotations are missing. `arw-cli runtime bundles list` surfaces the same consent summary so operators can double-check catalogs from the terminal.
+- Consent annotations ship with a repository check (`scripts/validate_runtime_consent.py`) so CI fails fast if a catalog includes audio/vision bundles without consent metadata.
 
 ## Guiding Principles
 

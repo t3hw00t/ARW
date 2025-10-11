@@ -39,6 +39,11 @@
         "process": {
           "command": "llama.cpp",
           "health_probe": "/health"
+        },
+        "consent": {
+          "required": false,
+          "modalities": ["text"],
+          "note": "Text-only runtime; no additional consent overlay is required."
         }
       }
     }

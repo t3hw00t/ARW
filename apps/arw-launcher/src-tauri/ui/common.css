@@ -372,6 +372,15 @@ th{ color:#555; font-weight:600 }
 .runtime-runbook summary{ font-weight:600; cursor:pointer; color: var(--color-ink) }
 .runtime-runbook[open] summary{ margin-bottom:4px }
 .runtime-runbook p{ margin:0; font-size:13px; line-height:1.45; color: inherit }
+.runtime-hints{ margin:12px 0; padding:10px 12px; border:1px solid var(--color-line); border-radius:10px; background: linear-gradient(180deg,#ffffff,#f8fafc); display:grid; gap:6px }
+.runtime-hints h4{ margin:0; font-size:14px; font-weight:600; color: var(--color-ink) }
+.runtime-hints p{ margin:0; font-size:12px; color: var(--color-muted) }
+.runtime-hints p.warn{ color: var(--status-warn); font-weight:600 }
+.runtime-hints-actions{ display:flex; flex-wrap:wrap; gap:8px; margin-top:6px }
+.runtime-hints-actions .ghost{ display:inline-flex; align-items:center; border:1px solid #cfd6de; border-radius:8px; padding:6px 10px; text-decoration:none; color:inherit; background-image: linear-gradient(180deg, #ffffff, #f3f4f6), var(--noise); box-shadow: var(--shadow-1), 0 8px 18px rgba(0,0,0,0.04); transition: transform .06s ease, box-shadow .12s ease; }
+.runtime-hints-actions .ghost:hover,
+.runtime-hints-actions .ghost:focus-visible{ transform: translateY(-0.5px); box-shadow: 0 1px 0 rgba(255,255,255,0.95) inset, 0 12px 20px rgba(0,0,0,0.08); border-color: rgba(var(--brand-copper-rgb),0.35); outline:2px solid rgba(var(--brand-copper-rgb),0.5); outline-offset:1px; }
+.runtime-hints-actions .ghost.mini{ padding:4px 8px; font-size:12px; border-radius:6px }
 .runtime-detail{ margin-top:6px }
 .runtime-detail summary{ cursor:pointer; font-size:12px; color: var(--color-muted); font-weight:600 }
 .runtime-detail ul{ margin:4px 0 0; padding-left:18px; font-size:12px; color: var(--color-muted) }

@@ -19,6 +19,10 @@ const PROCESS_HEALTH_METHOD_KEY: &str = "process.health.method";
 const PROCESS_HEALTH_STATUS_KEY: &str = "process.health.expect_status";
 const PROCESS_HEALTH_BODY_KEY: &str = "process.health.expect_body";
 const PROCESS_HEALTH_TIMEOUT_KEY: &str = "process.health.timeout_ms";
+const CONSENT_REQUIRED_KEY: &str = "consent.required";
+const CONSENT_MODALITIES_KEY: &str = "consent.modalities";
+const CONSENT_MODALITIES_FLAT_KEY: &str = "consent.modalities_flat";
+const CONSENT_NOTE_KEY: &str = "consent.note";
 
 /// Ensure the runtime supervisor knows about any bundles staged on disk.
 pub async fn reconcile(
@@ -142,6 +146,21 @@ fn definition_from_installation(
     }
 
     descriptor.tags.extend(process_tags);
+    let consent_tags = consent_tags_from_metadata(bundle.metadata.as_ref());
+    let needs_consent = descriptor
+        .modalities
+        .iter()
+        .any(|mode| matches!(mode, RuntimeModality::Audio | RuntimeModality::Vision));
+    if needs_consent && consent_tags.is_none() {
+        warn!(
+            target: "arw::runtime",
+            runtime = %runtime_id,
+            "bundle runtime missing consent metadata for audio/vision modalities; launcher will prompt to add annotations"
+        );
+    }
+    if let Some(consent_tags) = consent_tags {
+        descriptor.tags.extend(consent_tags);
+    }
 
     let definition = ManagedRuntimeDefinition::new(
         descriptor,
@@ -219,4 +238,128 @@ fn process_tags_from_metadata(metadata: Option<&Value>) -> Option<BTreeMap<Strin
     }
 
     Some(tags)
+}
+
+fn consent_tags_from_metadata(metadata: Option<&Value>) -> Option<BTreeMap<String, String>> {
+    let consent_obj = metadata
+        .and_then(|meta| meta.get("consent"))
+        .and_then(Value::as_object)?;
+
+    let mut tags = BTreeMap::new();
+
+    if let Some(required_value) = consent_obj.get("required") {
+        if let Some(required_bool) = required_value.as_bool() {
+            tags.insert(CONSENT_REQUIRED_KEY.into(), required_bool.to_string());
+        } else if let Some(required_str) = required_value.as_str() {
+            let trimmed = required_str.trim();
+            if !trimmed.is_empty() {
+                tags.insert(CONSENT_REQUIRED_KEY.into(), trimmed.to_string());
+            }
+        }
+    }
+
+    if let Some(modalities_value) = consent_obj.get("modalities") {
+        let mut modalities_list: Vec<String> = Vec::new();
+        if let Some(array) = modalities_value.as_array() {
+            for entry in array {
+                if let Some(text) = entry.as_str() {
+                    let trimmed = text.trim();
+                    if !trimmed.is_empty() {
+                        modalities_list.push(trimmed.to_string());
+                    }
+                }
+            }
+        } else if let Some(text) = modalities_value.as_str() {
+            let trimmed = text.trim();
+            if !trimmed.is_empty() {
+                modalities_list.push(trimmed.to_string());
+            }
+        }
+        if !modalities_list.is_empty() {
+            if let Ok(payload) = serde_json::to_string(&modalities_list) {
+                tags.insert(CONSENT_MODALITIES_KEY.into(), payload);
+            }
+            tags.insert(
+                CONSENT_MODALITIES_FLAT_KEY.into(),
+                modalities_list.join(","),
+            );
+        }
+    }
+
+    if let Some(note) = consent_obj.get("note").and_then(Value::as_str) {
+        let trimmed = note.trim();
+        if !trimmed.is_empty() {
+            tags.insert(CONSENT_NOTE_KEY.into(), trimmed.to_string());
+        }
+    }
+
+    if tags.is_empty() {
+        return None;
+    }
+    Some(tags)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn extracts_required_consent_tags_with_modalities() {
+        let metadata = json!({
+            "consent": {
+                "required": true,
+                "modalities": ["audio", "vision"],
+                "note": "overlay required before capture"
+            }
+        });
+
+        let tags = consent_tags_from_metadata(Some(&metadata)).expect("tags present");
+        assert_eq!(
+            tags.get(CONSENT_REQUIRED_KEY).map(String::as_str),
+            Some("true")
+        );
+        assert_eq!(
+            tags.get(CONSENT_MODALITIES_KEY).map(String::as_str),
+            Some("[\"audio\",\"vision\"]")
+        );
+        assert_eq!(
+            tags.get(CONSENT_MODALITIES_FLAT_KEY).map(String::as_str),
+            Some("audio,vision")
+        );
+        assert_eq!(
+            tags.get(CONSENT_NOTE_KEY).map(String::as_str),
+            Some("overlay required before capture")
+        );
+    }
+
+    #[test]
+    fn extracts_optional_consent_without_modalities() {
+        let metadata = json!({
+            "consent": {
+                "required": false,
+                "note": "text-only runtime"
+            }
+        });
+
+        let tags = consent_tags_from_metadata(Some(&metadata)).expect("tags present");
+        assert_eq!(
+            tags.get(CONSENT_REQUIRED_KEY).map(String::as_str),
+            Some("false")
+        );
+        assert!(tags.get(CONSENT_MODALITIES_KEY).is_none());
+        assert_eq!(
+            tags.get(CONSENT_NOTE_KEY).map(String::as_str),
+            Some("text-only runtime")
+        );
+    }
+
+    #[test]
+    fn returns_none_when_metadata_missing_or_invalid() {
+        assert!(consent_tags_from_metadata(None).is_none());
+        let empty_obj = json!({});
+        assert!(consent_tags_from_metadata(Some(&empty_obj)).is_none());
+        let invalid = json!({"consent": []});
+        assert!(consent_tags_from_metadata(Some(&invalid)).is_none());
+    }
 }

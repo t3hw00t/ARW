@@ -147,6 +147,7 @@
               <button id="runtimeRefresh" class="ghost">Refresh</button>
               <label class="key"><input type="checkbox" id="runtimeAuto" checked> auto refresh</label>
               <button id="runtimeCopyAll" class="ghost">Copy snapshot</button>
+              <button id="runtimeFocusTable" class="ghost btn-small" type="button">Focus table</button>
               <a href="https://github.com/t3hw00t/ARW/blob/main/docs/guide/runtime_matrix.md" target="_blank" rel="noopener noreferrer" class="ghost" role="button">Runbook</a>
               <span id="runtimeStat" class="dim" role="status" aria-live="polite" style="margin-left:auto"></span>
             </div>
@@ -159,14 +160,24 @@
                 presets.
               </p>
             </details>
+            <div id="runtimeHints" class="runtime-hints" role="region" aria-live="polite" aria-labelledby="runtimeHintsTitle" hidden>
+              <h4 id="runtimeHintsTitle">Operator cues</h4>
+              <p id="runtimeConsentHint" class="dim" role="status" aria-live="polite"></p>
+              <p id="runtimeHardwareHint" class="dim" role="status" aria-live="polite"></p>
+              <div class="runtime-hints-actions" role="toolbar" aria-label="Runtime reference links">
+                <a class="ghost mini" href="https://github.com/t3hw00t/ARW/blob/main/docs/architecture/capability_consent_ledger.md" target="_blank" rel="noopener noreferrer">Consent guide</a>
+                <a class="ghost mini" href="https://github.com/t3hw00t/ARW/blob/main/docs/guide/runtime_matrix.md" target="_blank" rel="noopener noreferrer">Hardware checklist</a>
+              </div>
+            </div>
             <div style="overflow:auto; max-height:220px">
-              <table aria-label="Managed runtimes" data-runtime-table>
+              <table aria-label="Managed runtimes" data-runtime-table tabindex="-1">
                 <thead>
                   <tr><th scope="col">Runtime</th><th scope="col">Status</th><th scope="col">Profile</th><th scope="col">Budget</th><th scope="col">Updated</th><th scope="col">Actions</th></tr>
                 </thead>
                 <tbody id="runtimeTbl"></tbody>
               </table>
             </div>
+            <div id="runtimeAnnounce" class="sr-only" aria-live="assertive"></div>
             <div id="runtimeEmpty" class="dim" role="status" aria-live="polite">No managed runtimes registered.</div>
             <div class="runtime-matrix" role="region" aria-live="polite" aria-labelledby="runtimeMatrixTitle" data-mode="expert-only">
               <h4 id="runtimeMatrixTitle">Node Status</h4>

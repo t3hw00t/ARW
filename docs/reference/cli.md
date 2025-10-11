@@ -26,6 +26,8 @@ Commands (summary)
 - `arw-cli runtime bundles install [--dir PATH] [--remote] [--dest DIR] [--artifact-kind KIND] [--artifact-format FORMAT] [--force] [--dry-run] <bundle-id>...` — download bundle artifacts into the managed runtime directory (defaults to `<state_dir>/runtime/bundles`)
 - `arw-cli runtime bundles import --bundle <id> [--dest DIR] [--metadata FILE] [--force] [--dry-run] <path>...` — copy local archives or directories into the managed runtime directory for offline installs
 - `arw-cli runtime bundles rollback --bundle <id> [--dest DIR] [--revision REV] [--list] [--dry-run] [--json {--pretty}]` — list available revisions and restore a bundle from the local history snapshot (JSON mode works for both `--list` and rollback actions)
+
+Human-readable output from `runtime bundles list` now includes consent summaries derived from each catalog’s `metadata.consent` block (for example, `consent: required (vision)` or `consent: missing metadata for audio/vision modalities`). Any audio/vision bundle without annotations is flagged so operators can update the catalog before promoting the runtime.
 - `arw-cli runtime shutdown <id>` — request a managed runtime shutdown via `/orchestrator/runtimes/{id}/shutdown`
 - `arw-cli admin autonomy lanes [--json {--pretty}]` — list autonomy lanes with alert and budget summaries.
 - `arw-cli admin autonomy lane --lane <id> [--json {--pretty}]` — inspect a specific lane for current mode, jobs, alerts, and budgets.

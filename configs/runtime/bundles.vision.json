@@ -39,6 +39,11 @@
         "process": {
           "command": "llava.cpp",
           "health_probe": "/health"
+        },
+        "consent": {
+          "required": true,
+          "modalities": ["vision"],
+          "note": "Camera capture requires the launcher consent overlay before streaming frames."
         }
       }
     }

@@ -1326,6 +1326,9 @@ fn print_bundle_summary(
                     println!("    support: {}", support_notes.join("; "));
                 }
             }
+            if let Some(consent) = bundle_consent_summary(bundle) {
+                println!("    {}", consent);
+            }
             if !bundle.notes.is_empty() {
                 println!("    notes: {}", bundle.notes[0]);
                 if bundle.notes.len() > 1 {
@@ -1401,6 +1404,11 @@ fn print_bundle_summary(
                     );
                 } else {
                     println!("    artifacts: {}", names);
+                }
+            }
+            if let Some(bundle) = inst.bundle.as_ref() {
+                if let Some(consent) = bundle_consent_summary(bundle) {
+                    println!("    {}", consent);
                 }
             }
         }
@@ -6186,6 +6194,101 @@ fn accelerator_slug(accel: &RuntimeAccelerator) -> &'static str {
         RuntimeAccelerator::NpuOther => "npu_other",
         RuntimeAccelerator::Other => "other",
     }
+}
+
+fn bundle_consent_summary(bundle: &runtime_bundles::RuntimeBundle) -> Option<String> {
+    let modalities: Vec<String> = bundle
+        .modalities
+        .iter()
+        .map(modality_slug)
+        .map(|slug| slug.to_string())
+        .collect();
+    let needs_overlay = bundle
+        .modalities
+        .iter()
+        .any(|mode| matches!(mode, RuntimeModality::Audio | RuntimeModality::Vision));
+
+    let metadata = bundle.metadata.as_ref();
+    let consent_meta = metadata.and_then(|value| value.get("consent"));
+
+    if consent_meta.is_none() {
+        if needs_overlay {
+            let label = if modalities.is_empty() {
+                "audio/vision".to_string()
+            } else {
+                modalities.join(", ")
+            };
+            return Some(format!(
+                "consent: missing metadata for {} modalities (add `metadata.consent` to the bundle catalog)",
+                label
+            ));
+        }
+        return Some("consent: not required (text-only runtime)".to_string());
+    }
+
+    let consent_obj = match consent_meta.unwrap().as_object() {
+        Some(obj) => obj,
+        None => {
+            return Some("consent: metadata present but malformed (expected object)".to_string());
+        }
+    };
+
+    let required = consent_obj
+        .get("required")
+        .and_then(|value| value.as_bool());
+
+    let mut consent_modalities: Vec<String> = match consent_obj.get("modalities") {
+        Some(JsonValue::Array(items)) => items
+            .iter()
+            .filter_map(|item| item.as_str())
+            .map(|item| item.trim())
+            .filter(|item| !item.is_empty())
+            .map(|item| item.to_string())
+            .collect(),
+        Some(JsonValue::String(text)) => {
+            let trimmed = text.trim();
+            if trimmed.is_empty() {
+                Vec::new()
+            } else {
+                vec![trimmed.to_string()]
+            }
+        }
+        _ => Vec::new(),
+    };
+    if consent_modalities.is_empty() && !modalities.is_empty() {
+        consent_modalities = modalities.clone();
+    }
+    let label = if consent_modalities.is_empty() {
+        "unspecified".to_string()
+    } else {
+        consent_modalities.join(", ")
+    };
+
+    let note = consent_obj
+        .get("note")
+        .and_then(|value| value.as_str())
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(|value| value.to_string());
+    let suffix = note
+        .as_deref()
+        .map(|value| format!(" – {}", value))
+        .unwrap_or_default();
+
+    Some(match required {
+        Some(true) => format!("consent: required ({}){}", label, suffix),
+        Some(false) => format!("consent: optional ({}){}", label, suffix),
+        None => {
+            if needs_overlay {
+                format!(
+                    "consent: annotate requirement for {} modalities{}",
+                    label, suffix
+                )
+            } else {
+                format!("consent: not specified ({}){}", label, suffix)
+            }
+        }
+    })
 }
 
 fn cmd_context_telemetry(args: &ContextTelemetryArgs) -> Result<()> {

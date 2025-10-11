@@ -8,6 +8,7 @@ const RUNTIME_ACCEL_LABELS = {
   npu_coreml: 'NPU (CoreML)',
   npu_other: 'NPU',
   other: 'Other',
+  unspecified: 'Unspecified',
 };
 
 const RUNTIME_MODALITY_LABELS = {
@@ -15,6 +16,29 @@ const RUNTIME_MODALITY_LABELS = {
   text: 'Text',
   vision: 'Vision',
 };
+
+const CONSENT_MODALITY_MESSAGES = {
+  audio: 'Capture microphone or audio streams only after participants acknowledge the consent overlay.',
+  vision: 'Screen or camera capture must present the consent banner before streaming begins.',
+};
+
+const HARDWARE_TIPS = {
+  cpu: 'Keep at least four performance cores available and avoid CPU throttling during long runs.',
+  gpu_cuda: 'Install current NVIDIA drivers with matching CUDA libraries and ensure sufficient VRAM headroom.',
+  gpu_rocm: 'Confirm the ROCm stack is installed and that the GPU model is on the supported compatibility list.',
+  gpu_metal: 'Requires macOS with a Metal-capable GPU; keep the display awake to maintain capture consent surfaces.',
+  gpu_vulkan: 'Ensure Vulkan runtimes and drivers are present; restart after driver updates to refresh detection.',
+  npu_directml: 'Verify DirectML is enabled and GPU drivers are up to date on Windows before starting these bundles.',
+  npu_coreml: 'Use Apple Silicon devices with Core ML support and connect to AC power for sustained workloads.',
+  npu_other: 'Confirm the vendor NPU runtime stack matches the bundle manifest before promotion.',
+  other: 'Review the runtime manifest for vendor-specific accelerator requirements.',
+  unspecified: 'Declare accelerator requirements in the runtime manifest so operators can stage the right hardware.',
+};
+
+const CONSENT_TAG_REQUIRED = 'consent.required';
+const CONSENT_TAG_MODALITIES = 'consent.modalities';
+const CONSENT_TAG_MODALITIES_FLAT = 'consent.modalities_flat';
+const CONSENT_TAG_NOTE = 'consent.note';
 
 const CAN_OPEN_LOCAL = !!(ARW.env && ARW.env.isTauri);
 
@@ -78,11 +102,31 @@ document.addEventListener('DOMContentLoaded', async () => {
   const elRuntimeEmpty = document.getElementById('runtimeEmpty');
   const elRuntimeRefreshBtn = document.getElementById('runtimeRefresh');
   const elRuntimeCopyBtn = document.getElementById('runtimeCopyAll');
+  const elRuntimeFocusBtn = document.getElementById('runtimeFocusTable');
   const elRuntimeAuto = document.getElementById('runtimeAuto');
   const elRuntimeStat = document.getElementById('runtimeStat');
   const elRuntimeRunbook = document.getElementById('runtimeRunbook');
   const elRuntimeMatrix = document.getElementById('runtimeMatrix');
   const elRuntimeBundles = document.getElementById('runtimeBundles');
+  const elRuntimeConsentHint = document.getElementById('runtimeConsentHint');
+  const elRuntimeHardwareHint = document.getElementById('runtimeHardwareHint');
+  const elRuntimeHints = document.getElementById('runtimeHints');
+  const elRuntimeAnnounce = document.getElementById('runtimeAnnounce');
+  if (elRuntimeFocusBtn && elRuntimeTable) {
+    elRuntimeFocusBtn.setAttribute('aria-label', 'Focus runtime table');
+    elRuntimeFocusBtn.addEventListener('click', () => {
+      try {
+        elRuntimeTable.focus();
+      } catch {}
+      if (elRuntimeTable && typeof elRuntimeTable.scrollIntoView === 'function') {
+        try {
+          elRuntimeTable.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        } catch {
+          elRuntimeTable.scrollIntoView();
+        }
+      }
+    });
+  }
   const runtimePending = new Set();
   const updateModeUi = (mode, { remount = false } = {}) => {
     const normalized = mode === 'expert' ? 'expert' : 'guided';
@@ -126,7 +170,272 @@ document.addEventListener('DOMContentLoaded', async () => {
     }, 2000);
   }
 
+  function joinList(values = []) {
+    const unique = Array.from(new Set(values.filter(Boolean)));
+    if (!unique.length) return '';
+    if (unique.length === 1) return unique[0];
+    if (unique.length === 2) return `${unique[0]} and ${unique[1]}`;
+    return `${unique.slice(0, -1).join(', ')}, and ${unique.at(-1)}`;
+  }
+
+  function runtimeDisplayName(descriptor = {}) {
+    return descriptor.name || descriptor.id || 'runtime';
+  }
+
+  function setRuntimeHint(element, message, tone = 'info') {
+    if (!element) return;
+    element.textContent = message || '';
+    element.title = message || '';
+    element.classList.remove('warn');
+  if (tone === 'warn') {
+    element.classList.add('warn');
+  }
+}
+
+  function parseBoolean(value) {
+    if (value === true) return true;
+    if (value === false) return false;
+    if (value == null) return null;
+    const normalized = String(value).trim().toLowerCase();
+    if (!normalized) return null;
+    if (['1', 'true', 'yes', 'required', 'on'].includes(normalized)) return true;
+    if (['0', 'false', 'no', 'optional', 'off'].includes(normalized)) return false;
+    return null;
+  }
+
+  function extractConsentInfo(tags) {
+    const info = {
+      required: null,
+      modalities: [],
+      note: '',
+      annotated: false,
+    };
+    if (!tags || typeof tags !== 'object') {
+      return info;
+    }
+    const requiredValue = tags[CONSENT_TAG_REQUIRED];
+    const parsedRequired = parseBoolean(requiredValue);
+    if (parsedRequired !== null) {
+      info.required = parsedRequired;
+      info.annotated = true;
+    } else if (typeof requiredValue === 'string' && requiredValue.trim()) {
+      info.annotated = true;
+    }
+
+    let modalitiesRaw = [];
+    const modalJson = tags[CONSENT_TAG_MODALITIES];
+    if (typeof modalJson === 'string' && modalJson.trim()) {
+      try {
+        const parsed = JSON.parse(modalJson);
+        if (Array.isArray(parsed)) {
+          modalitiesRaw = parsed;
+        }
+      } catch {
+        // fall back to flat key below
+      }
+    }
+    if (!modalitiesRaw.length) {
+      const flat = tags[CONSENT_TAG_MODALITIES_FLAT];
+      if (typeof flat === 'string' && flat.trim()) {
+        modalitiesRaw = flat
+          .split(',')
+          .map((entry) => entry.trim())
+          .filter(Boolean);
+      }
+    }
+    if (modalitiesRaw.length) {
+      info.modalities = Array.from(
+        new Set(
+          modalitiesRaw
+            .map((mode) => String(mode || '').trim().toLowerCase())
+            .filter(Boolean),
+        ),
+      );
+      info.annotated = true;
+    }
+
+    const note = tags[CONSENT_TAG_NOTE];
+    if (typeof note === 'string' && note.trim()) {
+      info.note = note.trim();
+      info.annotated = true;
+    }
+    return info;
+  }
+
+  function buildConsentHint(runtimes) {
+    const requiredList = [];
+    const missingList = [];
+    const optionalList = [];
+    for (const entry of runtimes) {
+      const descriptor = entry?.descriptor || {};
+      const name = runtimeDisplayName(descriptor);
+      const modalities = Array.isArray(descriptor.modalities)
+        ? descriptor.modalities.map((mode) => String(mode || '').toLowerCase())
+        : [];
+      const tags =
+        descriptor.tags && typeof descriptor.tags === 'object' ? descriptor.tags : null;
+      const consentInfo = extractConsentInfo(tags);
+      const consentModalities = consentInfo.modalities.length
+        ? consentInfo.modalities
+        : modalities.filter((mode) => mode === 'audio' || mode === 'vision');
+      const needsConsentByModality = modalities.some(
+        (mode) => mode === 'audio' || mode === 'vision',
+      );
+      if (consentInfo.required === true && consentModalities.length) {
+        requiredList.push({
+          name,
+          modalities: consentModalities,
+          note: consentInfo.note,
+        });
+      } else if (needsConsentByModality && consentInfo.required === null && !consentInfo.annotated) {
+        missingList.push({
+          name,
+          modalities: modalities.filter((mode) => mode === 'audio' || mode === 'vision'),
+        });
+      } else if (consentInfo.required === false && consentModalities.length) {
+        optionalList.push({
+          name,
+          modalities: consentModalities,
+          note: consentInfo.note,
+        });
+      }
+    }
+    if (!requiredList.length && !missingList.length && !optionalList.length) {
+      return {
+        message: 'Consent: Text-only runtimes detected; no additional consent prompt required before start.',
+        tone: 'info',
+      };
+    }
+    const statements = [];
+    if (requiredList.length) {
+      const segments = requiredList.map((item) => {
+        const label =
+          runtimeModalitiesLabel(item.modalities) || joinList(item.modalities);
+        const segment = label ? `${item.name} (${label})` : item.name;
+        return item.note ? `${segment} – ${item.note}` : segment;
+      });
+      const requirements = joinList(segments);
+      const guidance = [];
+      if (requiredList.some((item) => item.modalities.includes('audio'))) {
+        guidance.push(CONSENT_MODALITY_MESSAGES.audio);
+      }
+      if (requiredList.some((item) => item.modalities.includes('vision'))) {
+        guidance.push(CONSENT_MODALITY_MESSAGES.vision);
+      }
+      const guidanceText = guidance.join(' ');
+      statements.push(
+        `Consent required: ${requirements}. ${guidanceText ||
+          'Confirm the overlay acknowledgement before restoring these runtimes.'}`,
+      );
+    }
+    if (optionalList.length && !requiredList.length) {
+      const segments = optionalList.map((item) => {
+        const label =
+          runtimeModalitiesLabel(item.modalities) || joinList(item.modalities);
+        const segment = label ? `${item.name} (${label})` : item.name;
+        return item.note ? `${segment} – ${item.note}` : segment;
+      });
+      statements.push(
+        `Consent overlays optional: ${joinList(segments)}.`,
+      );
+    }
+    if (missingList.length) {
+      const segments = missingList.map((item) => {
+        const label =
+          runtimeModalitiesLabel(item.modalities) || joinList(item.modalities);
+        return label ? `${item.name} (${label})` : item.name;
+      });
+      statements.push(
+        `Add consent metadata for ${joinList(segments)} so the launcher can verify overlays before activation.`,
+      );
+    }
+    const tone = requiredList.length || missingList.length ? 'warn' : 'info';
+    return { message: statements.join(' ').trim(), tone };
+  }
+
+  function buildHardwareHint(runtimes) {
+    const groups = new Map();
+    const issues = [];
+    for (const entry of runtimes) {
+      const descriptor = entry?.descriptor || {};
+      const status = entry?.status || {};
+      const name = runtimeDisplayName(descriptor);
+      let accelerator = descriptor.accelerator;
+      accelerator = accelerator ? String(accelerator).toLowerCase() : '';
+      if (!accelerator) accelerator = 'unspecified';
+      if (!groups.has(accelerator)) {
+        groups.set(accelerator, []);
+      }
+      groups.get(accelerator).push(name);
+      const summary = String(status.summary || '');
+      const detailLines = Array.isArray(status.detail) ? status.detail : [];
+      const combined = `${summary} ${detailLines.join(' ')}`.toLowerCase();
+      const hardwareWarning =
+        (combined.includes('gpu') || combined.includes('accelerator')) &&
+        (combined.includes('not available') ||
+          combined.includes('not detected') ||
+          combined.includes('missing') ||
+          combined.includes('driver') ||
+          combined.includes('simulated'));
+      if (hardwareWarning) {
+        issues.push(`${name}: ${summary || 'hardware attention required.'}`);
+      }
+    }
+    const groupParts = [];
+    for (const [accel, names] of groups.entries()) {
+      const label = runtimeAcceleratorLabel(accel);
+      const list = joinList(names);
+      if (!list) continue;
+      groupParts.push(`${label}: ${list}`);
+    }
+    groupParts.sort();
+    let message = '';
+    if (groupParts.length) {
+      message = `Hardware: ${groupParts.join('; ')}.`;
+    } else {
+      message = 'Hardware: Runtime manifests did not expose accelerator metadata.';
+    }
+    const tips = new Set();
+    for (const accel of groups.keys()) {
+      const tipKey = accel || 'unspecified';
+      const tip = HARDWARE_TIPS[tipKey] || HARDWARE_TIPS.unspecified;
+      if (tip) tips.add(tip);
+    }
+    if (tips.size) {
+      message += ` Tips: ${Array.from(tips).join(' ')}`;
+    }
+    if (issues.length) {
+      message += ` Warnings: ${issues.join(' ')}`;
+    }
+    const tone = issues.length ? 'warn' : 'info';
+    return { message: message.trim(), tone };
+  }
+
+  function updateRuntimeHints(runtimes) {
+    if (!elRuntimeHints || !elRuntimeConsentHint || !elRuntimeHardwareHint) return;
+    if (!Array.isArray(runtimes) || runtimes.length === 0) {
+      elRuntimeHints.hidden = true;
+      setRuntimeHint(elRuntimeConsentHint, '');
+      setRuntimeHint(elRuntimeHardwareHint, '');
+      return;
+    }
+    elRuntimeHints.hidden = false;
+    const consent = buildConsentHint(runtimes);
+    const hardware = buildHardwareHint(runtimes);
+    setRuntimeHint(elRuntimeConsentHint, consent.message, consent.tone);
+    setRuntimeHint(elRuntimeHardwareHint, hardware.message, hardware.tone);
+  }
+
+  let lastRuntimeAnnouncement = '';
+  function setRuntimeAnnouncement(message) {
+    if (!elRuntimeAnnounce) return;
+    if (message === lastRuntimeAnnouncement) return;
+    lastRuntimeAnnouncement = message;
+    elRuntimeAnnounce.textContent = message || '';
+  }
+
   setRuntimeBadge('Runtime: loading…');
+  setRuntimeAnnouncement('Runtime snapshot loading.');
 
   function formatReset(ts) {
     try {
@@ -148,6 +457,13 @@ document.addEventListener('DOMContentLoaded', async () => {
       renderRuntimeTable(runtimes);
     } else if (elRuntimeEmpty) {
       elRuntimeEmpty.style.display = runtimes.length ? 'none' : '';
+    }
+    updateRuntimeHints(runtimes);
+    if (elRuntimeFocusBtn) {
+      elRuntimeFocusBtn.disabled = !runtimes.length;
+    }
+    if (!runtimes.length) {
+      setRuntimeAnnouncement('Runtime snapshot cleared. No managed runtimes registered.');
     }
     if (!elRuntimeBadge) return;
     if (!runtimes.length) {
@@ -217,6 +533,15 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
     const title = details.join('\n');
     const level = err ? 'warn' : warn ? 'warn' : 'neutral';
+    const announceParts = [`Runtime snapshot updated: ${readyCount} of ${total} ready`];
+    if (minRemaining != null) {
+      const plural = minRemaining === 1 ? '' : 's';
+      announceParts.push(`${minRemaining} restart${plural} remaining`);
+    }
+    if (resetAt) {
+      announceParts.push(`next reset ${formatReset(resetAt)}`);
+    }
+    setRuntimeAnnouncement(announceParts.join('. '));
     setRuntimeBadge(`Runtime: ${badgeParts.join(' · ')}`, level, title);
   }
 
@@ -575,6 +900,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       const status = entry?.status || {};
       const runtimeId = descriptor.id || status.id;
       if (!runtimeId) continue;
+      const prettyName = descriptor.name || runtimeId;
       const tr = document.createElement('tr');
       if (runtimePending.has(runtimeId)) {
         tr.setAttribute('data-runtime-pending', 'true');
@@ -582,7 +908,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
       const nameCell = document.createElement('td');
       const nameLabel = document.createElement('strong');
-      nameLabel.textContent = descriptor.name || runtimeId;
+      nameLabel.textContent = prettyName;
       nameCell.appendChild(nameLabel);
       const idEl = document.createElement('div');
       idEl.className = 'dim mono';
@@ -690,37 +1016,42 @@ document.addEventListener('DOMContentLoaded', async () => {
       if (stateSlug === 'offline' || stateSlug === 'unknown') {
         const startBtn = document.createElement('button');
         startBtn.className = 'ghost btn-small';
+        let startLabel = `Start runtime ${prettyName}`;
         if (isPending) {
           startBtn.textContent = 'Starting…';
           startBtn.disabled = true;
-          startBtn.title = 'Start request in flight';
+          startLabel = 'Start request in flight';
         } else {
           startBtn.textContent = 'Start';
-          startBtn.title = `Start ${descriptor.name || runtimeId}`;
         }
+        startBtn.title = startLabel;
+        startBtn.setAttribute('aria-label', startLabel);
         startBtn.addEventListener('click', () => handleRuntimeStart(entry));
         actionsWrap.appendChild(startBtn);
       } else {
         const stopBtn = document.createElement('button');
         stopBtn.className = 'ghost btn-small';
+        let stopLabel = `Stop runtime ${prettyName}`;
         if (isPending) {
           stopBtn.textContent = 'Stopping…';
           stopBtn.disabled = true;
-          stopBtn.title = 'Operation in flight';
+          stopLabel = 'Stop request in flight';
         } else {
           stopBtn.textContent = 'Stop';
-          stopBtn.title = `Stop ${descriptor.name || runtimeId}`;
         }
+        stopBtn.title = stopLabel;
+        stopBtn.setAttribute('aria-label', stopLabel);
         stopBtn.addEventListener('click', () => handleRuntimeStop(entry));
         actionsWrap.appendChild(stopBtn);
       }
 
       const restartBtn = document.createElement('button');
       restartBtn.className = 'ghost btn-small';
+      let restartLabel = `Request restart for ${prettyName}`;
       if (isPending) {
         restartBtn.textContent = 'Requesting…';
         restartBtn.disabled = true;
-        restartBtn.title = 'Restart request in flight';
+        restartLabel = 'Restart request in flight';
       } else {
         restartBtn.textContent = 'Restart';
       }
@@ -729,13 +1060,15 @@ document.addEventListener('DOMContentLoaded', async () => {
         restartBtn.disabled = true;
         disableReason = 'Restart budget exhausted';
       }
-      if (!isPending) {
-        if (disableReason) {
-          restartBtn.title = disableReason;
-        } else {
-          restartBtn.title = `Request restart for ${descriptor.name || runtimeId}`;
-        }
+      if (isPending) {
+        restartBtn.title = restartLabel;
+      } else if (disableReason) {
+        restartBtn.title = disableReason;
+      } else {
+        restartBtn.title = restartLabel;
       }
+      const ariaRestart = disableReason ? `${disableReason} for ${prettyName}` : restartLabel;
+      restartBtn.setAttribute('aria-label', ariaRestart);
       restartBtn.addEventListener('click', () => handleRuntimeRestart(entry));
       actionsWrap.appendChild(restartBtn);
 

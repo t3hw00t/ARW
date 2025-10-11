@@ -39,6 +39,11 @@
         "process": {
           "command": "whisper.cpp",
           "health_probe": "/health"
+        },
+        "consent": {
+          "required": true,
+          "modalities": ["audio"],
+          "note": "Microphone capture triggers the launcher consent overlay and lease approval."
         }
       }
     }
