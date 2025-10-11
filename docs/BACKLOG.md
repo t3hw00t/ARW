@@ -40,7 +40,7 @@ Complexity Collapse (Cross-cutting)
 
 Managed Runtime Supervisor (Priority One)
 - [Kernel] Runtime Matrix Phase 1: land health reasons, restart budgets, and accessible status strings; add CPU/GPU smoke tests exercising llama.cpp integration — in_progress (health strings + restart budgets landed; stubbed llama smoke via `just runtime-smoke`; CI now runs a simulated GPU smoke via `scripts/dev.sh verify --ci` while real GPU runs remain outstanding).
-- [Kernel] Supervisor Core Phase 2: finalize `RuntimeRegistry` adapter trait, lease-gated start/stop APIs, structured logs, and policy simulator coverage — plan (structured log stream with heartbeat dedupe, plus `state_label`/`severity_label` exposed to clients, landed).
+- [Kernel] Supervisor Core Phase 2: finalize `RuntimeRegistry` adapter trait, lease-gated start/stop APIs, structured logs, and policy simulator coverage — in_progress (structured log stream with heartbeat dedupe plus `state_label`/`severity_label` landed; runtime start/stop now lease-gated via `runtime:manage`; policy simulator coverage next).
 - [Pack: Collaboration][Kernel] Launcher runtime panels: expose profiles, consent cues, and start/stop controls with keyboard parity; publish operator runbook excerpt in Launcher help cards — plan.
 - [Kernel] Supply-chain readiness for bundled runtimes: sign binary manifests, document update cadence, and ship rollback checklist — plan.
 - [Kernel] Bundle catalog & signatures: publish `configs/runtime/bundles.llama.json`, `bundles.vision.json`, and `bundles.audio.json` with signed hashes; pipeline to resolve bundle channel metadata — in_progress (preview catalogs + `/state/runtime/bundles` read-model shipping with catalog + installation summaries; signing workflow pending) (Expert Alignment Plan §1A).
@@ -58,7 +58,7 @@ Never‑Out‑Of‑Context (High Priority)
 - [Pack: Research] [t-250912143029-0008] UI: Project Hub panel “What’s in context now” with artifact pointers and rehydrate actions — done (Launcher Hub now surfaces assembled context with rehydrate tools)
 - [Pack: Research] [t-250912143033-0009] Training Park: dials for diversity/recency/compression; recall‑risk and coverage meters — done (launcher now ships a recency dial and live coverage/recall meters wired to `context_metrics`)
 - [Pack: Research] [t-250918120201-tp01] Training telemetry read-models in `arw-server` (context/memory/tool success stats) powering Training Park — doing (baseline snapshot live; expanding coverage)
-- [Pack: Research] [t-250918120205-tp02] Launcher Training Park window: replace stub UI with live metrics + control bindings — plan
+- [Pack: Research] [t-250918120205-tp02] Launcher Training Park window: replace stub UI with live metrics + control bindings — done (training workspace now ships live telemetry panels, presets, and start/diff controls wired to orchestrator APIs)
 - **Recently shipped:** Context Working Set doc; Context API budgets + stable IDs; Memory hygiene janitor; Context telemetry guardrails.
 
 Modular Cognitive Stack (Kickoff)
@@ -95,7 +95,7 @@ UI Coherence
 - [Pack: Collaboration] [t-250918120301-hitl01] Human-in-the-loop staging queue in `arw-server` with `/state/staging/actions` read-model and leases — done (shipped kernel + API; follow-up UX tracked separately)
 - [Pack: Collaboration] [t-250918120305-hitl02] Sidecar approvals UI: replace placeholder copy with live staging actions + evidence preview — done (sidecar lane shows staging queue, evidence viewer, approve/deny buttons, persisted filters/sort, stale-mode triage chips with shortcuts, copyable summaries)
 - [Pack: Collaboration] Feedback loop readiness: validate Heuristic Feedback Engine shadow runs, log deltas, and document sidecar approvals before enabling auto-apply — done (delta log + approvals doc landed)
-- [Pack: Collaboration] Project Hub SSE bridge: consume `state.read.model.patch` (Event Spine) for notes/files/live context in the SPA swap — doing (metadata feed wired)
+- [Pack: Collaboration] Project Hub SSE bridge: consume `state.read.model.patch` (Event Spine) for notes/files/live context in the SPA swap — done (SPA sidecar and hub panes now consume `state.read.model.patch` to keep notes/files/context synchronized live)
 
 Experience Outcomes
 - [Pack: Collaboration] Trusted Onboarding Journey kit: scripted first-run narration, beta walk-through deck, Launcher help-card refresh — plan (ship alongside Runtime Supervisor Phase 2 enabling)
@@ -176,7 +176,7 @@ Accessibility & Consent Foundations (Continuous)
 Operational Excellence & Release Engineering
 - [Kernel] Bundle signing pipeline: GitHub Actions job producing `ghcr.io/.../arw-bundles:<version>` with provenance attestation — plan (Expert Alignment Plan §5).
 - [Kernel] Cross-platform managed-runtime smoke: nightly Windows/Linux/macOS runs with installed bundles — plan (Expert Alignment Plan §5).
-- [Docs] Update `docs/guide/release.md` and publish `docs/ops/cluster_runbook.md` for bundle/federation operations — plan (Expert Alignment Plan §5).
+- [Docs] Update `docs/guide/release.md` and publish `docs/ops/cluster_runbook.md` for bundle/federation operations — done (Expert Alignment Plan §5; refreshed guides published 2025-10-11).
 
 - [Kernel] Asimov Capsule Guard (alpha)
   - [Kernel] [t-250916130001-asg01] RPU telemetry + `/state/policy/capsules` read-model surfacing adoption and TTL — done (capsule leases, expired events)

@@ -57,6 +57,7 @@ Assistant quickstart: [Agent Onboarding](ai/AGENT_ONBOARDING.md)
 - Managed runtime supervisor (in progress) respects guardrails: accelerator access is lease-gated, telemetry is recorded, and fallbacks never break privacy promises as the supervisor matures toward full automation.
 
 ## Get Started
+- [Runtime Quickstart (Non-Technical)](guide/runtime_quickstart.md): step-by-step operator checklist (includes zero-auth mirrors and checksum guidance).
 - [Quickstart](guide/quickstart.md): run ARW locally in minutes.
 - [Feature Matrix](reference/feature_matrix.md): review what ships today and what’s planned.
 - [Architecture overview](architecture/object_graph.md): follow the unified object graph and SSE stream.

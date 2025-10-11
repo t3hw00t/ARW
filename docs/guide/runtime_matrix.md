@@ -3,6 +3,8 @@ title: Runtime Matrix
 ---
 
 # Runtime Matrix
+
+> Need the short version? See [Runtime Quickstart (Non-Technical)](runtime_quickstart.md).
 Updated: 2025-10-11
 Type: Blueprint
 Status: In progress
@@ -25,6 +27,31 @@ ARW seeds a runtime matrix read-model from `runtime.health` events. Today it mer
   - To exercise a real llama.cpp build: `MODE=real LLAMA_SERVER_BIN=/path/to/server LLAMA_MODEL_PATH=/path/to/model.gguf just runtime-smoke`. Optionally pass `LLAMA_SERVER_ARGS="--your --flags"` or `LLAMA_SERVER_PORT=XXXX` to match your deployment.
   - CI parity (`scripts/dev.sh verify --ci`) runs both the stub path and a simulated GPU mode (`LLAMA_GPU_SIMULATE=1 MODE=gpu`) to keep the accelerator detection and log parsing code paths covered even when real GPUs are absent.
 - Vision smoke: `ARW_SERVER_BIN=target/debug/arw-server just runtime-smoke-vision` uses the managed supervisor to launch a stub llava runtime from a generated manifest, probes `/describe`, forces a restore, and watches `/state/runtime_matrix` for the vision runtime to cycle back to Ready. The helper sets `ARW_SMOKE_MODE=vision` so only the runtimes/read-models needed for the smoke are launched and writes under `.smoke/vision/run.XXXX/` by default; export `VISION_SMOKE_ROOT=/path/to/cache` if you want to redirect or reuse the working directory between runs.
+
+### Getting real weights
+
+When you are ready to run the runtime smoke against a real llama.cpp binary (CPU or GPU), download a GGUF checkpoint using a Hugging Face access token. The fastest path is `just runtime-weights`, which pulls the default TinyLlama weights into `cache/models/`. If you prefer the manual route:
+
+1. Sign in to (or create) a Hugging Face account at https://huggingface.co/.
+2. Generate a “Read” access token at https://huggingface.co/settings/tokens.
+3. Export the token in your shell (`export HF_TOKEN=hf_...`) or run `huggingface-cli login`.
+4. Fetch the desired weights, for example:
+   ```bash
+   huggingface-cli download ggml-org/tinyllama-1.1b-chat \
+     --include tinyllama-1.1b-chat-q4_k_m.gguf \
+     --local-dir ./models
+   ```
+5. Point the smoke test at the compiled server and the downloaded GGUF:
+   ```bash
+   MODE=gpu \
+   LLAMA_SERVER_BIN=/path/to/llama.cpp/build/bin/llama-server \
+   LLAMA_MODEL_PATH=$PWD/models/tinyllama-1.1b-chat-q4_k_m.gguf \
+   just runtime-smoke
+   ```
+
+If the smoke script detects that a real run is missing weights, it now prints the same checklist so operators know how to proceed.
+
+By default the helper iterates through a small roster of public Hugging Face sources (`ggml-org/tinyllama-1.1b-chat`, `TheBloke/TinyLlama-1.1B-Chat-GGUF`, …) until a download succeeds. Override the list with `LLAMA_MODEL_SOURCES="repo::file,repo2::file2"` when you want to exercise different checkpoints; any previously downloaded GGUF in `cache/models/<file>` is re-used automatically. Configure organization-wide defaults and optional `checksum` values in `configs/runtime/model_sources.json`—the helper prints those mirrors (for example, the zero-auth TinyLlama S3 bucket) and validates downloads automatically whenever a checksum is present.
 
 ### Example payload
 ```json

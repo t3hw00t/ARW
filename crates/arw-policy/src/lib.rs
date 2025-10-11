@@ -609,6 +609,10 @@ fn posture_to_config(posture: &str) -> PolicyConfig {
                     kind_prefix: "shell.".into(),
                     capability: "shell".into(),
                 },
+                LeaseRule {
+                    kind_prefix: "runtime.".into(),
+                    capability: "runtime:manage".into(),
+                },
             ],
             cedar: None,
         },
@@ -647,6 +651,10 @@ fn posture_to_config(posture: &str) -> PolicyConfig {
                 LeaseRule {
                     kind_prefix: "system.".into(),
                     capability: "system".into(),
+                },
+                LeaseRule {
+                    kind_prefix: "runtime.".into(),
+                    capability: "runtime:manage".into(),
                 },
             ],
             cedar: None,

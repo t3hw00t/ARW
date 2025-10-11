@@ -27,12 +27,162 @@ MODE=$(printf '%s' "$MODE" | tr '[:upper:]' '[:lower:]')
 BACKEND_KIND=""
 LLAMA_ACCEL="${LLAMA_ACCEL:-}"
 EXPECTED_CHAT_BACKEND="llama"
+
+load_default_sources() {
+  local config="${PROJECT_ROOT}/configs/runtime/model_sources.json"
+  local python_bin=""
+  if command -v python3 >/dev/null 2>&1; then
+    python_bin="python3"
+  elif command -v python >/dev/null 2>&1; then
+    python_bin="python"
+  else
+    return 1
+  fi
+  "$python_bin" - <<'PY'
+import json, sys
+from pathlib import Path
+path = Path("configs/runtime/model_sources.json")
+sources = []
+try:
+    data = json.loads(path.read_text(encoding="utf-8"))
+except FileNotFoundError:
+    pass
+except json.JSONDecodeError as exc:
+    sys.stderr.write(f"[runtime-smoke] Invalid JSON in {path}: {exc}\n")
+else:
+    for entry in data.get("default", []):
+        repo = entry.get("repo")
+        file = entry.get("file")
+        if repo and file:
+            sources.append(f"{repo}::{file}")
+print(",".join(sources))
+PY
+}
+
+DEFAULT_MODEL_SOURCES_RAW="$(load_default_sources || true)"
+if [[ -n "$DEFAULT_MODEL_SOURCES_RAW" ]]; then
+  IFS=',' read -ra DEFAULT_MODEL_SOURCES <<< "$DEFAULT_MODEL_SOURCES_RAW"
+else
+  DEFAULT_MODEL_SOURCES=()
+fi
+if [[ ${#DEFAULT_MODEL_SOURCES[@]} -eq 0 ]]; then
+  DEFAULT_MODEL_SOURCES=(
+    "ggml-org/tinyllama-1.1b-chat::tinyllama-1.1b-chat-q4_k_m.gguf"
+    "TheBloke/TinyLlama-1.1B-Chat-GGUF::TinyLlama-1.1B-Chat-q4_k_m.gguf"
+  )
+fi
+IFS=',' read -ra MODEL_SOURCES <<< "${LLAMA_MODEL_SOURCES:-}"
+if [[ ${#MODEL_SOURCES[@]} -eq 0 ]]; then
+  MODEL_SOURCES=("${DEFAULT_MODEL_SOURCES[@]}")
+fi
+
+MODEL_PATH_PRESET=0
+if [[ -n "${LLAMA_MODEL_PATH:-}" ]]; then
+  MODEL_PATH_PRESET=1
+else
+  for src in "${MODEL_SOURCES[@]}"; do
+    model_file="${src##*::}"
+    candidate="${PROJECT_ROOT}/cache/models/${model_file}"
+    if [[ -f "$candidate" ]]; then
+      LLAMA_MODEL_PATH="$candidate"
+      break
+    fi
+  done
+  if [[ -z "${LLAMA_MODEL_PATH:-}" ]]; then
+    primary_file="${MODEL_SOURCES[0]##*::}"
+    LLAMA_MODEL_PATH="${PROJECT_ROOT}/cache/models/${primary_file}"
+  fi
+  export LLAMA_MODEL_PATH
+fi
 is_truthy() {
   local value="${1:-}"
   case "$(printf '%s' "$value" | tr '[:upper:]' '[:lower:]')" in
     1|true|yes|on) return 0 ;;
     *) return 1 ;;
   esac
+}
+
+print_hf_token_help() {
+  cat >&2 <<'EOF'
+[runtime-smoke] To exercise a real llama.cpp build you need a Hugging Face access token so the weights download succeeds:
+  1. Create (or sign in to) your Hugging Face account.
+  2. Visit https://huggingface.co/settings/tokens and generate a token with the “Read” scope.
+  3. Export it before downloading models, e.g.:
+       export HF_TOKEN=hf_your_read_token
+     or run:
+       huggingface-cli login
+  4. Download a GGUF weight file, for example:
+       huggingface-cli download --repo-id ggml-org/tinyllama-1.1b-chat \
+         --include tinyllama-1.1b-chat-q4_k_m.gguf --local-dir ./models
+  5. Set LLAMA_MODEL_PATH to the downloaded .gguf before rerunning this smoke test.
+
+See docs/guide/runtime_matrix.md#getting-real-weights for additional tips.
+EOF
+}
+
+download_weights_if_needed() {
+  local target="$1"
+  local token="${HF_TOKEN:-${HUGGINGFACEHUB_API_TOKEN:-}}"
+  local tmp=""
+  local repo=""
+  local file=""
+  local url=""
+
+  if [[ -f "$target" ]]; then
+    return 0
+  fi
+
+  if [[ $MODEL_PATH_PRESET -eq 1 ]]; then
+    if [[ -z "$token" ]]; then
+      echo "[runtime-smoke] LLAMA_MODEL_PATH not found (${target})." >&2
+      print_hf_token_help
+      return 1
+    fi
+    mkdir -p "$(dirname "$target")"
+    for src in "${MODEL_SOURCES[@]}"; do
+      repo="${src%%::*}"
+      file="${src##*::}"
+      url="https://huggingface.co/${repo}/resolve/main/${file}"
+      tmp="${target}.download"
+      rm -f "$tmp"
+      echo "[runtime-smoke] Downloading ${file} from ${repo}..."
+      if curl -fsSL -H "Authorization: Bearer $token" -o "$tmp" "$url"; then
+        mv "$tmp" "$target"
+        echo "[runtime-smoke] Saved weights to $target"
+        return 0
+      fi
+    done
+  else
+    for src in "${MODEL_SOURCES[@]}"; do
+      repo="${src%%::*}"
+      file="${src##*::}"
+      target="${PROJECT_ROOT}/cache/models/${file}"
+      if [[ -f "$target" ]]; then
+        LLAMA_MODEL_PATH="$target"
+        export LLAMA_MODEL_PATH
+        return 0
+      fi
+      if [[ -z "$token" ]]; then
+        continue
+      fi
+      mkdir -p "$(dirname "$target")"
+      tmp="${target}.download"
+      rm -f "$tmp"
+      url="https://huggingface.co/${repo}/resolve/main/${file}"
+      echo "[runtime-smoke] Downloading ${file} from ${repo}..."
+      if curl -fsSL -H "Authorization: Bearer $token" -o "$tmp" "$url"; then
+        mv "$tmp" "$target"
+        LLAMA_MODEL_PATH="$target"
+        export LLAMA_MODEL_PATH
+        echo "[runtime-smoke] Saved weights to $target"
+        return 0
+      fi
+    done
+  fi
+
+  echo "[runtime-smoke] Unable to download LLaMA weights from configured sources." >&2
+  print_hf_token_help
+  return 1
 }
 
 GPU_SIMULATE=0
@@ -85,13 +235,23 @@ if [[ "$BACKEND_KIND" = "llama" && -z "$LLAMA_ACCEL" ]]; then
 fi
 
 if [[ "$BACKEND_KIND" = "llama" && "$LLAMA_ACCEL" = "gpu" ]]; then
-  if [[ -z "${LLAMA_SERVER_BIN:-}" || -z "${LLAMA_MODEL_PATH:-}" ]]; then
+  if [[ -z "${LLAMA_SERVER_BIN:-}" ]]; then
     if [[ "$GPU_REQUIRE_REAL" = "1" ]]; then
-      echo "[runtime-smoke] GPU mode requires LLAMA_SERVER_BIN and LLAMA_MODEL_PATH when LLAMA_GPU_REQUIRE_REAL=1" >&2
+      echo "[runtime-smoke] GPU mode requires LLAMA_SERVER_BIN when LLAMA_GPU_REQUIRE_REAL=1" >&2
+      print_hf_token_help
       exit 1
     fi
     if [[ "$GPU_SIMULATE" != "1" ]]; then
-      echo "[runtime-smoke] GPU inputs missing; auto-enabling simulated GPU markers (set LLAMA_GPU_REQUIRE_REAL=1 to enforce real accelerators)." >&2
+      echo "[runtime-smoke] LLAMA_SERVER_BIN missing; auto-enabling simulated GPU markers (set LLAMA_GPU_REQUIRE_REAL=1 to enforce real accelerators)." >&2
+      GPU_SIMULATE=1
+    fi
+  fi
+  if [[ "$GPU_SIMULATE" != "1" ]]; then
+    if ! download_weights_if_needed "$LLAMA_MODEL_PATH"; then
+      if [[ "$GPU_REQUIRE_REAL" = "1" ]]; then
+        exit 1
+      fi
+      echo "[runtime-smoke] Falling back to simulated GPU markers." >&2
       GPU_SIMULATE=1
     fi
   fi

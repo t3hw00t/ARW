@@ -1,5 +1,5 @@
 use axum::http::HeaderMap;
-use axum::response::IntoResponse;
+use axum::response::{IntoResponse, Response};
 use axum::{
     extract::{Path, Query, State},
     Json,
@@ -28,6 +28,79 @@ use uuid::Uuid;
 )]
 pub async fn orchestrator_mini_agents() -> impl IntoResponse {
     Json(json!({"items": []}))
+}
+
+async fn ensure_runtime_policy(state: &AppState, action: &str) -> Result<(), Response> {
+    let decision = state.policy().evaluate_action(action).await;
+    if decision.allow {
+        return Ok(());
+    }
+
+    let explain_payload = decision.explain.clone();
+    if let Some(capability) = decision.require_capability.as_deref() {
+        match state
+            .kernel()
+            .find_valid_lease_async("local", capability)
+            .await
+        {
+            Ok(Some(_)) => Ok(()),
+            Ok(None) => {
+                let _ = state.bus().publish(
+                    topics::TOPIC_POLICY_DECISION,
+                    &json!({
+                        "action": action,
+                        "allow": false,
+                        "require_capability": capability,
+                        "explain": explain_payload,
+                    }),
+                );
+                Err((
+                    axum::http::StatusCode::FORBIDDEN,
+                    Json(json!({
+                        "type":"about:blank","title":"Forbidden","status":403,
+                        "detail":"Denied (lease required)",
+                        "require_capability": capability,
+                        "explain": explain_payload
+                    })),
+                )
+                    .into_response())
+            }
+            Err(err) => {
+                warn!(
+                    target: "runtime",
+                    %err,
+                    action,
+                    "failed to verify runtime lease requirement"
+                );
+                Err((
+                    axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(json!({
+                        "type":"about:blank","title":"Error","status":500,
+                        "detail": format!("failed to verify lease: {err}")
+                    })),
+                )
+                    .into_response())
+            }
+        }
+    } else {
+        let _ = state.bus().publish(
+            topics::TOPIC_POLICY_DECISION,
+            &json!({
+                "action": action,
+                "allow": false,
+                "explain": explain_payload,
+            }),
+        );
+        Err((
+            axum::http::StatusCode::FORBIDDEN,
+            Json(json!({
+                "type":"about:blank","title":"Forbidden","status":403,
+                "detail":"Denied by policy",
+                "explain": explain_payload
+            })),
+        )
+            .into_response())
+    }
 }
 
 #[derive(Deserialize, ToSchema)]
@@ -539,6 +612,10 @@ pub async fn orchestrator_runtime_restore(
         return *resp;
     }
 
+    if let Err(resp) = ensure_runtime_policy(&state, "runtime.supervisor.restore").await {
+        return resp;
+    }
+
     match state
         .runtime()
         .request_restore(&runtime_id, req.restart, req.preset.clone())
@@ -597,6 +674,10 @@ pub async fn orchestrator_runtime_shutdown(
 ) -> impl IntoResponse {
     if let Err(resp) = crate::responses::require_admin(&headers).await {
         return *resp;
+    }
+
+    if let Err(resp) = ensure_runtime_policy(&state, "runtime.supervisor.shutdown").await {
+        return resp;
     }
 
     match state

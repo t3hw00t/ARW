@@ -3,15 +3,15 @@ title: Gating Keys
 ---
 
 # Gating Keys
-Generated: 2025-10-09 17:32 UTC
+Generated: 2025-10-11 16:52 UTC
 Type: Reference
 
 Generated from code.
 
 ## Overview
 
-- Groups: 12
-- Keys: 47
+- Groups: 13
+- Keys: 48
 
 ## Orchestration
 
@@ -34,6 +34,14 @@ Retrieval-augmented memory operations and quota management.
 | `memory:apply` | Memory Apply | stable | Apply memory updates or patches to existing capsules. |
 | `memory:limit:get` | Memory Limit Inspect | stable | Inspect the configured memory quota for a scope. |
 | `memory:limit:set` | Memory Limit Update | stable | Adjust the allowed memory quota for a scope. |
+
+## Runtime Supervisor
+
+Managed runtime orchestration and lifecycle controls.
+
+| Key | Title | Stability | Purpose |
+| --- | --- | --- | --- |
+| `runtime:manage` | Runtime Manage | beta | Start, restore, or stop managed runtimes via the supervisor. |
 
 ## Models
 

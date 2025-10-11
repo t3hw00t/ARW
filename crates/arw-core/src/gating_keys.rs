@@ -162,6 +162,18 @@ gating_catalog! {
         ]
     },
     group {
+        name: "Runtime Supervisor",
+        summary: "Managed runtime orchestration and lifecycle controls.",
+        keys: [
+            RUNTIME_MANAGE => {
+                id: "runtime:manage",
+                title: "Runtime Manage",
+                summary: "Start, restore, or stop managed runtimes via the supervisor.",
+                stability: "beta"
+            }
+        ]
+    },
+    group {
         name: "Models",
         summary: "Model registry, lifecycle, and distribution controls.",
         keys: [

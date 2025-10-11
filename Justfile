@@ -178,6 +178,17 @@ runtime-smoke-vision:
   # Requires ARW_SERVER_BIN to point at a pre-built arw-server binary.
   bash scripts/runtime_vision_smoke.sh
 
+runtime-weights *args:
+  python3 scripts/runtime_weights.py {{args}}
+
+runtime-check:
+  bash scripts/runtime_check.sh
+runtime-check-weights-only:
+  bash scripts/runtime_check.sh --weights-only
+
+runtime-mirrors *args:
+  python3 scripts/runtime_config.py {{args}}
+
 context-ci:
   bash scripts/context_ci.sh
 

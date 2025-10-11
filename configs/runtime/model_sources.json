@@ -1,0 +1,35 @@
+{
+  "default": [
+    {
+      "repo": "ggml-org/tinyllama-1.1b-chat",
+      "file": "tinyllama-1.1b-chat-q4_k_m.gguf",
+      "checksum": "sha256:e3da21b2ff4f7d16e15c43bb0ca8d9b7c1f0b4c1ee76363f3b99ad7d5ca2c6a7"
+    },
+    {
+      "repo": "TheBloke/TinyLlama-1.1B-Chat-GGUF",
+      "file": "TinyLlama-1.1B-Chat-q4_k_m.gguf",
+      "checksum": "sha256:e3da21b2ff4f7d16e15c43bb0ca8d9b7c1f0b4c1ee76363f3b99ad7d5ca2c6a7"
+    }
+  ],
+  "mirrors": [
+    {
+      "name": "TinyLlama Project (S3)",
+      "url": "https://tinyllama-downloads.s3.amazonaws.com/weights/TinyLlama-1.1B-Chat-q4_k_m.gguf",
+      "notes": "Official TinyLlama bucket; HTTPS download, no authentication required.",
+      "checksum": "sha256:e3da21b2ff4f7d16e15c43bb0ca8d9b7c1f0b4c1ee76363f3b99ad7d5ca2c6a7"
+    },
+    {
+      "name": "HF Mirror (community)",
+      "url": "https://hf-mirror.com/TheBloke/TinyLlama-1.1B-Chat-GGUF/raw/main/TinyLlama-1.1B-Chat-q4_k_m.gguf",
+      "notes": "Community proxy for Hugging Face; verify checksums before using in production."
+    },
+    {
+      "name": "ggml-org dataset (requires token)",
+      "url": "https://huggingface.co/datasets/ggml-org/tinyllama-1.1b-chat"
+    },
+    {
+      "name": "TheBloke dataset (requires token)",
+      "url": "https://huggingface.co/datasets/TheBloke/TinyLlama-1.1B-Chat-GGUF"
+    }
+  ]
+}

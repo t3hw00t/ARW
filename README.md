@@ -26,6 +26,7 @@ Assistant quickstart → [Agent Onboarding](docs/ai/AGENT_ONBOARDING.md)
 ## Quick Links
 - [Agent Onboarding](docs/ai/AGENT_ONBOARDING.md) - Workflow primer for assistants and new contributors.
 - [Quickstart](docs/guide/quickstart.md) - Run the unified server locally.
+- [Runtime Quickstart](docs/guide/runtime_quickstart.md) - Non-technical checklist for preparing managed runtimes (zero-auth mirrors + checksum validation).
 - [Repo Map](docs/ai/REPO_MAP.md) - Directory overview for retrieval and navigation.
 - [Documentation Home](docs/index.md) - Product overview, guides, and reference docs.
 

@@ -22,6 +22,7 @@ Promote the runtime manager from proposal to a first-class kernel capability. Th
 - Manifests are optional; when none are present the registry still behaves as before, letting operators opt in incrementally while we continue wiring additional adapters (ONNX Runtime, vLLM, multimodal).
 - `/state/runtime/bundles` now surfaces discovered bundle catalogs (including the preview `bundles.llama.json`, `bundles.vision.json`, and `bundles.audio.json` entries) **and** a summary of installed bundles; operators can inspect the same data via `arw-cli runtime bundles list` (local mode now scans `<state_dir>/runtime/bundles` by default) or force a rescan with `arw-cli runtime bundles reload`.
 - Bundle resolver auto-registers staged runtimes and prunes descriptors when bundles are removed; Launcher surfaces start/stop/restart controls alongside restart budgets for managed bundles.
+- Runtime supervisor start/restore/shutdown endpoints now enforce the `runtime:manage` capability. Lease checks run before launches, denied attempts emit `policy_decision` events, and operators satisfy the gate via standard `POST /leases` flows.
 - Preview bundle catalogs live in `configs/runtime/bundles.llama.json`, `configs/runtime/bundles.vision.json`, and `configs/runtime/bundles.audio.json`; inspect available entries with `arw-cli runtime bundles list` (add `--remote` to query a running server, `--json/--pretty` for scripting). Artifact URLs remain placeholders until the signing pipeline lands.
 
 ## Guiding Principles
