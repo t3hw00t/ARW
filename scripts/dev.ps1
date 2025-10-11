@@ -36,6 +36,7 @@ Commands:
   test-fast          Alias for cargo nextest run --workspace.
   docs               Regenerate docs (docgen + mkdocs build --strict when available).
   docs-check         Run docs checks (uses scripts/docgen.ps1 and mkdocs when available).
+  docs-cache         Build offline docs wheel cache (writes dist/docs-wheels.tar.gz).
   verify             Run the standard fmt → clippy → tests → docs guardrail sequence.
                      Flags: -Fast (skip docs/UI), -WithLauncher (include Tauri crate), -Ci (CI parity: registries, docgens --check, env-guard, smokes)
   hooks              Install git hooks (cross-platform wrapper).
@@ -211,11 +212,14 @@ function Invoke-Verify {
       Status  = 'skipped'
       Message = 'headless default; pass -WithLauncher to include'
     }
+  } elseif ($null -eq $node) {
+    $results += [pscustomobject]@{
+      Name    = 'node read_store.test.js'
+      Status  = 'skipped'
+      Message = 'Node.js 18+ not found; install Node.js or pass -SkipUI/-Fast to suppress'
+    }
   } else {
     $results += Invoke-Step -Name 'node read_store.test.js' -Action {
-      if ($null -eq $node) {
-        throw 'Node.js 18+ not found in PATH'
-      }
       $testPath = Join-Path $RepoRoot 'apps\arw-launcher\src-tauri\ui\read_store.test.js'
       Invoke-Program -Executable $node -Arguments @($testPath)
     }
@@ -296,7 +300,8 @@ function Invoke-Verify {
     if ((Test-Path $docsScript) -and ($null -ne $bash)) {
       & $bash.Source ($docsScript.Replace('\','/'))
       if ($LASTEXITCODE -ne 0) {
-        throw "docs_check.sh exited with $LASTEXITCODE"
+        $message = 'docs_check.sh exited with {0}' -f $LASTEXITCODE
+        throw ([System.Exception]::new($message))
       }
       return
     }
@@ -566,6 +571,19 @@ switch ($commandKey) {
         Write-Warning 'Docs checks skipped (missing bash/mkdocs). Install Git Bash or MkDocs to enable full validation.'
       }
     }
+  }
+  'docs-cache' {
+    $bashCandidates = @('bash')
+    if (-not [string]::IsNullOrEmpty($env:ProgramFiles)) {
+      $bashCandidates += (Join-Path $env:ProgramFiles 'Git\bin\bash.exe')
+    }
+    $bash = Resolve-Tool $bashCandidates
+    if (-not $bash) {
+      throw 'bash not found; install Git for Windows (provides bash) or run this command from a Unix-like shell.'
+    }
+    $archive = Join-Path $RepoRoot 'dist/docs-wheels.tar.gz'
+    $script = (Join-Path $ScriptRoot 'build_docs_wheels.sh').Replace('\\','/')
+    & $bash.Source $script '--archive' $archive @Args
   }
   'verify' {
     $recognized = @('fast','skip-docs','skip-ui','skip-doc-python','with-launcher','ci')

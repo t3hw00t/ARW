@@ -5,6 +5,7 @@ param(
   [switch]$NoDocs,
   [switch]$Minimal,
   [switch]$Headless,
+  [switch]$WithLauncher,
   [switch]$SkipBuild,
   [switch]$SkipCli,
   [switch]$WithCli,
@@ -74,6 +75,10 @@ if ($WithCli.IsPresent) {
   $buildCli = $false
 }
 
+if ($WithLauncher) {
+  $Headless = $false
+}
+
 $buildMode = $env:ARW_BUILD_MODE
 if ([string]::IsNullOrWhiteSpace($buildMode)) { $buildMode = 'release' }
 $buildMode = $buildMode.ToLowerInvariant()
@@ -86,6 +91,8 @@ if ($Minimal) {
 }
 if ($Headless) {
   Info 'Headless mode enabled: launcher build will be skipped.'
+} elseif ($WithLauncher) {
+  Info 'Launcher opt-in enabled: attempting Tauri launcher build.'
 }
 if ($SkipBuild) {
   Info 'Skip-build enabled: workspace compile/test steps will be bypassed.'

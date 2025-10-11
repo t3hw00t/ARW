@@ -13,6 +13,7 @@ run_tests=0
 no_docs=0
 minimal=0
 headless=0
+with_launcher=0
 skip_build=0
 build_cli=1
 cli_flag=""
@@ -23,6 +24,10 @@ while [[ $# -gt 0 ]]; do
     --run-tests) run_tests=1; shift;;
     --minimal) minimal=1; no_docs=1; shift;;
     --headless) headless=1; shift;;
+    --with-launcher)
+      headless=0
+      with_launcher=1
+      shift;;
     --skip-build|--no-build) skip_build=1; shift;;
     --skip-cli)
       build_cli=0
@@ -121,6 +126,8 @@ if [[ $minimal -eq 1 ]]; then
 fi
 if [[ $headless -eq 1 ]]; then
   info "Headless mode enabled: launcher build will be skipped."
+elif [[ $with_launcher -eq 1 ]]; then
+  info "Launcher opt-in enabled: attempting Tauri launcher build."
 fi
 if [[ $skip_build -eq 1 ]]; then
   info "Skip-build enabled: workspace compile/test steps will be bypassed."

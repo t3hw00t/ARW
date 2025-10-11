@@ -50,7 +50,7 @@ Assistant quickstart → [Agent Onboarding](docs/ai/AGENT_ONBOARDING.md)
 - Docs: `mkdocs build --strict`, `scripts/dev.{sh,ps1} docs`, or `just docs-build` (requires Bash). Windows without Bash: `pwsh -ExecutionPolicy Bypass -File scripts\docgen.ps1` followed by `mkdocs build --strict`. Prefer task wrappers? Use `mise run docs:check` or `mise run docs:check:fast`.
 - Docs metadata: `python scripts/update_doc_metadata.py docs/<path>.md` refreshes the `Updated:` stamp after edits (add `--dry-run` to preview changes).
 - Docs toolchain: `mise run bootstrap:docs` (or `bash scripts/bootstrap_docs.sh`) installs the pinned MkDocs/Material stack. Generate an offline wheel bundle with `mise run docs:cache:build` (archive lands in `dist/docs-wheels.tar.gz`), then reuse it via `mise run bootstrap:docs -- --wheel-dir <path>`.
-- Need offline docs? Generate `docs-wheels.tar.gz` locally with `mise run docs:cache:build` (or `scripts/dev.sh docs-cache`) and reuse it via `scripts/bootstrap_docs.sh --wheel-dir <dir>`.
+- Need offline docs? Generate `docs-wheels.tar.gz` locally with `mise run docs:cache:build` (or `scripts/dev.sh docs-cache` / `scripts\dev.ps1 docs-cache`) and reuse it via `scripts/bootstrap_docs.sh --wheel-dir <dir>`.
 
 ## Repository Layout
 - `crates/` - Core Rust libraries (protocol, kernel, policy, runtime, etc.).

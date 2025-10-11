@@ -32,6 +32,7 @@ Commands:
   test-fast        Alias for cargo nextest run --workspace.
   docs             Regenerate docs (docgen + mkdocs build --strict when available).
   docs-check       Run docs checks (docgen + docs_check.sh if bash available).
+  docs-cache       Build offline docs wheel cache (writes dist/docs-wheels.tar.gz).
   verify           Run fmt → clippy → tests → docs guardrail sequence.
                    Flags: --fast (skip docs/UI), --with-launcher (include Tauri crate), --ci (CI parity: registries, docgens --check, env-guard, smokes)
   hooks            Install git hooks (delegates to scripts/hooks/install_hooks.sh).
@@ -191,8 +192,7 @@ run_verify() {
         echo "[verify] node fallback apps/arw-launcher/src-tauri/ui/read_store.test.js"
         if ! "$node_fallback" "$REPO_ROOT/apps/arw-launcher/src-tauri/ui/read_store.test.js"; then ok=1; fi
       else
-        echo "[verify] launcher UI smoke blocked (node not found; install Node.js 18+ or pass --skip-ui/--fast)"
-        ok=1
+        echo "[verify] launcher UI smoke skipped (Node.js 18+ not found; install Node.js or pass --skip-ui/--fast to suppress this notice)"
       fi
     fi
   fi
@@ -393,6 +393,9 @@ case "$command" in
     else
       echo "[dev] skipping docs checks (missing docs_check.sh & mkdocs)"
     fi
+    ;;
+  docs-cache)
+    bash "$SCRIPT_DIR/build_docs_wheels.sh" --archive "$REPO_ROOT/dist/docs-wheels.tar.gz" "$@"
     ;;
   verify)
     run_verify "$@"

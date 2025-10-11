@@ -23,7 +23,7 @@ Microsummary: Fast orientation for assistants working in the ARW repo—where to
 - CI parity sweep: `scripts/dev.sh verify --ci` (PowerShell: `scripts\dev.ps1 verify -Ci`) runs the extended guards from GitHub Actions—registry integrity checks, doc generators in `--check` mode, env-guard lint, snappy bench, triad/context/runtime smokes, and legacy surface checks. This mode requires Python 3.11+, Git Bash, and the Rust binaries built locally.
 - Doc metadata helper: `python scripts/update_doc_metadata.py docs/path/to/page.md` refreshes the `Updated:` stamp (add `--dry-run` to see needed changes without writing).
 - Docs bootstrap: `mise run bootstrap:docs` (or `bash scripts/bootstrap_docs.sh`) installs the pinned MkDocs/Material toolchain.
-- Offline docs cache: `mise run docs:cache:build` produces `dist/docs-wheels.tar.gz`; releases include the same bundle for reuse. Extract it and pass `--wheel-dir` to `bootstrap_docs.sh` when PyPI is unavailable.
+- Offline docs cache: `mise run docs:cache:build` or `scripts/dev.{sh,ps1} docs-cache` produces `dist/docs-wheels.tar.gz`; releases include the same bundle for reuse. Extract it and pass `--wheel-dir` to `bootstrap_docs.sh` when PyPI is unavailable.
 
 ## Tooling Checklist
 - Rust toolchain 1.90+ with `cargo`, `rustfmt`, `clippy`, and ideally `cargo-nextest`.
