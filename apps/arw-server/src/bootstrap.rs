@@ -31,7 +31,7 @@ use crate::{
     capsule_guard, config, config_watcher, egress_proxy, identity, metrics, queue, read_models,
     responses,
     router::build_router,
-    security,
+    runtime_bundle_resolver, security,
     sse_cache::SseIdCache,
     tasks::{TaskHandle, TaskManager},
     worker, world,
@@ -152,6 +152,16 @@ pub(crate) async fn build() -> BootstrapOutput {
             target = "arw::runtime",
             error = %err,
             "failed to refresh runtime bundle catalogs"
+        );
+    }
+    if let Err(err) =
+        runtime_bundle_resolver::reconcile(state.runtime_supervisor(), state.runtime_bundles())
+            .await
+    {
+        warn!(
+            target = "arw::runtime",
+            error = %err,
+            "failed to register bundle runtimes"
         );
     }
 

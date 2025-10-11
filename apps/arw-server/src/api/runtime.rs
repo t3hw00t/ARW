@@ -5,6 +5,8 @@ use serde_json::json;
 use utoipa::ToSchema;
 
 use crate::app_state::AppState;
+use crate::runtime_bundle_resolver;
+use tracing::warn;
 
 #[derive(ToSchema, serde::Serialize)]
 pub struct RuntimeBundlesReloadResponse {
@@ -36,11 +38,33 @@ pub async fn runtime_bundles_reload(
             .into_response();
     }
     match state.runtime_bundles().reload().await {
-        Ok(_) => Json(RuntimeBundlesReloadResponse {
-            ok: true,
-            error: None,
-        })
-        .into_response(),
+        Ok(_) => {
+            if let Err(err) = runtime_bundle_resolver::reconcile(
+                state.runtime_supervisor(),
+                state.runtime_bundles(),
+            )
+            .await
+            {
+                warn!(
+                    target = "arw::runtime",
+                    error = %err,
+                    "bundle reload succeeded but runtime registration failed"
+                );
+                return (
+                    axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(RuntimeBundlesReloadResponse {
+                        ok: false,
+                        error: Some(err.to_string()),
+                    }),
+                )
+                    .into_response();
+            }
+            Json(RuntimeBundlesReloadResponse {
+                ok: true,
+                error: None,
+            })
+            .into_response()
+        }
         Err(err) => (
             axum::http::StatusCode::INTERNAL_SERVER_ERROR,
             Json(RuntimeBundlesReloadResponse {

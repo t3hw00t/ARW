@@ -27,14 +27,17 @@ Basics
   - `arw-cli tools --pretty` — pretty JSON
 - Managed runtime bundles
   - Local catalogs: `arw-cli runtime bundles list --dir ./configs/runtime --pretty`
-  - Remote snapshot: `arw-cli runtime bundles list --remote --base http://127.0.0.1:8091 --admin-token $ARW_ADMIN_TOKEN`
+  - Alternate install root: `arw-cli runtime bundles list --install-dir ~/.cache/arw/bundles`
+  - Remote snapshot (catalogs + installed bundles): `arw-cli runtime bundles list --remote --base http://127.0.0.1:8091 --admin-token $ARW_ADMIN_TOKEN`
   - Trigger rescan: `arw-cli runtime bundles reload --base http://127.0.0.1:8091 --admin-token $ARW_ADMIN_TOKEN`
+  - Start a managed runtime: `arw-cli runtime restore llama.cpp-preview/linux-x86_64-cpu --no-restart`
+  - Stop a managed runtime: `arw-cli runtime shutdown llama.cpp-preview/linux-x86_64-cpu`
   - Download artifacts: `arw-cli runtime bundles install llama.cpp-preview/linux-x86_64-cpu`
   - Offline import: `arw-cli runtime bundles import --bundle llama.cpp-preview/linux-x86_64-cpu ./llama-build`
   - Roll back to a previous snapshot: `arw-cli runtime bundles rollback --bundle llama.cpp-preview/linux-x86_64-cpu --list`
   - Add `--json`/`--pretty` to the rollback command for machine-readable history listings or outcome summaries
   - Preview installs: add `--dry-run` to either command; use `--dest /custom/path` when staging bundles outside the default `<state_dir>/runtime/bundles`
-  - Scripting: add `--json`/`--pretty` to either command; remote mode fetches `/state/runtime/bundles` from the running server.
+  - Scripting: add `--json`/`--pretty` to either command; remote mode fetches `/state/runtime/bundles` (including `installations`) from the running server.
 
 Admin Tokens
 - Generate, hash, and persist `ARW_ADMIN_TOKEN` values without committing secrets:

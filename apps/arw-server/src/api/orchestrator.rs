@@ -476,6 +476,20 @@ pub struct RuntimeRestoreDeniedResponse {
     pub restart_budget: RuntimeRestartBudgetView,
 }
 
+#[derive(Serialize, ToSchema)]
+pub struct RuntimeShutdownResponse {
+    pub ok: bool,
+    pub runtime_id: String,
+    pub stopped: bool,
+}
+
+#[derive(Serialize, ToSchema)]
+pub struct RuntimeShutdownFailureResponse {
+    pub ok: bool,
+    pub runtime_id: String,
+    pub reason: String,
+}
+
 #[derive(Clone, Debug, Serialize, ToSchema)]
 pub struct RuntimeRestartBudgetView {
     pub window_seconds: u64,
@@ -558,6 +572,53 @@ pub async fn orchestrator_runtime_restore(
                 runtime_id,
                 pending: false,
                 reason,
+            }),
+        )
+            .into_response(),
+    }
+}
+
+/// Request a managed runtime shutdown.
+#[utoipa::path(
+    post,
+    path = "/orchestrator/runtimes/{id}/shutdown",
+    tag = "Orchestrator",
+    params(("id" = String, Path, description = "Runtime identifier")),
+    responses(
+        (status = 202, description = "Shutdown requested", body = RuntimeShutdownResponse),
+        (status = 500, description = "Shutdown failed", body = RuntimeShutdownFailureResponse),
+        (status = 401, description = "Unauthorized", body = arw_protocol::ProblemDetails)
+    )
+)]
+pub async fn orchestrator_runtime_shutdown(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(runtime_id): Path<String>,
+) -> impl IntoResponse {
+    if let Err(resp) = crate::responses::require_admin(&headers).await {
+        return *resp;
+    }
+
+    match state
+        .runtime_supervisor()
+        .shutdown_runtime(&runtime_id)
+        .await
+    {
+        Ok(_) => (
+            axum::http::StatusCode::ACCEPTED,
+            Json(RuntimeShutdownResponse {
+                ok: true,
+                runtime_id,
+                stopped: true,
+            }),
+        )
+            .into_response(),
+        Err(err) => (
+            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+            Json(RuntimeShutdownFailureResponse {
+                ok: false,
+                runtime_id,
+                reason: err.to_string(),
             }),
         )
             .into_response(),

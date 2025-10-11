@@ -1142,6 +1142,8 @@ enum RuntimeCmd {
     Status(RuntimeStatusArgs),
     /// Request a managed runtime restore
     Restore(RuntimeRestoreArgs),
+    /// Request a managed runtime shutdown
+    Shutdown(RuntimeShutdownArgs),
     /// Inspect managed runtime bundle catalogs
     Bundles {
         #[command(subcommand)]
@@ -1190,6 +1192,7 @@ fn runtime_bundles_list_remote(args: &RuntimeBundlesListArgs) -> Result<()> {
         &snapshot.catalogs,
         &snapshot.roots,
         snapshot.generated.as_deref(),
+        &snapshot.installations,
     );
     Ok(())
 }
@@ -1211,6 +1214,7 @@ fn print_bundle_summary(
     catalogs: &[CliRuntimeBundleCatalog],
     roots: &[String],
     generated: Option<&str>,
+    installations: &[CliRuntimeBundleInstallation],
 ) {
     if !roots.is_empty() {
         println!("Roots: {}", roots.join(", "));
@@ -1224,8 +1228,7 @@ fn print_bundle_summary(
         if catalogs.len() == 1 { "" } else { "s" }
     );
     if catalogs.is_empty() {
-        println!("(no bundles declared)");
-        return;
+        println!("(no bundle catalogs declared)");
     }
 
     for catalog in catalogs {
@@ -1335,6 +1338,75 @@ fn print_bundle_summary(
             }
         }
     }
+
+    if !installations.is_empty() {
+        println!(
+            "\nDiscovered {} installed bundle{}:",
+            installations.len(),
+            if installations.len() == 1 { "" } else { "s" }
+        );
+        for inst in installations {
+            let label = inst
+                .name
+                .as_ref()
+                .map(|name| name.as_str())
+                .unwrap_or(inst.id.as_str());
+            println!("  - {} [{}]", label, inst.id);
+            let mut detail_parts: Vec<String> = Vec::new();
+            if let Some(adapter) = inst.adapter.as_deref() {
+                detail_parts.push(format!("adapter: {}", adapter));
+            }
+            if let Some(accel) = inst.accelerator.as_deref() {
+                detail_parts.push(format!("accelerator: {}", accel));
+            }
+            if !inst.modalities.is_empty() {
+                detail_parts.push(format!("modalities: {}", inst.modalities.join("/")));
+            }
+            if !inst.profiles.is_empty() {
+                detail_parts.push(format!("profiles: {}", inst.profiles.join("/")));
+            }
+            if let Some(channel) = inst.channel.as_deref() {
+                detail_parts.push(format!("channel: {}", channel));
+            }
+            if let Some(ts) = inst.installed_at.as_deref() {
+                detail_parts.push(format!("installed_at: {}", ts));
+            }
+            if inst.installed_at.is_none() {
+                if let Some(ts) = inst.imported_at.as_deref() {
+                    detail_parts.push(format!("imported_at: {}", ts));
+                }
+            }
+            if let Some(root) = inst.root.as_deref() {
+                detail_parts.push(format!("root: {}", root));
+            }
+            if let Some(meta_path) = inst.metadata_path.as_deref() {
+                detail_parts.push(format!("metadata: {}", meta_path));
+            }
+            if !detail_parts.is_empty() {
+                println!("    {}", detail_parts.join(" | "));
+            }
+            if !inst.artifacts.is_empty() {
+                let total_bytes: u64 = inst.artifacts.iter().filter_map(|a| a.bytes).sum();
+                let names = inst
+                    .artifacts
+                    .iter()
+                    .map(|a| a.name.as_str())
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                if total_bytes > 0 {
+                    println!(
+                        "    artifacts: {} (total {})",
+                        names,
+                        format_bytes(total_bytes)
+                    );
+                } else {
+                    println!("    artifacts: {}", names);
+                }
+            }
+        }
+    } else {
+        println!("\nDiscovered 0 installed bundles.");
+    }
 }
 
 #[derive(Subcommand)]
@@ -1427,12 +1499,23 @@ struct RuntimeRestoreArgs {
 }
 
 #[derive(Args)]
+struct RuntimeShutdownArgs {
+    #[command(flatten)]
+    base: RuntimeBaseArgs,
+    /// Runtime identifier
+    id: String,
+}
+
+#[derive(Args)]
 struct RuntimeBundlesListArgs {
     #[command(flatten)]
     base: RuntimeBaseArgs,
     /// Directory containing bundle catalogs (defaults to configs/runtime/)
     #[arg(long, value_name = "DIR")]
     dir: Option<PathBuf>,
+    /// Directory containing installed bundles (defaults to <state_dir>/runtime/bundles)
+    #[arg(long = "install-dir", value_name = "DIR")]
+    install_dir: Option<PathBuf>,
     /// Fetch bundle catalogs from a running server instead of local files
     #[arg(long)]
     remote: bool,
@@ -1543,6 +1626,8 @@ struct CliRuntimeBundleSnapshot {
     roots: Vec<String>,
     #[serde(default)]
     catalogs: Vec<CliRuntimeBundleCatalog>,
+    #[serde(default)]
+    installations: Vec<CliRuntimeBundleInstallation>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1555,6 +1640,45 @@ struct CliRuntimeBundleCatalog {
     notes: Option<String>,
     #[serde(default)]
     bundles: Vec<runtime_bundles::RuntimeBundle>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct CliRuntimeBundleInstallation {
+    #[serde(default)]
+    id: String,
+    #[serde(default)]
+    name: Option<String>,
+    #[serde(default)]
+    adapter: Option<String>,
+    #[serde(default)]
+    profiles: Vec<String>,
+    #[serde(default)]
+    modalities: Vec<String>,
+    #[serde(default)]
+    accelerator: Option<String>,
+    #[serde(default)]
+    channel: Option<String>,
+    #[serde(default)]
+    installed_at: Option<String>,
+    #[serde(default)]
+    imported_at: Option<String>,
+    #[serde(default)]
+    source: Option<JsonValue>,
+    #[serde(default)]
+    metadata_path: Option<String>,
+    #[serde(default)]
+    artifacts: Vec<CliRuntimeBundleArtifact>,
+    #[serde(default)]
+    root: Option<String>,
+    #[serde(default)]
+    bundle: Option<runtime_bundles::RuntimeBundle>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct CliRuntimeBundleArtifact {
+    name: String,
+    #[serde(default)]
+    bytes: Option<u64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1587,9 +1711,327 @@ fn load_runtime_bundle_snapshot_local(dir: Option<PathBuf>) -> Result<CliRuntime
         generated_ms: Some(now.timestamp_millis().max(0) as u64),
         roots,
         catalogs,
+        installations: Vec::new(),
     })
 }
 
+fn load_local_runtime_bundle_installations(
+    root: &Path,
+) -> Result<Vec<CliRuntimeBundleInstallation>> {
+    let mut installs = Vec::new();
+    let read_dir = match std::fs::read_dir(root) {
+        Ok(entries) => entries,
+        Err(err) if err.kind() == io::ErrorKind::NotFound => return Ok(installs),
+        Err(err) => {
+            return Err(anyhow!(
+                "reading runtime bundle install root {}: {err}",
+                root.display()
+            ))
+        }
+    };
+    for entry in read_dir {
+        let entry = entry.with_context(|| {
+            format!(
+                "reading entry within runtime bundle install root {}",
+                root.display()
+            )
+        })?;
+        let path = entry.path();
+        let file_type = entry.file_type().with_context(|| {
+            format!(
+                "reading file type for runtime bundle entry {}",
+                path.display()
+            )
+        })?;
+        if !file_type.is_dir() {
+            continue;
+        }
+        if let Some(install) = load_local_runtime_bundle_installation(root, &path)? {
+            installs.push(install);
+        }
+    }
+    installs.sort_by(|a, b| a.id.cmp(&b.id).then_with(|| a.root.cmp(&b.root)));
+    Ok(installs)
+}
+
+fn load_local_runtime_bundle_installation(
+    root: &Path,
+    dir: &Path,
+) -> Result<Option<CliRuntimeBundleInstallation>> {
+    let metadata_path = dir.join("bundle.json");
+    let metadata_value = match std::fs::read(&metadata_path) {
+        Ok(bytes) => match serde_json::from_slice::<JsonValue>(&bytes) {
+            Ok(value) => Some(value),
+            Err(err) => {
+                eprintln!(
+                    "warning: failed to parse runtime bundle metadata {}: {err}",
+                    metadata_path.display()
+                );
+                None
+            }
+        },
+        Err(err) if err.kind() == io::ErrorKind::NotFound => None,
+        Err(err) => {
+            eprintln!(
+                "warning: failed to read runtime bundle metadata {}: {err}",
+                metadata_path.display()
+            );
+            None
+        }
+    };
+
+    let mut bundle_struct: Option<runtime_bundles::RuntimeBundle> = None;
+    let mut id = dir
+        .file_name()
+        .and_then(|value| value.to_str())
+        .unwrap_or("bundle")
+        .to_string();
+    let mut name: Option<String> = None;
+    let mut adapter: Option<String> = None;
+    let mut profiles: Vec<String> = Vec::new();
+    let mut modalities: Vec<String> = Vec::new();
+    let mut accelerator: Option<String> = None;
+    let mut channel: Option<String> = None;
+    let mut installed_at: Option<String> = None;
+    let mut imported_at: Option<String> = None;
+    let mut source: Option<JsonValue> = None;
+
+    if let Some(metadata) = metadata_value.as_ref() {
+        if let Some(bundle_node) = metadata.get("bundle") {
+            if let Ok(parsed) =
+                serde_json::from_value::<runtime_bundles::RuntimeBundle>(bundle_node.clone())
+            {
+                id = parsed.id.clone();
+                name = Some(parsed.name.clone());
+                adapter = Some(parsed.adapter.clone());
+                profiles = parsed.profiles.clone();
+                modalities = parsed
+                    .modalities
+                    .iter()
+                    .map(|m| modality_slug(m).to_string())
+                    .collect();
+                accelerator = parsed
+                    .accelerator
+                    .as_ref()
+                    .map(|acc| accelerator_slug(acc).to_string());
+                bundle_struct = Some(parsed);
+            } else {
+                if let Some(bundle_id) = bundle_node
+                    .get("id")
+                    .and_then(|value| value.as_str())
+                    .filter(|value| !value.is_empty())
+                {
+                    id = bundle_id.to_string();
+                }
+                name = bundle_node
+                    .get("name")
+                    .and_then(|value| value.as_str())
+                    .map(|value| value.to_string());
+                adapter = bundle_node
+                    .get("adapter")
+                    .and_then(|value| value.as_str())
+                    .map(|value| value.to_string());
+                profiles = parse_strings_from_json(bundle_node.get("profiles"));
+                modalities = parse_strings_from_json(bundle_node.get("modalities"));
+                accelerator = bundle_node
+                    .get("accelerator")
+                    .and_then(|value| value.as_str())
+                    .map(|value| value.to_string());
+            }
+        }
+        channel = metadata
+            .pointer("/catalog/channel")
+            .and_then(|value| value.as_str())
+            .map(|value| value.to_string());
+        installed_at = metadata
+            .get("installed_at")
+            .and_then(|value| value.as_str())
+            .map(|value| value.to_string());
+        imported_at = metadata
+            .get("imported_at")
+            .and_then(|value| value.as_str())
+            .map(|value| value.to_string());
+        source = metadata.get("source").cloned();
+    }
+
+    if modalities.is_empty() {
+        modalities = parse_strings_from_json(
+            metadata_value
+                .as_ref()
+                .and_then(|value| value.pointer("/bundle/modalities")),
+        );
+    }
+
+    if accelerator.is_none() {
+        accelerator = metadata_value
+            .as_ref()
+            .and_then(|value| value.pointer("/bundle/accelerator"))
+            .and_then(|value| value.as_str())
+            .map(|value| value.to_string());
+    }
+
+    let artifacts_dir = dir.join("artifacts");
+    let artifacts = load_local_runtime_bundle_artifacts(&artifacts_dir);
+
+    if metadata_value.is_none() && artifacts.is_empty() {
+        return Ok(None);
+    }
+
+    Ok(Some(CliRuntimeBundleInstallation {
+        id,
+        name,
+        adapter,
+        profiles,
+        modalities,
+        accelerator,
+        channel,
+        installed_at,
+        imported_at,
+        source,
+        metadata_path: metadata_value
+            .as_ref()
+            .map(|_| metadata_path.display().to_string()),
+        artifacts,
+        root: Some(root.display().to_string()),
+        bundle: bundle_struct,
+    }))
+}
+
+fn load_local_runtime_bundle_artifacts(dir: &Path) -> Vec<CliRuntimeBundleArtifact> {
+    let mut artifacts = Vec::new();
+    let read_dir = match std::fs::read_dir(dir) {
+        Ok(entries) => entries,
+        Err(err) if err.kind() == io::ErrorKind::NotFound => return artifacts,
+        Err(err) => {
+            eprintln!(
+                "warning: failed to read runtime bundle artifacts in {}: {err}",
+                dir.display()
+            );
+            return artifacts;
+        }
+    };
+    for entry in read_dir {
+        let entry = match entry {
+            Ok(e) => e,
+            Err(err) => {
+                eprintln!("warning: failed to read artifact entry: {err}");
+                continue;
+            }
+        };
+        let path = entry.path();
+        let file_type = match entry.file_type() {
+            Ok(ft) => ft,
+            Err(err) => {
+                eprintln!(
+                    "warning: failed to read artifact file type {}: {err}",
+                    path.display()
+                );
+                continue;
+            }
+        };
+        if !file_type.is_file() {
+            continue;
+        }
+        let name = entry.file_name().to_string_lossy().into_owned();
+        let bytes = match entry.metadata() {
+            Ok(meta) => Some(meta.len()),
+            Err(err) => {
+                eprintln!(
+                    "warning: failed to read artifact metadata {}: {err}",
+                    path.display()
+                );
+                None
+            }
+        };
+        artifacts.push(CliRuntimeBundleArtifact { name, bytes });
+    }
+    artifacts.sort_by(|a, b| a.name.cmp(&b.name));
+    artifacts
+}
+
+fn parse_strings_from_json(node: Option<&JsonValue>) -> Vec<String> {
+    let mut values = Vec::new();
+    if let Some(JsonValue::Array(items)) = node {
+        for entry in items {
+            if let Some(text) = entry.as_str() {
+                let trimmed = text.trim();
+                if !trimmed.is_empty() {
+                    values.push(trimmed.to_string());
+                }
+            }
+        }
+    }
+    values
+}
+
+#[cfg(test)]
+mod runtime_bundle_list_tests {
+    use super::*;
+    use serde_json::json;
+    use tempfile::tempdir;
+
+    #[test]
+    fn load_local_installation_with_metadata() -> Result<()> {
+        let tmp = tempdir().expect("tempdir");
+        let root = tmp.path();
+        let bundle_dir = root.join("bundle_one");
+        std::fs::create_dir_all(bundle_dir.join("artifacts"))?;
+        std::fs::write(
+            bundle_dir.join("bundle.json"),
+            serde_json::to_vec_pretty(&json!({
+                "bundle": {
+                    "id": "llama.cpp-preview/linux-x86_64-cpu",
+                    "name": "Test LLaMA",
+                    "adapter": "process",
+                    "modalities": ["text"],
+                    "accelerator": "cpu",
+                    "profiles": ["balanced"]
+                },
+                "catalog": { "channel": "preview" },
+                "installed_at": "2025-10-11T12:00:00Z"
+            }))?,
+        )?;
+        std::fs::write(bundle_dir.join("artifacts").join("weights.bin"), b"content")?;
+
+        let installs = load_local_runtime_bundle_installations(root)?;
+        assert_eq!(installs.len(), 1);
+        let install = &installs[0];
+        assert_eq!(install.id, "llama.cpp-preview/linux-x86_64-cpu");
+        assert_eq!(install.name.as_deref(), Some("Test LLaMA"));
+        assert_eq!(install.adapter.as_deref(), Some("process"));
+        assert_eq!(install.modalities, vec!["text"]);
+        assert_eq!(install.accelerator.as_deref(), Some("cpu"));
+        assert_eq!(install.channel.as_deref(), Some("preview"));
+        assert_eq!(install.artifacts.len(), 1);
+        assert_eq!(install.artifacts[0].name, "weights.bin");
+        assert!(install.artifacts[0].bytes.is_some());
+        let expected_metadata = bundle_dir.join("bundle.json").display().to_string();
+        assert_eq!(
+            install.metadata_path.as_deref(),
+            Some(expected_metadata.as_str())
+        );
+        assert!(install.bundle.is_some());
+        Ok(())
+    }
+
+    #[test]
+    fn load_local_installation_without_metadata_but_artifacts() -> Result<()> {
+        let tmp = tempdir().expect("tempdir");
+        let root = tmp.path();
+        let bundle_dir = root.join("bare");
+        std::fs::create_dir_all(bundle_dir.join("artifacts"))?;
+        std::fs::write(bundle_dir.join("artifacts").join("stub.bin"), b"123")?;
+
+        let installs = load_local_runtime_bundle_installations(root)?;
+        assert_eq!(installs.len(), 1);
+        let install = &installs[0];
+        assert_eq!(install.id, "bare");
+        assert!(install.name.is_none());
+        assert!(install.bundle.is_none());
+        assert_eq!(install.artifacts.len(), 1);
+        Ok(())
+    }
+}
 fn fetch_runtime_bundle_snapshot_remote(
     base: &RuntimeBaseArgs,
 ) -> Result<CliRuntimeBundleSnapshot> {
@@ -2350,6 +2792,12 @@ fn main() {
             }
             RuntimeCmd::Restore(args) => {
                 if let Err(e) = cmd_runtime_restore(&args) {
+                    eprintln!("{}", e);
+                    std::process::exit(1);
+                }
+            }
+            RuntimeCmd::Shutdown(args) => {
+                if let Err(e) = cmd_runtime_shutdown(&args) {
                     eprintln!("{}", e);
                     std::process::exit(1);
                 }
@@ -4351,12 +4799,53 @@ fn cmd_runtime_restore(args: &RuntimeRestoreArgs) -> Result<()> {
     }
 }
 
+fn cmd_runtime_shutdown(args: &RuntimeShutdownArgs) -> Result<()> {
+    let token = resolve_admin_token(&args.base.admin_token);
+    let client = Client::builder()
+        .timeout(Duration::from_secs(args.base.timeout))
+        .build()
+        .context("building HTTP client")?;
+    let base = args.base.base_url();
+    let url = format!("{}/orchestrator/runtimes/{}/shutdown", base, args.id);
+
+    let mut req = client.post(&url);
+    req = with_admin_headers(req, token.as_deref());
+    let resp = req
+        .send()
+        .with_context(|| format!("requesting runtime shutdown for {}", args.id))?;
+    let status = resp.status();
+    let body: JsonValue = resp.json().context("parsing runtime shutdown response")?;
+
+    match status {
+        reqwest::StatusCode::ACCEPTED => {
+            let runtime_id = body
+                .get("runtime_id")
+                .and_then(|v| v.as_str())
+                .unwrap_or(&args.id);
+            println!("Shutdown requested for {}.", runtime_id);
+            Ok(())
+        }
+        _ => Err(anyhow::anyhow!(
+            "runtime shutdown failed: {} {}",
+            status,
+            body
+        )),
+    }
+}
+
 fn cmd_runtime_bundles_list(args: &RuntimeBundlesListArgs) -> Result<()> {
     if args.remote {
         return runtime_bundles_list_remote(args);
     }
 
-    let snapshot = load_runtime_bundle_snapshot_local(args.dir.clone())?;
+    let mut snapshot = load_runtime_bundle_snapshot_local(args.dir.clone())?;
+    let install_root = default_runtime_bundle_root(&args.install_dir)?;
+    let installations = load_local_runtime_bundle_installations(&install_root)?;
+    let root_str = install_root.display().to_string();
+    if !snapshot.roots.iter().any(|entry| entry == &root_str) {
+        snapshot.roots.push(root_str);
+    }
+    snapshot.installations = installations;
 
     if args.json {
         let payload = serde_json::to_value(&snapshot).unwrap_or_else(|_| json!({}));
@@ -4371,18 +4860,12 @@ fn cmd_runtime_bundles_list(args: &RuntimeBundlesListArgs) -> Result<()> {
         return Ok(());
     }
 
-    println!(
-        "Local runtime bundle inventory (root: {})",
-        snapshot
-            .roots
-            .first()
-            .map(|s| s.as_str())
-            .unwrap_or("<unknown>")
-    );
+    println!("Local runtime bundle inventory");
     print_bundle_summary(
         &snapshot.catalogs,
         &snapshot.roots,
         snapshot.generated.as_deref(),
+        &snapshot.installations,
     );
     Ok(())
 }

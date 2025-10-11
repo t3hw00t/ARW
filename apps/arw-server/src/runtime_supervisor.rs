@@ -63,6 +63,28 @@ pub(crate) struct ManagedRuntimeDefinition {
     source: Option<String>,
 }
 
+impl ManagedRuntimeDefinition {
+    pub(crate) fn new(
+        descriptor: RuntimeDescriptor,
+        adapter_id: String,
+        auto_start: bool,
+        preset: Option<String>,
+        source: Option<String>,
+    ) -> Self {
+        Self {
+            descriptor,
+            adapter_id,
+            auto_start,
+            preset,
+            source,
+        }
+    }
+
+    pub(crate) fn source(&self) -> Option<&str> {
+        self.source.as_deref()
+    }
+}
+
 struct ActiveRuntime {
     adapter_id: String,
     handle: arw_runtime::RuntimeHandle,
@@ -129,6 +151,38 @@ impl RuntimeSupervisor {
     pub async fn install_builtin_adapters(&self) -> Result<(), SupervisorError> {
         let adapter = ProcessRuntimeAdapter::new().map_err(SupervisorError::Adapter)?;
         self.register_adapter(adapter).await;
+        Ok(())
+    }
+
+    pub async fn runtime_ids_with_source_prefix(&self, prefix: &str) -> Vec<String> {
+        let guard = self.definitions.read().await;
+        guard
+            .iter()
+            .filter_map(|(id, definition)| {
+                definition
+                    .source()
+                    .filter(|src| src.starts_with(prefix))
+                    .map(|_| id.clone())
+            })
+            .collect()
+    }
+
+    pub async fn remove_definition(&self, id: &str) -> Result<(), SupervisorError> {
+        let existed = {
+            let mut guard = self.definitions.write().await;
+            guard.remove(id)
+        };
+        if existed.is_none() {
+            return Ok(());
+        }
+
+        self.shutdown_runtime(id).await?;
+        self.registry.remove_descriptor(id).await;
+        info!(
+            target = "arw::runtime",
+            runtime = %id,
+            "runtime definition removed"
+        );
         Ok(())
     }
 
@@ -694,13 +748,13 @@ fn manifest_entry_to_definition(
         }
     }
 
-    Ok(ManagedRuntimeDefinition {
+    Ok(ManagedRuntimeDefinition::new(
         descriptor,
-        adapter_id: entry.adapter,
-        auto_start: entry.auto_start.unwrap_or(false),
-        preset: entry.preset,
-        source: source.map(|p| p.display().to_string()),
-    })
+        entry.adapter,
+        entry.auto_start.unwrap_or(false),
+        entry.preset,
+        source.map(|p| p.display().to_string()),
+    ))
 }
 
 fn manifest_paths() -> Vec<PathBuf> {
@@ -1058,13 +1112,13 @@ mod tests {
         supervisor.register_adapter(adapter.clone()).await;
         let descriptor = RuntimeDescriptor::new("fake-runtime", "fake");
         supervisor
-            .install_definition(ManagedRuntimeDefinition {
-                descriptor: descriptor.clone(),
-                adapter_id: "fake".into(),
-                auto_start: true,
-                preset: None,
-                source: None,
-            })
+            .install_definition(ManagedRuntimeDefinition::new(
+                descriptor.clone(),
+                "fake".into(),
+                true,
+                None,
+                None,
+            ))
             .await
             .expect("definition install");
 
@@ -1108,13 +1162,13 @@ mod tests {
 
         let descriptor = RuntimeDescriptor::new("fake-runtime", "fake");
         supervisor
-            .install_definition(ManagedRuntimeDefinition {
-                descriptor: descriptor.clone(),
-                adapter_id: "fake".into(),
-                auto_start: true,
-                preset: None,
-                source: None,
-            })
+            .install_definition(ManagedRuntimeDefinition::new(
+                descriptor.clone(),
+                "fake".into(),
+                true,
+                None,
+                None,
+            ))
             .await
             .expect("definition install");
 
@@ -1132,13 +1186,13 @@ mod tests {
         .expect("restore completion event");
 
         supervisor
-            .install_definition(ManagedRuntimeDefinition {
-                descriptor: descriptor.clone(),
-                adapter_id: "fake".into(),
-                auto_start: false,
-                preset: None,
-                source: None,
-            })
+            .install_definition(ManagedRuntimeDefinition::new(
+                descriptor.clone(),
+                "fake".into(),
+                false,
+                None,
+                None,
+            ))
             .await
             .expect("definition update");
 
@@ -1169,13 +1223,13 @@ mod tests {
 
         let descriptor = RuntimeDescriptor::new("fake-runtime", "fake");
         supervisor
-            .install_definition(ManagedRuntimeDefinition {
-                descriptor: descriptor.clone(),
-                adapter_id: "fake".into(),
-                auto_start: true,
-                preset: None,
-                source: Some("test-source".into()),
-            })
+            .install_definition(ManagedRuntimeDefinition::new(
+                descriptor.clone(),
+                "fake".into(),
+                true,
+                None,
+                Some("test-source".into()),
+            ))
             .await
             .expect("definition install");
 

@@ -21,11 +21,12 @@ Commands (summary)
 - `arw-cli capsule status [--json] [--limit N]` — inspect active capsules
 - `arw-cli capsule teardown [--id ID] [--all] [--reason TEXT] [--dry-run]` — revoke capsules via the emergency teardown API
 - `arw-cli screenshots backfill-ocr [--lang <code>] [--force] [--dry-run]` — regenerate OCR sidecars via `/admin/tools/run`
-- `arw-cli runtime bundles list [--dir PATH] [--remote] [--json {--pretty}]` — inspect managed runtime bundle catalogs locally or via `/state/runtime/bundles`
+- `arw-cli runtime bundles list [--dir PATH] [--install-dir PATH] [--remote] [--json {--pretty}]` — inspect managed runtime bundle catalogs and installed bundles locally or via `/state/runtime/bundles`
 - `arw-cli runtime bundles reload [--json {--pretty}]` — trigger `/admin/runtime/bundles/reload` to rescan bundle catalogs on the server
 - `arw-cli runtime bundles install [--dir PATH] [--remote] [--dest DIR] [--artifact-kind KIND] [--artifact-format FORMAT] [--force] [--dry-run] <bundle-id>...` — download bundle artifacts into the managed runtime directory (defaults to `<state_dir>/runtime/bundles`)
 - `arw-cli runtime bundles import --bundle <id> [--dest DIR] [--metadata FILE] [--force] [--dry-run] <path>...` — copy local archives or directories into the managed runtime directory for offline installs
 - `arw-cli runtime bundles rollback --bundle <id> [--dest DIR] [--revision REV] [--list] [--dry-run] [--json {--pretty}]` — list available revisions and restore a bundle from the local history snapshot (JSON mode works for both `--list` and rollback actions)
+- `arw-cli runtime shutdown <id>` — request a managed runtime shutdown via `/orchestrator/runtimes/{id}/shutdown`
 - `arw-cli admin autonomy lanes [--json {--pretty}]` — list autonomy lanes with alert and budget summaries.
 - `arw-cli admin autonomy lane --lane <id> [--json {--pretty}]` — inspect a specific lane for current mode, jobs, alerts, and budgets.
 - `arw-cli admin autonomy pause --lane <id> [--operator NAME] [--reason TEXT]` — pause scheduling and running jobs under a lane.

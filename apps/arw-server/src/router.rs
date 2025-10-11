@@ -773,6 +773,11 @@ pub(crate) fn build_router() -> (Router<AppState>, Vec<String>, Vec<Value>) {
         api::orchestrator::orchestrator_runtime_restore,
         None,
     );
+    builder.route_post(
+        "/orchestrator/runtimes/{id}/shutdown",
+        api::orchestrator::orchestrator_runtime_shutdown,
+        None,
+    );
     builder.route_get(
         "/state/orchestrator/jobs",
         api::orchestrator::state_orchestrator_jobs,

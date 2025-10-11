@@ -82,6 +82,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   const elRuntimeStat = document.getElementById('runtimeStat');
   const elRuntimeRunbook = document.getElementById('runtimeRunbook');
   const elRuntimeMatrix = document.getElementById('runtimeMatrix');
+  const elRuntimeBundles = document.getElementById('runtimeBundles');
   const runtimePending = new Set();
   const updateModeUi = (mode, { remount = false } = {}) => {
     const normalized = mode === 'expert' ? 'expert' : 'guided';
@@ -319,6 +320,227 @@ document.addEventListener('DOMContentLoaded', async () => {
     elRuntimeMatrix.appendChild(cards);
   }
 
+  let runtimeBundlesModel = null;
+  function renderRuntimeBundles(model) {
+    runtimeBundlesModel = model || runtimeBundlesModel;
+    if (!elRuntimeBundles) return;
+
+    const frag = document.createDocumentFragment();
+    const installs = Array.isArray(runtimeBundlesModel?.installations)
+      ? [...runtimeBundlesModel.installations]
+      : [];
+    installs.sort((a, b) => {
+      const lhs = (a?.name || a?.id || '').toString().toLowerCase();
+      const rhs = (b?.name || b?.id || '').toString().toLowerCase();
+      return lhs.localeCompare(rhs);
+    });
+
+    const summary = document.createElement('div');
+    summary.className = 'runtime-bundle-summary';
+    if (installs.length) {
+      const label = installs.length === 1 ? 'bundle installed' : 'bundles installed';
+      summary.textContent = `${installs.length} ${label}`;
+    } else {
+      summary.textContent = 'No bundles installed yet.';
+    }
+    frag.appendChild(summary);
+
+    const columns = ['Bundle', 'Adapter', 'Accelerator', 'Profiles', 'Modalities', 'Channel', 'Location', 'Installed'];
+
+    if (installs.length) {
+      const table = document.createElement('table');
+      table.className = 'runtime-bundle-table';
+      const thead = document.createElement('thead');
+      const headRow = document.createElement('tr');
+      for (const label of columns) {
+        const th = document.createElement('th');
+        th.scope = 'col';
+        th.textContent = label;
+        headRow.appendChild(th);
+      }
+      thead.appendChild(headRow);
+      table.appendChild(thead);
+
+      const tbody = document.createElement('tbody');
+      for (const inst of installs) {
+        const runtimeId = inst?.id || '';
+        const displayName = inst?.name || runtimeId || 'Bundle';
+        const adapter = inst?.adapter || '—';
+        const accelerator = runtimeAcceleratorLabel(inst?.accelerator || '') || '—';
+        const profiles = Array.isArray(inst?.profiles) && inst.profiles.length
+          ? inst.profiles.join(', ')
+          : '—';
+        const modalities = runtimeModalitiesLabel(inst?.modalities) || '—';
+        const channel = inst?.channel || '—';
+        const location = inst?.root || inst?.metadata_path || '—';
+        const installedIso = inst?.installed_at || inst?.imported_at || '';
+        const installedHuman = formatRelativeIso(installedIso) || installedIso || '—';
+
+        const row = document.createElement('tr');
+
+        const cellName = document.createElement('td');
+        const strongName = document.createElement('strong');
+        strongName.textContent = displayName;
+        cellName.appendChild(strongName);
+        if (runtimeId && runtimeId !== displayName) {
+          const idLine = document.createElement('div');
+          idLine.className = 'mono dim';
+          idLine.textContent = runtimeId;
+          cellName.appendChild(idLine);
+        }
+        row.appendChild(cellName);
+
+        const cellAdapter = document.createElement('td');
+        cellAdapter.textContent = adapter;
+        row.appendChild(cellAdapter);
+
+        const cellAccel = document.createElement('td');
+        cellAccel.textContent = accelerator;
+        row.appendChild(cellAccel);
+
+        const cellProfiles = document.createElement('td');
+        cellProfiles.textContent = profiles;
+        row.appendChild(cellProfiles);
+
+        const cellModalities = document.createElement('td');
+        cellModalities.textContent = modalities || '—';
+        row.appendChild(cellModalities);
+
+        const cellChannel = document.createElement('td');
+        cellChannel.textContent = channel || '—';
+        row.appendChild(cellChannel);
+
+        const cellLocation = document.createElement('td');
+        cellLocation.textContent = location;
+        if (location && location !== '—') {
+          cellLocation.classList.add('mono');
+          cellLocation.title = location;
+        }
+        row.appendChild(cellLocation);
+
+        const cellInstalled = document.createElement('td');
+        cellInstalled.textContent = installedHuman;
+        if (installedIso && installedIso !== installedHuman) {
+          cellInstalled.title = installedIso;
+        }
+        row.appendChild(cellInstalled);
+
+        tbody.appendChild(row);
+
+        const detailParts = [];
+        if (inst?.artifacts && Array.isArray(inst.artifacts) && inst.artifacts.length) {
+          const artifactLabels = inst.artifacts.map((artifact) => {
+            const name = artifact?.name || 'artifact';
+            if (typeof artifact?.bytes === 'number' && Number.isFinite(artifact.bytes)) {
+              return `${name} (${formatBytes(artifact.bytes)})`;
+            }
+            return name;
+          });
+          if (artifactLabels.length) {
+            detailParts.push(`artifacts ${artifactLabels.join(', ')}`);
+          }
+        }
+        const sourceLabel = describeBundleSource(inst?.source);
+        if (sourceLabel) {
+          detailParts.push(sourceLabel);
+        }
+        if (inst?.metadata_path) {
+          detailParts.push(`metadata ${inst.metadata_path}`);
+        }
+        if (inst?.root && inst.root !== location) {
+          detailParts.push(`root ${inst.root}`);
+        }
+        if (detailParts.length) {
+          const metaRow = document.createElement('tr');
+          metaRow.className = 'runtime-bundle-meta';
+          const metaCell = document.createElement('td');
+          metaCell.colSpan = columns.length;
+          metaCell.textContent = detailParts.join(' · ');
+          metaRow.appendChild(metaCell);
+          tbody.appendChild(metaRow);
+        }
+      }
+
+      table.appendChild(tbody);
+      frag.appendChild(table);
+    } else {
+      const empty = document.createElement('div');
+      empty.className = 'dim';
+      empty.textContent = 'Install a bundle or import artifacts to stage managed runtimes.';
+      frag.appendChild(empty);
+    }
+
+    const catalogs = Array.isArray(runtimeBundlesModel?.catalogs)
+      ? runtimeBundlesModel.catalogs
+      : [];
+    const catalogBlock = document.createElement('div');
+    catalogBlock.className = 'runtime-bundle-catalogs';
+    if (catalogs.length) {
+      const list = document.createElement('ul');
+      list.className = 'runtime-bundle-catalog-list';
+      for (const cat of catalogs) {
+        const item = document.createElement('li');
+        const label = document.createElement('strong');
+        label.textContent = cat?.path || 'Catalog';
+        item.appendChild(label);
+        const metaParts = [];
+        if (typeof cat?.version !== 'undefined') metaParts.push(`version ${cat.version}`);
+        if (cat?.channel) metaParts.push(`channel ${cat.channel}`);
+        if (cat?.notes) metaParts.push(cat.notes);
+        if (metaParts.length) {
+          const span = document.createElement('span');
+          span.className = 'dim';
+          span.textContent = metaParts.join(' · ');
+          item.appendChild(span);
+        }
+        list.appendChild(item);
+      }
+      catalogBlock.appendChild(list);
+    } else {
+      const none = document.createElement('div');
+      none.className = 'dim';
+      none.textContent = 'No bundle catalogs discovered yet.';
+      catalogBlock.appendChild(none);
+    }
+    frag.appendChild(catalogBlock);
+
+    const roots = Array.isArray(runtimeBundlesModel?.roots)
+      ? runtimeBundlesModel.roots.filter(Boolean)
+      : [];
+    if (roots.length) {
+      const rootsDiv = document.createElement('div');
+      rootsDiv.className = 'dim mono';
+      rootsDiv.textContent = `Roots: ${roots.join(', ')}`;
+      frag.appendChild(rootsDiv);
+    }
+
+    elRuntimeBundles.innerHTML = '';
+    elRuntimeBundles.appendChild(frag);
+
+    function describeBundleSource(source) {
+      if (!source) return '';
+      if (typeof source === 'string') {
+        return `source ${source}`;
+      }
+      if (typeof source !== 'object') {
+        return '';
+      }
+      if (Array.isArray(source)) {
+        return '';
+      }
+      const obj = source;
+      const parts = [];
+      if (typeof obj.kind === 'string') parts.push(obj.kind);
+      if (typeof obj.channel === 'string') parts.push(`channel ${obj.channel}`);
+      if (parts.length) return parts.join(' ');
+      try {
+        return `source ${JSON.stringify(obj)}`;
+      } catch {
+        return '';
+      }
+    }
+  }
+
   function runtimeAcceleratorLabel(slug) {
     if (!slug) return '';
     const key = String(slug || '').toLowerCase();
@@ -460,9 +682,41 @@ document.addEventListener('DOMContentLoaded', async () => {
       tr.appendChild(updatedCell);
 
       const actionsCell = document.createElement('td');
+      const actionsWrap = document.createElement('div');
+      actionsWrap.className = 'runtime-actions';
+      const isPending = runtimePending.has(runtimeId);
+
+      const stateSlug = stateInfo.slug;
+      if (stateSlug === 'offline' || stateSlug === 'unknown') {
+        const startBtn = document.createElement('button');
+        startBtn.className = 'ghost btn-small';
+        if (isPending) {
+          startBtn.textContent = 'Starting…';
+          startBtn.disabled = true;
+          startBtn.title = 'Start request in flight';
+        } else {
+          startBtn.textContent = 'Start';
+          startBtn.title = `Start ${descriptor.name || runtimeId}`;
+        }
+        startBtn.addEventListener('click', () => handleRuntimeStart(entry));
+        actionsWrap.appendChild(startBtn);
+      } else {
+        const stopBtn = document.createElement('button');
+        stopBtn.className = 'ghost btn-small';
+        if (isPending) {
+          stopBtn.textContent = 'Stopping…';
+          stopBtn.disabled = true;
+          stopBtn.title = 'Operation in flight';
+        } else {
+          stopBtn.textContent = 'Stop';
+          stopBtn.title = `Stop ${descriptor.name || runtimeId}`;
+        }
+        stopBtn.addEventListener('click', () => handleRuntimeStop(entry));
+        actionsWrap.appendChild(stopBtn);
+      }
+
       const restartBtn = document.createElement('button');
       restartBtn.className = 'ghost btn-small';
-      const isPending = runtimePending.has(runtimeId);
       if (isPending) {
         restartBtn.textContent = 'Requesting…';
         restartBtn.disabled = true;
@@ -483,7 +737,9 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
       }
       restartBtn.addEventListener('click', () => handleRuntimeRestart(entry));
-      actionsCell.appendChild(restartBtn);
+      actionsWrap.appendChild(restartBtn);
+
+      actionsCell.appendChild(actionsWrap);
       tr.appendChild(actionsCell);
 
       elRuntimeTable.appendChild(tr);
@@ -492,7 +748,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   const runtimePresetCache = new Map();
 
-  async function handleRuntimeRestart(entry) {
+async function handleRuntimeRestart(entry) {
     const descriptor = entry?.descriptor || {};
     const status = entry?.status || {};
     const runtimeId = descriptor.id || status.id;
@@ -627,9 +883,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   }
 
-  let runtimeMatrixAbort = null;
-  async function refreshRuntimeMatrix() {
-    if (!elRuntimeMatrix) return;
+let runtimeMatrixAbort = null;
+async function refreshRuntimeMatrix() {
+  if (!elRuntimeMatrix) return;
     let controller = null;
     try {
       if (runtimeMatrixAbort) {
@@ -656,6 +912,132 @@ document.addEventListener('DOMContentLoaded', async () => {
         runtimeMatrixAbort = null;
       }
     }
+  }
+}
+
+async function handleRuntimeStart(entry) {
+  const descriptor = entry?.descriptor || {};
+  const status = entry?.status || {};
+  const runtimeId = descriptor.id || status.id;
+  if (!runtimeId) return;
+  const name = descriptor.name || runtimeId;
+  try {
+    const confirmed = await ARW.modal.confirm({
+      title: 'Start runtime',
+      body: `Start ${name}? The managed supervisor will launch the bundle if it has been staged.`,
+      submitLabel: 'Start runtime',
+      cancelLabel: 'Cancel',
+    });
+    if (!confirmed) return;
+
+    runtimePending.add(runtimeId);
+    renderRuntimeSupervisor();
+
+    const resp = await ARW.http.fetch(
+      base,
+      `/orchestrator/runtimes/${encodeURIComponent(runtimeId)}/restore`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ restart: false }),
+      }
+    );
+
+    if (!resp.ok) {
+      throw new Error(`start failed (${resp.status})`);
+    }
+
+    setRuntimeStat(`${name}: start requested`, true);
+    ARW.toast('Start requested');
+    scheduleRuntimeRefresh(true);
+  } catch (err) {
+    console.error(err);
+    setRuntimeStat(`${name}: start failed`, true);
+    ARW.toast('Start failed');
+  } finally {
+    runtimePending.delete(runtimeId);
+    renderRuntimeSupervisor();
+  }
+}
+
+async function handleRuntimeStop(entry) {
+  const descriptor = entry?.descriptor || {};
+  const status = entry?.status || {};
+  const runtimeId = descriptor.id || status.id;
+  if (!runtimeId) return;
+  const name = descriptor.name || runtimeId;
+  try {
+    const confirmed = await ARW.modal.confirm({
+      title: 'Stop runtime',
+      body: `Stop ${name}? Active requests will be interrupted.`,
+      submitLabel: 'Stop runtime',
+      cancelLabel: 'Cancel',
+    });
+    if (!confirmed) return;
+
+    runtimePending.add(runtimeId);
+    renderRuntimeSupervisor();
+
+    const resp = await ARW.http.fetch(
+      base,
+      `/orchestrator/runtimes/${encodeURIComponent(runtimeId)}/shutdown`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      }
+    );
+
+    if (!resp.ok) {
+      throw new Error(`stop failed (${resp.status})`);
+    }
+
+    setRuntimeStat(`${name}: stop requested`, true);
+    ARW.toast('Stop requested');
+    scheduleRuntimeRefresh(true);
+  } catch (err) {
+    console.error(err);
+    setRuntimeStat(`${name}: stop failed`, true);
+    ARW.toast('Stop failed');
+  } finally {
+    runtimePending.delete(runtimeId);
+    renderRuntimeSupervisor();
+  }
+}
+
+let runtimeBundlesAbort = null;
+async function refreshRuntimeBundles() {
+  if (!elRuntimeBundles) return;
+  let controller = null;
+  try {
+    if (runtimeBundlesAbort) {
+      try {
+        runtimeBundlesAbort.abort();
+      } catch {}
+    }
+    controller = new AbortController();
+    runtimeBundlesAbort = controller;
+    await fetchReadModel('runtime_bundles', '/state/runtime/bundles', {
+      signal: controller.signal,
+      transform(raw) {
+        if (raw && typeof raw === 'object') {
+          const installations = Array.isArray(raw.installations) ? raw.installations : [];
+          const catalogs = Array.isArray(raw.catalogs) ? raw.catalogs : [];
+          const roots = Array.isArray(raw.roots) ? raw.roots : [];
+          return { installations, catalogs, roots };
+        }
+        return { installations: [], catalogs: [], roots: [] };
+      },
+    });
+  } catch (err) {
+    if (!(err && err.name === 'AbortError')) {
+      console.warn('runtime bundles fetch failed', err);
+    }
+  } finally {
+    if (runtimeBundlesAbort === controller) {
+      runtimeBundlesAbort = null;
+    }
+  }
+}
   }
 
   let runtimeRefreshScheduled = false;
@@ -686,6 +1068,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       refreshProjectsSnapshot(),
       refreshRuntimeSupervisor(),
       refreshRuntimeMatrix(),
+      refreshRuntimeBundles(),
       refreshContextSnapshot(),
       refreshContextCascade({ quiet: true }),
       refreshContextMetrics(),
@@ -695,6 +1078,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   ARW.sse.connect(base, { replay: 25 });
   await refreshRuntimeSupervisor();
   await refreshRuntimeMatrix();
+  await refreshRuntimeBundles();
   await refreshContextMetrics();
   if (elRuntimeRefreshBtn) {
     elRuntimeRefreshBtn.addEventListener('click', async () => {
@@ -2122,6 +2506,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   const idEpisodesRead = ARW.read.subscribe('episodes', applyEpisodesModel);
   const idRuntimeRead = ARW.read.subscribe('runtime_supervisor', renderRuntimeSupervisor);
   const idRuntimeMatrixRead = ARW.read.subscribe('runtime_matrix', renderRuntimeMatrix);
+  const idRuntimeBundlesRead = ARW.read.subscribe('runtime_bundles', renderRuntimeBundles);
   const idContextMetricsRead = ARW.read.subscribe('context_metrics', applyContextMetrics);
   await refreshEpisodesSnapshot();
   // Throttle SSE-driven refresh on episode-related activity
@@ -3311,6 +3696,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     try { ARW.read.unsubscribe(idProjectsRead); } catch {}
     try { ARW.read.unsubscribe(idRuntimeRead); } catch {}
     try { ARW.read.unsubscribe(idRuntimeMatrixRead); } catch {}
+    try { ARW.read.unsubscribe(idRuntimeBundlesRead); } catch {}
     try { ARW.read.unsubscribe(idContextMetricsRead); } catch {}
   });
 

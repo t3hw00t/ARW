@@ -47,6 +47,7 @@ mod research_watcher;
 mod responses;
 mod review;
 mod runtime;
+mod runtime_bundle_resolver;
 mod runtime_bundles;
 mod runtime_matrix;
 mod runtime_supervisor;
