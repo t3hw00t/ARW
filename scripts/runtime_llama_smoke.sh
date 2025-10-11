@@ -132,6 +132,11 @@ download_weights_if_needed() {
     return 0
   fi
 
+  if ! is_truthy "${LLAMA_ALLOW_DOWNLOADS:-0}"; then
+    echo "[runtime-smoke] skipping automatic LLaMA weight downloads; set LLAMA_ALLOW_DOWNLOADS=1 to enable." >&2
+    return 1
+  fi
+
   if [[ $MODEL_PATH_PRESET -eq 1 ]]; then
     if [[ -z "$token" ]]; then
       echo "[runtime-smoke] LLAMA_MODEL_PATH not found (${target})." >&2
@@ -303,7 +308,11 @@ s.close()' 2>"$LOOPBACK_ERR_FILE"; then
   if [[ -s "$LOOPBACK_ERR_FILE" ]]; then
     echo "[runtime-smoke] socket probe error: $(cat "$LOOPBACK_ERR_FILE" 2>/dev/null || true)" >&2
   fi
-  echo "[runtime-smoke] skipping runtime smoke (reported as success) due to restricted networking." >&2
+  if is_truthy "${RUNTIME_SMOKE_REQUIRE_LOOPBACK:-0}"; then
+    echo "[runtime-smoke] aborting (set RUNTIME_SMOKE_REQUIRE_LOOPBACK=0 to downgrade to a skip)." >&2
+    exit 1
+  fi
+  echo "[runtime-smoke] skipping runtime smoke due to restricted networking (set RUNTIME_SMOKE_REQUIRE_LOOPBACK=1 to fail)." >&2
   exit 0
 fi
 
@@ -519,7 +528,14 @@ start_server() {
       server_bin="$PROJECT_ROOT/target/debug/arw-server"
     else
       echo "[runtime-smoke] building arw-server binary" >&2
-      (cd "$PROJECT_ROOT" && cargo build -p arw-server >/dev/null)
+      local build_log
+      build_log=$(mktemp -t runtime-smoke-build.XXXX.log)
+      if ! (cd "$PROJECT_ROOT" && cargo build -p arw-server &>"$build_log"); then
+        echo "[runtime-smoke] cargo build failed; log preserved at $build_log" >&2
+        tail -n 200 "$build_log" >&2 || true
+        exit 1
+      fi
+      rm -f "$build_log"
       server_bin="$PROJECT_ROOT/target/debug/arw-server"
     fi
   fi

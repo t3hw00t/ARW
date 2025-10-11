@@ -3,7 +3,7 @@ title: Runtime Quickstart (Non-Technical)
 ---
 
 # Runtime Quickstart (Non-Technical)
-Updated: 2025-10-11  
+Updated: 2025-10-12
 Type: Tutorial
 
 This walkthrough is aimed at operators who want to validate the managed runtime supervisor without digging into the codebase. It uses the automation we ship (`just` commands and helper scripts) so you can prepare weights and run the smoke test with minimal manual tinkering.
@@ -59,10 +59,14 @@ If the helper used the simulated mode (because no real binary or weights were av
   LLAMA_MODEL_SOURCES="repo::file,repo2::file2" just runtime-weights
   ```
 - Provide a checksum for any source by adding a `"checksum": "sha256:..."` entry in `configs/runtime/model_sources.json`; the helper validates downloads automatically when a checksum is present.
+- Opt-in to automatic Hugging Face downloads from the smoke helper:
+  ```bash
+  LLAMA_ALLOW_DOWNLOADS=1 MODE=gpu LLAMA_SERVER_BIN=/path/to/llama-server just runtime-smoke
+  ```
 - List configured mirrors without downloading anything:
   ```bash
   just runtime-mirrors
-  
+
   # include -- --check to send a HEAD request to each mirror
   just runtime-mirrors -- --check
   ```

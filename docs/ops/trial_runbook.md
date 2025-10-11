@@ -4,7 +4,7 @@ title: Trial Runbook
 
 # Trial Runbook
 
-Updated: 2025-10-09
+Updated: 2025-10-12
 Type: Checklist (quick reference)
 
 This runbook keeps our two-person trial routine lightweight. Use it with the Trial Readiness Plan, facilitator checklist, and quickstart note so we stay in sync without extra meetings.
@@ -46,7 +46,7 @@ This runbook keeps our two-person trial routine lightweight. Use it with the Tri
 2. If the run was under Autonomy Lane, jump to the [Autonomy rollback playbook](trials/autonomy_rollback_playbook.md) after pausing.
 3. Reapply the guardrail preset (`just trials-guardrails preset=trial --dry_run=false`) when the stop is real; keep `--dry-run` for rehearsals so we can preview without touching the config file.
 4. Capture the time and what people saw in the incident log.
-5. Run `arw-cli smoke triad` (or `just triad-smoke`) to confirm the core service. Use `arw-cli smoke --help` if you need to tweak ports or keep the temp directory for forensic logs; the wrappers honor `SMOKE_TRIAD_TIMEOUT_SECS`/`SMOKE_TIMEOUT_SECS` and exit after 600 s by default (set to `0` for long investigations).
+5. Run `arw-cli smoke triad` (or `just triad-smoke`) to confirm the core service. Use `arw-cli smoke --help` if you need to tweak ports or keep the temp directory for forensic logs; the wrappers honor `SMOKE_TRIAD_TIMEOUT_SECS`/`SMOKE_TIMEOUT_SECS` and exit after 600 s by default (set to `0` for long investigations). They now build/run against debug artifacts for faster recovery—set `ARW_SMOKE_USE_RELEASE=1` when you explicitly need a release binary.
 6. DM each other with the incident note so we decide fast.
 7. Decide whether to resume, retry, or end the session.
 

@@ -45,7 +45,14 @@ run_cli() {
   if command -v cargo >/dev/null 2>&1; then
     local prev_dir=$PWD
     cd "$ROOT_DIR"
-    run_command cargo run --quiet --release -p arw-cli -- smoke triad "$@"
+    local cargo_args=()
+    if [[ "${ARW_SMOKE_USE_RELEASE:-0}" == "1" ]]; then
+      cargo_args=(run --quiet --release -p arw-cli -- smoke triad)
+    else
+      cargo_args=(run --quiet -p arw-cli -- smoke triad)
+    fi
+    cargo_args+=("$@")
+    run_command cargo "${cargo_args[@]}"
     local status=$?
     cd "$prev_dir"
     return "$status"

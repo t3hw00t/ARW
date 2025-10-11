@@ -25,7 +25,14 @@ cleanup() {
 trap cleanup EXIT
 
 if [[ ! -x "$SERVER_BIN" ]]; then
-  (cd "$ROOT_DIR" && cargo build -p arw-server >/dev/null 2>&1)
+  build_log="$(mktemp -t triad-smoke-build.XXXX.log)"
+  echo "[triad-smoke] building arw-server binary" >&2
+  if ! (cd "$ROOT_DIR" && cargo build -p arw-server &>"$build_log"); then
+    echo "[triad-smoke] cargo build failed; log preserved at $build_log" >&2
+    tail -n 200 "$build_log" >&2 || true
+    exit 1
+  fi
+  rm -f "$build_log"
 fi
 
 ARW_PORT="$PORT" \

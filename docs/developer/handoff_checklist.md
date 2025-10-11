@@ -4,7 +4,7 @@ title: Handoff Checklist — Policy & Egress Restructure
 
 # Handoff Checklist — Policy & Egress Restructure
 
-Updated: 2025-10-09
+Updated: 2025-10-12
 Type: Reference
 
 Scope
@@ -18,7 +18,7 @@ Runbook
 - Update settings: `POST /egress/settings` (admin header required)
 - Preview egress: `POST /egress/preview` with `{ url, method? }`
 - Stream events: `GET /events?prefix=egress.`
-- SSE smoke test: `ARW_ADMIN_TOKEN=... ./scripts/sse_smoke.sh` (respects `SSE_SMOKE_TIMEOUT_SECS` or the shared `SMOKE_TIMEOUT_SECS`; set to `0` for long-lived tails)
+- SSE smoke test: `ARW_ADMIN_TOKEN=... ./scripts/sse_smoke.sh` (verifies the `service.connected` handshake and exits once observed; tune `SSE_SMOKE_STREAM_TIMEOUT`/`SSE_SMOKE_EXPECT_EVENT` as needed, or set `SSE_SMOKE_TIMEOUT_SECS=0` to allow longer diagnostics)
 - Smoke helpers share the timeout harness in `scripts/lib/smoke_timeout.sh`; tweak the guard there when adjusting defaults across shells.
 
 New/Changed Endpoints

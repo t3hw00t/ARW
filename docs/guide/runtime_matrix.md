@@ -5,7 +5,7 @@ title: Runtime Matrix
 # Runtime Matrix
 
 > Need the short version? See [Runtime Quickstart (Non-Technical)](runtime_quickstart.md).
-Updated: 2025-10-11
+Updated: 2025-10-12
 Type: Blueprint
 Status: In progress
 
@@ -51,7 +51,9 @@ When you are ready to run the runtime smoke against a real llama.cpp binary (CPU
 
 If the smoke script detects that a real run is missing weights, it now prints the same checklist so operators know how to proceed.
 
-By default the helper iterates through a small roster of public Hugging Face sources (`ggml-org/tinyllama-1.1b-chat`, `TheBloke/TinyLlama-1.1B-Chat-GGUF`, …) until a download succeeds. Override the list with `LLAMA_MODEL_SOURCES="repo::file,repo2::file2"` when you want to exercise different checkpoints; any previously downloaded GGUF in `cache/models/<file>` is re-used automatically. Configure organization-wide defaults and optional `checksum` values in `configs/runtime/model_sources.json`—the helper prints those mirrors (for example, the zero-auth TinyLlama S3 bucket) and validates downloads automatically whenever a checksum is present.
+The helper still enumerates a small roster of public Hugging Face sources (`ggml-org/tinyllama-1.1b-chat`, `TheBloke/TinyLlama-1.1B-Chat-GGUF`, …) so existing downloads in `cache/models/<file>` can be re-used automatically. Set `LLAMA_MODEL_SOURCES="repo::file,repo2::file2"` when you want to exercise different checkpoints. Automatic downloads now require an explicit opt-in (`LLAMA_ALLOW_DOWNLOADS=1`) so CI and constrained sandboxes do not unexpectedly pull gigabytes of weights; otherwise the script prints the checklist shown above and exits or falls back to the stub backend. Configure organization-wide defaults and optional `checksum` values in `configs/runtime/model_sources.json`—the helper prints those mirrors (for example, the zero-auth TinyLlama S3 bucket) and validates downloads automatically whenever a checksum is present.
+
+Running inside locked-down sandboxes sometimes blocks loopback sockets entirely. When the helper detects that scenario it now reports a “skipped” outcome instead of pretending the smoke passed; export `RUNTIME_SMOKE_REQUIRE_LOOPBACK=1` when you would rather fail the run so upstream automation can flag the gap.
 
 ### Example payload
 ```json

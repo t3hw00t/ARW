@@ -5,8 +5,35 @@ SCRIPT_DIR=$(cd -- "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 PROJECT_ROOT=$(cd -- "$SCRIPT_DIR/.." && pwd)
 source "$SCRIPT_DIR/lib/smoke_timeout.sh"
 
+mksmoke_root() {
+  python3 - "$1" "$2" <<'PY'
+import sys
+from pathlib import Path
+
+raw = Path(sys.argv[1])
+project_root = Path(sys.argv[2]).resolve()
+if not raw.is_absolute():
+    raw = project_root / raw
+try:
+    resolved = raw.resolve(strict=False)
+except FileNotFoundError:
+    resolved = raw
+try:
+    resolved.relative_to(project_root)
+except ValueError:
+    raise SystemExit("SMOKE_ROOT must stay under the project root")
+if resolved == project_root:
+    raise SystemExit("SMOKE_ROOT cannot equal the project root")
+print(resolved)
+PY
+}
+
 RUNTIME_ID="${VISION_RUNTIME_ID:-vision.llava.preview}"
-SMOKE_ROOT="${VISION_SMOKE_ROOT:-$PROJECT_ROOT/.smoke/vision}"
+SMOKE_ROOT_RAW="${VISION_SMOKE_ROOT:-$PROJECT_ROOT/.smoke/vision}"
+if ! SMOKE_ROOT="$(mksmoke_root "$SMOKE_ROOT_RAW" "$PROJECT_ROOT")"; then
+  echo "[vision-smoke] invalid SMOKE_ROOT (${SMOKE_ROOT_RAW}); adjust VISION_SMOKE_ROOT." >&2
+  exit 1
+fi
 mkdir -p "$SMOKE_ROOT"
 
 prune_old_runs() {
@@ -17,7 +44,8 @@ prune_old_runs() {
   local keep="${VISION_SMOKE_KEEP_RECENT:-6}"
   local ttl="${VISION_SMOKE_RETENTION_SECS:-604800}"
   local removed
-  removed=$(python3 - "$root" "$keep" "$ttl" <<'PY') || return
+  removed=$(
+    python3 - "$root" "$keep" "$ttl" <<'PY'
 import shutil
 import sys
 import time
@@ -71,7 +99,7 @@ for index, (mtime, entry) in enumerate(entries):
 if removed:
     print(" ".join(removed))
 PY
-)
+) || return
   if [[ -n "$removed" ]]; then
     echo "[vision-smoke] pruned old runs: $removed" >&2
   fi
@@ -121,7 +149,32 @@ cleanup() {
     SERVER_PID=""
   fi
   if [[ -n "${STUB_SCRIPT:-}" ]]; then
-    pkill -f "$STUB_SCRIPT" 2>/dev/null || true
+    if command -v pkill >/dev/null 2>&1; then
+      pkill -f "$STUB_SCRIPT" 2>/dev/null || true
+    else
+      python3 - "$STUB_SCRIPT" <<'PY' 2>/dev/null || true
+import os
+import signal
+import subprocess
+import sys
+
+needle = sys.argv[1]
+try:
+    output = subprocess.check_output(["ps", "-eo", "pid,command"], text=True)
+except Exception:
+    sys.exit(0)
+for line in output.splitlines():
+    parts = line.strip().split(None, 1)
+    if len(parts) != 2:
+        continue
+    pid, command = parts
+    if needle in command:
+        try:
+            os.kill(int(pid), signal.SIGTERM)
+        except Exception:
+            pass
+PY
+    fi
   fi
   if [[ $status -ne 0 ]]; then
     echo "[vision-smoke] server log (tail)" >&2
