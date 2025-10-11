@@ -105,6 +105,19 @@ pub struct MemoryGcSummary {
     pub evicted_total: u64,
 }
 
+#[derive(Clone, Serialize, Default)]
+pub struct MemoryEmbedBackfillSummary {
+    pub total_updated: u64,
+    pub runs: u64,
+    pub last_batch: u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub last_at: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub last_error: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub pending_estimate: Option<u64>,
+}
+
 #[derive(Clone, Serialize)]
 pub struct MetricsSummary {
     pub events: EventsSummary,
@@ -112,6 +125,7 @@ pub struct MetricsSummary {
     pub tasks: BTreeMap<String, TaskStatus>,
     pub compatibility: CompatibilitySummary,
     pub memory_gc: MemoryGcSummary,
+    pub memory_embed_backfill: MemoryEmbedBackfillSummary,
     pub autonomy: AutonomySummary,
     pub modular: ModularSummary,
     pub worker: WorkerSummary,
@@ -264,6 +278,46 @@ impl MemoryGcCounters {
 }
 
 #[derive(Default)]
+struct MemoryEmbedBackfillCounters {
+    total_updated: u64,
+    runs: u64,
+    last_batch: u64,
+    last_at: Option<String>,
+    last_error: Option<String>,
+    pending_estimate: Option<u64>,
+}
+
+impl MemoryEmbedBackfillCounters {
+    fn record_success(&mut self, updated: u64, pending: Option<u64>) {
+        self.runs = self.runs.saturating_add(1);
+        self.total_updated = self.total_updated.saturating_add(updated);
+        self.last_batch = updated;
+        self.last_at = Some(now_rfc3339());
+        self.last_error = None;
+        if pending.is_some() {
+            self.pending_estimate = pending;
+        }
+    }
+
+    fn record_error(&mut self, err: &str) {
+        let truncated: String = err.chars().take(256).collect();
+        self.last_error = Some(truncated);
+        self.last_at = Some(now_rfc3339());
+    }
+
+    fn snapshot(&self) -> MemoryEmbedBackfillSummary {
+        MemoryEmbedBackfillSummary {
+            total_updated: self.total_updated,
+            runs: self.runs,
+            last_batch: self.last_batch,
+            last_at: self.last_at.clone(),
+            last_error: self.last_error.clone(),
+            pending_estimate: self.pending_estimate,
+        }
+    }
+}
+
+#[derive(Default)]
 struct ModularCounters {
     agents: BTreeMap<String, u64>,
     tools: BTreeMap<String, u64>,
@@ -344,6 +398,7 @@ pub struct Metrics {
     routes_version: AtomicU64,
     legacy_capsule_headers: AtomicU64,
     memory_gc: MemoryGcCounters,
+    memory_embed_backfill: Mutex<MemoryEmbedBackfillCounters>,
     autonomy_interrupts: Mutex<BTreeMap<String, u64>>,
     modular: Mutex<ModularCounters>,
     worker_configured: AtomicU64,
@@ -386,6 +441,7 @@ impl Metrics {
             routes_version: AtomicU64::new(0),
             legacy_capsule_headers: AtomicU64::new(0),
             memory_gc: MemoryGcCounters::default(),
+            memory_embed_backfill: Mutex::new(MemoryEmbedBackfillCounters::default()),
             autonomy_interrupts: Mutex::new(BTreeMap::new()),
             modular: Mutex::new(ModularCounters::default()),
             worker_configured: AtomicU64::new(0),
@@ -445,6 +501,11 @@ impl Metrics {
             legacy_capsule_headers: self.legacy_capsule_headers.load(Ordering::Relaxed),
         };
         let memory_gc = self.memory_gc.snapshot();
+        let memory_embed_backfill = self
+            .memory_embed_backfill
+            .lock()
+            .map(|counters| counters.snapshot())
+            .unwrap_or_default();
         let autonomy = self
             .autonomy_interrupts
             .lock()
@@ -470,6 +531,7 @@ impl Metrics {
             tasks,
             compatibility,
             memory_gc,
+            memory_embed_backfill,
             autonomy,
             modular,
             worker,
@@ -534,6 +596,18 @@ impl Metrics {
             return;
         }
         self.memory_gc.record(expired, evicted);
+    }
+
+    pub fn record_embed_backfill(&self, batch_updated: u64, pending: Option<u64>) {
+        if let Ok(mut counters) = self.memory_embed_backfill.lock() {
+            counters.record_success(batch_updated, pending);
+        }
+    }
+
+    pub fn record_embed_backfill_error(&self, err: &str) {
+        if let Ok(mut counters) = self.memory_embed_backfill.lock() {
+            counters.record_error(err);
+        }
     }
 
     pub fn event_kind_count(&self, kind: &str) -> u64 {
@@ -615,6 +689,7 @@ pub fn route_stats_snapshot(
         "tasks": summary.tasks,
         "cache": cache_stats_snapshot(cache),
         "memory_gc": summary.memory_gc,
+        "memory_embed_backfill": summary.memory_embed_backfill,
         "autonomy": summary.autonomy,
         "modular": summary.modular,
         "worker": summary.worker,

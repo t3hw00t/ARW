@@ -20,6 +20,7 @@ const SELECT_COLUMN_LIST: &[&str] = &[
     "tags",
     "hash",
     "embed",
+    "embed_blob",
     "embed_hint",
     "score",
     "prob",
@@ -214,6 +215,7 @@ impl<'c> MemoryStore<'c> {
               tags TEXT,
               hash TEXT,
               embed TEXT,
+              embed_blob BLOB,
               embed_hint TEXT,
               score REAL,
               prob REAL,
@@ -236,6 +238,8 @@ impl<'c> MemoryStore<'c> {
             CREATE INDEX IF NOT EXISTS idx_mem_key ON memory_records(key);
             CREATE INDEX IF NOT EXISTS idx_mem_hash ON memory_records(hash);
             CREATE INDEX IF NOT EXISTS idx_mem_agent_project ON memory_records(agent_id, project_id, updated DESC);
+            CREATE INDEX IF NOT EXISTS idx_mem_updated ON memory_records(updated DESC);
+            CREATE INDEX IF NOT EXISTS idx_mem_lane_updated ON memory_records(lane, updated DESC);
 
             CREATE VIRTUAL TABLE IF NOT EXISTS memory_fts USING fts5(
               id UNINDEXED,
@@ -258,6 +262,7 @@ impl<'c> MemoryStore<'c> {
             "#,
         )?;
         for ddl in [
+            "ALTER TABLE memory_records ADD COLUMN embed_blob BLOB",
             "ALTER TABLE memory_records ADD COLUMN embed_hint TEXT",
             "ALTER TABLE memory_records ADD COLUMN agent_id TEXT",
             "ALTER TABLE memory_records ADD COLUMN project_id TEXT",
@@ -271,6 +276,8 @@ impl<'c> MemoryStore<'c> {
             "ALTER TABLE memory_records ADD COLUMN source TEXT",
             "ALTER TABLE memory_records ADD COLUMN links TEXT",
             "ALTER TABLE memory_records ADD COLUMN extra TEXT",
+            "CREATE INDEX IF NOT EXISTS idx_mem_updated ON memory_records(updated DESC)",
+            "CREATE INDEX IF NOT EXISTS idx_mem_lane_updated ON memory_records(lane, updated DESC)",
         ] {
             let _ = conn.execute(ddl, []);
         }
@@ -288,10 +295,15 @@ impl<'c> MemoryStore<'c> {
     ) -> Result<(String, Value)> {
         let now = Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
         let value_s = serde_json::to_string(args.value).unwrap_or_else(|_| "{}".to_string());
-        let embed_s = args.embed.map(|v| {
-            let arr: Vec<String> = v.iter().map(|f| f.to_string()).collect();
-            format!("[{}]", arr.join(","))
-        });
+        let (embed_s, embed_blob) = if let Some(values) = args.embed {
+            let arr: Vec<String> = values.iter().map(|f| f.to_string()).collect();
+            (
+                Some(format!("[{}]", arr.join(","))),
+                Some(encode_embed_blob(values)),
+            )
+        } else {
+            (None, None)
+        };
         let hash = args.hash.clone().unwrap_or_else(|| args.compute_hash());
         let id = args
             .id
@@ -301,9 +313,9 @@ impl<'c> MemoryStore<'c> {
         let keywords_joined = args.keywords.map(|kw| kw.join(","));
         self.conn.execute(
             "INSERT OR REPLACE INTO memory_records(
-                id,lane,kind,key,value,tags,hash,embed,embed_hint,score,prob,
+                id,lane,kind,key,value,tags,hash,embed,embed_blob,embed_hint,score,prob,
                 agent_id,project_id,text,durability,trust,privacy,ttl_s,keywords,entities,source,links,extra,created,updated
-            ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             params![
                 id,
                 args.lane,
@@ -313,6 +325,7 @@ impl<'c> MemoryStore<'c> {
                 tags_joined.clone(),
                 hash.clone(),
                 embed_s,
+                embed_blob,
                 args.embed_hint,
                 args.score,
                 args.prob,
@@ -519,27 +532,37 @@ impl<'c> MemoryStore<'c> {
         };
         let mut scored: Vec<(f32, Value)> = Vec::new();
         while let Some(r) = rows.next()? {
-            let embed_s: Option<String> = r.get(7)?;
-            if let Some(embed_str) = embed_s {
-                if let Ok(embed_vec) = parse_embedding(&embed_str) {
-                    if embed_vec.len() == embed.len() && !embed_vec.is_empty() {
-                        if let Ok(sim) = cosine_similarity(embed, &embed_vec) {
-                            let mut item = row_to_value_full(r)?;
-                            if let Some(obj) = item.as_object_mut() {
-                                obj.insert("sim".into(), json!(sim));
-                            }
-                            scored.push((sim, item));
+            let embed_vec = match r.get::<_, Option<Vec<u8>>>(8)? {
+                Some(blob) => decode_embed_blob(&blob),
+                None => {
+                    let embed_s: Option<String> = r.get(7)?;
+                    embed_s.and_then(|s| parse_embedding(s.as_str()).ok())
+                }
+            };
+            if let Some(embed_vec) = embed_vec {
+                if embed_vec.len() == embed.len() && !embed_vec.is_empty() {
+                    if let Ok(sim) = cosine_similarity(embed, &embed_vec) {
+                        let mut item = row_to_value_full(r)?;
+                        if let Some(obj) = item.as_object_mut() {
+                            obj.insert("sim".into(), json!(sim));
                         }
+                        scored.push((sim, item));
                     }
                 }
             }
         }
+        let limit_usize = if limit <= 0 { 0 } else { limit as usize };
+        if limit_usize == 0 {
+            return Ok(Vec::new());
+        }
+        if scored.len() > limit_usize {
+            scored.select_nth_unstable_by(limit_usize.saturating_sub(1), |a, b| {
+                b.0.partial_cmp(&a.0).unwrap_or(Ordering::Equal)
+            });
+            scored.truncate(limit_usize);
+        }
         scored.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(Ordering::Equal));
-        Ok(scored
-            .into_iter()
-            .take(limit as usize)
-            .map(|(_, v)| v)
-            .collect())
+        Ok(scored.into_iter().map(|(_, v)| v).collect())
     }
 
     pub fn select_memory_hybrid(
@@ -659,12 +682,18 @@ impl<'c> MemoryStore<'c> {
             }
             scored.push((cscore, item));
         }
+        let limit_usize = if limit <= 0 { 0 } else { limit as usize };
+        if limit_usize == 0 {
+            return Ok(Vec::new());
+        }
+        if scored.len() > limit_usize {
+            scored.select_nth_unstable_by(limit_usize.saturating_sub(1), |a, b| {
+                b.0.partial_cmp(&a.0).unwrap_or(Ordering::Equal)
+            });
+            scored.truncate(limit_usize);
+        }
         scored.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(Ordering::Equal));
-        Ok(scored
-            .into_iter()
-            .take(limit as usize)
-            .map(|(_, v)| v)
-            .collect())
+        Ok(scored.into_iter().map(|(_, v)| v).collect())
     }
 
     pub fn expired_candidates(
@@ -680,7 +709,7 @@ impl<'c> MemoryStore<'c> {
              FROM memory_records \
              WHERE ttl_s IS NOT NULL AND ttl_s > 0 \
                AND (strftime('%s', created) + ttl_s) <= ?1 \
-             ORDER BY updated ASC \
+             ORDER BY updated ASC, id ASC \
              LIMIT ?2",
         )?;
         let mut rows = stmt.query(params![now.timestamp(), limit as i64])?;
@@ -733,7 +762,7 @@ impl<'c> MemoryStore<'c> {
             "SELECT id,lane,kind,project_id,agent_id,durability,ttl_s,created,updated \
              FROM memory_records \
              WHERE lane = ?1 \
-             ORDER BY updated ASC \
+             ORDER BY updated ASC, id ASC \
              LIMIT ?2",
         )?;
         let mut rows = stmt.query(params![lane, fetch as i64])?;
@@ -778,6 +807,57 @@ impl<'c> MemoryStore<'c> {
 
         tx.commit()?;
         Ok(total_deleted)
+    }
+
+    pub fn backfill_embed_blobs(&self, batch_limit: usize) -> Result<usize> {
+        let limit = batch_limit.clamp(1, 1024);
+        let mut to_update: Vec<(String, Vec<u8>)> = Vec::new();
+        {
+            let mut stmt = self.conn.prepare(
+                "SELECT id, embed \
+                 FROM memory_records \
+                 WHERE embed_blob IS NULL AND embed IS NOT NULL \
+                 ORDER BY updated ASC, id ASC \
+                 LIMIT ?1",
+            )?;
+            let mut rows = stmt.query(params![limit as i64])?;
+            while let Some(row) = rows.next()? {
+                let id: String = row.get(0)?;
+                let embed_s: String = row.get(1)?;
+                match parse_embedding(embed_s.as_str()) {
+                    Ok(vec) if !vec.is_empty() => {
+                        to_update.push((id, encode_embed_blob(&vec)));
+                    }
+                    Ok(_) | Err(_) => {}
+                }
+            }
+        }
+        if to_update.is_empty() {
+            return Ok(0);
+        }
+        let count = to_update.len();
+        let tx = self.conn.unchecked_transaction()?;
+        {
+            let mut stmt = tx.prepare("UPDATE memory_records SET embed_blob = ?1 WHERE id = ?2")?;
+            for (id, blob) in to_update.into_iter() {
+                let _ = stmt.execute(params![blob, id])?;
+            }
+        }
+        tx.commit()?;
+        Ok(count)
+    }
+
+    pub fn pending_embed_backfill(&self) -> Result<u64> {
+        let mut stmt = self.conn.prepare(
+            "SELECT COUNT(*) FROM memory_records WHERE embed_blob IS NULL AND embed IS NOT NULL",
+        )?;
+        let mut rows = stmt.query([])?;
+        if let Some(row) = rows.next()? {
+            let count: i64 = row.get(0)?;
+            Ok(count.max(0) as u64)
+        } else {
+            Ok(0)
+        }
     }
 
     pub fn insert_memory_link(
@@ -1011,69 +1091,72 @@ fn row_to_value_common(row: &rusqlite::Row<'_>) -> Result<Value> {
         map.insert("hash".into(), json!(hash));
     }
 
-    if let Some(embed) = row.get::<_, Option<String>>(7)? {
-        if let Ok(vec) = parse_embedding(&embed) {
-            if !vec.is_empty() {
-                map.insert("embed".into(), json!(vec));
-            }
+    let embed_vec = match row.get::<_, Option<Vec<u8>>>(8)? {
+        Some(blob) => decode_embed_blob(&blob),
+        None => {
+            let embed_s: Option<String> = row.get(7)?;
+            embed_s.and_then(|embed| parse_embedding(embed.as_str()).ok())
         }
+    };
+    if let Some(ref vec) = embed_vec {
+        map.insert("embed".into(), json!(vec));
     }
-    if let Some(hint) = row.get::<_, Option<String>>(8)? {
+    if let Some(hint) = row.get::<_, Option<String>>(9)? {
         map.insert("embed_hint".into(), json!(hint));
     }
 
-    if let Some(score) = row.get::<_, Option<f64>>(9)? {
+    if let Some(score) = row.get::<_, Option<f64>>(10)? {
         map.insert("score".into(), json!(score));
     }
-    if let Some(prob) = row.get::<_, Option<f64>>(10)? {
+    if let Some(prob) = row.get::<_, Option<f64>>(11)? {
         map.insert("prob".into(), json!(prob));
     }
 
-    if let Some(created) = row.get::<_, Option<String>>(11)? {
+    if let Some(created) = row.get::<_, Option<String>>(12)? {
         map.insert("created".into(), json!(created));
     }
-    map.insert("updated".into(), json!(row.get::<_, String>(12)?));
+    map.insert("updated".into(), json!(row.get::<_, String>(13)?));
 
-    if let Some(agent) = row.get::<_, Option<String>>(13)? {
+    if let Some(agent) = row.get::<_, Option<String>>(14)? {
         map.insert("agent_id".into(), json!(agent));
     }
-    if let Some(project) = row.get::<_, Option<String>>(14)? {
+    if let Some(project) = row.get::<_, Option<String>>(15)? {
         map.insert("project_id".into(), json!(project));
     }
-    if let Some(text) = row.get::<_, Option<String>>(15)? {
+    if let Some(text) = row.get::<_, Option<String>>(16)? {
         map.insert("text".into(), json!(text));
     }
-    if let Some(durability) = row.get::<_, Option<String>>(16)? {
+    if let Some(durability) = row.get::<_, Option<String>>(17)? {
         map.insert("durability".into(), json!(durability));
     }
-    if let Some(trust) = row.get::<_, Option<f64>>(17)? {
+    if let Some(trust) = row.get::<_, Option<f64>>(18)? {
         map.insert("trust".into(), json!(trust));
     }
-    if let Some(privacy) = row.get::<_, Option<String>>(18)? {
+    if let Some(privacy) = row.get::<_, Option<String>>(19)? {
         map.insert("privacy".into(), json!(privacy));
     }
-    if let Some(ttl) = row.get::<_, Option<i64>>(19)? {
+    if let Some(ttl) = row.get::<_, Option<i64>>(20)? {
         map.insert("ttl_s".into(), json!(ttl));
     }
 
     let keywords_value = row
-        .get::<_, Option<String>>(20)?
+        .get::<_, Option<String>>(21)?
         .map(|s| split_list(&s))
         .unwrap_or_default();
     if !keywords_value.is_empty() {
         map.insert("keywords".into(), Value::Array(keywords_value));
     }
 
-    if let Some(entities) = parse_json_string(row.get::<_, Option<String>>(21)?) {
+    if let Some(entities) = parse_json_string(row.get::<_, Option<String>>(22)?) {
         map.insert("entities".into(), entities);
     }
-    if let Some(source) = parse_json_string(row.get::<_, Option<String>>(22)?) {
+    if let Some(source) = parse_json_string(row.get::<_, Option<String>>(23)?) {
         map.insert("source".into(), source);
     }
-    if let Some(links) = parse_json_string(row.get::<_, Option<String>>(23)?) {
+    if let Some(links) = parse_json_string(row.get::<_, Option<String>>(24)?) {
         map.insert("links".into(), links);
     }
-    if let Some(extra) = parse_json_string(row.get::<_, Option<String>>(24)?) {
+    if let Some(extra) = parse_json_string(row.get::<_, Option<String>>(25)?) {
         map.insert("extra".into(), extra);
     }
 
@@ -1091,6 +1174,27 @@ fn split_list(input: &str) -> Vec<Value> {
 
 fn parse_json_string(input: Option<String>) -> Option<Value> {
     input.and_then(|s| serde_json::from_str::<Value>(&s).ok())
+}
+
+fn encode_embed_blob(embed: &[f32]) -> Vec<u8> {
+    let mut bytes = Vec::with_capacity(embed.len() * std::mem::size_of::<f32>());
+    for value in embed {
+        bytes.extend_from_slice(&value.to_le_bytes());
+    }
+    bytes
+}
+
+fn decode_embed_blob(blob: &[u8]) -> Option<Vec<f32>> {
+    if blob.len() % std::mem::size_of::<f32>() != 0 {
+        return None;
+    }
+    let mut out = Vec::with_capacity(blob.len() / std::mem::size_of::<f32>());
+    for chunk in blob.chunks_exact(std::mem::size_of::<f32>()) {
+        let mut buf = [0u8; std::mem::size_of::<f32>()];
+        buf.copy_from_slice(chunk);
+        out.push(f32::from_le_bytes(buf));
+    }
+    Some(out)
 }
 
 fn parse_embedding(embed_s: &str) -> Result<Vec<f32>> {
@@ -1400,5 +1504,36 @@ mod tests {
             }
             other => panic!("unexpected reason: {other:?}"),
         }
+    }
+
+    #[test]
+    fn backfill_embed_blobs_populates_missing_rows() {
+        let conn = setup_conn();
+        let store = MemoryStore::new(&conn);
+        let mut owned = make_owned(Some("embed-1"), "semantic", json!({"text": "vec"}));
+        owned.embed = Some(vec![0.5, -0.5, 0.25]);
+        let args = owned.to_args();
+        let id = store.insert_memory(&args).unwrap();
+        conn.execute(
+            "UPDATE memory_records SET embed_blob = NULL WHERE id = ?",
+            params![&id],
+        )
+        .unwrap();
+
+        let updated = store.backfill_embed_blobs(32).unwrap();
+        assert_eq!(updated, 1);
+
+        let blob: Option<Vec<u8>> = conn
+            .query_row(
+                "SELECT embed_blob FROM memory_records WHERE id = ?",
+                params![&id],
+                |row| row.get(0),
+            )
+            .unwrap();
+        let blob = blob.expect("embed_blob populated");
+        assert_eq!(blob.len(), 3 * std::mem::size_of::<f32>());
+
+        let second = store.backfill_embed_blobs(32).unwrap();
+        assert_eq!(second, 0);
     }
 }

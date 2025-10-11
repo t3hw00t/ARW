@@ -1,4 +1,5 @@
 use std::sync::Arc;
+use std::time::Duration;
 
 use arw_events::Bus;
 use arw_kernel::Kernel;
@@ -6,7 +7,7 @@ use arw_policy::PolicyEngine;
 use arw_wasi::ToolHost;
 use serde_json::json;
 use tokio::sync::Mutex;
-use tracing::{error, info, warn};
+use tracing::{debug, error, info, warn};
 #[cfg(not(test))]
 use utoipa::OpenApi;
 
@@ -159,6 +160,15 @@ pub(crate) async fn build() -> BootstrapOutput {
     crate::logic_units_builtin::seed(&state).await;
 
     background_tasks.merge(initialise_state(&state, kernel_enabled, smoke_mode).await);
+    if kernel_enabled {
+        if let Some(handle) = spawn_embed_backfill_task(
+            state.clone(),
+            embed_backfill_batch_from_env(),
+            embed_backfill_idle_from_env(),
+        ) {
+            background_tasks.push(handle);
+        }
+    }
     if !smoke_mode {
         background_tasks.extend(config_watcher::start(state.clone()));
         if let Some(handle) = identity_registry.watch() {
@@ -590,6 +600,77 @@ fn spawn_trust_store_watcher(state: AppState) -> TaskHandle {
             }
         }
     })
+}
+
+fn embed_backfill_batch_from_env() -> usize {
+    std::env::var("ARW_MEMORY_EMBED_BACKFILL_BATCH")
+        .ok()
+        .and_then(|s| s.parse::<usize>().ok())
+        .unwrap_or(256)
+}
+
+fn embed_backfill_idle_from_env() -> Duration {
+    std::env::var("ARW_MEMORY_EMBED_BACKFILL_IDLE_SEC")
+        .ok()
+        .and_then(|s| s.parse::<u64>().ok())
+        .filter(|&secs| secs > 0)
+        .map(Duration::from_secs)
+        .unwrap_or_else(|| Duration::from_secs(300))
+}
+
+fn spawn_embed_backfill_task(state: AppState, batch: usize, idle: Duration) -> Option<TaskHandle> {
+    if batch == 0 {
+        return None;
+    }
+    let metrics = state.metrics();
+    Some(crate::tasks::spawn_supervised(
+        "memory.embed_backfill",
+        move || {
+            let kernel = state.kernel().clone();
+            let metrics = metrics.clone();
+            async move {
+                loop {
+                    match kernel.backfill_embed_blobs_async(batch).await {
+                        Ok(updated) => {
+                            let pending = match kernel.pending_embed_backfill_async().await {
+                                Ok(value) => Some(value),
+                                Err(err) => {
+                                    warn!(
+                                        target: "arw::memory",
+                                        error = %err,
+                                        "memory embed backfill pending count failed"
+                                    );
+                                    None
+                                }
+                            };
+                            metrics.record_embed_backfill(updated as u64, pending);
+                            if updated == 0 {
+                                tokio::time::sleep(idle).await;
+                            } else {
+                                debug!(
+                                    target: "arw::memory",
+                                    %updated,
+                                    batch,
+                                    "backfilled memory embedding blobs"
+                                );
+                                tokio::time::sleep(Duration::from_millis(50)).await;
+                            }
+                        }
+                        Err(err) => {
+                            let err_msg = err.to_string();
+                            metrics.record_embed_backfill_error(&err_msg);
+                            warn!(
+                                target: "arw::memory",
+                                error = %err_msg,
+                                "memory embed backfill failed"
+                            );
+                            tokio::time::sleep(idle).await;
+                        }
+                    }
+                }
+            }
+        },
+    ))
 }
 
 #[cfg(test)]

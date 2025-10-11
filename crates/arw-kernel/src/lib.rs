@@ -1695,6 +1695,21 @@ impl Kernel {
         store.find_memory_by_hash(hash)
     }
 
+    pub fn backfill_embed_blobs(&self, batch_limit: usize) -> Result<usize> {
+        if batch_limit == 0 {
+            return Ok(0);
+        }
+        let conn = self.conn()?;
+        let store = MemoryStore::new(&conn);
+        store.backfill_embed_blobs(batch_limit)
+    }
+
+    pub fn pending_embed_backfill(&self) -> Result<u64> {
+        let conn = self.conn()?;
+        let store = MemoryStore::new(&conn);
+        store.pending_embed_backfill()
+    }
+
     pub fn expired_memory_candidates(
         &self,
         now: DateTime<Utc>,
@@ -2060,6 +2075,23 @@ impl Kernel {
         })
         .await
         .map_err(|e| anyhow!("join error: {}", e))?
+    }
+
+    pub async fn backfill_embed_blobs_async(&self, batch_limit: usize) -> Result<usize> {
+        if batch_limit == 0 {
+            return Ok(0);
+        }
+        let k = self.clone();
+        tokio::task::spawn_blocking(move || k.backfill_embed_blobs(batch_limit))
+            .await
+            .map_err(|e| anyhow!("join error: {}", e))?
+    }
+
+    pub async fn pending_embed_backfill_async(&self) -> Result<u64> {
+        let k = self.clone();
+        tokio::task::spawn_blocking(move || k.pending_embed_backfill())
+            .await
+            .map_err(|e| anyhow!("join error: {}", e))?
     }
 
     pub async fn list_memory_links_async(

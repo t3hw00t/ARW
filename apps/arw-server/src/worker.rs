@@ -24,10 +24,18 @@ pub(crate) fn desired_worker_count() -> usize {
         .and_then(|s| s.parse::<usize>().ok())
         .filter(|&n| n > 0)
         .unwrap_or_else(|| {
-            let fallback = std::thread::available_parallelism()
+            let parallelism = std::thread::available_parallelism()
                 .map(|n| n.get())
                 .unwrap_or(1);
-            fallback.clamp(1, 4)
+            let mut target = parallelism.saturating_mul(2).max(1).min(32);
+            if let Some(max_env) = std::env::var("ARW_WORKERS_MAX")
+                .ok()
+                .and_then(|s| s.parse::<usize>().ok())
+                .filter(|&n| n > 0)
+            {
+                target = target.min(max_env);
+            }
+            target
         })
 }
 

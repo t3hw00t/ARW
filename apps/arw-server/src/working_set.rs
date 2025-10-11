@@ -529,10 +529,11 @@ impl<'a> WorkingSetBuilder<'a> {
 
         self.ingest_world_beliefs(&spec, &mut candidates, &mut expanded_raw, observer);
 
-        let mut all_candidates: Vec<Candidate> = candidates.into_values().collect();
-        all_candidates.sort_by(|a, b| b.cscore.partial_cmp(&a.cscore).unwrap_or(Ordering::Equal));
-        let has_above = all_candidates.iter().any(|c| c.cscore >= spec.min_score);
-        let candidate_total = all_candidates.len();
+        let candidate_total = candidates.len();
+        let has_above = candidates
+            .values()
+            .any(|candidate| candidate.cscore >= spec.min_score);
+        let all_candidates: Vec<Candidate> = candidates.into_values().collect();
 
         let select_start = Instant::now();
         let (selected, lane_counts, slot_counts) =
