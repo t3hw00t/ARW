@@ -129,3 +129,4 @@ selectors = { path = "vendor/selectors" }
 display-info = { path = "vendor/display-info" }
 fxprof-processed-profile = { path = "vendor/fxprof-processed-profile" }
 metrics-exporter-opentelemetry = { path = "vendor/metrics-exporter-opentelemetry" }
+glib = { path = "vendor/glib" }

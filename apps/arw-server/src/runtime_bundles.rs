@@ -661,7 +661,7 @@ mod tests {
         std::fs::write(&metadata_path, serde_json::to_vec_pretty(&metadata)?)?;
         std::fs::write(bundle_dir.join("artifacts").join("llama.bin"), b"123456")?;
 
-        let installs = load_installations_from_root(root).await?;
+        let installs = load_installations_from_root(root, None).await?;
         assert_eq!(installs.len(), 1);
         let install = &installs[0];
         assert_eq!(install.id, "llama.cpp-preview/linux-x86_64-cpu".to_string());
@@ -695,7 +695,7 @@ mod tests {
         let tmp = tempdir().expect("tempdir");
         let bundle_dir = tmp.path().join("empty_bundle");
         std::fs::create_dir_all(&bundle_dir)?;
-        let installs = load_installations_from_root(tmp.path()).await?;
+        let installs = load_installations_from_root(tmp.path(), None).await?;
         assert!(installs.is_empty());
         Ok(())
     }

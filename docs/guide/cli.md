@@ -48,10 +48,16 @@ Basics
   - Offline audit: `arw-cli runtime bundles audit --require-signed` fails fast when any installed bundle lacks a trusted manifest; add `--dest` to point at alternate roots
   - Remote audit: `arw-cli runtime bundles audit --remote --base http://hub:8091 --require-signed` checks the running server and surfaces both the enforcement flag and the trusted/untrusted totals exposed by `/state/runtime/bundles`
   - Production guardrail: set `ARW_REQUIRE_SIGNED_BUNDLES=1` so `runtime bundles reload` refuses unsigned manifests; `runtime bundles list --remote --json` will report `signature_summary.enforced:true`
-  - Automation helper: `BASE_URL=https://hub scripts/verify_bundle_signatures.sh` wraps the remote audit and exits non-zero when signatures are missing—drop it into CI jobs.
-  - Prefer `just verify-signatures --base https://hub --token $ARW_ADMIN_TOKEN` for local checks; it delegates to the same script.
-  - Preview installs: add `--dry-run` to either command; use `--dest /custom/path` when staging bundles outside the default `<state_dir>/runtime/bundles`
-  - Scripting: add `--json`/`--pretty` to either command; remote mode fetches `/state/runtime/bundles` (including `installations`) from the running server.
+- Automation helper: `BASE_URL=https://hub scripts/verify_bundle_signatures.sh` wraps the remote audit and exits non-zero when signatures are missing—drop it into CI jobs.
+- Prefer `just verify-signatures --base https://hub --token $ARW_ADMIN_TOKEN` for local checks; it delegates to the same script.
+- Preview installs: add `--dry-run` to either command; use `--dest /custom/path` when staging bundles outside the default `<state_dir>/runtime/bundles`
+- Scripting: add `--json`/`--pretty` to either command; remote mode fetches `/state/runtime/bundles` (including `installations`) from the running server.
+
+Logic Units
+- Inspect local manifests: `arw-cli logic-units inspect examples/logic-units/retrieval-mmr-rrf.yaml --json` (works on single files or folders; validates against the schema before printing a summary)
+- Install to the kernel: `arw-cli logic-units install examples/logic-units/memory-hygiene.yaml --base http://127.0.0.1:8091 --admin-token $ARW_ADMIN_TOKEN` (pair with `--dry-run` to preview payloads and `--id` to override manifest ids at publish time)
+- List registered units: `arw-cli logic-units list --base http://127.0.0.1:8091 --admin-token $ARW_ADMIN_TOKEN --json --pretty`
+- Examples in `examples/logic-units/` stay schema-validated via `cargo test -p arw-cli logic_unit_examples_validate_against_schema`, so you can treat the gallery as a starting point for new packs.
 
 Admin Tokens
 - Generate, hash, and persist `ARW_ADMIN_TOKEN` values without committing secrets:

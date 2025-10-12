@@ -4,7 +4,7 @@ title: Backlog
 
 # Backlog
 
-Updated: 2025-10-11
+Updated: 2025-10-12
 Type: Reference
 
 This backlog captures concrete work items and near-term priorities. The Roadmap focuses on higher‑level themes and time horizons; see About → Roadmap for strategic context.
@@ -128,12 +128,12 @@ Standards & Docs
  - [Kernel] [t-250914231300-std02] Optional docs a11y check in CI (axe) — done
 
 Recipes MVP
-- [Pack: Collaboration] Finalize `spec/schemas/recipe_manifest.json`; add doc‑tests and example gallery entries
+- [Pack: Collaboration] Finalize `spec/schemas/recipe_manifest.json`; add doc‑tests and example gallery entries — in_progress (schema helper tests codified; new `runtime-health-auditor` gallery sample added)
 - [Pack: Collaboration] Gallery UI: install (copy folder), inspect manifest, launch, capture Episodes
 - [Pack: Collaboration] Permission prompts (ask/allow/never) with TTL leases; audit decisions as `Policy.*` events
 
 Logic Units (High Priority)
-- [Pack: Research] Manifest and schema (`spec/schemas/logic_unit_manifest.json`); example units under `examples/logic-units/`
+- [Pack: Research] Manifest and schema (`spec/schemas/logic_unit_manifest.json`); example units under `examples/logic-units/` — in_progress (schema + gallery sample validation now covered by `logic_unit_examples_validate_against_schema`)
 - [Pack: Research] Library UI: tabs (Installed/Experimental/Suggested/Archived), diff preview, apply/revert/promote
 - [Pack: Research] Agent Profile slots + compatibility checks (design + stubs)
 - [Pack: Research] A/B dry‑run pipeline wired to Evaluation Harness; per‑unit metrics panel
@@ -152,9 +152,9 @@ Last‑mile Structures
 - [Pack: Research] Scheduler/Governor: fair queues, preemption, backpressure, kill‑switch; policy‑aware
 
 Security & Admin
-- [Kernel] Admin auth hardening — hashed tokens + per‑token/IP sliding rate‑limit [t-250911230312-0863]
+- [Kernel] Admin auth hardening — hashed tokens + per-token/IP sliding rate-limit [t-250911230312-0863] — done (env hash support + ARW_ADMIN_RATE_LIMIT/ARW_ADMIN_RATE_WINDOW_SECS shipped across server + helpers)
 - [Kernel] Per‑route gating layers; slim global admin middleware [t-250911230252-9858] — done (all admin routes enforce `#[arw_gate]`; global middleware trimmed after hashed-token + per-token/IP throttling rollout)
-- [Kernel] Supply‑chain: upgrade GTK/GLib stack to >=0.20 (via wry/gtk/tao/tauri) to resolve RUSTSEC-2024-0429; remove temporary ignore in `deny.toml` and audit script guard once lockfile carries `glib >= 0.20.0`.
+- [Kernel] Supply‑chain: upgrade GTK/GLib stack to >=0.20 (via wry/gtk/tao/tauri) to resolve RUSTSEC-2024-0429; remove temporary ignore in `deny.toml` and audit script guard once lockfile carries `glib >= 0.20.0` — done (vendored glib 0.18.5 with VariantStrIter fix; audit ignores cleaned up).
 
 Federation MVP & Cluster Matrix (Preview)
 - [Kernel][Pack: Federation] Remote worker shim: standalone worker binary with lease/capsule propagation; gRPC/WebSocket transport — plan (Expert Alignment Plan §2A).

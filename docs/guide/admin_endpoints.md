@@ -56,15 +56,15 @@ Example (counts will vary as new endpoints land)
 ```
 
 !!! warning "Minimum Secure Setup"
-    - Set `ARW_ADMIN_TOKEN` and require it on all admin calls
+    - Set `ARW_ADMIN_TOKEN` (or `ARW_ADMIN_TOKEN_SHA256` for hashed secrets) and require it on all admin calls
     - Keep the service bound to `127.0.0.1` or place behind a TLS proxy
-    - Planned: per-token/IP rate limiter (`ARW_ADMIN_RL=limit/window`) — rely on admin tokens and default concurrency caps until the limiter lands
+    - Tune the per-token/IP rate limiter via `ARW_ADMIN_RATE_LIMIT` (requests) and `ARW_ADMIN_RATE_WINDOW_SECS` (seconds) — defaults to `60` requests per minute
     - Avoid `ARW_DEBUG=1` outside local development (debug mode is the only time admin endpoints are open without a token)
 
 ## Authentication
 
 - Header: `Authorization: Bearer <token>` **or** `X-ARW-Admin: <token>`.
-- Server toggle: set `ARW_ADMIN_TOKEN` (or `ARW_ADMIN_TOKEN_SHA256`) to the expected token; when neither variable is set the surface stays locked unless `ARW_DEBUG=1` is also present.
+- Server toggle: set `ARW_ADMIN_TOKEN` (or the hash-only `ARW_ADMIN_TOKEN_SHA256`) to the expected token; when neither variable is set the surface stays locked unless `ARW_DEBUG=1` is also present.
 - Mutating endpoints that require the token today include:
   - Configuration and schema helpers (`POST /patch/*`).
   - Connector lifecycle (`POST /connectors/register`, `POST /connectors/token`).

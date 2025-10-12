@@ -1,0 +1,40 @@
+id: runtime-health-auditor
+name: Runtime Health Auditor
+version: 0.1.0
+model:
+  preferred: "local:llama-3.1-8b"
+  fallback: "remote:gpt-4.1-mini"
+permissions:
+  state.read.runtime: allow
+  net.http:
+    mode: ask
+    ttl_secs: 900
+  console.log: never
+prompts:
+  system: |
+    You review managed runtimes and produce targeted remediation checklists.
+    Focus on restart pressure, accelerator mismatches, and missing consent annotations.
+  user_template: |
+    Operator notes:
+    {{notes}}
+tools:
+  - id: runtime.matrix.snapshot
+  - id: runtime.bundle.catalog
+  - id: summarize_text
+  - id: plan_actions
+workflows:
+  - step: "Gather runtime matrix snapshot"
+    tool: runtime.matrix.snapshot
+  - step: "Inspect bundle catalog state"
+    tool: runtime.bundle.catalog
+  - step: "Summarize findings"
+    tool: summarize_text
+  - step: "Draft remediation plan"
+    tool: plan_actions
+tags:
+  - runtime
+  - operations
+  - audits
+notes: >
+  Surfaces warnings when restart budgets are exhausted, accelerator claims are unknown,
+  or consent metadata is missing for audio/vision bundles.

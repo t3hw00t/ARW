@@ -75,8 +75,8 @@ run_cargo_audit() {
   if ! need_tool cargo-audit; then warn "Skipping cargo-audit"; return 0; fi
   info "cargo audit (this updates advisory DB as needed)"
   local args=()
-  # Temporary ignore for glib<0.20 (RUSTSEC-2024-0429) — removed automatically when resolved
-  if ! glib_version_ge_020; then args+=(--ignore RUSTSEC-2024-0429); fi
+  # Temporary ignore for glib<0.20 (RUSTSEC-2024-0429) — removed automatically when patched
+  if ! glib_rustsec_0429_resolved; then args+=(--ignore RUSTSEC-2024-0429); fi
   (cd "$ROOT" && cargo audit "${args[@]}" || true)
 }
 
@@ -102,11 +102,20 @@ glib_version_ge_020() {
   return 1
 }
 
+glib_rustsec_0429_resolved() {
+  if glib_version_ge_020; then return 0; fi
+  local vendor_meta="$ROOT/vendor/glib/Cargo.toml"
+  if [[ -f "$vendor_meta" ]] && rg -q 'patched_rustsec_2024_0429\s*=\s*true' "$vendor_meta"; then
+    return 0
+  fi
+  return 1
+}
+
 auto_clean_ignored_advisory() {
   local deny="$ROOT/deny.toml"
   [[ -f "$deny" ]] || return 0
-  if glib_version_ge_020 && rg -q "RUSTSEC-2024-0429" "$deny"; then
-    info "glib >= 0.20 detected. Removing temporary ignore RUSTSEC-2024-0429 from deny.toml"
+  if glib_rustsec_0429_resolved && rg -q "RUSTSEC-2024-0429" "$deny"; then
+    info "glib patched. Removing temporary ignore RUSTSEC-2024-0429 from deny.toml"
     # Remove the line containing the advisory; preserve surrounding formatting
     tmp=$(mktemp)
     awk 'index($0,"RUSTSEC-2024-0429")==0 {print $0}' "$deny" > "$tmp" && mv "$tmp" "$deny"
@@ -166,7 +175,7 @@ if [[ $STRICT -eq 1 ]]; then
   strict_rc=0
   if [[ $RUN_AUDIT -eq 1 ]]; then
     audit_args=()
-    $(! glib_version_ge_020) && audit_args+=(--ignore RUSTSEC-2024-0429)
+    $(! glib_rustsec_0429_resolved) && audit_args+=(--ignore RUSTSEC-2024-0429)
     (cd "$ROOT" && cargo audit "${audit_args[@]}") || strict_rc=1
   fi
   if [[ $RUN_DENY -eq 1 ]]; then (cd "$ROOT" && cargo deny check advisories bans sources licenses) || strict_rc=1; fi

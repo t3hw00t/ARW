@@ -31,6 +31,7 @@ Additional samples
 - [examples/recipes/incident-reviewer.yaml](https://github.com/t3hw00t/ARW/blob/main/examples/recipes/incident-reviewer.yaml) — SRE post-incident workflow with TTL-limited file access and multi-step outline generation.
 - [examples/recipes/research-digest.yaml](https://github.com/t3hw00t/ARW/blob/main/examples/recipes/research-digest.yaml) — Weekly research digest with feed aggregation, clustering, and project-specific delivery cues.
 - [examples/recipes/web-browsing.yaml](https://github.com/t3hw00t/ARW/blob/main/examples/recipes/web-browsing.yaml) — Out-of-the-box browsing assistant that fetches pages with `http.fetch` and summarizes results.
+- [examples/recipes/runtime-health-auditor.yaml](https://github.com/t3hw00t/ARW/blob/main/examples/recipes/runtime-health-auditor.yaml) — Runtime matrix auditor that highlights restart pressure, missing consent metadata, and bundle catalog drift.
 
 CLI helpers
 - `arw-cli recipes inspect <path>` validates a manifest (file or folder) and prints a readable summary.

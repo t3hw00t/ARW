@@ -1,11 +1,7 @@
 [advisories]
 # cargo-deny defaults to denying advisories; scope unmaintained to direct deps
 unmaintained = "workspace"
-ignore = [
-  # TEMP: launcher pulls gtk/glib via wry; glib<0.20 hits RUSTSEC-2024-0429.
-  # Remove when Cargo.lock resolves to glib >= 0.20.0 (audit.sh auto-cleans).
-  "RUSTSEC-2024-0429",
-]
+ignore = []
 
 [licenses]
 allow = [

@@ -840,10 +840,149 @@ mod tests {
         response::IntoResponse,
     };
     use jsonschema::{Draft, JSONSchema};
+    use once_cell::sync::Lazy;
     use serde_json::json;
     use std::collections::HashMap;
-    use std::path::PathBuf;
+    use std::path::{Path as FsPath, PathBuf};
+    use std::sync::Mutex;
     use tempfile::tempdir;
+
+    static CWD_LOCK: Lazy<Mutex<()>> = Lazy::new(|| Mutex::new(()));
+
+    struct CwdGuard {
+        _lock: std::sync::MutexGuard<'static, ()>,
+        original: PathBuf,
+    }
+
+    impl CwdGuard {
+        fn set_current_dir(path: &FsPath) -> Self {
+            let lock = CWD_LOCK.lock().unwrap();
+            let original = std::env::current_dir().expect("current dir");
+            std::env::set_current_dir(path).expect("set current dir");
+            Self {
+                _lock: lock,
+                original,
+            }
+        }
+    }
+
+    impl Drop for CwdGuard {
+        fn drop(&mut self) {
+            std::env::set_current_dir(&self.original).expect("restore current dir");
+        }
+    }
+
+    #[test]
+    fn dot_to_pointer_encodes_segments() {
+        assert_eq!(dot_to_pointer(""), "/");
+        assert_eq!(dot_to_pointer("recipes.main"), "/recipes/main");
+        assert_eq!(dot_to_pointer("a~b/c"), "/a~0b~1c");
+    }
+
+    #[test]
+    fn ensure_and_get_by_dot_roundtrip() {
+        let mut value = json!({});
+        {
+            let leaf = ensure_path(&mut value, "foo.bar.baz");
+            *leaf = json!(42);
+        }
+        assert_eq!(
+            get_by_dot(&value, "foo.bar.baz")
+                .and_then(|v| v.as_i64())
+                .unwrap(),
+            42
+        );
+        assert!(get_by_dot(&value, "foo.bar.missing").is_none());
+    }
+
+    #[test]
+    fn merge_values_overwrites_scalars_and_merges_objects() {
+        let mut dst = json!({
+            "a": {"b": 1, "c": 2},
+            "d": 5
+        });
+        let add = json!({
+            "a": {"c": 3, "e": 4},
+            "d": {"nested": true}
+        });
+        merge_values(&mut dst, &add);
+        assert_eq!(
+            dst,
+            json!({
+                "a": {"b": 1, "c": 3, "e": 4},
+                "d": {"nested": true}
+            })
+        );
+    }
+
+    #[test]
+    fn validate_patch_value_accepts_expected_shape() {
+        let payload = json!({
+            "id": "cfg-1",
+            "dry_run": true,
+            "patches": [
+                {"target": "recipes.agent", "op": "merge", "value": {"enabled": true}},
+                {"target": "egress.settings", "op": "set", "value": {"proxy_enable": false}}
+            ]
+        });
+        assert!(validate_patch_value(&payload).is_ok());
+    }
+
+    #[test]
+    fn validate_patch_value_rejects_unknown_ops() {
+        let payload = json!({
+            "patches": [
+                {"target": "recipes.agent", "op": "remove", "value": {}}
+            ]
+        });
+        let errors = validate_patch_value(&payload).expect_err("invalid op should fail");
+        assert!(
+            errors.iter().any(|err| {
+                err.get("error")
+                    .and_then(Value::as_str)
+                    .map(|msg| msg.contains("not one of"))
+                    .unwrap_or(false)
+            }),
+            "expected enum validation error, got {errors:?}"
+        );
+    }
+
+    #[test]
+    fn infer_schema_uses_env_map_pointer_prefix() {
+        let mut env = crate::test_support::env::guard();
+        let tmp = tempdir().expect("tempdir");
+        let schema_path = tmp.path().join("schema.json");
+        std::fs::write(&schema_path, "{}").expect("schema file");
+        let map_path = tmp.path().join("map.json");
+        let map_payload = json!({
+            "custom": {
+                "schema_ref": schema_path.to_string_lossy(),
+                "pointer_prefix": "custom"
+            }
+        });
+        std::fs::write(&map_path, map_payload.to_string()).expect("map file");
+        env.set("ARW_SCHEMA_MAP", map_path.to_string_lossy());
+
+        let (schema, pointer) =
+            infer_schema_for_target("custom.section").expect("schema inference succeeds");
+        assert_eq!(schema, schema_path.to_string_lossy());
+        assert_eq!(pointer, "custom.section");
+    }
+
+    #[test]
+    fn infer_schema_fallback_handles_known_targets() {
+        let mut env = crate::test_support::env::guard();
+        env.remove("ARW_SCHEMA_MAP");
+        let workspace_root = FsPath::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../")
+            .canonicalize()
+            .unwrap();
+        let _cwd_guard = CwdGuard::set_current_dir(&workspace_root);
+        let (schema, pointer) =
+            infer_schema_for_target("recipes.new").expect("recipes schema available");
+        assert!(schema.ends_with("spec/schemas/recipe_manifest.json"));
+        assert_eq!(pointer, "recipes.new");
+    }
 
     fn admin_headers() -> HeaderMap {
         let mut headers = HeaderMap::new();

@@ -990,8 +990,8 @@ function Security-Tips {
   Banner 'Security Tips' 'Protect admin endpoints'
   Write-Host '  • Sensitive endpoints: /admin/debug, /probe, /admin/memory*, /state/memory*, /models/*, /governor/*, /introspect/*, /chat/*, /feedback/*'
   Write-Host '  • In development, ARW_DEBUG=1 is convenient; disable it otherwise.'
-  Write-Host '  • Set ARW_ADMIN_TOKEN and send header: X-ARW-Admin: <token>'
-  Write-Host '  • Admin rate limiting (ARW_ADMIN_RL) arrives in a future release; today rely on ARW_ADMIN_TOKEN and sensible ARW_HTTP_MAX_CONC values.'
+  Write-Host '  • Set ARW_ADMIN_TOKEN (or hash via ARW_ADMIN_TOKEN_SHA256) and send header: X-ARW-Admin: <token>'
+  Write-Host '  • Admin rate limiting ships: adjust ARW_ADMIN_RATE_LIMIT (requests) and ARW_ADMIN_RATE_WINDOW_SECS (seconds). Defaults: 60 requests per minute per token/IP.'
   Write-Host '  • Consider a reverse proxy with TLS for multi-user environments.'
   Read-Host 'Continue' | Out-Null
 }
