@@ -1,7 +1,7 @@
 {
   "type": "reference",
-  "total_groups": 13,
-  "total_keys": 48,
+  "total_groups": 12,
+  "total_keys": 47,
   "groups": [
     {
       "name": "Orchestration",
@@ -60,18 +60,6 @@
           "title": "Memory Limit Update",
           "summary": "Adjust the allowed memory quota for a scope.",
           "stability": "stable"
-        }
-      ]
-    },
-    {
-      "name": "Runtime Supervisor",
-      "summary": "Managed runtime orchestration and lifecycle controls.",
-      "keys": [
-        {
-          "id": "runtime:manage",
-          "title": "Runtime Manage",
-          "summary": "Start, restore, or stop managed runtimes via the supervisor.",
-          "stability": "beta"
         }
       ]
     },
@@ -370,5 +358,5 @@
       ]
     }
   ],
-  "generated": "2025-10-11 22:51 UTC"
+  "generated": "2025-10-12 17:47 UTC"
 }
