@@ -762,6 +762,53 @@ mod tests {
             .await
     }
 
+    async fn policy_simulate_denies_action(action: &str) {
+        let temp = tempdir().expect("tempdir");
+        let mut ctx = test_support::begin_state_env(temp.path());
+        ctx.env.remove("ARW_POLICY_FILE");
+        ctx.env.set("ARW_SECURITY_POSTURE", "standard");
+
+        let state = build_state(temp.path(), &mut ctx.env).await;
+        let app = Router::new()
+            .route("/policy/simulate", post(policy_simulate))
+            .with_state(state);
+
+        let request = Request::builder()
+            .method("POST")
+            .uri("/policy/simulate")
+            .header("content-type", "application/json")
+            .body(Body::from(format!(r#"{{"action":"{action}"}}"#)))
+            .expect("request");
+
+        let response = app.oneshot(request).await.expect("router response");
+        assert_eq!(response.status(), StatusCode::OK);
+        let bytes = to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("body bytes");
+        let decision: Value = serde_json::from_slice(&bytes).expect("decision json");
+        assert_eq!(decision.get("allow"), Some(&Value::Bool(false)));
+        assert_eq!(
+            decision.get("require_capability").and_then(Value::as_str),
+            Some("runtime:manage")
+        );
+        let reason = decision
+            .get("explain")
+            .and_then(|v| v.get("reason"))
+            .and_then(Value::as_str)
+            .unwrap_or_default();
+        assert_eq!(reason, "lease_required");
+    }
+
+    #[tokio::test]
+    async fn policy_simulate_flags_runtime_restore_capability_requirement() {
+        policy_simulate_denies_action("runtime.supervisor.restore").await;
+    }
+
+    #[tokio::test]
+    async fn policy_simulate_flags_runtime_shutdown_capability_requirement() {
+        policy_simulate_denies_action("runtime.supervisor.shutdown").await;
+    }
+
     #[tokio::test]
     async fn guardrail_apply_event_carries_correlation_metadata() {
         let temp = tempdir().expect("tempdir");

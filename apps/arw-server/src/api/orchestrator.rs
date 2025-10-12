@@ -705,3 +705,446 @@ pub async fn orchestrator_runtime_shutdown(
             .into_response(),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::runtime_supervisor::ManagedRuntimeDefinition;
+    use crate::test_support;
+    use arw_runtime::{
+        AdapterError, PrepareContext, PreparedRuntime, RuntimeAdapter, RuntimeDescriptor,
+        RuntimeHandle, RuntimeHealthReport, RuntimeModality, RuntimeState, RuntimeStatus,
+    };
+    use async_trait::async_trait;
+    use axum::body::{to_bytes, Body};
+    use axum::http::{Request, StatusCode};
+    use axum::routing::post;
+    use axum::Router;
+    use chrono::{Duration as ChronoDuration, SecondsFormat, Utc};
+    use serde_json::Value;
+    use std::sync::Arc;
+    use tempfile::tempdir;
+    use tower::ServiceExt;
+
+    #[derive(Debug)]
+    struct StubRuntimeAdapter;
+
+    #[async_trait]
+    impl RuntimeAdapter for StubRuntimeAdapter {
+        fn id(&self) -> &'static str {
+            "stub.test"
+        }
+
+        async fn prepare(&self, ctx: PrepareContext<'_>) -> Result<PreparedRuntime, AdapterError> {
+            Ok(PreparedRuntime {
+                command: "stub".to_string(),
+                args: Vec::new(),
+                runtime_id: Some(ctx.descriptor.id.clone()),
+            })
+        }
+
+        async fn launch(&self, prepared: PreparedRuntime) -> Result<RuntimeHandle, AdapterError> {
+            Ok(RuntimeHandle {
+                id: prepared
+                    .runtime_id
+                    .unwrap_or_else(|| "stub-runtime".to_string()),
+                pid: None,
+            })
+        }
+
+        async fn shutdown(&self, _handle: RuntimeHandle) -> Result<(), AdapterError> {
+            Ok(())
+        }
+
+        async fn health(
+            &self,
+            handle: &RuntimeHandle,
+        ) -> Result<RuntimeHealthReport, AdapterError> {
+            let status =
+                RuntimeStatus::new(handle.id.clone(), RuntimeState::Ready).with_summary("Ready");
+            Ok(RuntimeHealthReport { status })
+        }
+    }
+
+    async fn install_runtime_with_adapter(
+        supervisor: Arc<crate::runtime_supervisor::RuntimeSupervisor>,
+        runtime_id: &str,
+        adapter: Arc<dyn RuntimeAdapter>,
+    ) {
+        let adapter_id = adapter.id().to_string();
+        supervisor.register_adapter(adapter).await;
+        let mut descriptor = RuntimeDescriptor::new(runtime_id, adapter_id.clone());
+        descriptor.modalities.push(RuntimeModality::Text);
+        supervisor
+            .install_definition(ManagedRuntimeDefinition::new(
+                descriptor,
+                adapter_id,
+                false,
+                None,
+                Some("tests".into()),
+            ))
+            .await
+            .expect("install runtime definition");
+    }
+
+    async fn install_stub_runtime(
+        supervisor: Arc<crate::runtime_supervisor::RuntimeSupervisor>,
+        runtime_id: &str,
+    ) {
+        install_runtime_with_adapter(supervisor, runtime_id, Arc::new(StubRuntimeAdapter)).await;
+    }
+
+    #[derive(Debug)]
+    struct FailingRuntimeAdapter;
+
+    #[async_trait]
+    impl RuntimeAdapter for FailingRuntimeAdapter {
+        fn id(&self) -> &'static str {
+            "stub.fail"
+        }
+
+        async fn prepare(&self, ctx: PrepareContext<'_>) -> Result<PreparedRuntime, AdapterError> {
+            Ok(PreparedRuntime {
+                command: "stub-fail".to_string(),
+                args: Vec::new(),
+                runtime_id: Some(ctx.descriptor.id.clone()),
+            })
+        }
+
+        async fn launch(&self, _prepared: PreparedRuntime) -> Result<RuntimeHandle, AdapterError> {
+            Err(AdapterError::Launch("stub launch failed".into()))
+        }
+
+        async fn shutdown(&self, _handle: RuntimeHandle) -> Result<(), AdapterError> {
+            Ok(())
+        }
+
+        async fn health(
+            &self,
+            handle: &RuntimeHandle,
+        ) -> Result<RuntimeHealthReport, AdapterError> {
+            let status =
+                RuntimeStatus::new(handle.id.clone(), RuntimeState::Ready).with_summary("Ready");
+            Ok(RuntimeHealthReport { status })
+        }
+    }
+
+    #[tokio::test]
+    async fn runtime_restore_denied_without_runtime_manage_lease() {
+        let temp = tempdir().expect("tempdir");
+        let mut ctx = test_support::begin_state_env(temp.path());
+        ctx.env.set("ARW_SECURITY_POSTURE", "standard");
+        ctx.env.set("ARW_ADMIN_TOKEN", "secret-token");
+
+        let state = test_support::build_state(temp.path(), &mut ctx.env).await;
+        let app = Router::new()
+            .route(
+                "/orchestrator/runtimes/{id}/restore",
+                post(orchestrator_runtime_restore),
+            )
+            .with_state(state);
+
+        let request = Request::builder()
+            .method("POST")
+            .uri("/orchestrator/runtimes/runtime-test/restore")
+            .header("content-type", "application/json")
+            .header("x-arw-admin", "secret-token")
+            .body(Body::from("{}"))
+            .expect("request");
+
+        let response = app.oneshot(request).await.expect("router response");
+        assert_eq!(response.status(), StatusCode::FORBIDDEN);
+        let bytes = to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("response bytes");
+        let payload: Value = serde_json::from_slice(&bytes).expect("json payload");
+        assert_eq!(
+            payload.get("require_capability").and_then(Value::as_str),
+            Some("runtime:manage")
+        );
+        assert_eq!(
+            payload.get("detail").and_then(Value::as_str),
+            Some("Denied (lease required)")
+        );
+    }
+
+    #[tokio::test]
+    async fn runtime_restore_allowed_when_runtime_manage_lease_present() {
+        let temp = tempdir().expect("tempdir");
+        let mut ctx = test_support::begin_state_env(temp.path());
+        ctx.env.set("ARW_SECURITY_POSTURE", "standard");
+        ctx.env.set("ARW_ADMIN_TOKEN", "secret-token");
+
+        let state = test_support::build_state(temp.path(), &mut ctx.env).await;
+        let supervisor = state.runtime_supervisor();
+        install_stub_runtime(supervisor.clone(), "runtime-test").await;
+        let ttl =
+            (Utc::now() + ChronoDuration::minutes(30)).to_rfc3339_opts(SecondsFormat::Millis, true);
+        state
+            .kernel()
+            .insert_lease(
+                "lease-runtime-manage",
+                "local",
+                "runtime:manage",
+                None,
+                &ttl,
+                None,
+                None,
+            )
+            .expect("insert lease");
+
+        let app = Router::new()
+            .route(
+                "/orchestrator/runtimes/{id}/restore",
+                post(orchestrator_runtime_restore),
+            )
+            .with_state(state.clone());
+
+        let request = Request::builder()
+            .method("POST")
+            .uri("/orchestrator/runtimes/runtime-test/restore")
+            .header("content-type", "application/json")
+            .header("x-arw-admin", "secret-token")
+            .body(Body::from("{}"))
+            .expect("request");
+
+        let response = app.oneshot(request).await.expect("router response");
+        assert_eq!(response.status(), StatusCode::ACCEPTED);
+        let bytes = to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("response bytes");
+        let payload: Value = serde_json::from_slice(&bytes).expect("json payload");
+        assert_eq!(payload.get("ok"), Some(&Value::Bool(true)));
+        assert_eq!(
+            payload.get("runtime_id").and_then(Value::as_str),
+            Some("runtime-test")
+        );
+    }
+
+    #[tokio::test]
+    async fn runtime_restore_denied_when_restart_budget_exhausted() {
+        let temp = tempdir().expect("tempdir");
+        let mut ctx = test_support::begin_state_env(temp.path());
+        ctx.env.set("ARW_SECURITY_POSTURE", "standard");
+        ctx.env.set("ARW_ADMIN_TOKEN", "secret-token");
+        ctx.env.set("ARW_RUNTIME_RESTART_MAX", "1");
+        ctx.env.set("ARW_RUNTIME_RESTART_WINDOW_SEC", "3600");
+
+        let state = test_support::build_state(temp.path(), &mut ctx.env).await;
+        install_stub_runtime(state.runtime_supervisor(), "runtime-test").await;
+
+        let ttl =
+            (Utc::now() + ChronoDuration::minutes(30)).to_rfc3339_opts(SecondsFormat::Millis, true);
+        state
+            .kernel()
+            .insert_lease(
+                "lease-runtime-manage",
+                "local",
+                "runtime:manage",
+                None,
+                &ttl,
+                None,
+                None,
+            )
+            .expect("insert lease");
+
+        fn build_request() -> Request<Body> {
+            Request::builder()
+                .method("POST")
+                .uri("/orchestrator/runtimes/runtime-test/restore")
+                .header("content-type", "application/json")
+                .header("x-arw-admin", "secret-token")
+                .body(Body::from("{}"))
+                .expect("request")
+        }
+
+        let response_ok = Router::new()
+            .route(
+                "/orchestrator/runtimes/{id}/restore",
+                post(orchestrator_runtime_restore),
+            )
+            .with_state(state.clone())
+            .oneshot(build_request())
+            .await
+            .expect("router response");
+        assert_eq!(response_ok.status(), StatusCode::ACCEPTED);
+
+        let response_budget = Router::new()
+            .route(
+                "/orchestrator/runtimes/{id}/restore",
+                post(orchestrator_runtime_restore),
+            )
+            .with_state(state.clone())
+            .oneshot(build_request())
+            .await
+            .expect("router response");
+        assert_eq!(response_budget.status(), StatusCode::TOO_MANY_REQUESTS);
+        let bytes = to_bytes(response_budget.into_body(), usize::MAX)
+            .await
+            .expect("response bytes");
+        let payload: Value = serde_json::from_slice(&bytes).expect("json payload");
+        assert_eq!(payload.get("ok"), Some(&Value::Bool(false)));
+        assert_eq!(
+            payload.get("reason").and_then(Value::as_str),
+            Some("Restart budget exhausted")
+        );
+        let remaining = payload
+            .get("restart_budget")
+            .and_then(|v| v.get("remaining"))
+            .and_then(Value::as_u64);
+        assert_eq!(remaining, Some(0));
+    }
+
+    #[tokio::test]
+    async fn runtime_restore_returns_error_when_launch_fails() {
+        let temp = tempdir().expect("tempdir");
+        let mut ctx = test_support::begin_state_env(temp.path());
+        ctx.env.set("ARW_SECURITY_POSTURE", "standard");
+        ctx.env.set("ARW_ADMIN_TOKEN", "secret-token");
+
+        let state = test_support::build_state(temp.path(), &mut ctx.env).await;
+        install_runtime_with_adapter(
+            state.runtime_supervisor(),
+            "runtime-fail",
+            Arc::new(FailingRuntimeAdapter),
+        )
+        .await;
+
+        let ttl =
+            (Utc::now() + ChronoDuration::minutes(30)).to_rfc3339_opts(SecondsFormat::Millis, true);
+        state
+            .kernel()
+            .insert_lease(
+                "lease-runtime-manage",
+                "local",
+                "runtime:manage",
+                None,
+                &ttl,
+                None,
+                None,
+            )
+            .expect("insert lease");
+
+        let app = Router::new()
+            .route(
+                "/orchestrator/runtimes/{id}/restore",
+                post(orchestrator_runtime_restore),
+            )
+            .with_state(state);
+
+        let request = Request::builder()
+            .method("POST")
+            .uri("/orchestrator/runtimes/runtime-fail/restore")
+            .header("content-type", "application/json")
+            .header("x-arw-admin", "secret-token")
+            .body(Body::from("{}"))
+            .expect("request");
+
+        let response = app.oneshot(request).await.expect("router response");
+        assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+        let bytes = to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("response bytes");
+        let payload: Value = serde_json::from_slice(&bytes).expect("json payload");
+        assert_eq!(payload.get("ok"), Some(&Value::Bool(false)));
+        assert_eq!(
+            payload.get("reason").and_then(Value::as_str),
+            Some("launch failure: stub launch failed")
+        );
+    }
+
+    #[tokio::test]
+    async fn runtime_shutdown_denied_without_runtime_manage_lease() {
+        let temp = tempdir().expect("tempdir");
+        let mut ctx = test_support::begin_state_env(temp.path());
+        ctx.env.set("ARW_SECURITY_POSTURE", "standard");
+        ctx.env.set("ARW_ADMIN_TOKEN", "secret-token");
+
+        let state = test_support::build_state(temp.path(), &mut ctx.env).await;
+        install_stub_runtime(state.runtime_supervisor(), "runtime-test").await;
+
+        let app = Router::new()
+            .route(
+                "/orchestrator/runtimes/{id}/shutdown",
+                post(orchestrator_runtime_shutdown),
+            )
+            .with_state(state);
+
+        let request = Request::builder()
+            .method("POST")
+            .uri("/orchestrator/runtimes/runtime-test/shutdown")
+            .header("content-type", "application/json")
+            .header("x-arw-admin", "secret-token")
+            .body(Body::from("{}"))
+            .expect("request");
+
+        let response = app.oneshot(request).await.expect("router response");
+        assert_eq!(response.status(), StatusCode::FORBIDDEN);
+        let bytes = to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("response bytes");
+        let payload: Value = serde_json::from_slice(&bytes).expect("json payload");
+        assert_eq!(
+            payload.get("require_capability").and_then(Value::as_str),
+            Some("runtime:manage")
+        );
+        assert_eq!(
+            payload.get("detail").and_then(Value::as_str),
+            Some("Denied (lease required)")
+        );
+    }
+
+    #[tokio::test]
+    async fn runtime_shutdown_allowed_when_runtime_manage_lease_present() {
+        let temp = tempdir().expect("tempdir");
+        let mut ctx = test_support::begin_state_env(temp.path());
+        ctx.env.set("ARW_SECURITY_POSTURE", "standard");
+        ctx.env.set("ARW_ADMIN_TOKEN", "secret-token");
+
+        let state = test_support::build_state(temp.path(), &mut ctx.env).await;
+        install_stub_runtime(state.runtime_supervisor(), "runtime-test").await;
+
+        let ttl =
+            (Utc::now() + ChronoDuration::minutes(30)).to_rfc3339_opts(SecondsFormat::Millis, true);
+        state
+            .kernel()
+            .insert_lease(
+                "lease-runtime-manage",
+                "local",
+                "runtime:manage",
+                None,
+                &ttl,
+                None,
+                None,
+            )
+            .expect("insert lease");
+
+        let app = Router::new()
+            .route(
+                "/orchestrator/runtimes/{id}/shutdown",
+                post(orchestrator_runtime_shutdown),
+            )
+            .with_state(state.clone());
+
+        let request = Request::builder()
+            .method("POST")
+            .uri("/orchestrator/runtimes/runtime-test/shutdown")
+            .header("content-type", "application/json")
+            .header("x-arw-admin", "secret-token")
+            .body(Body::from("{}"))
+            .expect("request");
+
+        let response = app.oneshot(request).await.expect("router response");
+        assert_eq!(response.status(), StatusCode::ACCEPTED);
+        let bytes = to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("response bytes");
+        let payload: Value = serde_json::from_slice(&bytes).expect("json payload");
+        assert_eq!(payload.get("ok"), Some(&Value::Bool(true)));
+        assert_eq!(
+            payload.get("runtime_id").and_then(Value::as_str),
+            Some("runtime-test")
+        );
+        assert_eq!(payload.get("stopped").and_then(Value::as_bool), Some(true));
+    }
+}
