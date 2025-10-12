@@ -16,13 +16,16 @@ Microsummary: Layered, LLM-agnostic memory service that sits on the unified obje
 
 ## Goals
 - **Consistent API surface**: expose `memory.upsert`, `memory.search`, and `memory.pack` as lightweight actions on `/actions`, plus `/state/memory` as a live SSE read-model.
-- **Layered memories**: track ephemeral, episodic, semantic, and profile lanes with durability metadata while storing them in one canonical table.
+- **Layered memories**: track ephemeral, episodic, semantic, profile, and story-thread lanes with durability metadata while storing them in one canonical table.
+- **Threaded recall**: maintain topic-weighted story threads so assistants can recover the narrative spine of an initiative without replaying every turn.
 - **Deterministic context build**: hybrid lexical/vector retrieval fused via RRF, diversified via MMR, then budgeted into context packs with per-kind quotas.
 - **Explainable recall**: emit journaling metadata for every packed item (scores, boosts, lanes) so downstream UIs can replay why an item landed.
 - **Composable adapters**: keep embedding generation, token counting, and packing strategies pluggable so different agents/models can reuse the same store.
 
 ## High-level architecture
 ```
+
+When `topics` are provided the overlay normalises each hint, tags the memory (`topic:<slug>`), and fans out updates to the `story_thread` lane so follow-up retrieval can pivot straight to the relevant narrative thread.
 ┌────────────────────────────────────────────────────────────────────────────┐
 │ arw-server                                                                 │
 │                                                                            │
@@ -155,6 +158,7 @@ All new endpoints ship via the unified action bus (`/actions`) and the SSE state
     "privacy": "project",
     "embedding": {"hint": "fastembed:e5", "vector": [ ... ]},
     "links": {"parents": ["mem://summary:123"], "children": []},
+    "topics": [{"name": "launch validation", "weight": 0.9}],
     "extra": {"lane": "episodic"}
   }
 }
@@ -217,6 +221,7 @@ All new endpoints ship via the unified action bus (`/actions`) and the SSE state
 - **apps/arw-server**
   - `api_actions.rs`: register new action handlers.
   - `read_models.rs`: add `/state/memory` patch emitter.
+  - `story_threads.rs`: normalise `topics` hints and keep `story_thread` summaries + graph links fresh.
   - `working_set.rs`: switch to `ContextPacker` trait for assembling context.
   - `metrics.rs`: new histograms (`memory.retrieval.latency_ms`, `memory.pack.tokens`).
 - **arw-kernel**

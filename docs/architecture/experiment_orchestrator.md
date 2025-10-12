@@ -24,7 +24,7 @@ Endpoints
 - `POST /admin/experiments/start` — begin a live run with optional assignment/budget hints.
 - `POST /admin/experiments/stop` — finalize and persist results.
 - `POST /admin/experiments/assign` — override assignment for a session.
-- `POST /admin/experiments/run` — run A/B/n on project goldens.
+- `POST /admin/experiments/run` — run A/B/n on project goldens (returns `RunOutcome { …, job_id }` and records an `experiment_run` entry in the orchestrator job plane).
 - `POST /admin/experiments/activate` — apply winner hints to the governor.
 - `GET /admin/experiments/list` — list definitions and variants.
 - `GET /admin/experiments/scoreboard` — last-run metrics per variant.

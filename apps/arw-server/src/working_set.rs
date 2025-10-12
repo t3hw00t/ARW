@@ -1884,6 +1884,7 @@ pub fn default_lanes() -> Vec<String> {
                 "semantic".to_string(),
                 "procedural".to_string(),
                 "episodic".to_string(),
+                "story_thread".to_string(),
             ]
         })
 }

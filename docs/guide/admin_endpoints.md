@@ -152,14 +152,17 @@ The triad groups operations by intent:
   - `POST /actions (memory.upsert)` — insert or merge a memory item; emits `memory.item.upserted` and updates `/state/memory`.
   - `POST /actions (memory.search)` — hybrid lexical/vector search with filters and RRF/MMR metadata.
   - `POST /actions (memory.pack)` — build a context pack respecting token/slot budgets; journals decisions via `memory.pack.journaled`.
-  - `POST /admin/memory/apply` — lightweight helper to upsert a record directly via the kernel (admin token required). Returns `{ id, record, applied }` where `record` mirrors the canonical memory item (id/lane/kind/key/tags/hash/value/ptr) and `applied` includes the observability metadata broadcast on `memory.applied` (`source`, `value_preview`, `value_preview_truncated`, `value_bytes`, `applied_at`).
+  - `POST /admin/memory/apply` — lightweight helper to upsert a record directly via the kernel (admin token required). Returns `{ id, record, applied }` where `record` mirrors the canonical memory item (id/lane/kind/key/tags/hash/value/ptr) and `applied` includes the observability metadata broadcast on `memory.applied` (`source`, `value_preview`, `value_preview_truncated`, `value_bytes`, `applied_at`). Provide optional `topics: [{"name": "...", "weight": 0.8, "relation": "thread.project"}, …]` to tag the memory and update the `story_thread` lane in the same call.
   - `GET /admin/memory` — quick snapshot of recent records (supports `lane` and `limit` filters).
   - Legacy `/memory/*` selectors have been removed; use the action-based flow and `GET /state/memory/recent` for inspection.
 - **Connectors**
   - `POST /connectors/register` — write a connector manifest to disk and emit `connectors.registered` (token required).
   - `POST /connectors/token` — store or rotate connector tokens/secrets and emit `connectors.token.updated` (token required). Connector scopes require matching capability leases before use; missing scopes surface `connector lease required`.
+- **Experiments**
+  - `POST /admin/experiments/run` — execute A/B/n runs on project goldens; response now includes a `job_id` and the orchestrator job plane tracks progress/results under the `experiment_run` category.
 - **Orchestrator**
-  - `POST /orchestrator/mini_agents/start_training` — kick off training for mini agents; the read model exposes progress via `/state/orchestrator/jobs`.
+  - `POST /orchestrator/mini_agents/start_training` — kick off training for mini agents; responses include `job_id` and the read model exposes progress via `/state/orchestrator/jobs`.
+  - `POST /orchestrator/runtimes/{id}/restore` / `POST /orchestrator/runtimes/{id}/shutdown` — queue runtime lifecycle operations; both return `job_id` handles and publish updates via the shared orchestrator job stream.
 
 ### Events plane (observation)
 

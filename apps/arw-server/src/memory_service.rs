@@ -3,10 +3,12 @@ use rustc_hash::FxHashSet;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Map, Value};
 use std::collections::BTreeMap;
+use utoipa::ToSchema;
 
-use crate::{util, working_set, AppState};
+use crate::{story_threads, util, working_set, AppState};
 use arw_memory_core::MemoryInsertOwned;
 use arw_topics as topics;
+use tracing::warn;
 
 const VALUE_PREVIEW_MAX_CHARS: usize = 240;
 
@@ -15,6 +17,14 @@ const VALUE_PREVIEW_MAX_CHARS: usize = 240;
 pub struct MemoryEmbeddingInput {
     pub vector: Vec<f32>,
     pub hint: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize, Serialize, ToSchema)]
+#[serde(default)]
+pub struct MemoryTopicHint {
+    pub name: String,
+    pub weight: Option<f32>,
+    pub relation: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]
@@ -42,6 +52,7 @@ pub struct MemoryUpsertInput {
     pub links: Value,
     pub extra: Value,
     pub dedupe: bool,
+    pub topics: Vec<MemoryTopicHint>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -194,11 +205,33 @@ pub async fn upsert_memory(
     input: MemoryUpsertInput,
     source: &str,
 ) -> Result<MemoryUpsertResult> {
+    let topic_hints = normalize_topic_hints(&input.topics);
     let dedupe = input.dedupe;
     let mut insert_owned = input.into_insert_owned();
     let hash = insert_owned.compute_hash();
     if insert_owned.hash.is_none() {
         insert_owned.hash = Some(hash.clone());
+    }
+
+    if !topic_hints.is_empty() {
+        if let Value::Object(ref mut map) = insert_owned.value {
+            map.entry("topics".to_string())
+                .or_insert_with(|| {
+                    Value::Array(
+                        topic_hints
+                            .iter()
+                            .map(|hint| json!({ "name": hint.name, "weight": hint.weight, "relation": hint.relation }))
+                            .collect(),
+                    )
+                });
+        }
+        let tags = insert_owned.tags.get_or_insert_with(Vec::new);
+        for hint in &topic_hints {
+            if let Some(slug) = slugify_topic(&hint.name) {
+                tags.push(format!("topic:{slug}"));
+            }
+        }
+        dedupe_vec(tags);
     }
 
     if dedupe {
@@ -221,6 +254,29 @@ pub async fn upsert_memory(
         .context("insert memory")?;
 
     let mut record_event = build_memory_record_event(&record);
+    if !topic_hints.is_empty() {
+        if let Some(obj) = record_event.as_object_mut() {
+            obj.insert(
+                "topics".into(),
+                Value::Array(
+                    topic_hints
+                        .iter()
+                        .map(|hint| {
+                            let mut payload = serde_json::Map::new();
+                            payload.insert("name".into(), Value::String(hint.name.clone()));
+                            if let Some(weight) = hint.weight {
+                                payload.insert("weight".into(), json!(weight));
+                            }
+                            if let Some(rel) = hint.relation.as_ref() {
+                                payload.insert("relation".into(), Value::String(rel.clone()));
+                            }
+                            Value::Object(payload)
+                        })
+                        .collect(),
+                ),
+            );
+        }
+    }
     util::attach_memory_ptr(&mut record_event);
 
     state
@@ -232,11 +288,98 @@ pub async fn upsert_memory(
         .bus()
         .publish(topics::TOPIC_MEMORY_APPLIED, &applied_event);
 
+    if !topic_hints.is_empty() {
+        if let Err(err) = story_threads::attach_topics_to_record(
+            state,
+            &record_event,
+            &topic_hints,
+            story_threads::StoryThreadSource::Manual,
+            None,
+        )
+        .await
+        {
+            warn!(
+                target: "story_threads",
+                error = ?err,
+                "failed to attach manual topics to story threads"
+            );
+        }
+    }
+
     Ok(MemoryUpsertResult {
         id,
         record: record_event,
         applied: applied_event,
     })
+}
+
+pub(crate) fn normalize_topic_hints(hints: &[MemoryTopicHint]) -> Vec<MemoryTopicHint> {
+    let mut out = Vec::new();
+    let mut seen: FxHashSet<String> = FxHashSet::default();
+    for hint in hints {
+        let trimmed = hint.name.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        let label = trim_spaces(trimmed);
+        if label.is_empty() {
+            continue;
+        }
+        let key = label.to_ascii_lowercase();
+        if !seen.insert(key) {
+            continue;
+        }
+        let weight = hint.weight.map(|w| w.clamp(0.0, 1.0));
+        let relation = hint
+            .relation
+            .as_ref()
+            .map(|rel| trim_spaces(rel))
+            .filter(|rel| !rel.is_empty());
+        out.push(MemoryTopicHint {
+            name: label,
+            weight,
+            relation,
+        });
+    }
+    out
+}
+
+pub(crate) fn slugify_topic(label: &str) -> Option<String> {
+    let mut slug = String::new();
+    let mut prev_dash = false;
+    for ch in label.chars() {
+        if ch.is_ascii_alphanumeric() {
+            slug.push(ch.to_ascii_lowercase());
+            prev_dash = false;
+        } else {
+            if !slug.is_empty() && !prev_dash {
+                slug.push('-');
+                prev_dash = true;
+            }
+        }
+    }
+    let slug = slug.trim_matches('-').to_string();
+    if slug.is_empty() {
+        None
+    } else {
+        Some(slug)
+    }
+}
+
+fn dedupe_vec(items: &mut Vec<String>) {
+    let mut seen: FxHashSet<String> = FxHashSet::default();
+    items.retain(|item| seen.insert(item.to_ascii_lowercase()));
+}
+
+fn trim_spaces(input: &str) -> String {
+    let mut parts = Vec::new();
+    for part in input.split_whitespace() {
+        let trimmed = part.trim();
+        if !trimmed.is_empty() {
+            parts.push(trimmed);
+        }
+    }
+    parts.join(" ")
 }
 
 pub async fn search_memory(state: &AppState, params: MemorySearchInput) -> Result<Vec<Value>> {

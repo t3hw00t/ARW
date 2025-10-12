@@ -225,7 +225,7 @@ impl RuntimeSupervisor {
                     let preset_clone = preset.clone();
                     tokio::spawn(async move {
                         match registry
-                            .request_restore(&runtime_id_clone, true, preset_clone)
+                            .request_restore(&runtime_id_clone, true, preset_clone, None)
                             .await
                         {
                             Ok(_) => info!(
@@ -259,7 +259,7 @@ impl RuntimeSupervisor {
                 let preset_clone = preset.clone();
                 tokio::spawn(async move {
                     match registry
-                        .request_restore(&runtime_id_clone, false, preset_clone)
+                        .request_restore(&runtime_id_clone, false, preset_clone, None)
                         .await
                     {
                         Ok(_) => info!(
@@ -405,6 +405,7 @@ impl RuntimeSupervisor {
         id: &str,
         restart: bool,
         budget_hint: Option<RuntimeRestartBudget>,
+        restore_job_id: Option<String>,
     ) -> Result<(), SupervisorError> {
         let definition = {
             let guard = self.definitions.read().await;
@@ -453,6 +454,7 @@ impl RuntimeSupervisor {
             definition.adapter_id.clone(),
             handle.clone(),
             cancel.clone(),
+            restore_job_id.clone(),
         );
 
         let mut active_guard = self.active.write().await;
@@ -507,11 +509,12 @@ impl RuntimeSupervisor {
         adapter_id: String,
         handle: arw_runtime::RuntimeHandle,
         cancel: CancellationToken,
+        restore_job_id: Option<String>,
     ) -> tokio::task::JoinHandle<()> {
         let supervisor = Arc::clone(self);
         tokio::spawn(async move {
             supervisor
-                .run_health_loop(runtime_id, adapter_id, handle, cancel)
+                .run_health_loop(runtime_id, adapter_id, handle, cancel, restore_job_id)
                 .await;
         })
     }
@@ -522,6 +525,7 @@ impl RuntimeSupervisor {
         adapter_id: String,
         handle: arw_runtime::RuntimeHandle,
         cancel: CancellationToken,
+        mut restore_job_id: Option<String>,
     ) {
         let Some(adapter) = self.adapters.read().await.get(&adapter_id).cloned() else {
             warn!(
@@ -549,10 +553,15 @@ impl RuntimeSupervisor {
                         Ok(report) => {
                             self.registry.apply_status(report.status).await;
                             if !announced {
-                                self.bus.publish(
-                                    arw_topics::TOPIC_RUNTIME_RESTORE_COMPLETED,
-                                    &serde_json::json!({"runtime": runtime_id}),
-                                );
+                                let mut payload =
+                                    serde_json::json!({ "runtime": runtime_id.clone(), "ok": true });
+                                if let Some(job_id) = restore_job_id.take() {
+                                    if let serde_json::Value::Object(ref mut map) = payload {
+                                        map.insert("job_id".into(), serde_json::json!(job_id));
+                                    }
+                                }
+                                self.bus
+                                    .publish(arw_topics::TOPIC_RUNTIME_RESTORE_COMPLETED, &payload);
                                 announced = true;
                             }
                         }
@@ -569,11 +578,34 @@ impl RuntimeSupervisor {
                                 error = %err,
                                 "runtime reported unhealthy status"
                             );
+                            if let Some(job_id) = restore_job_id.take() {
+                                self.bus.publish(
+                                    arw_topics::TOPIC_RUNTIME_RESTORE_COMPLETED,
+                                    &serde_json::json!({
+                                        "runtime": runtime_id.clone(),
+                                        "ok": false,
+                                        "error": err.to_string(),
+                                        "job_id": job_id,
+                                    }),
+                                );
+                            }
                             break;
                         }
                     }
                 }
             }
+        }
+
+        if let Some(job_id) = restore_job_id.take() {
+            self.bus.publish(
+                arw_topics::TOPIC_RUNTIME_RESTORE_COMPLETED,
+                &serde_json::json!({
+                    "runtime": runtime_id,
+                    "ok": false,
+                    "error": "Restore monitoring ended",
+                    "job_id": job_id,
+                }),
+            );
         }
     }
 }

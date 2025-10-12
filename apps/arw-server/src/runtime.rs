@@ -429,6 +429,7 @@ impl RuntimeRegistry {
         id: &str,
         restart: bool,
         preset: Option<String>,
+        job_id: Option<String>,
     ) -> Result<RuntimeRestartBudget, RuntimeRestoreError> {
         self.ensure_descriptor(id).await;
         info!(
@@ -502,18 +503,22 @@ impl RuntimeRegistry {
             "runtime restore queued"
         );
 
-        self.bus.publish(
-            TOPIC_RUNTIME_RESTORE_REQUESTED,
-            &json!({
-                "runtime": id,
-                "restart": restart,
-                "preset": preset,
-            }),
-        );
+        let mut requested_payload = json!({
+            "runtime": id,
+            "restart": restart,
+            "preset": preset,
+        });
+        if let Some(job) = job_id.as_ref() {
+            if let serde_json::Value::Object(ref mut map) = requested_payload {
+                map.insert("job_id".into(), json!(job));
+            }
+        }
+        self.bus
+            .publish(TOPIC_RUNTIME_RESTORE_REQUESTED, &requested_payload);
 
         if let Some(supervisor) = self.supervisor().await {
             if let Err(err) = supervisor
-                .restore_runtime(id, restart, Some(budget_snapshot.clone()))
+                .restore_runtime(id, restart, Some(budget_snapshot.clone()), job_id.clone())
                 .await
             {
                 let mut failed = RuntimeStatus::new(id.to_string(), RuntimeState::Error)
@@ -541,6 +546,7 @@ impl RuntimeRegistry {
         let registry = self.clone();
         let bus = self.bus.clone();
         let runtime_id = id.to_string();
+        let job_id_for_task = job_id.clone();
         tokio::spawn(async move {
             tokio::time::sleep(Duration::from_secs(1)).await;
             let mut ready = RuntimeStatus::new(runtime_id.clone(), RuntimeState::Ready)
@@ -564,10 +570,13 @@ impl RuntimeRegistry {
                 restart_reset_at = reset_hint.as_deref().unwrap_or("n/a"),
                 "runtime restore completed"
             );
-            bus.publish(
-                TOPIC_RUNTIME_RESTORE_COMPLETED,
-                &json!({"runtime": runtime_id}),
-            );
+            let mut payload = json!({"runtime": runtime_id, "ok": true});
+            if let Some(job_id) = job_id_for_task {
+                if let serde_json::Value::Object(ref mut map) = payload {
+                    map.insert("job_id".into(), json!(job_id));
+                }
+            }
+            bus.publish(TOPIC_RUNTIME_RESTORE_COMPLETED, &payload);
         });
 
         Ok(budget_snapshot)
@@ -810,7 +819,7 @@ mod tests {
         let mut rx = bus.subscribe();
 
         registry
-            .request_restore("runtime-a", true, Some("standard".into()))
+            .request_restore("runtime-a", true, Some("standard".into()), None)
             .await
             .expect("restart budget available");
 
@@ -840,6 +849,7 @@ mod tests {
         .await
         .expect("completion timeout");
         assert_eq!(completed.payload["runtime"], "runtime-a");
+        assert_eq!(completed.payload["ok"], serde_json::Value::Bool(true));
 
         let snapshot = registry.snapshot().await;
         let record = snapshot
@@ -898,19 +908,22 @@ mod tests {
         let registry = RuntimeRegistry::with_budget_config(bus.clone(), config);
 
         registry
-            .request_restore("runtime-budget", true, None)
+            .request_restore("runtime-budget", true, None, None)
             .await
             .expect("first restart allowed");
         tokio::time::sleep(Duration::from_millis(1_100)).await;
 
         registry
-            .request_restore("runtime-budget", true, None)
+            .request_restore("runtime-budget", true, None, None)
             .await
             .expect("second restart allowed");
         tokio::time::sleep(Duration::from_millis(1_100)).await;
 
         let mut rx = bus.subscribe();
-        let denied_budget = match registry.request_restore("runtime-budget", true, None).await {
+        let denied_budget = match registry
+            .request_restore("runtime-budget", true, None, None)
+            .await
+        {
             Err(RuntimeRestoreError::RestartDenied { budget }) => budget,
             other => panic!("expected restart denial, got {:?}", other),
         };

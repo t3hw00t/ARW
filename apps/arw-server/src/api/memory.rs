@@ -546,6 +546,8 @@ pub struct MemoryApplyReq {
     pub extra: Value,
     #[serde(default)]
     pub dedupe: bool,
+    #[serde(default)]
+    pub topics: Vec<memory_service::MemoryTopicHint>,
 }
 
 /// Insert a memory item (admin helper).
@@ -602,6 +604,7 @@ pub async fn admin_memory_apply(
         links: req.links,
         extra: req.extra,
         dedupe: req.dedupe,
+        topics: req.topics,
     };
     if body.privacy.is_none() {
         body.privacy = Some("private".to_string());

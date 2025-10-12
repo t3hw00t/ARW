@@ -62,6 +62,7 @@ See [memory_overlay_service.md](memory_overlay_service.md#data-model) for full s
 | `episodic` | `short` | Summaries of recent turns, tool outputs, and micro plans. |
 | `semantic` | `long` | Durable facts, docs, source snippets; chunked + indexed. |
 | `profile` | `long` | Preferences, API scopes, user/agent traits. |
+| `story_thread` | `long` | Topic-weighted threads linking related memories and cascade summaries; feeds retrieval with stitched narratives. |
 
 Durability drives TTLs (minutes, hours, or months) and recency boosts during retrieval. Background janitors in `arw-memory-core` enforce expiry and publish `memory.item.expired` events.
 
@@ -74,7 +75,7 @@ Durability drives TTLs (minutes, hours, or months) and recency boosts during ret
 Legacy `/memory/*` routes have been removed; rely on the action-based flow below for all production-facing behavior.
 
 ### Memory Overlay actions (preferred)
-- `memory.upsert` → Upsert item, update indices, emit `memory.item.upserted`.
+- `memory.upsert` → Upsert item, update indices, emit `memory.item.upserted`. Accepts optional `topics[]` hints that seed or reinforce story threads.
 - `memory.search` → Hybrid lexical/vector retrieval with RRF + MMR + scoring.
 - `memory.pack` → Build context packs from ranked items using per-kind token budgets.
 
@@ -82,7 +83,7 @@ Every action is invoked via `POST /actions` and participates in the unified jour
 
 ### Read-models & events
 - `/state/memory` (SSE JSON Patch) shows incremental inserts, expirations, and latest pack preview per agent/project.
-- Event topics: `memory.item.upserted`, `memory.item.expired`, `memory.pack.journaled`, `memory.overlay.metrics`.
+- Event topics: `memory.item.upserted`, `memory.item.expired`, `memory.pack.journaled`, `story.thread.updated`, `memory.overlay.metrics`.
 
 ## Retrieval & packing
 - Candidate generation runs lexical (SQLite FTS or Tantivy) and vector (sqlite-vec or Qdrant) searches in parallel.
@@ -99,6 +100,7 @@ See [memory_overlay_service.md#retrieval-pipeline](memory_overlay_service.md#ret
 - **Logic Units**: strategies can register custom packers or scoring tweaks by implementing the `ContextPacker` trait and providing pack presets.
 - **Policy & Gating**: privacy scope and TTL drive policy checks before data leaves the node or remote collaborators request context.
 - **Modular Cognitive Stack**: recall/compression/validation agents use MAL lanes as their single source of truth; orchestration contracts and provenance expectations are detailed in [Modular Cognitive Stack](modular_cognitive_stack.md).
+- **Story threads**: cascade summaries and manual `topics` hints keep the `story_thread` lane fresh; working-set expansion follows thread links to resurface the most relevant episodes for an active line of work.
 
 ## Migration status
 | Phase | Status | Highlights |

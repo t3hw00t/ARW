@@ -134,6 +134,8 @@ pub struct RunOutcome {
     pub proj: String,
     pub results: Vec<RunOutcomeVariant>,
     pub winner: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub job_id: Option<String>,
 }
 
 pub struct Experiments {
@@ -281,6 +283,7 @@ impl Experiments {
             proj: plan.proj,
             results,
             winner,
+            job_id: None,
         }
     }
 

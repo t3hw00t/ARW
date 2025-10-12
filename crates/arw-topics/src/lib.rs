@@ -37,6 +37,7 @@ pub const TOPIC_MEMORY_LINK_PUT: &str = "memory.link.put";
 pub const TOPIC_MEMORY_ITEM_UPSERTED: &str = "memory.item.upserted";
 pub const TOPIC_MEMORY_ITEM_EXPIRED: &str = "memory.item.expired";
 pub const TOPIC_MEMORY_PACK_JOURNALED: &str = "memory.pack.journaled";
+pub const TOPIC_STORY_THREAD_UPDATED: &str = "story.thread.updated";
 
 // Beliefs (read-model summaries)
 pub const TOPIC_BELIEFS_UPDATED: &str = "beliefs.updated";

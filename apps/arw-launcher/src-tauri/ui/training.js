@@ -430,6 +430,14 @@ function normalizeGovernorHints(raw) {
   return normalized;
 }
 
+function formatJobCategory(job) {
+  if (!job) return '—';
+  const category = (job.data && job.data.category) || job.category;
+  if (!category) return '—';
+  const label = typeof category === 'string' ? category : String(category);
+  return label.replace(/_/g, ' ');
+}
+
 function governorHistoryKey(hints) {
   const keyObj = {
     mode: hints.mode || null,
@@ -950,7 +958,7 @@ function renderJobs(items) {
 
   const table = document.createElement('table');
   table.className = 'jobs-table';
-  table.innerHTML = '<thead><tr><th>Job</th><th>Status</th><th>Progress</th><th>Goal</th><th>Updated</th></tr></thead>';
+  table.innerHTML = '<thead><tr><th>Job</th><th>Category</th><th>Status</th><th>Progress</th><th>Goal</th><th>Updated</th></tr></thead>';
   const tbody = document.createElement('tbody');
 
   filtered.forEach((job) => {
@@ -983,11 +991,14 @@ function renderJobs(items) {
         : parsed.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
     }
     const goalText = escapeText(job.goal || '');
+    const categoryName = formatJobCategory(job);
+    const categoryLabel = escapeText(categoryName);
     const goalCell = trainingSummary && trainingSummary.text
       ? `${goalText}<span class="hint">${escapeText(trainingSummary.text)}</span>`
       : goalText;
     tr.innerHTML = `
       <td class="mono">${escapeText(job.id || '')}</td>
+      <td class="mono">${categoryLabel}</td>
       <td class="${statusClass}">${statusDisplay}</td>
       <td>${progress}</td>
       <td>${goalCell}</td>
@@ -1027,7 +1038,7 @@ function renderJobs(items) {
     const detailRow = document.createElement('tr');
     detailRow.className = 'job-detail';
     const detailCell = document.createElement('td');
-    detailCell.colSpan = 5;
+    detailCell.colSpan = 6;
     const details = document.createElement('details');
     const summary = document.createElement('summary');
     summary.textContent = 'Details';
@@ -1038,6 +1049,68 @@ function renderJobs(items) {
     const createdItem = document.createElement('li');
     createdItem.textContent = `Created: ${escapeText(job.created_at || job.created || '—')}`;
     metaList.appendChild(createdItem);
+    const categoryItem = document.createElement('li');
+    categoryItem.textContent = `Category: ${categoryName || '—'}`;
+    metaList.appendChild(categoryItem);
+    const tags = Array.isArray(job?.data?.tags) ? job.data.tags.filter((tag) => typeof tag === 'string' && tag.trim()) : [];
+    if (tags.length) {
+      const tagsItem = document.createElement('li');
+      tagsItem.textContent = 'Tags: ';
+      const frag = document.createDocumentFragment();
+      tags.forEach((tag, index) => {
+        const span = document.createElement('span');
+        span.className = 'badge';
+        span.textContent = tag;
+        frag.appendChild(span);
+        if (index < tags.length - 1) {
+          frag.appendChild(document.createTextNode(' '));
+        }
+      });
+      tagsItem.appendChild(frag);
+      metaList.appendChild(tagsItem);
+    }
+    const topics = Array.isArray(job?.data?.topics) ? job.data.topics.filter((topic) => typeof topic === 'string' && topic.trim()) : [];
+    if (topics.length) {
+      const topicsItem = document.createElement('li');
+      topicsItem.textContent = `Topics: ${topics.join(', ')}`;
+      metaList.appendChild(topicsItem);
+    }
+    const storyThreads = Array.isArray(job?.data?.story_threads)
+      ? job.data.story_threads.filter((thread) => thread && typeof thread === 'object')
+      : [];
+    if (storyThreads.length) {
+      const threadsItem = document.createElement('li');
+      threadsItem.className = 'story-thread-summary';
+      const heading = document.createElement('span');
+      heading.textContent = 'Story threads:';
+      threadsItem.appendChild(heading);
+      const list = document.createElement('ul');
+      list.className = 'compact-list';
+      storyThreads.slice(0, 3).forEach((thread) => {
+        const entry = document.createElement('li');
+        const topic = typeof thread.topic === 'string' && thread.topic.trim()
+          ? thread.topic.trim()
+          : typeof thread.topic_key === 'string' && thread.topic_key.trim()
+            ? thread.topic_key.trim()
+            : typeof thread.id === 'string'
+              ? thread.id
+              : 'thread';
+        const summary = typeof thread.summary === 'string' && thread.summary.trim()
+          ? thread.summary.trim()
+          : '';
+        entry.innerHTML = `<span class="mono">${escapeText(topic)}</span>${summary ? ` — ${escapeText(summary)}` : ''}`;
+        list.appendChild(entry);
+      });
+      if (storyThreads.length > 3) {
+        const remaining = storyThreads.length - 3;
+        const more = document.createElement('li');
+        more.className = 'dim';
+        more.textContent = `+${remaining} more`; 
+        list.appendChild(more);
+      }
+      threadsItem.appendChild(list);
+      metaList.appendChild(threadsItem);
+    }
     const stateItem = document.createElement('li');
     const detailMeta = jobStatusMeta(job);
     const detailLabel = escapeText(detailMeta.label || job.state || job.status || 'n/a');

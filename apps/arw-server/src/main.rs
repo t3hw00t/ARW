@@ -38,6 +38,7 @@ mod metrics;
 mod models;
 mod modular;
 mod openapi;
+mod orchestrator_jobs;
 mod patch_guard;
 mod policy;
 mod project_snapshots;
@@ -57,6 +58,7 @@ mod singleflight;
 mod sse_cache;
 mod staging;
 mod state_observer;
+mod story_threads;
 mod tasks;
 #[cfg(test)]
 mod test_support;

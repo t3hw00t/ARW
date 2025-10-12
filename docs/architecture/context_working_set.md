@@ -20,6 +20,7 @@ Memory layers (each with its own budget + eviction)
 - Episodic log (warm): compact summaries of past turns and actions with stable IDs that point back to full artifacts.
 - Semantic memory (warm): vector/graph/KV indexes over notes, files, web grabs, code, and “beliefs” (claims with provenance and confidence).
 - Procedural memory (warm): reusable flows/options (e.g., crawl→clean→index, triage→brief).
+- Story threads (warm): topic-weighted threads linking episodic summaries so long-running efforts stay recallable without replaying every turn.
 - Project world model (cool): small belief graph (entities, claims, constraints, open questions) with freshness and contradiction flags.
 - Cold artifacts: full docs, transcripts, results—content‑addressed and never forced into the prompt unless rehydrated.
 
@@ -27,7 +28,7 @@ Context assembly (every turn)
 - Plan first: start with a subgoal‑specific plan; choose the next small step.
 - Targeted retrieval: build a small set from semantic + world memories using relevance, recency, and diversity (MMR‑style) to avoid duplicates.
 - Token budgeter: fixed slots for instructions, plan, safety/policy, and evidence; leftover tokens go to nice-to-have context.
-- Slot-aware assembly: `/context/assemble` accepts `slot_budgets` (map of slot → max items). Selected items expose a normalized `slot` field and the response summarizes how many items landed in each slot so telemetry and UI can highlight gaps.
+- Slot-aware assembly: `/context/assemble` accepts `slot_budgets` (map of slot → max items). Selected items expose a normalized `slot` field—including the dedicated `story_thread` slot—and the response summarizes how many items landed in each slot so telemetry and UI can highlight gaps.
 - Always include pointers: emit stable IDs alongside excerpts so the agent/UI can rehydrate more by ID when needed.
 - Coverage-guided refinement: when `coverage.reasons` flag gaps (e.g., low lane diversity, weak scores, below target limit) the next iteration automatically widens lanes, increases expansion, or lowers thresholds before running. Dashboards see the proposed adjustments via the `next_spec` snapshot on each `working_set.iteration.summary` event.
 
@@ -36,7 +37,7 @@ Compression cascade (history never bloats)
 - Rolling window: keep the last N raw tokens; summarize older chunks into the cascade; drop raw once linked from a summary.
 - Entity rollups: merge repeated facts by entity with counters (mention frequency), recency, and confidence.
 
-_Implementation status:_ `arw-server` ships a `context.cascade` background task that tails new episodes, waits for a brief cooldown, and writes the extract/abstract/outline bundle into the `episodic_summary` memory lane. Each summary stores provenance (`sources.event_ids`) and the episode pointer so retrieval and rehydrate flows can jump back to the raw events. The launcher Training Park and Hub surfaces can now fetch these records without recomputing the cascade at render time.
+_Implementation status:_ `arw-server` ships a `context.cascade` background task that tails new episodes, waits for a brief cooldown, and writes the extract/abstract/outline bundle into the `episodic_summary` memory lane while forwarding topic hints to the `story_thread` lane. Each summary stores provenance (`sources.event_ids`) and the episode pointer so retrieval and rehydrate flows can jump back to the raw events. The launcher Training Park and Hub surfaces can now fetch these records without recomputing the cascade at render time.
 
 Never‑out‑of‑context controls
 - Information‑gain gate: only admit a chunk if it reduces predicted error for the current subgoal (proxy: novelty × source reliability × task match).

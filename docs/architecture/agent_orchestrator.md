@@ -17,8 +17,9 @@ Principles
 
 Architecture
 - Orchestrator service schedules training jobs, pulls goals/datasets, runs episodes via the unified triad (/actions,/events,/state), and writes back Logic Units patches.
-- Produces: mini‑agent profiles, candidate Logic Units, evaluation reports, and promotion decisions.
+- Produces: mini-agent profiles, candidate Logic Units, evaluation reports, and promotion decisions.
 - Consumes: Memory Abstraction Layer (for curriculum and retrieval), Policies/Leases, and the Evaluation Harness.
+- Job lifecycle is now centralised through `apps/arw-server/src/orchestrator_jobs.rs`: every training request is wrapped in a `JobSpec`, tagged as `agent_training`, and enriched with related story threads so downstream dashboards and operators can trace narrative context. Responses include a `job_id` that maps to `/state/orchestrator/jobs`.
 
 Endpoints (initial stubs)
 - `GET /orchestrator/mini_agents` → `{ items: [...] }`

@@ -5,7 +5,11 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 use utoipa::ToSchema;
 
-use crate::{admin_ok, experiments, AppState};
+use crate::{
+    admin_ok, experiments,
+    orchestrator_jobs::{self, JobCategory, JobSpec},
+    AppState,
+};
 
 fn unauthorized() -> axum::response::Response {
     (
@@ -92,15 +96,51 @@ pub async fn experiments_run(
     if !admin_ok(&headers).await {
         return unauthorized();
     }
-    let outcome = state
-        .experiments()
-        .run_on_goldens(experiments::RunPlan {
-            proj: req.proj,
-            exp_id: req.id,
-            variants: req.variants,
-            budget_total_ms: req.budget_total_ms,
-        })
-        .await;
+    let plan = experiments::RunPlan {
+        proj: req.proj.clone(),
+        exp_id: req.id.clone(),
+        variants: req.variants.clone(),
+        budget_total_ms: req.budget_total_ms,
+    };
+    let payload = json!({
+        "exp_id": plan.exp_id,
+        "proj": plan.proj,
+        "variants": plan.variants,
+        "budget_total_ms": plan.budget_total_ms,
+    });
+    let mut job_spec = JobSpec::new(
+        JobCategory::ExperimentRun,
+        "experiment.run",
+        format!("Run experiment {} on {}", plan.exp_id, plan.proj),
+    );
+    job_spec.project = Some(plan.proj.clone());
+    job_spec.tags = vec!["experiment".into(), "run".into()];
+    job_spec.topics = vec![plan.exp_id.clone(), plan.proj.clone()];
+    job_spec.payload = payload.clone();
+    if let Some(budget) = plan.budget_total_ms {
+        job_spec.hints = Some(json!({ "budget_total_ms": budget }));
+    }
+    let job_id = match orchestrator_jobs::create_job(&state, &job_spec).await {
+        Ok(id) => id,
+        Err(err) => {
+            return (
+                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({
+                    "type": "about:blank",
+                    "title": "Error",
+                    "status": 500,
+                    "detail": err.to_string()
+                })),
+            )
+                .into_response();
+        }
+    };
+    let _ = orchestrator_jobs::update_job(&state, &job_id, Some("running"), Some(0.05), None).await;
+
+    let mut outcome = state.experiments().run_on_goldens(plan).await;
+    outcome.job_id = Some(job_id.clone());
+    let result_payload = serde_json::to_value(&outcome).unwrap_or(payload);
+    let _ = orchestrator_jobs::complete_job_ok(&state, &job_id, Some(result_payload), None).await;
     Json(outcome).into_response()
 }
 

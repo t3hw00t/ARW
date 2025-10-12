@@ -10,7 +10,7 @@ use tokio::{
 };
 use tracing::{debug, warn};
 
-use crate::{api::state, tasks::TaskHandle, util, AppState};
+use crate::{api::state, story_threads, tasks::TaskHandle, util, AppState};
 
 const TASK_NAME: &str = "context.cascade";
 const CURSOR_FILE: &str = "context_cascade.cursor";
@@ -185,7 +185,37 @@ async fn run_once(state: &AppState) -> Result<CascadeStats> {
             continue;
         }
 
-        persist_summary(state, summary).await?;
+        let inserted_record = persist_summary(state, &summary).await?;
+        let topic_hints = story_threads::derive_topics_from_summary(&summary.value);
+        if !topic_hints.is_empty() {
+            let mut record_event = inserted_record.clone();
+            util::attach_memory_ptr(&mut record_event);
+            let meta = json!({
+                "episode_id": summary.episode_id,
+                "stats": {
+                    "events": summary.stats.count,
+                    "errors": summary.stats.errors,
+                    "last_event_id": summary.stats.last_event_id,
+                },
+                "projects": summary.projects.clone(),
+            });
+            if let Err(err) = story_threads::attach_topics_to_record(
+                state,
+                &record_event,
+                &topic_hints,
+                story_threads::StoryThreadSource::Cascade,
+                Some(meta),
+            )
+            .await
+            {
+                warn!(
+                    target: TASK_NAME,
+                    error = ?err,
+                    episode = %summary.episode_id,
+                    "failed to attach cascade summary to story threads"
+                );
+            }
+        }
         processed += 1;
         processed_max = processed_max.max(last_event_id);
     }
@@ -235,7 +265,7 @@ async fn should_skip_existing(
     Ok(false)
 }
 
-async fn persist_summary(state: &AppState, summary: CascadeSummary) -> Result<()> {
+async fn persist_summary(state: &AppState, summary: &CascadeSummary) -> Result<Value> {
     let ttl_s = ttl_seconds();
     let mut record = arw_memory_core::MemoryInsertOwned {
         id: Some(summary.record_id.clone()),
@@ -286,13 +316,13 @@ async fn persist_summary(state: &AppState, summary: CascadeSummary) -> Result<()
             "last_event_id": summary.stats.last_event_id,
             "events": summary.stats.count,
             "errors": summary.stats.errors,
-            "projects": summary.projects,
+            "projects": summary.projects.clone(),
             "updated": Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true),
         }),
     );
 
     counter!("arw_context_cascade_written_total").increment(1);
-    Ok(())
+    Ok(inserted_record)
 }
 
 fn episode_ready(events: &[arw_kernel::EventRow], cooldown_secs: i64, min_events: usize) -> bool {

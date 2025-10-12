@@ -2067,6 +2067,7 @@ impl Kernel {
         id: &str,
         status: Option<&str>,
         progress: Option<f64>,
+        data_patch: Option<&serde_json::Value>,
     ) -> Result<bool> {
         let conn = self.conn()?;
         let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
@@ -2076,6 +2077,37 @@ impl Kernel {
         }
         if progress.is_some() {
             set_parts.push("progress=?");
+        }
+        let mut merged_data: Option<String> = None;
+        if let Some(patch) = data_patch {
+            if patch.is_object() {
+                let existing: Option<String> = conn.query_row(
+                    "SELECT data FROM orchestrator_jobs WHERE id=? LIMIT 1",
+                    [id],
+                    |row| row.get(0),
+                )?;
+                let mut base = existing
+                    .as_ref()
+                    .and_then(|raw| serde_json::from_str::<serde_json::Value>(raw).ok())
+                    .unwrap_or_else(|| serde_json::json!({}));
+                if !base.is_object() {
+                    base = serde_json::json!({});
+                }
+                if let serde_json::Value::Object(ref mut base_map) = base {
+                    if let serde_json::Value::Object(ref patch_map) = patch {
+                        for (key, value) in patch_map.iter() {
+                            base_map.insert(key.clone(), value.clone());
+                        }
+                    }
+                }
+                merged_data = Some(serde_json::to_string(&base).unwrap_or_else(|_| "{}".into()));
+            } else if !patch.is_null() {
+                merged_data =
+                    Some(serde_json::to_string(patch).unwrap_or_else(|_| "{}".to_string()));
+            }
+            if merged_data.is_some() {
+                set_parts.push("data=?");
+            }
         }
         set_parts.push("updated=?");
         let sql = format!(
@@ -2089,6 +2121,9 @@ impl Kernel {
         }
         if let Some(p) = progress {
             params_vec.push(rusqlite::types::Value::from(p));
+        }
+        if let Some(data) = merged_data {
+            params_vec.push(rusqlite::types::Value::from(data));
         }
         params_vec.push(rusqlite::types::Value::from(now.clone()));
         params_vec.push(rusqlite::types::Value::from(id.to_string()));
@@ -2415,9 +2450,12 @@ impl Kernel {
         id: String,
         status: Option<String>,
         progress: Option<f64>,
+        data_patch: Option<serde_json::Value>,
     ) -> Result<bool> {
-        self.run_blocking(move |k| k.update_orchestrator_job(&id, status.as_deref(), progress))
-            .await
+        self.run_blocking(move |k| {
+            k.update_orchestrator_job(&id, status.as_deref(), progress, data_patch.as_ref())
+        })
+        .await
     }
 
     pub async fn list_orchestrator_jobs_async(&self, limit: i64) -> Result<Vec<serde_json::Value>> {

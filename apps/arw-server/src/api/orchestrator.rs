@@ -6,14 +6,19 @@ use axum::{
 };
 use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
-use serde_json::json;
+use serde_json::{json, Value};
 use utoipa::ToSchema;
 
-use crate::{runtime::RuntimeRestoreError, AppState};
+use crate::{
+    orchestrator_jobs::{self, JobCategory, JobSpec},
+    runtime::RuntimeRestoreError,
+    AppState,
+};
 use arw_topics as topics;
 
 use arw_runtime::RuntimeRestartBudget;
 use chrono::{Duration as ChronoDuration, SecondsFormat as ChronoSecondsFormat};
+use tokio::time::{timeout, Duration};
 use tracing::warn;
 use uuid::Uuid;
 
@@ -410,9 +415,9 @@ pub async fn orchestrator_start_training(
     }
 
     let job_data_value = if job_data_map.is_empty() {
-        None
+        Value::Null
     } else {
-        Some(serde_json::Value::Object(job_data_map.clone()))
+        Value::Object(job_data_map.clone())
     };
 
     let bus = state.bus();
@@ -448,58 +453,80 @@ pub async fn orchestrator_start_training(
             .await;
     }
 
-    let id = match state
-        .kernel()
-        .insert_orchestrator_job_async(req.goal.as_str(), job_data_value.as_ref())
-        .await
-    {
-        Ok(id) => id,
-        Err(e) => return (
-            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
-            Json(
-                json!({"type":"about:blank","title":"Error","status":500, "detail": e.to_string()}),
-            ),
-        )
-            .into_response(),
-    };
-    let mut created_payload = json!({"id": id, "goal": goal});
-    if let Some(data_value) = job_data_value.clone() {
-        if let serde_json::Value::Object(ref mut map) = created_payload {
-            map.insert("data".into(), data_value);
-        }
+    let project_hint = data
+        .as_ref()
+        .and_then(|v| v.get("project").or_else(|| v.get("proj")))
+        .and_then(|v| v.as_str())
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty());
+    let topics_list: Vec<String> = data
+        .as_ref()
+        .and_then(|v| v.get("topics"))
+        .and_then(|v| v.as_array())
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|value| value.as_str())
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty())
+                .collect()
+        })
+        .unwrap_or_else(Vec::new);
+    let mut job_spec = JobSpec::new(JobCategory::AgentTraining, "agent.training", goal.clone());
+    job_spec.project = project_hint.clone();
+    job_spec.priority = 3;
+    job_spec.tags = vec!["training".into(), "mini-agent".into()];
+    let mut topics = topics_list.clone();
+    if topics.is_empty() {
+        topics.push(goal.clone());
     }
-    state
-        .bus()
-        .publish(topics::TOPIC_ORCHESTRATOR_JOB_CREATED, &created_payload);
+    job_spec.topics = topics;
+    job_spec.payload = job_data_value.clone();
+    if !training_meta_map.is_empty() {
+        job_spec.hints = Some(Value::Object(training_meta_map.clone()));
+    }
+    let job_id = match orchestrator_jobs::create_job(&state, &job_spec).await {
+        Ok(id) => id,
+        Err(err) => {
+            return (
+                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({
+                    "type": "about:blank",
+                    "title": "Error",
+                    "status": 500,
+                    "detail": err.to_string()
+                })),
+            )
+                .into_response()
+        }
+    };
     let state2 = state.clone();
-    let id_clone = id.clone();
+    let job_id_clone = job_id.clone();
     let training_meta_for_hints = training_meta_map.clone();
+    let goal_for_actions = goal.clone();
+    let preset_for_actions = preset_value.clone();
     tokio::spawn(async move {
         let steps = 5;
-        for i in 1..=steps {
-            let p = (i as f64) / (steps as f64);
-            let _ = state2
-                .kernel()
-                .update_orchestrator_job_async(
-                    id_clone.clone(),
-                    Some(if i < steps { "running" } else { "completed" }.to_string()),
-                    Some(p),
-                )
-                .await;
-            state2.bus().publish(
-                topics::TOPIC_ORCHESTRATOR_JOB_PROGRESS,
-                &json!({"id": id_clone, "progress": p}),
-            );
-            if i < steps {
+        for stage in 1..=steps {
+            let progress = (stage as f64) / (steps as f64);
+            let status = if stage < steps {
+                "running"
+            } else {
+                "completed"
+            };
+            let _ = orchestrator_jobs::update_job(
+                &state2,
+                &job_id_clone,
+                Some(status),
+                Some(progress),
+                Some(json!({ "progress_stage": stage })),
+            )
+            .await;
+            if stage < steps {
                 tokio::time::sleep(std::time::Duration::from_millis(500)).await;
             }
         }
-        state2.bus().publish(
-            topics::TOPIC_ORCHESTRATOR_JOB_COMPLETED,
-            &json!({"id": id_clone, "ok": true}),
-        );
-        // Suggest a Logic Unit manifest as an output of the training
-        let lu_id = format!("lu-{}", id_clone);
+
+        let lu_id = format!("lu-{}", job_id_clone);
         let mut hints_map = serde_json::Map::new();
         if let Some(mode) = mode_hint.clone() {
             hints_map.insert("mode".into(), serde_json::Value::String(mode));
@@ -537,13 +564,23 @@ pub async fn orchestrator_start_training(
             .kernel()
             .insert_logic_unit_async(lu_id.clone(), manifest.clone(), "suggested".to_string())
             .await;
-        let mut suggested_payload = json!({"id": lu_id, "job_id": id_clone});
+        let mut suggested_payload = json!({"id": lu_id, "job_id": job_id_clone});
         if let serde_json::Value::Object(ref mut map) = suggested_payload {
-            map.insert("hints".into(), hints_value);
+            map.insert("hints".into(), hints_value.clone());
         }
         state2
             .bus()
             .publish(topics::TOPIC_LOGICUNIT_SUGGESTED, &suggested_payload);
+        let _ = orchestrator_jobs::complete_job_ok(
+            &state2,
+            &job_id_clone,
+            Some(json!({
+                "logic_unit": manifest,
+                "hints": hints_value.clone()
+            })),
+            None,
+        )
+        .await;
 
         let lease_id = Uuid::new_v4().to_string();
         let ttl_until = (chrono::Utc::now() + ChronoDuration::minutes(5))
@@ -566,13 +603,15 @@ pub async fn orchestrator_start_training(
             let agent_action_id = Uuid::new_v4().to_string();
             let modular_payload = json!({
                 "agent_id": "orchestrator.trainer",
-                "turn_id": id_clone,
+                "turn_id": job_id_clone,
                 "intent": "orchestrator.summary",
                 "payload": {
-                    "goal": goal,
+                    "goal": goal_for_actions,
                     "logic_unit_id": lu_id,
                     "hints": hints_map,
-                    "training_meta": training_meta_map,
+                    "training_meta": serde_json::Value::Object(
+                        training_meta_for_hints.clone(),
+                    ),
                 },
                 "context_refs": [],
                 "evidence_ids": [lu_id.clone()],
@@ -607,15 +646,17 @@ pub async fn orchestrator_start_training(
 
             let tool_action_id = Uuid::new_v4().to_string();
             let modular_tool_payload = json!({
-                "invocation_id": format!("invoke-{}", id_clone),
+                "invocation_id": format!("invoke-{}", job_id_clone),
                 "requested_by": "orchestrator.trainer",
                 "tool_id": "training.job",
                 "operation_id": "training.job@1.0.0",
                 "input_payload": {
-                    "goal": goal,
-                    "job_id": id_clone,
-                    "preset": preset_value,
-                    "training_meta": training_meta_map,
+                    "goal": goal_for_actions,
+                    "job_id": job_id_clone,
+                    "preset": preset_for_actions,
+                    "training_meta": serde_json::Value::Object(
+                        training_meta_for_hints.clone(),
+                    ),
                 },
                 "sandbox_requirements": {
                     "needs_network": false,
@@ -650,11 +691,13 @@ pub async fn orchestrator_start_training(
             }
         }
     });
-    (
-        axum::http::StatusCode::ACCEPTED,
-        Json(json!({"job_id": id, "ok": true})),
-    )
-        .into_response()
+    let mut response_body = json!({"id": job_id.clone(), "job_id": job_id, "goal": goal});
+    if !job_data_value.is_null() {
+        if let serde_json::Value::Object(ref mut map) = response_body {
+            map.insert("data".into(), job_data_value);
+        }
+    }
+    (axum::http::StatusCode::ACCEPTED, Json(response_body)).into_response()
 }
 
 /// Orchestrator jobs snapshot.
@@ -709,6 +752,8 @@ pub struct RuntimeRestoreResponse {
     pub runtime_id: String,
     pub pending: bool,
     pub restart_budget: RuntimeRestartBudgetView,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub job_id: Option<String>,
 }
 
 #[derive(Serialize, ToSchema)]
@@ -717,6 +762,8 @@ pub struct RuntimeRestoreFailureResponse {
     pub runtime_id: String,
     pub pending: bool,
     pub reason: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub job_id: Option<String>,
 }
 
 #[derive(Serialize, ToSchema)]
@@ -726,6 +773,8 @@ pub struct RuntimeRestoreDeniedResponse {
     pub pending: bool,
     pub reason: String,
     pub restart_budget: RuntimeRestartBudgetView,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub job_id: Option<String>,
 }
 
 #[derive(Serialize, ToSchema)]
@@ -733,6 +782,8 @@ pub struct RuntimeShutdownResponse {
     pub ok: bool,
     pub runtime_id: String,
     pub stopped: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub job_id: Option<String>,
 }
 
 #[derive(Serialize, ToSchema)]
@@ -740,6 +791,8 @@ pub struct RuntimeShutdownFailureResponse {
     pub ok: bool,
     pub runtime_id: String,
     pub reason: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub job_id: Option<String>,
 }
 
 #[derive(Clone, Debug, Serialize, ToSchema)]
@@ -795,42 +848,192 @@ pub async fn orchestrator_runtime_restore(
         return resp;
     }
 
+    let payload = json!({
+        "runtime_id": runtime_id.clone(),
+        "restart": req.restart,
+        "preset": req.preset,
+    });
+    let mut job_spec = JobSpec::new(
+        JobCategory::Runtime,
+        "runtime.restore",
+        format!("Restore runtime {}", runtime_id),
+    );
+    job_spec.tags = vec!["runtime".into(), "restore".into()];
+    job_spec.topics = vec![runtime_id.clone()];
+    job_spec.payload = payload.clone();
+    if let Some(ref preset) = req.preset {
+        job_spec.hints = Some(json!({ "preset": preset }));
+    }
+    let job_id = match orchestrator_jobs::create_job(&state, &job_spec).await {
+        Ok(id) => id,
+        Err(err) => {
+            return (
+                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({
+                    "type": "about:blank",
+                    "title": "Error",
+                    "status": 500,
+                    "detail": err.to_string()
+                })),
+            )
+                .into_response();
+        }
+    };
+    let _ = orchestrator_jobs::update_job(&state, &job_id, Some("running"), Some(0.0), None).await;
+
     match state
         .runtime()
-        .request_restore(&runtime_id, req.restart, req.preset.clone())
+        .request_restore(
+            &runtime_id,
+            req.restart,
+            req.preset.clone(),
+            Some(job_id.clone()),
+        )
         .await
     {
-        Ok(budget) => (
-            axum::http::StatusCode::ACCEPTED,
-            Json(RuntimeRestoreResponse {
-                ok: true,
-                runtime_id,
-                pending: true,
-                restart_budget: budget.into(),
-            }),
-        )
-            .into_response(),
-        Err(RuntimeRestoreError::RestartDenied { budget }) => (
-            axum::http::StatusCode::TOO_MANY_REQUESTS,
-            Json(RuntimeRestoreDeniedResponse {
-                ok: false,
-                runtime_id,
-                pending: false,
-                reason: "Restart budget exhausted".to_string(),
-                restart_budget: budget.into(),
-            }),
-        )
-            .into_response(),
-        Err(RuntimeRestoreError::RestoreFailed { reason }) => (
-            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
-            Json(RuntimeRestoreFailureResponse {
-                ok: false,
-                runtime_id,
-                pending: false,
-                reason,
-            }),
-        )
-            .into_response(),
+        Ok(budget) => {
+            let view: RuntimeRestartBudgetView = budget.clone().into();
+            let _ = orchestrator_jobs::update_job(
+                &state,
+                &job_id,
+                Some("running"),
+                Some(0.05),
+                Some(json!({
+                    "restart_budget": view,
+                    "pending": true,
+                })),
+            )
+            .await;
+
+            let bus = state.bus();
+            let mut rx = bus.subscribe_filtered(
+                vec![topics::TOPIC_RUNTIME_RESTORE_COMPLETED.to_string()],
+                Some(32),
+            );
+            let bus_for_task = bus.clone();
+            let state_for_task = state.clone();
+            let runtime_id_for_task = runtime_id.clone();
+            let job_id_for_task = job_id.clone();
+            tokio::spawn(async move {
+                let listener = async {
+                    while let Some(env) = crate::util::next_bus_event(
+                        &mut rx,
+                        &bus_for_task,
+                        "orchestrator.runtime_restore_listener",
+                    )
+                    .await
+                    {
+                        if env.kind.as_str() != topics::TOPIC_RUNTIME_RESTORE_COMPLETED {
+                            continue;
+                        }
+                        let runtime = env.payload.get("runtime").and_then(Value::as_str);
+                        if runtime != Some(runtime_id_for_task.as_str()) {
+                            continue;
+                        }
+                        let event_job = env.payload.get("job_id").and_then(Value::as_str);
+                        if let Some(jid) = event_job {
+                            if jid != job_id_for_task {
+                                continue;
+                            }
+                        } else if env.payload.get("job_id").is_some() {
+                            continue;
+                        }
+                        let ok = env
+                            .payload
+                            .get("ok")
+                            .and_then(Value::as_bool)
+                            .unwrap_or(true);
+                        if ok {
+                            let _ = orchestrator_jobs::complete_job_ok(
+                                &state_for_task,
+                                &job_id_for_task,
+                                Some(env.payload.clone()),
+                                None,
+                            )
+                            .await;
+                        } else {
+                            let reason = env
+                                .payload
+                                .get("error")
+                                .and_then(Value::as_str)
+                                .unwrap_or("Runtime restore failed");
+                            let _ = orchestrator_jobs::complete_job_error(
+                                &state_for_task,
+                                &job_id_for_task,
+                                reason,
+                                Some(env.payload.clone()),
+                            )
+                            .await;
+                        }
+                        return;
+                    }
+                };
+                if timeout(Duration::from_secs(600), listener).await.is_err() {
+                    let _ = orchestrator_jobs::complete_job_error(
+                        &state_for_task,
+                        &job_id_for_task,
+                        "Runtime restore timed out",
+                        None,
+                    )
+                    .await;
+                }
+            });
+
+            (
+                axum::http::StatusCode::ACCEPTED,
+                Json(RuntimeRestoreResponse {
+                    ok: true,
+                    runtime_id,
+                    pending: true,
+                    restart_budget: budget.into(),
+                    job_id: Some(job_id),
+                }),
+            )
+                .into_response()
+        }
+        Err(RuntimeRestoreError::RestartDenied { budget }) => {
+            let _ = orchestrator_jobs::complete_job_error(
+                &state,
+                &job_id,
+                "Restart budget exhausted",
+                Some(json!({
+                    "restart_budget": RuntimeRestartBudgetView::from(budget.clone())
+                })),
+            )
+            .await;
+            (
+                axum::http::StatusCode::TOO_MANY_REQUESTS,
+                Json(RuntimeRestoreDeniedResponse {
+                    ok: false,
+                    runtime_id,
+                    pending: false,
+                    reason: "Restart budget exhausted".to_string(),
+                    restart_budget: budget.into(),
+                    job_id: Some(job_id),
+                }),
+            )
+                .into_response()
+        }
+        Err(RuntimeRestoreError::RestoreFailed { reason }) => {
+            let _ = orchestrator_jobs::complete_job_error(
+                &state,
+                &job_id,
+                &reason,
+                Some(json!({ "pending": false })),
+            )
+            .await;
+            (
+                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                Json(RuntimeRestoreFailureResponse {
+                    ok: false,
+                    runtime_id,
+                    pending: false,
+                    reason,
+                    job_id: Some(job_id),
+                }),
+            )
+                .into_response()
+        }
     }
 }
 
@@ -859,29 +1062,75 @@ pub async fn orchestrator_runtime_shutdown(
         return resp;
     }
 
+    let payload = json!({ "runtime_id": runtime_id.clone() });
+    let mut job_spec = JobSpec::new(
+        JobCategory::Runtime,
+        "runtime.shutdown",
+        format!("Shutdown runtime {}", runtime_id),
+    );
+    job_spec.tags = vec!["runtime".into(), "shutdown".into()];
+    job_spec.topics = vec![runtime_id.clone()];
+    job_spec.payload = payload.clone();
+    let job_id = match orchestrator_jobs::create_job(&state, &job_spec).await {
+        Ok(id) => id,
+        Err(err) => {
+            return (
+                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({
+                    "type": "about:blank",
+                    "title": "Error",
+                    "status": 500,
+                    "detail": err.to_string()
+                })),
+            )
+                .into_response();
+        }
+    };
+
     match state
         .runtime_supervisor()
         .shutdown_runtime(&runtime_id)
         .await
     {
-        Ok(_) => (
-            axum::http::StatusCode::ACCEPTED,
-            Json(RuntimeShutdownResponse {
-                ok: true,
-                runtime_id,
-                stopped: true,
-            }),
-        )
-            .into_response(),
-        Err(err) => (
-            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
-            Json(RuntimeShutdownFailureResponse {
-                ok: false,
-                runtime_id,
-                reason: err.to_string(),
-            }),
-        )
-            .into_response(),
+        Ok(_) => {
+            let _ = orchestrator_jobs::complete_job_ok(
+                &state,
+                &job_id,
+                Some(json!({ "stopped": true })),
+                None,
+            )
+            .await;
+            (
+                axum::http::StatusCode::ACCEPTED,
+                Json(RuntimeShutdownResponse {
+                    ok: true,
+                    runtime_id,
+                    stopped: true,
+                    job_id: Some(job_id),
+                }),
+            )
+                .into_response()
+        }
+        Err(err) => {
+            let reason = err.to_string();
+            let _ = orchestrator_jobs::complete_job_error(
+                &state,
+                &job_id,
+                &reason,
+                Some(json!({ "stopped": false })),
+            )
+            .await;
+            (
+                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                Json(RuntimeShutdownFailureResponse {
+                    ok: false,
+                    runtime_id,
+                    reason,
+                    job_id: Some(job_id),
+                }),
+            )
+                .into_response()
+        }
     }
 }
 
@@ -1113,6 +1362,7 @@ mod tests {
             payload.get("runtime_id").and_then(Value::as_str),
             Some("runtime-test")
         );
+        assert!(payload.get("job_id").and_then(Value::as_str).is_some());
     }
 
     #[tokio::test]
@@ -1187,6 +1437,7 @@ mod tests {
             .and_then(|v| v.get("remaining"))
             .and_then(Value::as_u64);
         assert_eq!(remaining, Some(0));
+        assert!(payload.get("job_id").and_then(Value::as_str).is_some());
     }
 
     #[tokio::test]
@@ -1245,6 +1496,7 @@ mod tests {
             payload.get("reason").and_then(Value::as_str),
             Some("launch failure: stub launch failed")
         );
+        assert!(payload.get("job_id").and_then(Value::as_str).is_some());
     }
 
     #[tokio::test]
@@ -1340,5 +1592,6 @@ mod tests {
             Some("runtime-test")
         );
         assert_eq!(payload.get("stopped").and_then(Value::as_bool), Some(true));
+        assert!(payload.get("job_id").and_then(Value::as_str).is_some());
     }
 }

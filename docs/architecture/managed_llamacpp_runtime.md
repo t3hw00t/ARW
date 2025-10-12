@@ -75,6 +75,7 @@ We need a first-class, flexible integration that feels native, stays policy-awar
 - Add orchestrator tasks: `runtime.ensure_ready` (idempotent), `runtime.health_probe`, and `runtime.swap_model` to align with project plans.
 - Introduce automation pipeline: when a project enters autonomous mode, orchestrator requests runtime claim; Runtime Manager ensures target model is downloaded, runtime warm, accelerator enabled, and prompt cache primed before job execution.
 - Expose consistent events: `runtime.claim.acquired`, `runtime.claim.rejected`, `runtime.health.degraded`, `runtime.fallback.engaged`, `runtime.accelerator.switch`.
+- Surface every restore/shutdown request through the unified orchestrator job helper (`category = runtime`), allowing operators to track progress via `job_id` and linking job metadata with relevant story threads.
 
 ### 5. Extensibility Layer
 
