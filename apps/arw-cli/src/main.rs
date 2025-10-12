@@ -16,6 +16,7 @@ use arw_protocol::GatingCapsule;
 use arw_runtime::{RuntimeAccelerator, RuntimeModality, RuntimeSeverity, RuntimeState};
 use base64::engine::general_purpose::STANDARD as BASE64;
 use base64::Engine;
+use chrono::Duration as ChronoDuration;
 use chrono::{DateTime, Local, SecondsFormat, TimeZone, Utc};
 use clap::CommandFactory;
 use clap::{Args, Parser, Subcommand, ValueEnum};
@@ -30,7 +31,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Map as JsonMap, Number as JsonNumber, Value as JsonValue};
 use sha2::{Digest, Sha256};
 use std::cmp::Reverse;
-use std::collections::{BTreeMap, HashSet, VecDeque};
+use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
 use std::env;
 use std::fmt::Write as _;
 use std::fs::{create_dir_all, OpenOptions};
@@ -9009,6 +9010,9 @@ fn render_egress_scopes_text(snapshot: &JsonValue) -> Result<()> {
         return Ok(());
     }
 
+    let scope_leases = collect_scope_leases(snapshot);
+    let now = Utc::now();
+
     println!("\nScopes ({}):", scopes.len());
     for scope in scopes {
         let id = scope
@@ -9111,9 +9115,175 @@ fn render_egress_scopes_text(snapshot: &JsonValue) -> Result<()> {
         {
             println!("    Expires at: {}", expires_at);
         }
+
+        let mut lease_summary: Option<String> = None;
+        if !id.is_empty() {
+            if let Some(entries) = scope_leases.get(&id) {
+                lease_summary = Some(summarize_scope_leases(entries, now));
+            }
+        }
+        if lease_summary.is_none() && !description.is_empty() {
+            if let Some(entries) = scope_leases.get(&description) {
+                lease_summary = Some(summarize_scope_leases(entries, now));
+            }
+        }
+        if let Some(summary) = lease_summary {
+            println!("    Leases: {}", summary);
+        }
     }
 
     Ok(())
+}
+
+#[derive(Clone, Debug)]
+struct ScopeLeaseInfo {
+    capability: String,
+    matched_capability: Option<String>,
+    ttl_until: Option<String>,
+}
+
+fn collect_scope_leases(snapshot: &JsonValue) -> HashMap<String, Vec<ScopeLeaseInfo>> {
+    let mut scoped: HashMap<String, Vec<ScopeLeaseInfo>> = HashMap::new();
+    if let Some(items) = snapshot
+        .get("leases")
+        .and_then(|v| v.get("items"))
+        .and_then(|v| v.as_array())
+    {
+        for lease in items {
+            let scope = lease
+                .get("scope")
+                .and_then(|v| v.as_str())
+                .map(|s| s.trim())
+                .filter(|s| !s.is_empty());
+            let capability = lease
+                .get("capability")
+                .and_then(|v| v.as_str())
+                .map(|s| s.trim())
+                .filter(|s| !s.is_empty());
+            if let (Some(scope_id), Some(cap)) = (scope, capability) {
+                let info = ScopeLeaseInfo {
+                    capability: cap.to_string(),
+                    matched_capability: lease
+                        .get("matched_capability")
+                        .and_then(|v| v.as_str())
+                        .map(|s| s.to_string()),
+                    ttl_until: lease
+                        .get("ttl_until")
+                        .and_then(|v| v.as_str())
+                        .map(|s| s.to_string()),
+                };
+                scoped.entry(scope_id.to_string()).or_default().push(info);
+            }
+        }
+    }
+    scoped
+}
+
+fn summarize_scope_leases(entries: &[ScopeLeaseInfo], now: DateTime<Utc>) -> String {
+    if entries.is_empty() {
+        return "none".into();
+    }
+    let mut by_capability: BTreeMap<String, ScopeLeaseInfo> = BTreeMap::new();
+    for entry in entries {
+        by_capability
+            .entry(entry.capability.clone())
+            .and_modify(|existing| {
+                let existing_ttl = existing.ttl_until.as_deref().and_then(parse_ttl_until);
+                let new_ttl = entry.ttl_until.as_deref().and_then(parse_ttl_until);
+                let replace = match (existing_ttl, new_ttl) {
+                    (None, Some(_)) => true,
+                    (Some(_), None) => false,
+                    (Some(old), Some(newer)) => newer > old,
+                    (None, None) => false,
+                };
+                if replace {
+                    *existing = entry.clone();
+                }
+            })
+            .or_insert_with(|| entry.clone());
+    }
+
+    let mut parts: Vec<String> = Vec::new();
+    for info in by_capability.values() {
+        let label = info
+            .matched_capability
+            .as_ref()
+            .and_then(|s| {
+                let trimmed = s.trim();
+                if trimmed.is_empty() {
+                    None
+                } else {
+                    Some(trimmed)
+                }
+            })
+            .unwrap_or_else(|| info.capability.as_str());
+
+        if let Some(ttl_str) = info.ttl_until.as_deref() {
+            match parse_ttl_until(ttl_str) {
+                Some(ttl) => {
+                    let delta = ttl - now;
+                    if delta > ChronoDuration::zero() {
+                        parts.push(format!(
+                            "{} expires in {} ({})",
+                            label,
+                            human_duration(delta),
+                            ttl.format("%Y-%m-%d %H:%M:%S")
+                        ));
+                    } else {
+                        let elapsed = -delta;
+                        parts.push(format!(
+                            "{} expired {} ago ({})",
+                            label,
+                            human_duration(elapsed),
+                            ttl.format("%Y-%m-%d %H:%M:%S")
+                        ));
+                    }
+                }
+                None => {
+                    parts.push(format!("{} (invalid ttl {})", label, ttl_str));
+                }
+            }
+        } else {
+            parts.push(format!("{} (ttl unknown)", label));
+        }
+    }
+
+    if parts.is_empty() {
+        "none".into()
+    } else {
+        parts.join(" | ")
+    }
+}
+
+fn parse_ttl_until(raw: &str) -> Option<DateTime<Utc>> {
+    DateTime::parse_from_rfc3339(raw)
+        .ok()
+        .map(|dt| dt.with_timezone(&Utc))
+}
+
+fn human_duration(delta: ChronoDuration) -> String {
+    let mut seconds = delta.num_seconds().abs();
+    let days = seconds / 86_400;
+    seconds %= 86_400;
+    let hours = seconds / 3_600;
+    seconds %= 3_600;
+    let minutes = seconds / 60;
+    seconds %= 60;
+
+    let mut parts: Vec<String> = Vec::new();
+    if days > 0 {
+        parts.push(format!("{}d", days));
+    }
+    if hours > 0 {
+        parts.push(format!("{}h", hours));
+    }
+    if minutes > 0 {
+        parts.push(format!("{}m", minutes));
+    }
+    if seconds > 0 || parts.is_empty() {
+        parts.push(format!("{}s", seconds));
+    }
+    parts.join("")
 }
 
 fn fetch_memory_quarantine_entries(

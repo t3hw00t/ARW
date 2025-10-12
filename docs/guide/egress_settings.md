@@ -140,6 +140,9 @@ Notes
 - Changing `posture` without specifying booleans adopts the `recommended` defaults (block IP literals, DNS guard, proxy, and ledger) so posture/ledger stay aligned. Provide explicit values in the patch body to override.
 - `scopes` supplement posture allowlists with structured network grants. Entries first expire client-side (`expires_at`) and are ignored without deleting them, so you can pre-stage time-bound access.
 - Optional `lease_capabilities` on a scope mints/refreshes the listed capability leases whenever that scope allows traffic, so you can mirror policy intent into the lease ledger automatically.
+- Scope-minted leases default to a one-hour TTL and refresh when fewer than five minutes remain. Tune cadence with `ARW_EGRESS_SCOPE_LEASE_TTL_SECS` (min 60, max 86 400) and `ARW_EGRESS_SCOPE_LEASE_REFRESH_SECS` (min 10).
+- `arw-cli admin egress scopes` surfaces the active leases per scope with remaining TTL so you can confirm the automation at a glance.
+- `/admin/probe/metrics` (Prometheus output) now exports `arw_egress_scope_lease_*` counters so dashboards can track scope lease mints and refreshes per scope.
 
 Network scopes
 - Define `hosts` (exact or wildcard) and/or `cidrs` to describe the endpoints covered by the scope. Empty entries are ignored.

@@ -154,6 +154,57 @@ fn render_prometheus(
     }
 
     out.push_str(
+        "# HELP arw_egress_scope_lease_minted_total Scope lease mints per scope\n# TYPE arw_egress_scope_lease_minted_total counter\n",
+    );
+    out.push_str(
+        "# HELP arw_egress_scope_lease_refreshed_total Scope lease refreshes per scope\n# TYPE arw_egress_scope_lease_refreshed_total counter\n",
+    );
+    out.push_str(
+        "# HELP arw_egress_scope_lease_last_mint_timestamp_seconds Last minted timestamp per scope\n# TYPE arw_egress_scope_lease_last_mint_timestamp_seconds gauge\n",
+    );
+    for (scope, data) in summary.egress.scope_leases.iter() {
+        let scope_label = ("scope", scope.clone());
+        write_metric_line(
+            &mut out,
+            "arw_egress_scope_lease_minted_total",
+            &[scope_label.clone()],
+            data.minted,
+        );
+        write_metric_line(
+            &mut out,
+            "arw_egress_scope_lease_refreshed_total",
+            &[scope_label.clone()],
+            data.refreshed,
+        );
+        if let Some(epoch) = data.last_minted_epoch {
+            write_metric_line(
+                &mut out,
+                "arw_egress_scope_lease_last_mint_timestamp_seconds",
+                &[scope_label.clone()],
+                epoch,
+            );
+        }
+    }
+    out.push_str(
+        "# HELP arw_egress_scope_lease_minted_global_total Total scope lease mints\n# TYPE arw_egress_scope_lease_minted_global_total counter\n",
+    );
+    write_metric_line(
+        &mut out,
+        "arw_egress_scope_lease_minted_global_total",
+        &[],
+        summary.egress.minted_total,
+    );
+    out.push_str(
+        "# HELP arw_egress_scope_lease_refreshed_global_total Total scope lease refreshes\n# TYPE arw_egress_scope_lease_refreshed_global_total counter\n",
+    );
+    write_metric_line(
+        &mut out,
+        "arw_egress_scope_lease_refreshed_global_total",
+        &[],
+        summary.egress.refreshed_total,
+    );
+
+    out.push_str(
         "# HELP arw_route_hits_total HTTP hits per route\n# TYPE arw_route_hits_total counter\n",
     );
     out.push_str("# HELP arw_route_errors_total HTTP errors per route\n# TYPE arw_route_errors_total counter\n");

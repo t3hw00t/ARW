@@ -73,12 +73,12 @@ pub async fn egress_preview(
         if let Some(scope_caps) = scope.lease_capabilities.as_ref() {
             meta.insert("scope_lease_caps".into(), json!(scope_caps));
             if lease.is_none() {
-                lease = lease_grant(&state, scope_caps).await;
+                lease = lease_grant(&state, scope_caps, Some(scope)).await;
             }
         }
     }
     if lease.is_none() {
-        lease = lease_grant(&state, &capability_candidates).await;
+        lease = lease_grant(&state, &capability_candidates, None).await;
     }
     if let Some(ref lease_val) = lease {
         meta.insert("lease".into(), lease_val.clone());
@@ -127,7 +127,7 @@ pub async fn egress_preview(
     if !policy_decision.allow {
         if let Some(cap) = policy_decision.require_capability.as_deref() {
             let lease_vec = vec![cap.to_string()];
-            if let Some(lease_val) = lease_grant(&state, &lease_vec).await {
+            if let Some(lease_val) = lease_grant(&state, &lease_vec, None).await {
                 lease = Some(lease_val.clone());
                 meta.insert("lease".into(), lease_val);
                 meta.insert("allowed_via".into(), json!("lease"));
@@ -336,34 +336,6 @@ mod tests {
                 }
             });
         }
-
-        let ttl = (chrono::Utc::now() + chrono::Duration::minutes(5))
-            .to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
-        let kernel = state.kernel();
-        kernel
-            .insert_lease_async(
-                "lease-trusted".into(),
-                "local".into(),
-                "net:https".into(),
-                Some("trusted".into()),
-                ttl.clone(),
-                None,
-                None,
-            )
-            .await
-            .expect("insert https lease");
-        kernel
-            .insert_lease_async(
-                "lease-trusted-http".into(),
-                "local".into(),
-                "net:http".into(),
-                Some("trusted".into()),
-                ttl,
-                None,
-                None,
-            )
-            .await
-            .expect("insert http lease");
 
         let req = EgressPreviewReq {
             url: "https://trusted.example.com/resource".into(),

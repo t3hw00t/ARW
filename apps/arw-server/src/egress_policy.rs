@@ -1,16 +1,18 @@
-use chrono::{DateTime, SecondsFormat, Utc};
+use chrono::{DateTime, Duration, SecondsFormat, Utc};
 use ipnet::IpNet;
 use serde::Serialize;
-use serde_json::{json, Value};
+use serde_json::{json, Map, Value};
 use std::{
     cell::RefCell,
     net::IpAddr,
     str::FromStr,
     sync::{Mutex, OnceLock},
 };
-use tracing::warn;
+use tracing::{debug, info, warn};
+use uuid::Uuid;
 
-use crate::{capsule_guard, AppState};
+use crate::{capsule_guard, read_models, AppState};
+use arw_topics as topics;
 
 fn domain_suffix(host: &str) -> Option<String> {
     let trimmed = host.trim().trim_end_matches('.').to_ascii_lowercase();
@@ -56,6 +58,29 @@ fn domain_suffix(host: &str) -> Option<String> {
     }
 
     Some(candidate)
+}
+
+const DEFAULT_SCOPE_LEASE_TTL_SECS: i64 = 3600;
+const MIN_SCOPE_LEASE_TTL_SECS: i64 = 60;
+const MAX_SCOPE_LEASE_TTL_SECS: i64 = 86_400;
+const SCOPE_LEASE_REFRESH_THRESHOLD_SECS: i64 = 300;
+
+fn scope_lease_ttl_duration() -> Duration {
+    std::env::var("ARW_EGRESS_SCOPE_LEASE_TTL_SECS")
+        .ok()
+        .and_then(|raw| raw.parse::<i64>().ok())
+        .map(|secs| secs.clamp(MIN_SCOPE_LEASE_TTL_SECS, MAX_SCOPE_LEASE_TTL_SECS))
+        .map(Duration::seconds)
+        .unwrap_or_else(|| Duration::seconds(DEFAULT_SCOPE_LEASE_TTL_SECS))
+}
+
+fn scope_lease_refresh_threshold() -> Duration {
+    std::env::var("ARW_EGRESS_SCOPE_LEASE_REFRESH_SECS")
+        .ok()
+        .and_then(|raw| raw.parse::<i64>().ok())
+        .map(|secs| secs.clamp(10, MAX_SCOPE_LEASE_TTL_SECS))
+        .map(Duration::seconds)
+        .unwrap_or_else(|| Duration::seconds(SCOPE_LEASE_REFRESH_THRESHOLD_SECS))
 }
 
 fn is_predefined_multi_label(second: &str, tld: &str) -> bool {
@@ -548,6 +573,25 @@ pub struct ScopeDecision {
     pub expires_at: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub lease_capabilities: Option<Vec<String>>,
+}
+
+#[derive(Clone, Copy)]
+enum ScopeLeaseMintReason {
+    Initial,
+    Refresh,
+}
+
+impl ScopeLeaseMintReason {
+    fn as_str(self) -> &'static str {
+        match self {
+            ScopeLeaseMintReason::Initial => "mint",
+            ScopeLeaseMintReason::Refresh => "refresh",
+        }
+    }
+
+    fn is_refresh(self) -> bool {
+        matches!(self, ScopeLeaseMintReason::Refresh)
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -1055,21 +1099,205 @@ pub fn capability_candidates(host: Option<&str>, port: Option<u16>, scheme: &str
     caps
 }
 
-pub async fn lease_grant(state: &AppState, caps: &[String]) -> Option<Value> {
+fn lease_needs_refresh(lease: &Value, threshold: Duration) -> bool {
+    let Some(ttl_str) = lease.get("ttl_until").and_then(|v| v.as_str()) else {
+        return true;
+    };
+    match DateTime::parse_from_rfc3339(ttl_str) {
+        Ok(ttl) => {
+            let ttl_utc = ttl.with_timezone(&Utc);
+            ttl_utc <= Utc::now() + threshold
+        }
+        Err(err) => {
+            warn!(%ttl_str, %err, "failed to parse lease ttl; refreshing");
+            true
+        }
+    }
+}
+
+async fn publish_scope_lease_created(
+    state: &AppState,
+    id: &str,
+    subject: &str,
+    capability: &str,
+    scope: Option<&str>,
+    ttl_until: &str,
+    created: &str,
+) {
+    let bus = state.bus();
+    let mut payload = Map::new();
+    payload.insert("id".into(), json!(id));
+    payload.insert("subject".into(), json!(subject));
+    payload.insert("capability".into(), json!(capability));
+    payload.insert("ttl_until".into(), json!(ttl_until));
+    payload.insert("created".into(), json!(created));
+    if let Some(scope_id) = scope {
+        payload.insert("scope".into(), json!(scope_id));
+    }
+    bus.publish(topics::TOPIC_LEASES_CREATED, &json!(payload));
+
+    let prev_snapshot =
+        read_models::cached_read_model("policy_leases").unwrap_or_else(|| json!({}));
+    let snapshot = read_models::leases_snapshot(state).await;
+    read_models::publish_read_model_patch_with_previous(
+        &bus,
+        "policy_leases",
+        Some(prev_snapshot),
+        &snapshot,
+    );
+}
+
+async fn mint_scope_lease(
+    state: &AppState,
+    capability: &str,
+    scope: Option<&ScopeDecision>,
+    reason: ScopeLeaseMintReason,
+) -> Option<Value> {
     if !state.kernel_enabled() {
         return None;
     }
     let kernel = state.kernel_if_enabled()?;
-    for cap in caps {
-        if let Ok(Some(mut lease)) = kernel.find_valid_lease_async("local", cap).await {
-            if let Some(obj) = lease.as_object_mut() {
-                obj.entry("matched_capability")
-                    .or_insert_with(|| json!(cap));
+    let issued_at = Utc::now();
+    let mut ttl_duration = scope_lease_ttl_duration();
+    if let Some(scope_decision) = scope {
+        if let Some(raw) = scope_decision.expires_at.as_deref() {
+            if let Ok(expiry) = DateTime::parse_from_rfc3339(raw) {
+                let expiry_utc = expiry.with_timezone(&Utc);
+                let remaining = expiry_utc - issued_at;
+                if remaining <= Duration::zero() {
+                    debug!(
+                        scope_id = scope_decision.id.as_deref().unwrap_or("<anonymous>"),
+                        "scope already expired; skipping lease mint"
+                    );
+                    return None;
+                }
+                if remaining < ttl_duration {
+                    ttl_duration = remaining;
+                }
             }
-            return Some(lease);
         }
     }
-    None
+    if ttl_duration <= Duration::zero() {
+        return None;
+    }
+    let ttl_until_dt = issued_at + ttl_duration;
+    let ttl_until = ttl_until_dt.to_rfc3339_opts(SecondsFormat::Millis, true);
+    let created = issued_at.to_rfc3339_opts(SecondsFormat::Millis, true);
+    let lease_id = Uuid::new_v4().to_string();
+    let scope_id = scope
+        .and_then(|sc| sc.id.as_deref().map(|s| s.to_string()))
+        .or_else(|| scope.and_then(|sc| sc.description.as_deref().map(|s| s.to_string())));
+    if let Err(err) = kernel
+        .insert_lease_async(
+            lease_id.clone(),
+            "local".into(),
+            capability.to_string(),
+            scope_id.clone(),
+            ttl_until.clone(),
+            None,
+            None,
+        )
+        .await
+    {
+        warn!(%capability, ?err, "failed to insert scope lease");
+        return None;
+    }
+
+    publish_scope_lease_created(
+        state,
+        &lease_id,
+        "local",
+        capability,
+        scope_id.as_deref(),
+        &ttl_until,
+        &created,
+    )
+    .await;
+    let scope_label = scope_id.as_deref();
+    state.metrics().record_scope_lease_mint(
+        scope_label,
+        capability,
+        Some(ttl_until.as_str()),
+        reason.is_refresh(),
+    );
+    info!(
+        lease_id,
+        %capability,
+        scope = scope_label.unwrap_or("(unknown)"),
+        reason = reason.as_str(),
+        ttl = %ttl_until,
+        "scope lease minted"
+    );
+
+    match kernel.find_valid_lease_async("local", capability).await {
+        Ok(Some(mut lease)) => {
+            if let Some(obj) = lease.as_object_mut() {
+                obj.insert("matched_capability".into(), json!(capability));
+            }
+            Some(lease)
+        }
+        Ok(None) => None,
+        Err(err) => {
+            warn!(%capability, ?err, "failed to reload minted scope lease");
+            None
+        }
+    }
+}
+
+pub async fn lease_grant(
+    state: &AppState,
+    caps: &[String],
+    scope: Option<&ScopeDecision>,
+) -> Option<Value> {
+    if !state.kernel_enabled() || caps.is_empty() {
+        return None;
+    }
+    let kernel = state.kernel_if_enabled()?;
+    let refresh_threshold = scope.map(|_| scope_lease_refresh_threshold());
+    let mut granted: Option<Value> = None;
+
+    for cap in caps {
+        let mut lease = match kernel.find_valid_lease_async("local", cap).await {
+            Ok(Some(mut lease)) => {
+                if let Some(obj) = lease.as_object_mut() {
+                    obj.insert("matched_capability".into(), json!(cap));
+                }
+                if let Some(threshold) = refresh_threshold {
+                    if lease_needs_refresh(&lease, threshold) {
+                        if let Some(refreshed) =
+                            mint_scope_lease(state, cap, scope, ScopeLeaseMintReason::Refresh).await
+                        {
+                            lease = refreshed;
+                        }
+                    }
+                }
+                Some(lease)
+            }
+            Ok(None) => {
+                if scope.is_some() {
+                    mint_scope_lease(state, cap, scope, ScopeLeaseMintReason::Initial).await
+                } else {
+                    None
+                }
+            }
+            Err(err) => {
+                warn!(%cap, ?err, "failed to query existing lease");
+                None
+            }
+        };
+
+        if let Some(ref mut lease_val) = lease {
+            if let Some(obj) = lease_val.as_object_mut() {
+                obj.insert("matched_capability".into(), json!(cap));
+            }
+        }
+
+        if granted.is_none() && lease.is_some() {
+            granted = lease.clone();
+        }
+    }
+
+    granted
 }
 
 #[cfg(test)]
@@ -1393,7 +1621,9 @@ mod tests {
             .await
             .expect("insert lease");
 
-        let lease = lease_grant(&state, &caps).await.expect("granted lease");
+        let lease = lease_grant(&state, &caps, None)
+            .await
+            .expect("granted lease");
         assert_eq!(
             lease.get("matched_capability").and_then(|v| v.as_str()),
             Some("net:domain:example.com")
@@ -1405,6 +1635,85 @@ mod tests {
         assert_eq!(
             lease.get("scope").and_then(|v| v.as_str()),
             Some("trusted-domain")
+        );
+    }
+
+    #[tokio::test]
+    async fn scope_lease_minted_when_missing() {
+        let temp = tempdir().expect("tempdir");
+        let mut ctx = test_support::begin_state_env(temp.path());
+        crate::test_support::init_tracing();
+        ctx.env.remove("ARW_NET_POSTURE");
+        ctx.env.remove("ARW_SECURITY_POSTURE");
+
+        let state = build_state(temp.path(), &mut ctx.env).await;
+        {
+            let config = state.config_state();
+            let mut cfg = config.lock().await;
+            let expires = (Utc::now() + Duration::minutes(5))
+                .to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+            *cfg = json!({
+                "egress": {
+                    "posture": "allowlist",
+                    "scopes": [{
+                        "id": "trusted-scope",
+                        "hosts": ["trusted.example.com"],
+                        "lease_capabilities": ["net:https"],
+                        "expires_at": expires
+                    }]
+                }
+            });
+        }
+
+        let policy = resolve_policy(&state).await;
+        let decision = evaluate(&policy, Some("trusted.example.com"), Some(443), "https");
+        assert!(decision.allow);
+        let scope_decision = decision.scope.expect("scope decision");
+        let caps = scope_decision
+            .lease_capabilities
+            .clone()
+            .expect("lease capabilities");
+
+        // No lease exists yet.
+        let none_found = state
+            .kernel()
+            .find_valid_lease_async("local", "net:https")
+            .await
+            .expect("query lease");
+        assert!(none_found.is_none());
+
+        let lease = lease_grant(&state, &caps, Some(&scope_decision))
+            .await
+            .expect("minted lease");
+        assert_eq!(
+            lease.get("capability").and_then(|v| v.as_str()),
+            Some("net:https")
+        );
+        assert_eq!(
+            lease.get("scope").and_then(|v| v.as_str()),
+            Some("trusted-scope")
+        );
+        let ttl = lease
+            .get("ttl_until")
+            .and_then(|v| v.as_str())
+            .expect("ttl string");
+        let ttl_dt = DateTime::parse_from_rfc3339(ttl).expect("valid ttl");
+        assert!(
+            ttl_dt.with_timezone(&Utc) > Utc::now(),
+            "ttl should be in the future"
+        );
+
+        // Lease snapshot now includes the minted lease.
+        let leases = state
+            .kernel()
+            .list_leases_async(10)
+            .await
+            .expect("list leases");
+        assert!(
+            leases
+                .iter()
+                .any(|item| item.get("capability").and_then(|v| v.as_str()) == Some("net:https")),
+            "minted lease present in kernel snapshot"
         );
     }
 }

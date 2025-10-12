@@ -363,7 +363,7 @@ mod tests {
             .expect("jobs");
         let job = jobs
             .into_iter()
-            .find(|row| row.get("id") == Some(Value::String(id.clone())))
+            .find(|row| row.get("id").and_then(Value::as_str) == Some(id.as_str()))
             .expect("job row");
         assert_eq!(
             job.get("goal"),

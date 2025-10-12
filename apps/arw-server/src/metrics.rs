@@ -128,6 +128,7 @@ pub struct MetricsSummary {
     pub autonomy: AutonomySummary,
     pub modular: ModularSummary,
     pub worker: WorkerSummary,
+    pub egress: EgressSummary,
 }
 
 #[derive(Clone, Serialize, Default)]
@@ -337,6 +338,24 @@ pub struct WorkerSummary {
     pub queue_depth: u64,
 }
 
+#[derive(Clone, Serialize, Default)]
+pub struct EgressSummary {
+    pub minted_total: u64,
+    pub refreshed_total: u64,
+    pub scope_leases: BTreeMap<String, ScopeLeaseSummary>,
+}
+
+#[derive(Clone, Serialize, Default)]
+pub struct ScopeLeaseSummary {
+    pub minted: u64,
+    pub refreshed: u64,
+    pub last_capability: Option<String>,
+    pub last_reason: Option<String>,
+    pub last_ttl_until: Option<String>,
+    pub last_minted_at: Option<String>,
+    pub last_minted_epoch: Option<i64>,
+}
+
 impl ModularCounters {
     fn record_agent(&mut self, agent: &str) {
         *self.agents.entry(agent.to_string()).or_default() += 1;
@@ -394,6 +413,99 @@ enum TaskOutcome {
     Aborted,
 }
 
+#[derive(Default, Clone)]
+struct ScopeLeaseCounters {
+    minted: u64,
+    refreshed: u64,
+    last_capability: Option<String>,
+    last_reason: Option<String>,
+    last_ttl_until: Option<String>,
+    last_minted_at: Option<String>,
+    last_minted_epoch: Option<i64>,
+}
+
+#[derive(Default)]
+struct EgressCounters {
+    minted_total: u64,
+    refreshed_total: u64,
+    by_scope: BTreeMap<String, ScopeLeaseCounters>,
+}
+
+impl ScopeLeaseCounters {
+    fn update(
+        &mut self,
+        capability: &str,
+        ttl_until: Option<&str>,
+        reason: &str,
+        minted_at_iso: String,
+        minted_at_epoch: i64,
+        refreshed: bool,
+    ) {
+        if refreshed {
+            self.refreshed = self.refreshed.saturating_add(1);
+        } else {
+            self.minted = self.minted.saturating_add(1);
+        }
+        self.last_capability = Some(capability.to_string());
+        self.last_reason = Some(reason.to_string());
+        self.last_ttl_until = ttl_until.map(|s| s.to_string());
+        self.last_minted_at = Some(minted_at_iso);
+        self.last_minted_epoch = Some(minted_at_epoch);
+    }
+
+    fn summary(&self) -> ScopeLeaseSummary {
+        ScopeLeaseSummary {
+            minted: self.minted,
+            refreshed: self.refreshed,
+            last_capability: self.last_capability.clone(),
+            last_reason: self.last_reason.clone(),
+            last_ttl_until: self.last_ttl_until.clone(),
+            last_minted_at: self.last_minted_at.clone(),
+            last_minted_epoch: self.last_minted_epoch,
+        }
+    }
+}
+
+impl EgressCounters {
+    fn record(
+        &mut self,
+        scope: Option<&str>,
+        capability: &str,
+        ttl_until: Option<&str>,
+        refreshed: bool,
+    ) {
+        let scope_label = scope
+            .map(|s| s.trim())
+            .filter(|s| !s.is_empty())
+            .unwrap_or("(unknown)");
+        let now = chrono::Utc::now();
+        let now_iso = now.to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+        let now_epoch = now.timestamp();
+        let reason = if refreshed { "refresh" } else { "mint" };
+
+        let entry = self.by_scope.entry(scope_label.to_string()).or_default();
+        entry.update(capability, ttl_until, reason, now_iso, now_epoch, refreshed);
+
+        if refreshed {
+            self.refreshed_total = self.refreshed_total.saturating_add(1);
+        } else {
+            self.minted_total = self.minted_total.saturating_add(1);
+        }
+    }
+
+    fn summary(&self) -> EgressSummary {
+        let mut scopes = BTreeMap::new();
+        for (scope, counters) in self.by_scope.iter() {
+            scopes.insert(scope.clone(), counters.summary());
+        }
+        EgressSummary {
+            minted_total: self.minted_total,
+            refreshed_total: self.refreshed_total,
+            scope_leases: scopes,
+        }
+    }
+}
+
 pub struct Metrics {
     events: Mutex<EventStats>,
     routes: Mutex<RouteStats>,
@@ -406,6 +518,7 @@ pub struct Metrics {
     memory_embed_backfill: Mutex<MemoryEmbedBackfillCounters>,
     autonomy_interrupts: Mutex<BTreeMap<String, u64>>,
     modular: Mutex<ModularCounters>,
+    egress: Mutex<EgressCounters>,
     worker_configured: AtomicU64,
     worker_busy: AtomicU64,
     worker_started: AtomicU64,
@@ -449,6 +562,7 @@ impl Metrics {
             memory_embed_backfill: Mutex::new(MemoryEmbedBackfillCounters::default()),
             autonomy_interrupts: Mutex::new(BTreeMap::new()),
             modular: Mutex::new(ModularCounters::default()),
+            egress: Mutex::new(EgressCounters::default()),
             worker_configured: AtomicU64::new(0),
             worker_busy: AtomicU64::new(0),
             worker_started: AtomicU64::new(0),
@@ -482,6 +596,18 @@ impl Metrics {
             entry.update(status, ms, bucket);
         }
         self.routes_version.fetch_add(1, Ordering::Relaxed);
+    }
+
+    pub fn record_scope_lease_mint(
+        &self,
+        scope: Option<&str>,
+        capability: &str,
+        ttl_until: Option<&str>,
+        refreshed: bool,
+    ) {
+        if let Ok(mut counters) = self.egress.lock() {
+            counters.record(scope, capability, ttl_until, refreshed);
+        }
     }
 
     pub fn snapshot(&self) -> MetricsSummary {
@@ -530,6 +656,11 @@ impl Metrics {
             completed: self.worker_completed.load(Ordering::Relaxed),
             queue_depth: self.queue_depth.load(Ordering::Relaxed),
         };
+        let egress = self
+            .egress
+            .lock()
+            .map(|counters| counters.summary())
+            .unwrap_or_default();
         MetricsSummary {
             events,
             routes,
@@ -540,6 +671,7 @@ impl Metrics {
             autonomy,
             modular,
             worker,
+            egress,
         }
     }
 

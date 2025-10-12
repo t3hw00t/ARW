@@ -775,6 +775,7 @@ fn pick_primary_text(record: &Value) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::memory_service::MemoryTopicHint;
 
     #[test]
     fn slugify_topic_produces_hyphenated_lowercase() {
@@ -834,9 +835,10 @@ mod tests {
         let derived = derive_topics_from_summary(&summary);
         assert!(!derived.is_empty());
         assert_eq!(derived[0].name, "Launch Review");
+        assert!(derived.iter().any(|hint| hint.name == "Retro"));
         assert!(derived.iter().any(|hint| hint.name == "atlas"));
         assert!(derived.iter().any(|hint| hint.name == "ops"));
-        assert!(derived.iter().any(|hint| hint.name == "launch review"));
+        assert_eq!(derived.len(), 4);
     }
 
     #[test]

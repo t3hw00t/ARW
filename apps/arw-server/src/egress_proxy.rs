@@ -218,12 +218,12 @@ async fn handle_connect(state: AppState, req: Request<IncomingBody>) -> Response
         if let Some(scope_caps) = scope.lease_capabilities.as_ref() {
             base_meta.insert("scope_lease_caps".into(), json!(scope_caps));
             if lease.is_none() {
-                lease = lease_grant(&state, scope_caps).await;
+                lease = lease_grant(&state, scope_caps, Some(scope)).await;
             }
         }
     }
     if lease.is_none() {
-        lease = lease_grant(&state, &caps).await;
+        lease = lease_grant(&state, &caps, None).await;
     }
     if let Some(ref lease_val) = lease {
         base_meta.insert("lease".into(), lease_val.clone());
@@ -293,7 +293,7 @@ async fn handle_connect(state: AppState, req: Request<IncomingBody>) -> Response
     if !policy_decision.allow {
         if let Some(cap) = policy_decision.require_capability.as_deref() {
             let lease_vec = vec![cap.to_string()];
-            if let Some(lease_val) = lease_grant(&state, &lease_vec).await {
+            if let Some(lease_val) = lease_grant(&state, &lease_vec, None).await {
                 lease = Some(lease_val.clone());
                 base_meta.insert("lease".into(), lease_val);
                 base_meta.insert("allowed_via".into(), json!("lease"));
@@ -499,7 +499,7 @@ async fn handle_http_forward(
             .reason
             .unwrap_or(DenyReason::HostNotAllowed);
         let caps = capability_candidates(host.as_deref(), Some(port), &scheme);
-        if lease_grant(&state, &caps).await.is_none() {
+        if lease_grant(&state, &caps, None).await.is_none() {
             let code = reason_code(reason);
             log_egress_event(
                 &state,
@@ -538,7 +538,7 @@ async fn handle_http_forward(
                 .unwrap_or(false);
         if doh_like || wants_dns_message {
             let caps = capability_candidates(host.as_deref(), Some(port), &scheme);
-            if lease_grant(&state, &caps).await.is_none() {
+            if lease_grant(&state, &caps, None).await.is_none() {
                 log_egress_event(
                     &state,
                     "deny",

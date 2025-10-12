@@ -259,6 +259,8 @@ These options control the policy‑backed egress gateway; some are implemented a
 - `ARW_DISABLE_HTTP3`: `1` to disable HTTP/3 for headless scrapers, ensuring proxy enforcement.
 - `ARW_EGRESS_LEDGER_ENABLE`: `1` to append entries to the egress ledger (opt-in). (implemented)
 - `ARW_EGRESS_MULTI_LABEL_SUFFIXES`: comma-separated additional multi-label suffixes (for example `internal.test,gov.bc.ca`) to treat as registrable domains when deriving capability/allowlist checks.
+- `ARW_EGRESS_SCOPE_LEASE_TTL_SECS`: TTL in seconds for scope-minted leases (default `3600`, min `60`, max `86400`).
+- `ARW_EGRESS_SCOPE_LEASE_REFRESH_SECS`: refresh threshold in seconds; when a scope-minted lease has less time remaining than this value it is renewed (default `300`, min `10`).
 
 Config file example:
 
