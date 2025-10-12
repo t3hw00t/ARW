@@ -48,6 +48,7 @@ optional = true
 [dev-dependencies]
 criterion = "0.7"
 serial_test = "3"
+rand = "0.9"
 
 [[bench]]
 name = "ingest"

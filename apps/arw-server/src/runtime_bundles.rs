@@ -11,11 +11,14 @@ use tokio::sync::RwLock;
 use tracing::{debug, info, warn};
 
 use arw_core::runtime_bundles::{
-    load_catalogs_from_dir, RuntimeBundle, RuntimeBundleCatalog, RuntimeBundleCatalogSource,
+    load_catalogs_from_dir,
+    signature::{verify_manifest_signatures, ManifestVerification},
+    RuntimeBundle, RuntimeBundleCatalog, RuntimeBundleCatalogSource,
 };
 use arw_runtime::{RuntimeAccelerator, RuntimeModality};
 
 const DEFAULT_SCAN_MSG: &str = "runtime bundle catalog scan";
+const ENV_REQUIRE_SIGNED_BUNDLES: &str = "ARW_REQUIRE_SIGNED_BUNDLES";
 
 #[derive(Debug, Clone, Serialize)]
 pub struct RuntimeBundleCatalogView {
@@ -119,6 +122,17 @@ impl RuntimeBundleStore {
         }
         installations.sort_by(|a, b| a.id.cmp(&b.id).then_with(|| a.root.cmp(&b.root)));
 
+        if require_signed_bundles() {
+            let summary = summarize_signatures(&installations);
+            if !summary.ok {
+                anyhow::bail!(
+                    "bundle signature enforcement enabled: unsigned or invalid manifests detected ({} failing, {} missing signatures)",
+                    summary.failed,
+                    summary.missing_signatures
+                );
+            }
+        }
+
         let catalog_count = collected.len();
         let installation_count = installations.len();
         {
@@ -161,6 +175,7 @@ impl RuntimeBundleStore {
             .iter()
             .map(|p| p.to_string_lossy().into_owned())
             .collect::<Vec<_>>();
+        let signature_summary = summarize_signatures(&installations);
         let now = Utc::now();
         let generated = now.to_rfc3339_opts(SecondsFormat::Millis, true);
         let generated_ms = now.timestamp_millis().max(0) as u64;
@@ -169,6 +184,7 @@ impl RuntimeBundleStore {
             "generated_ms": generated_ms,
             "roots": roots,
             "installations": installations,
+            "signature_summary": signature_summary,
             "catalogs": catalogs,
         })
     }
@@ -232,7 +248,57 @@ pub struct RuntimeBundleInstallation {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub root: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub signature: Option<ManifestVerification>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub bundle: Option<RuntimeBundle>,
+}
+
+fn summarize_signatures(installations: &[RuntimeBundleInstallation]) -> SignatureSummary {
+    let mut summary = SignatureSummary::default();
+    for inst in installations {
+        summary.total += 1;
+        match inst.signature.as_ref() {
+            Some(sig) => {
+                summary.with_manifest += 1;
+                if sig.ok {
+                    summary.verified += 1;
+                    if !sig.warnings.is_empty() {
+                        summary.warnings += 1;
+                    }
+                } else {
+                    summary.failed += 1;
+                    if sig.signatures.is_empty() {
+                        summary.missing_signatures += 1;
+                    }
+                }
+            }
+            None => {
+                summary.failed += 1;
+                summary.missing_signatures += 1;
+            }
+        }
+    }
+    summary.ok = summary.failed == 0;
+    summary.enforced = require_signed_bundles();
+    summary
+}
+
+#[derive(Debug, Clone, Serialize, Default)]
+struct SignatureSummary {
+    total: usize,
+    with_manifest: usize,
+    verified: usize,
+    failed: usize,
+    warnings: usize,
+    missing_signatures: usize,
+    ok: bool,
+    enforced: bool,
+}
+
+fn require_signed_bundles() -> bool {
+    std::env::var(ENV_REQUIRE_SIGNED_BUNDLES)
+        .map(|raw| matches!(raw.trim(), "1" | "true" | "TRUE" | "yes" | "on"))
+        .unwrap_or(false)
 }
 
 async fn load_installations_from_root(root: &Path) -> Result<Vec<RuntimeBundleInstallation>> {
@@ -372,6 +438,10 @@ async fn load_installation_from_dir(
     let artifacts_dir = dir.join("artifacts");
     let artifacts = load_artifact_summaries(&artifacts_dir).await;
 
+    let signature_status = metadata_value
+        .as_ref()
+        .map(|value| verify_manifest_signatures(value));
+
     if bundle_full.is_none() && metadata_value.is_none() && artifacts.is_empty() {
         return Ok(None);
     }
@@ -392,6 +462,7 @@ async fn load_installation_from_dir(
             .map(|_| metadata_path.display().to_string()),
         artifacts,
         root: Some(root.display().to_string()),
+        signature: signature_status,
         bundle: bundle_full,
     }))
 }
@@ -509,6 +580,7 @@ fn parse_accelerator(slug: &str) -> Option<RuntimeAccelerator> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use base64::Engine as _;
     use serde_json::json;
     use tempfile::tempdir;
 
@@ -559,6 +631,16 @@ mod tests {
             install.metadata_path.as_deref(),
             Some(metadata_path.to_string_lossy().as_ref())
         );
+        let signature = install
+            .signature
+            .as_ref()
+            .expect("signature status present");
+        assert!(!signature.ok);
+        assert_eq!(signature.signatures.len(), 0);
+        assert_eq!(
+            signature.warnings,
+            vec!["manifest has no signatures array".to_string()]
+        );
         Ok(())
     }
 
@@ -569,6 +651,96 @@ mod tests {
         std::fs::create_dir_all(&bundle_dir)?;
         let installs = load_installations_from_root(tmp.path()).await?;
         assert!(installs.is_empty());
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn reload_fails_when_enforcement_enabled_and_unsigned() -> Result<()> {
+        let tmp = tempdir().expect("tempdir");
+        let mut env_guard = crate::test_support::env::guard();
+        env_guard.set(super::ENV_REQUIRE_SIGNED_BUNDLES, "1");
+        env_guard.set("ARW_STATE_DIR", tmp.path().display().to_string());
+        env_guard.remove("ARW_RUNTIME_BUNDLE_DIR");
+
+        let bundle_dir = tmp.path().join("runtime/bundles/unsigned");
+        std::fs::create_dir_all(bundle_dir.join("artifacts"))?;
+        let manifest = json!({
+            "bundle": {
+                "id": "llama.cpp-preview/linux-x86_64-cpu",
+                "name": "Unsigned",
+                "adapter": "process",
+                "modalities": ["text"],
+                "accelerator": "cpu"
+            },
+            "catalog": { "channel": "preview" },
+            "installed_at": "2025-10-12T00:00:00Z"
+        });
+        std::fs::write(
+            bundle_dir.join("bundle.json"),
+            serde_json::to_vec_pretty(&manifest)?,
+        )?;
+
+        let store = RuntimeBundleStore::load_default().await;
+        let result = store.reload().await;
+        assert!(
+            result.is_err(),
+            "enforcement should reject unsigned manifests"
+        );
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn reload_succeeds_with_signed_manifest_when_enforced() -> Result<()> {
+        use arw_core::runtime_bundles::signature::{
+            canonical_payload_bytes, default_manifest_key_id,
+        };
+        use ed25519_dalek::{Signer, SigningKey};
+
+        let tmp = tempdir().expect("tempdir");
+        let mut env_guard = crate::test_support::env::guard();
+        env_guard.set(super::ENV_REQUIRE_SIGNED_BUNDLES, "1");
+        env_guard.set("ARW_STATE_DIR", tmp.path().display().to_string());
+        env_guard.remove("ARW_RUNTIME_BUNDLE_DIR");
+
+        let bundle_dir = tmp.path().join("runtime/bundles/signed");
+        std::fs::create_dir_all(bundle_dir.join("artifacts"))?;
+        let manifest = json!({
+            "bundle": {
+                "id": "llama.cpp-preview/linux-x86_64-cpu",
+                "name": "Signed",
+                "adapter": "process",
+                "modalities": ["text"],
+                "accelerator": "cpu"
+            },
+            "catalog": { "channel": "preview" },
+            "installed_at": "2025-10-12T00:00:00Z"
+        });
+
+        let (payload_bytes, payload_sha) = canonical_payload_bytes(&manifest)?;
+        let key_bytes: [u8; 32] = rand::random();
+        let signing_key = SigningKey::from_bytes(&key_bytes);
+        let verifying_key = signing_key.verifying_key();
+        let signature = signing_key.sign(&payload_bytes);
+
+        let signature_entry = json!({
+            "alg": "ed25519",
+            "key_id": default_manifest_key_id(&verifying_key.to_bytes()),
+            "public_key_b64": base64::engine::general_purpose::STANDARD.encode(verifying_key.to_bytes()),
+            "signature": base64::engine::general_purpose::STANDARD.encode(signature.to_bytes()),
+            "manifest_sha256": format!("sha256:{}", payload_sha),
+            "issued_at": "2025-10-12T00:00:00Z"
+        });
+
+        let mut signed_manifest = manifest;
+        signed_manifest["signatures"] = json!([signature_entry]);
+
+        std::fs::write(
+            bundle_dir.join("bundle.json"),
+            serde_json::to_vec_pretty(&signed_manifest)?,
+        )?;
+
+        let store = RuntimeBundleStore::load_default().await;
+        store.reload().await.expect("reload should succeed");
         Ok(())
     }
 }

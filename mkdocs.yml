@@ -99,6 +99,7 @@ nav:
       - Context Recipes: guide/context_recipes.md
       - Metrics & Insights: guide/METRICS_AND_INSIGHTS.md
       - Monitoring & Alerts: ops/monitoring.md
+      - Runtime Bundle Runbook: ops/runtime_bundle_runbook.md
       - Cluster Runbook: ops/cluster_runbook.md
       - Alerting (Prometheus): ALERTING.md
       - Trial Planning: ops/trial_readiness.md

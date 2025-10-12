@@ -1,6 +1,10 @@
 use anyhow::{anyhow, bail, ensure, Context, Result};
 mod logic_units;
 mod recipes;
+use arw_core::runtime_bundles::signature::{
+    canonical_payload_bytes, default_manifest_key_id, verify_manifest_signatures,
+    ManifestVerification,
+};
 use arw_core::{
     capsule_presets, capsule_trust, effective_paths, gating, gating_keys, hello_core,
     introspect_tools, load_effective_paths, resolve_config_path, runtime_bundles,
@@ -40,6 +44,173 @@ use walkdir::WalkDir;
 struct Cli {
     #[command(subcommand)]
     command: Option<Commands>,
+}
+
+#[cfg(test)]
+mod runtime_bundle_manifest_tests {
+    use super::*;
+    use serde_json::{json, Value as JsonValue};
+    use tempfile::tempdir;
+
+    #[test]
+    fn sign_and_verify_manifest_roundtrip() -> Result<()> {
+        let tmp = tempdir().expect("tempdir");
+        let manifest_path = tmp.path().join("bundle.json");
+        std::fs::write(
+            &manifest_path,
+            serde_json::to_vec_pretty(&json!({
+                "bundle": {
+                    "id": "llama.cpp-preview/linux-x86_64-cpu",
+                    "name": "Test LLaMA",
+                    "adapter": "process",
+                    "modalities": ["text"],
+                    "profiles": ["balanced"],
+                    "accelerator": "cpu"
+                },
+                "catalog": { "channel": "preview" },
+                "installed_at": "2025-10-12T00:00:00Z"
+            }))?,
+        )?;
+
+        let (_pk_b64, sk_b64) = generate_ed25519_pair_b64()?;
+        let sign_args = RuntimeBundlesManifestSignArgs {
+            manifest: manifest_path.clone(),
+            key_b64: Some(sk_b64),
+            key_file: None,
+            issuer: Some("ci".to_string()),
+            key_id: None,
+            output: None,
+            compact: false,
+        };
+        cmd_runtime_bundles_manifest_sign(&sign_args)?;
+
+        let manifest_bytes = std::fs::read(&sign_args.manifest)
+            .context("reading signed manifest for verification test")?;
+        let manifest_value: JsonValue =
+            serde_json::from_slice(&manifest_bytes).context("parsing signed manifest JSON")?;
+        let signatures = manifest_value
+            .get("signatures")
+            .and_then(|v| v.as_array())
+            .expect("signatures array present");
+        assert_eq!(signatures.len(), 1);
+
+        let verify_args = RuntimeBundlesManifestVerifyArgs {
+            manifest: sign_args.manifest.clone(),
+            json: false,
+            pretty: false,
+        };
+        cmd_runtime_bundles_manifest_verify(&verify_args)?;
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod runtime_bundle_audit_tests {
+    use super::*;
+    use serde_json::json;
+    use tempfile::tempdir;
+
+    #[test]
+    fn audit_detects_missing_signatures() -> Result<()> {
+        let tmp = tempdir().expect("tempdir");
+        let root = tmp.path();
+        let bundle_dir = root.join("unsigned");
+        std::fs::create_dir_all(bundle_dir.join("artifacts"))?;
+        let manifest = json!({
+            "bundle": {
+                "id": "llama.cpp-preview/linux-x86_64-cpu",
+                "name": "Unsigned LLaMA",
+                "adapter": "process",
+                "modalities": ["text"],
+                "accelerator": "cpu",
+                "profiles": ["balanced"]
+            },
+            "catalog": { "channel": "preview" },
+            "installed_at": "2025-10-12T00:00:00Z"
+        });
+        std::fs::write(
+            bundle_dir.join("bundle.json"),
+            serde_json::to_vec_pretty(&manifest)?,
+        )?;
+
+        let args_ok = RuntimeBundlesAuditArgs {
+            dest: Some(root.to_path_buf()),
+            json: false,
+            pretty: false,
+            require_signed: false,
+            remote: false,
+            base: RuntimeBaseArgs {
+                base: "http://127.0.0.1:8091".to_string(),
+                admin_token: None,
+                timeout: 5,
+            },
+        };
+        cmd_runtime_bundles_audit(&args_ok)?;
+
+        let args_fail = RuntimeBundlesAuditArgs {
+            dest: Some(root.to_path_buf()),
+            json: false,
+            pretty: false,
+            require_signed: true,
+            remote: false,
+            base: RuntimeBaseArgs {
+                base: "http://127.0.0.1:8091".to_string(),
+                admin_token: None,
+                timeout: 5,
+            },
+        };
+        assert!(cmd_runtime_bundles_audit(&args_fail).is_err());
+        Ok(())
+    }
+
+    #[test]
+    fn audit_accepts_signed_manifest() -> Result<()> {
+        let tmp = tempdir().expect("tempdir");
+        let root = tmp.path();
+        let bundle_dir = root.join("signed");
+        std::fs::create_dir_all(bundle_dir.join("artifacts"))?;
+        let manifest = json!({
+            "bundle": {
+                "id": "llama.cpp-preview/linux-x86_64-cpu",
+                "name": "Signed LLaMA",
+                "adapter": "process",
+                "modalities": ["text"],
+                "accelerator": "cpu",
+                "profiles": ["balanced"]
+            },
+            "catalog": { "channel": "preview" },
+            "installed_at": "2025-10-12T00:00:00Z"
+        });
+        let manifest_path = bundle_dir.join("bundle.json");
+        std::fs::write(&manifest_path, serde_json::to_vec_pretty(&manifest)?)?;
+
+        let (_pk, sk) = generate_ed25519_pair_b64()?;
+        let sign_args = RuntimeBundlesManifestSignArgs {
+            manifest: manifest_path.clone(),
+            key_b64: Some(sk),
+            key_file: None,
+            issuer: Some("test".to_string()),
+            key_id: None,
+            output: None,
+            compact: false,
+        };
+        cmd_runtime_bundles_manifest_sign(&sign_args)?;
+
+        let args = RuntimeBundlesAuditArgs {
+            dest: Some(root.to_path_buf()),
+            json: false,
+            pretty: false,
+            require_signed: true,
+            remote: false,
+            base: RuntimeBaseArgs {
+                base: "http://127.0.0.1:8091".to_string(),
+                admin_token: None,
+                timeout: 5,
+            },
+        };
+        cmd_runtime_bundles_audit(&args)?;
+        Ok(())
+    }
 }
 
 #[derive(Subcommand)]
@@ -1368,6 +1539,13 @@ enum RuntimeBundlesCmd {
     Import(RuntimeBundlesImportArgs),
     /// Roll back a managed runtime bundle to a previous revision
     Rollback(RuntimeBundlesRollbackArgs),
+    /// Bundle manifest helpers (signing, verification)
+    Manifest {
+        #[command(subcommand)]
+        cmd: RuntimeBundlesManifestCmd,
+    },
+    /// Audit installed bundles for signature coverage and health
+    Audit(RuntimeBundlesAuditArgs),
 }
 
 fn runtime_bundles_list_remote(args: &RuntimeBundlesListArgs) -> Result<()> {
@@ -1398,6 +1576,7 @@ fn runtime_bundles_list_remote(args: &RuntimeBundlesListArgs) -> Result<()> {
         &snapshot.roots,
         snapshot.generated.as_deref(),
         &snapshot.installations,
+        snapshot.signature_summary.as_ref(),
     );
     Ok(())
 }
@@ -1420,12 +1599,25 @@ fn print_bundle_summary(
     roots: &[String],
     generated: Option<&str>,
     installations: &[CliRuntimeBundleInstallation],
+    signature_summary: Option<&CliSignatureSummary>,
 ) {
     if !roots.is_empty() {
         println!("Roots: {}", roots.join(", "));
     }
     if let Some(ts) = generated {
         println!("Generated: {}", ts);
+    }
+    if let Some(summary) = signature_summary {
+        println!(
+            "Signatures: total {} | with manifest {} | verified {} | failed {} | warnings {} | missing {} | enforced {}",
+            summary.total,
+            summary.with_manifest,
+            summary.verified,
+            summary.failed,
+            summary.warnings,
+            summary.missing_signatures,
+            if summary.enforced { "yes" } else { "no" }
+        );
     }
     println!(
         "Found {} bundle catalog{}.",
@@ -1609,6 +1801,39 @@ fn print_bundle_summary(
                     );
                 } else {
                     println!("    artifacts: {}", names);
+                }
+            }
+            if let Some(sig) = inst.signature.as_ref() {
+                let status_label = if sig.ok {
+                    "verified"
+                } else {
+                    "needs attention"
+                };
+                let mut signature_parts = vec![format!("signature: {}", status_label)];
+                if let Some(sha) = sig.canonical_sha256.as_deref() {
+                    signature_parts.push(format!("canonical {}", sha));
+                }
+                println!("    {}", signature_parts.join(" | "));
+                for entry in &sig.signatures {
+                    let key = entry.key_id.as_deref().unwrap_or("<unknown>");
+                    let state = if entry.signature_valid && entry.hash_matches {
+                        "valid"
+                    } else if entry.signature_valid {
+                        "hash mismatch"
+                    } else {
+                        "invalid"
+                    };
+                    let mut entry_line = format!("      key {} -> {}", key, state);
+                    if let Some(issuer) = entry.issuer.as_deref() {
+                        entry_line.push_str(&format!(" (issuer: {})", issuer));
+                    }
+                    println!("{}", entry_line);
+                    if let Some(err) = entry.error.as_deref() {
+                        println!("        error: {}", err);
+                    }
+                }
+                if !sig.warnings.is_empty() {
+                    println!("      warnings: {}", sig.warnings.join(" | "));
                 }
             }
             if let Some(bundle) = inst.bundle.as_ref() {
@@ -1829,6 +2054,73 @@ struct RuntimeBundlesRollbackArgs {
     pretty: bool,
 }
 
+#[derive(Subcommand)]
+enum RuntimeBundlesManifestCmd {
+    /// Sign a bundle manifest with an ed25519 key
+    Sign(RuntimeBundlesManifestSignArgs),
+    /// Verify bundle manifest signatures
+    Verify(RuntimeBundlesManifestVerifyArgs),
+}
+
+#[derive(Args)]
+struct RuntimeBundlesManifestSignArgs {
+    /// Bundle manifest JSON file (bundle.json)
+    #[arg(value_name = "MANIFEST")]
+    manifest: PathBuf,
+    /// Secret key in base64 (ed25519 32-byte)
+    #[arg(long, value_name = "B64", conflicts_with = "key_file")]
+    key_b64: Option<String>,
+    /// File containing base64-encoded secret key (ed25519)
+    #[arg(long, value_name = "FILE", conflicts_with = "key_b64")]
+    key_file: Option<PathBuf>,
+    /// Optional issuer label to embed in the signature entry
+    #[arg(long, value_name = "ISSUER")]
+    issuer: Option<String>,
+    /// Optional key identifier (defaults to ed25519-sha256:<fingerprint>)
+    #[arg(long, value_name = "KEY_ID")]
+    key_id: Option<String>,
+    /// Write output to a different file instead of modifying MANIFEST in place
+    #[arg(long, value_name = "FILE")]
+    output: Option<PathBuf>,
+    /// Write compact JSON instead of pretty formatting
+    #[arg(long)]
+    compact: bool,
+}
+
+#[derive(Args)]
+struct RuntimeBundlesManifestVerifyArgs {
+    /// Bundle manifest JSON file (bundle.json)
+    #[arg(value_name = "MANIFEST")]
+    manifest: PathBuf,
+    /// Emit JSON instead of text
+    #[arg(long)]
+    json: bool,
+    /// Pretty-print JSON output (requires --json)
+    #[arg(long, requires = "json")]
+    pretty: bool,
+}
+
+#[derive(Args)]
+struct RuntimeBundlesAuditArgs {
+    /// Destination root containing managed runtime bundles (defaults to <state_dir>/runtime/bundles)
+    #[arg(long, value_name = "DIR", conflicts_with = "remote")]
+    dest: Option<PathBuf>,
+    /// Emit JSON instead of text
+    #[arg(long)]
+    json: bool,
+    /// Pretty-print JSON output (requires --json)
+    #[arg(long, requires = "json")]
+    pretty: bool,
+    /// Fail when any bundle is missing a valid signature
+    #[arg(long)]
+    require_signed: bool,
+    /// Inspect bundles on a running server instead of local filesystem
+    #[arg(long, conflicts_with = "dest")]
+    remote: bool,
+    #[command(flatten)]
+    base: RuntimeBaseArgs,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct CliRuntimeBundleSnapshot {
     #[serde(default)]
@@ -1841,6 +2133,8 @@ struct CliRuntimeBundleSnapshot {
     catalogs: Vec<CliRuntimeBundleCatalog>,
     #[serde(default)]
     installations: Vec<CliRuntimeBundleInstallation>,
+    #[serde(default)]
+    signature_summary: Option<CliSignatureSummary>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1885,6 +2179,43 @@ struct CliRuntimeBundleInstallation {
     root: Option<String>,
     #[serde(default)]
     bundle: Option<runtime_bundles::RuntimeBundle>,
+    #[serde(default)]
+    signature: Option<ManifestVerification>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+struct CliSignatureSummary {
+    #[serde(default)]
+    total: usize,
+    #[serde(default)]
+    with_manifest: usize,
+    #[serde(default)]
+    verified: usize,
+    #[serde(default)]
+    failed: usize,
+    #[serde(default)]
+    warnings: usize,
+    #[serde(default)]
+    missing_signatures: usize,
+    #[serde(default)]
+    ok: bool,
+    #[serde(default)]
+    enforced: bool,
+}
+
+impl From<SignatureSummary> for CliSignatureSummary {
+    fn from(src: SignatureSummary) -> Self {
+        Self {
+            total: src.total,
+            with_manifest: src.with_manifest,
+            verified: src.verified,
+            failed: src.failed,
+            warnings: src.warnings,
+            missing_signatures: src.missing_signatures,
+            ok: src.ok,
+            enforced: src.enforced,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1925,6 +2256,7 @@ fn load_runtime_bundle_snapshot_local(dir: Option<PathBuf>) -> Result<CliRuntime
         roots,
         catalogs,
         installations: Vec::new(),
+        signature_summary: None,
     })
 }
 
@@ -1992,6 +2324,10 @@ fn load_local_runtime_bundle_installation(
             None
         }
     };
+
+    let signature_status = metadata_value
+        .as_ref()
+        .map(|value| verify_manifest_signatures(value));
 
     let mut bundle_struct: Option<runtime_bundles::RuntimeBundle> = None;
     let mut id = dir
@@ -2107,6 +2443,7 @@ fn load_local_runtime_bundle_installation(
         artifacts,
         root: Some(root.display().to_string()),
         bundle: bundle_struct,
+        signature: signature_status,
     }))
 }
 
@@ -3106,6 +3443,26 @@ fn main() {
                 }
                 RuntimeBundlesCmd::Rollback(args) => {
                     if let Err(e) = cmd_runtime_bundles_rollback(&args) {
+                        eprintln!("{}", e);
+                        std::process::exit(1);
+                    }
+                }
+                RuntimeBundlesCmd::Manifest { cmd } => match cmd {
+                    RuntimeBundlesManifestCmd::Sign(args) => {
+                        if let Err(e) = cmd_runtime_bundles_manifest_sign(&args) {
+                            eprintln!("{}", e);
+                            std::process::exit(1);
+                        }
+                    }
+                    RuntimeBundlesManifestCmd::Verify(args) => {
+                        if let Err(e) = cmd_runtime_bundles_manifest_verify(&args) {
+                            eprintln!("{}", e);
+                            std::process::exit(1);
+                        }
+                    }
+                },
+                RuntimeBundlesCmd::Audit(args) => {
+                    if let Err(e) = cmd_runtime_bundles_audit(&args) {
                         eprintln!("{}", e);
                         std::process::exit(1);
                     }
@@ -5123,6 +5480,8 @@ fn cmd_runtime_bundles_list(args: &RuntimeBundlesListArgs) -> Result<()> {
         snapshot.roots.push(root_str);
     }
     snapshot.installations = installations;
+    let (summary, _) = summarize_installations(&snapshot.installations, false);
+    snapshot.signature_summary = Some(CliSignatureSummary::from(summary));
 
     if args.json {
         let payload = serde_json::to_value(&snapshot).unwrap_or_else(|_| json!({}));
@@ -5143,6 +5502,7 @@ fn cmd_runtime_bundles_list(args: &RuntimeBundlesListArgs) -> Result<()> {
         &snapshot.roots,
         snapshot.generated.as_deref(),
         &snapshot.installations,
+        snapshot.signature_summary.as_ref(),
     );
     Ok(())
 }
@@ -6442,7 +6802,385 @@ fn cmd_runtime_bundles_rollback(args: &RuntimeBundlesRollbackArgs) -> Result<()>
 
     Ok(())
 }
+fn cmd_runtime_bundles_manifest_sign(args: &RuntimeBundlesManifestSignArgs) -> Result<()> {
+    use ed25519_dalek::{Signer, SigningKey};
 
+    let manifest_path = &args.manifest;
+    let manifest_bytes = std::fs::read(manifest_path)
+        .with_context(|| format!("reading bundle manifest {}", manifest_path.display()))?;
+    let mut manifest: JsonValue =
+        serde_json::from_slice(&manifest_bytes).context("parsing bundle manifest JSON")?;
+    if !manifest.is_object() {
+        anyhow::bail!("bundle manifest root must be a JSON object");
+    }
+
+    let sk_b64 = if let Some(ref value) = args.key_b64 {
+        value.trim().to_string()
+    } else if let Some(ref path) = args.key_file {
+        std::fs::read_to_string(path)
+            .with_context(|| format!("reading secret key from {}", path.display()))?
+            .trim()
+            .to_string()
+    } else {
+        anyhow::bail!("provide --key-b64 or --key-file with an ed25519 secret key");
+    };
+    let sk_bytes = base64::engine::general_purpose::STANDARD
+        .decode(sk_b64.as_bytes())
+        .context("decoding ed25519 secret key (base64)")?;
+    let signing_key = SigningKey::from_bytes(
+        &sk_bytes
+            .as_slice()
+            .try_into()
+            .map_err(|_| anyhow::anyhow!("ed25519 secret key must be 32 bytes"))?,
+    );
+    let vk = signing_key.verifying_key();
+    let pk_bytes = vk.to_bytes();
+    let pk_b64 = base64::engine::general_purpose::STANDARD.encode(pk_bytes);
+    let key_id = args
+        .key_id
+        .clone()
+        .unwrap_or_else(|| default_manifest_key_id(&pk_bytes));
+
+    let (payload_bytes, payload_sha_hex) = canonical_payload_bytes(&manifest)?;
+    let signature = signing_key.sign(&payload_bytes);
+    let signature_b64 = base64::engine::general_purpose::STANDARD.encode(signature.to_bytes());
+    let issued_at = Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true);
+
+    let manifest_obj = manifest.as_object_mut().expect("checked object above");
+    let signatures_entry = manifest_obj
+        .entry("signatures".to_string())
+        .or_insert_with(|| JsonValue::Array(Vec::new()));
+    let signatures = signatures_entry
+        .as_array_mut()
+        .ok_or_else(|| anyhow!("manifest signatures entry must be an array"))?;
+    signatures.retain(|entry| {
+        entry
+            .get("key_id")
+            .and_then(|value| value.as_str())
+            .map(|value| value != key_id)
+            .unwrap_or(true)
+    });
+
+    let mut sig_map = JsonMap::new();
+    sig_map.insert("alg".into(), JsonValue::String("ed25519".into()));
+    sig_map.insert("key_id".into(), JsonValue::String(key_id.clone()));
+    sig_map.insert("public_key_b64".into(), JsonValue::String(pk_b64.clone()));
+    sig_map.insert("signature".into(), JsonValue::String(signature_b64.clone()));
+    sig_map.insert(
+        "manifest_sha256".into(),
+        JsonValue::String(format!("sha256:{}", payload_sha_hex)),
+    );
+    sig_map.insert("issued_at".into(), JsonValue::String(issued_at.clone()));
+    if let Some(ref issuer) = args.issuer {
+        if !issuer.trim().is_empty() {
+            sig_map.insert(
+                "issuer".into(),
+                JsonValue::String(issuer.trim().to_string()),
+            );
+        }
+    }
+    signatures.push(JsonValue::Object(sig_map));
+
+    let output_path = args.output.as_ref().unwrap_or(manifest_path);
+    let formatted = if args.compact {
+        serde_json::to_vec(&manifest).context("serializing signed manifest")?
+    } else {
+        serde_json::to_vec_pretty(&manifest).context("serializing signed manifest")?
+    };
+    std::fs::write(output_path, formatted)
+        .with_context(|| format!("writing signed manifest to {}", output_path.display()))?;
+
+    println!(
+        "Signed manifest {} with key {}",
+        output_path.display(),
+        key_id
+    );
+    println!("Canonical payload sha256: {}", payload_sha_hex);
+    println!("Public key (b64): {}", pk_b64);
+    println!("Signature (b64): {}", signature_b64);
+    Ok(())
+}
+
+fn cmd_runtime_bundles_manifest_verify(args: &RuntimeBundlesManifestVerifyArgs) -> Result<()> {
+    let manifest_path = &args.manifest;
+    let manifest_bytes = std::fs::read(manifest_path)
+        .with_context(|| format!("reading bundle manifest {}", manifest_path.display()))?;
+    let manifest: JsonValue =
+        serde_json::from_slice(&manifest_bytes).context("parsing bundle manifest JSON")?;
+    if !manifest.is_object() {
+        anyhow::bail!("bundle manifest root must be a JSON object");
+    }
+
+    let verification = verify_manifest_signatures(&manifest);
+    let summary = json!({
+        "manifest": manifest_path.display().to_string(),
+        "canonical_sha256": verification.canonical_sha256,
+        "signatures": verification.signatures,
+        "warnings": verification.warnings,
+        "ok": verification.ok,
+    });
+
+    if args.json {
+        if args.pretty {
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&summary).unwrap_or_else(|_| summary.to_string())
+            );
+        } else {
+            println!("{}", summary);
+        }
+    } else {
+        println!("Manifest: {}", manifest_path.display());
+        if let Some(ref canonical) = verification.canonical_sha256 {
+            println!("Canonical sha256: {}", canonical);
+        } else {
+            println!("Canonical sha256: <unavailable>");
+        }
+        if verification.signatures.is_empty() {
+            println!("Signatures: none");
+        } else {
+            println!("Signatures:");
+            for report in &verification.signatures {
+                let key_id = report.key_id.as_deref().unwrap_or("<unknown>");
+                let status = if report.signature_valid {
+                    "valid"
+                } else {
+                    "invalid"
+                };
+                let hash_status = if report.hash_matches {
+                    "hash match"
+                } else {
+                    "hash mismatch"
+                };
+                let issuer = report.issuer.as_deref().unwrap_or("unknown issuer");
+                println!(
+                    "  - key {} ({}, {}) – issuer: {}",
+                    key_id, status, hash_status, issuer
+                );
+                if let Some(err) = report.error.as_deref() {
+                    println!("    error: {}", err);
+                }
+            }
+        }
+        if !verification.warnings.is_empty() {
+            println!("Warnings:");
+            for warn in &verification.warnings {
+                println!("  - {}", warn);
+            }
+        }
+    }
+
+    if verification.ok {
+        Ok(())
+    } else {
+        anyhow::bail!("bundle manifest verification failed")
+    }
+}
+
+#[derive(Default, Serialize, Clone)]
+struct SignatureSummary {
+    total: usize,
+    with_manifest: usize,
+    verified: usize,
+    failed: usize,
+    warnings: usize,
+    missing_signatures: usize,
+    ok: bool,
+    enforced: bool,
+}
+
+impl From<&CliSignatureSummary> for SignatureSummary {
+    fn from(src: &CliSignatureSummary) -> Self {
+        Self {
+            total: src.total,
+            with_manifest: src.with_manifest,
+            verified: src.verified,
+            failed: src.failed,
+            warnings: src.warnings,
+            missing_signatures: src.missing_signatures,
+            ok: src.ok,
+            enforced: src.enforced,
+        }
+    }
+}
+
+fn summarize_installations(
+    installs: &[CliRuntimeBundleInstallation],
+    enforced: bool,
+) -> (SignatureSummary, Vec<String>) {
+    let mut summary = SignatureSummary::default();
+    summary.enforced = enforced;
+    let mut failing: Vec<String> = Vec::new();
+    for inst in installs {
+        summary.total += 1;
+        match inst.signature.as_ref() {
+            Some(sig) => {
+                summary.with_manifest += 1;
+                if sig.ok {
+                    summary.verified += 1;
+                    if !sig.warnings.is_empty() {
+                        summary.warnings += 1;
+                    }
+                } else {
+                    summary.failed += 1;
+                    if sig.signatures.is_empty() {
+                        summary.missing_signatures += 1;
+                    }
+                    failing.push(inst.id.clone());
+                }
+            }
+            None => {
+                summary.failed += 1;
+                summary.missing_signatures += 1;
+                failing.push(inst.id.clone());
+            }
+        }
+    }
+    summary.ok = failing.is_empty();
+    (summary, failing)
+}
+
+fn cmd_runtime_bundles_audit(args: &RuntimeBundlesAuditArgs) -> Result<()> {
+    let (installs, summary, failing_ids, context_label, context_kind) = if args.remote {
+        let snapshot = fetch_runtime_bundle_snapshot_remote(&args.base)?;
+        let installs = snapshot.installations;
+        let (computed_summary, failing) = summarize_installations(&installs, false);
+        let mut summary = snapshot
+            .signature_summary
+            .as_ref()
+            .map(SignatureSummary::from)
+            .unwrap_or_else(|| computed_summary.clone());
+        summary.ok = failing.is_empty();
+        summary.enforced = summary.enforced || computed_summary.enforced;
+        (
+            installs,
+            summary,
+            failing,
+            snapshot
+                .roots
+                .get(0)
+                .cloned()
+                .unwrap_or_else(|| args.base.base_url().to_string()),
+            "remote",
+        )
+    } else {
+        let root = default_runtime_bundle_root(&args.dest)?;
+        let installs = load_local_runtime_bundle_installations(&root)?;
+        let (mut summary, failing) = summarize_installations(&installs, false);
+        summary.enforced = false;
+        (
+            installs,
+            summary,
+            failing,
+            root.display().to_string(),
+            "local",
+        )
+    };
+
+    if args.json {
+        let payload = json!({
+            "context": context_label,
+            "context_kind": context_kind,
+            "summary": summary.clone(),
+            "installations": installs.clone(),
+        });
+        if args.pretty {
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&payload).unwrap_or_else(|_| payload.to_string())
+            );
+        } else {
+            println!("{}", payload);
+        }
+        if args.require_signed && !failing_ids.is_empty() {
+            let ids = failing_ids.join(", ");
+            anyhow::bail!("signature verification failed for bundle(s): {}", ids);
+        }
+        return Ok(());
+    } else {
+        println!(
+            "Bundle {} context: {}",
+            if context_kind == "remote" {
+                "server"
+            } else {
+                "root"
+            },
+            context_label
+        );
+        println!(
+            "Signatures: total {} | with manifest {} | verified {} | failed {} | warnings {} | missing {} | enforced {}",
+            summary.total,
+            summary.with_manifest,
+            summary.verified,
+            summary.failed,
+            summary.warnings,
+            summary.missing_signatures,
+            if summary.enforced { "yes" } else { "no" }
+        );
+
+        if installs.is_empty() {
+            println!("No bundles installed.");
+        } else {
+            println!();
+            for inst in &installs {
+                let label = inst
+                    .name
+                    .as_ref()
+                    .map(|name| name.as_str())
+                    .unwrap_or(inst.id.as_str());
+                println!("{} [{}]", label, inst.id);
+                match inst.signature.as_ref() {
+                    Some(sig) => {
+                        let state = if sig.ok {
+                            "verified"
+                        } else {
+                            "needs attention"
+                        };
+                        let mut detail = vec![format!("signature: {}", state)];
+                        if let Some(canonical) = sig.canonical_sha256.as_deref() {
+                            detail.push(format!("canonical {}", canonical));
+                        }
+                        if !sig.warnings.is_empty() {
+                            detail.push(format!("warnings: {}", sig.warnings.join(" | ")));
+                        }
+                        println!("  {}", detail.join(" | "));
+                        if !sig.signatures.is_empty() {
+                            for entry in &sig.signatures {
+                                let key = entry.key_id.as_deref().unwrap_or("<unknown>");
+                                let status = match (
+                                    entry.signature_valid,
+                                    entry.hash_matches,
+                                    entry.error.as_ref(),
+                                ) {
+                                    (true, true, _) => "valid",
+                                    (true, false, _) => "hash mismatch",
+                                    _ => "invalid",
+                                };
+                                let mut line = format!("    key {} -> {}", key, status);
+                                if let Some(issuer) = entry.issuer.as_deref() {
+                                    line.push_str(&format!(" (issuer: {})", issuer));
+                                }
+                                println!("{}", line);
+                                if let Some(err) = entry.error.as_deref() {
+                                    println!("      error: {}", err);
+                                }
+                            }
+                        }
+                    }
+                    None => {
+                        println!("  signature: missing (bundle.json lacks signature block)");
+                    }
+                }
+            }
+        }
+    }
+    if args.require_signed && !failing_ids.is_empty() {
+        let ids = failing_ids.join(", ");
+        anyhow::bail!("signature verification failed for bundle(s): {}", ids);
+    }
+
+    Ok(())
+}
 fn modality_slug(modality: &RuntimeModality) -> &'static str {
     match modality {
         RuntimeModality::Text => "text",

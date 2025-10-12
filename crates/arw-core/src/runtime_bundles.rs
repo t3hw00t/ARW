@@ -1,6 +1,8 @@
 use std::fs::File;
 use std::path::{Path, PathBuf};
 
+pub mod signature;
+
 use anyhow::{Context, Result};
 use arw_runtime::{RuntimeAccelerator, RuntimeModality};
 use serde::{Deserialize, Serialize};

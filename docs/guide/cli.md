@@ -3,7 +3,7 @@ title: CLI Guide
 ---
 
 # CLI Guide
-Updated: 2025-10-11
+Updated: 2025-10-12
 Type: How‑to
 
 Goal-oriented tasks using the `arw-cli` binary. This guide shows common commands with copy‑pasteable examples and flags you’re likely to want.
@@ -30,12 +30,21 @@ Basics
   - Alternate install root: `arw-cli runtime bundles list --install-dir ~/.cache/arw/bundles`
   - Remote snapshot (catalogs + installed bundles): `arw-cli runtime bundles list --remote --base http://127.0.0.1:8091 --admin-token $ARW_ADMIN_TOKEN`
   - Trigger rescan: `arw-cli runtime bundles reload --base http://127.0.0.1:8091 --admin-token $ARW_ADMIN_TOKEN`
+  - Both local and remote listings surface a `Signatures:` line summarizing totals, failures, and whether enforcement is active
   - Start a managed runtime: `arw-cli runtime restore llama.cpp-preview/linux-x86_64-cpu --no-restart`
   - Stop a managed runtime: `arw-cli runtime shutdown llama.cpp-preview/linux-x86_64-cpu`
   - Download artifacts: `arw-cli runtime bundles install llama.cpp-preview/linux-x86_64-cpu`
   - Offline import: `arw-cli runtime bundles import --bundle llama.cpp-preview/linux-x86_64-cpu ./llama-build`
   - Roll back to a previous snapshot: `arw-cli runtime bundles rollback --bundle llama.cpp-preview/linux-x86_64-cpu --list`
+  - Verify manifest signatures: `arw-cli runtime bundles manifest verify ~/.cache/arw/runtime/bundles/llama.cpp-preview/linux-x86_64-cpu/bundle.json`
+  - Sign manifests before publishing: `arw-cli runtime bundles manifest sign dist/bundles/llama.cpp-preview/linux-x86_64-cpu/bundle.json --key-file ops/keys/runtime_bundle_ed25519.sk --issuer bundle-ci`
   - Add `--json`/`--pretty` to the rollback command for machine-readable history listings or outcome summaries
+  - `runtime bundles list --pretty` includes signature verification results for each installed bundle (look for `signature: verified/needs attention` lines)
+  - Offline audit: `arw-cli runtime bundles audit --require-signed` fails fast when any installed bundle lacks a verified manifest; add `--dest` to point at alternate roots
+  - Remote audit: `arw-cli runtime bundles audit --remote --base http://hub:8091 --require-signed` checks the running server and respects its `signature_summary.enforced` flag
+  - Production guardrail: set `ARW_REQUIRE_SIGNED_BUNDLES=1` so `runtime bundles reload` refuses unsigned manifests; `runtime bundles list --remote --json` will report `signature_summary.enforced:true`
+  - Automation helper: `BASE_URL=https://hub scripts/verify_bundle_signatures.sh` wraps the remote audit and exits non-zero when signatures are missing—drop it into CI jobs.
+  - Prefer `just verify-signatures --base https://hub --token $ARW_ADMIN_TOKEN` for local checks; it delegates to the same script.
   - Preview installs: add `--dry-run` to either command; use `--dest /custom/path` when staging bundles outside the default `<state_dir>/runtime/bundles`
   - Scripting: add `--json`/`--pretty` to either command; remote mode fetches `/state/runtime/bundles` (including `installations`) from the running server.
 

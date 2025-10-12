@@ -189,6 +189,9 @@ runtime-check-weights-only:
 runtime-mirrors *args:
   python3 scripts/runtime_config.py {{args}}
 
+verify-signatures base='http://127.0.0.1:8091' token='':
+  BASE_URL='{{base}}' ARW_ADMIN_TOKEN='{{token}}' bash scripts/verify_bundle_signatures.sh
+
 context-ci:
   bash scripts/context_ci.sh
 

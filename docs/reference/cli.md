@@ -1,5 +1,5 @@
 # CLI Reference
-Updated: 2025-10-11
+Updated: 2025-10-12
 Type: Reference
 
 Microsummary: Commands, subcommands, and flags for `arw-cli` with pointers to tutorials. Beta.
@@ -30,6 +30,11 @@ Commands (summary)
 - `arw-cli runtime bundles install [--dir PATH] [--remote] [--dest DIR] [--artifact-kind KIND] [--artifact-format FORMAT] [--force] [--dry-run] <bundle-id>...` — download bundle artifacts into the managed runtime directory (defaults to `<state_dir>/runtime/bundles`)
 - `arw-cli runtime bundles import --bundle <id> [--dest DIR] [--metadata FILE] [--force] [--dry-run] <path>...` — copy local archives or directories into the managed runtime directory for offline installs
 - `arw-cli runtime bundles rollback --bundle <id> [--dest DIR] [--revision REV] [--list] [--dry-run] [--json {--pretty}]` — list available revisions and restore a bundle from the local history snapshot (JSON mode works for both `--list` and rollback actions)
+- `arw-cli runtime bundles manifest sign <manifest> [--key-b64 B64 | --key-file FILE] [--issuer NAME] [--key-id ID] [--output FILE] [--compact]` — append or replace ed25519 signature entries on a bundle manifest and emit canonical sha256 metadata
+- `arw-cli runtime bundles manifest verify <manifest> [--json {--pretty}]` — validate manifest signatures, hashes, and key metadata before promoting or rolling back a bundle
+- `arw-cli runtime bundles audit [--dest DIR | --remote --base URL] [--json {--pretty}] [--require-signed]` — scan installed bundles (defaults to `<state_dir>/runtime/bundles`) or a running server and report signature coverage, optionally failing when unsigned manifests are detected
+- Convenience wrapper: `scripts/verify_bundle_signatures.sh` runs the remote audit with `--require-signed`, respecting `BASE_URL`, `ARW_ADMIN_TOKEN`, and additional CLI flags—ideal for CI pipelines.
+- Local and remote bundle snapshots now include per-installation `signature` blocks (`ok`, `canonical_sha256`, `warnings`, per-key status) and a top-level `signature_summary` (with `enforced` flag) so operators can spot unsigned or mismatched manifests at a glance and confirm when enforcement is active.
 
 Human-readable output from `runtime bundles list` now includes consent summaries derived from each catalog’s `metadata.consent` block (for example, `consent: required (vision)` or `consent: missing metadata for audio/vision modalities`). Any audio/vision bundle without annotations is flagged so operators can update the catalog before promoting the runtime.
 - `arw-cli runtime shutdown <id>` — request a managed runtime shutdown via `/orchestrator/runtimes/{id}/shutdown`

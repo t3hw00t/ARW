@@ -303,6 +303,9 @@ PY
 
     echo "[verify] ARW_LEGACY_CHECK_WAIT_SECS=30 bash scripts/check_legacy_surface.sh"
     if ! ARW_LEGACY_CHECK_WAIT_SECS=30 bash "$REPO_ROOT/scripts/check_legacy_surface.sh"; then ok=1; fi
+
+    echo "[verify] bash scripts/verify_bundle_signatures.sh"
+    if ! bash "$REPO_ROOT/scripts/verify_bundle_signatures.sh"; then ok=1; fi
   fi
 
   set -e
