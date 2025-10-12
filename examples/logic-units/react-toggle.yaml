@@ -1,5 +1,5 @@
 id: reasoning-react-toggle
-name: Reasoning: ReAct vs CoT
+name: "Reasoning: ReAct vs CoT"
 version: 1.0.0
 category: reasoning
 kind: config
@@ -14,4 +14,3 @@ patches:
 metrics:
   expected_effect: better tool selection on complex tasks
   counters: [solve.rate, tool.success]
-

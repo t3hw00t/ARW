@@ -1,5 +1,5 @@
 id: budget-policy
-name: Budget Policy: Token/Time/Cost Caps
+name: "Budget Policy: Token/Time/Cost Caps"
 version: 1.0.0
 category: policy
 kind: config
@@ -24,4 +24,3 @@ patches:
 metrics:
   expected_effect: predictable spend with graceful degrade
   counters: [budget.spent.tokens, budget.spent.ms, budget.degraded.rate]
-

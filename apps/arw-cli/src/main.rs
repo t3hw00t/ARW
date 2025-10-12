@@ -1,4 +1,6 @@
 use anyhow::{anyhow, bail, ensure, Context, Result};
+mod logic_units;
+mod recipes;
 use arw_core::{
     capsule_presets, capsule_trust, effective_paths, gating, gating_keys, hello_core,
     introspect_tools, load_effective_paths, resolve_config_path, runtime_bundles,
@@ -11,7 +13,9 @@ use clap::CommandFactory;
 use clap::{Args, Parser, Subcommand, ValueEnum};
 use csv::WriterBuilder;
 use json_patch::{patch as apply_json_patch, Patch as JsonPatch};
+use logic_units::LogicUnitsCmd;
 use rand::RngCore;
+use recipes::RecipesCmd;
 use reqwest::{blocking::Client, header::ACCEPT, StatusCode};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
@@ -72,6 +76,16 @@ enum Commands {
     Spec {
         #[command(subcommand)]
         cmd: SpecCmd,
+    },
+    /// Recipe helpers (validate, install, inspect)
+    Recipes {
+        #[command(subcommand)]
+        cmd: RecipesCmd,
+    },
+    /// Logic unit helpers (inspect, install, list)
+    LogicUnits {
+        #[command(subcommand)]
+        cmd: LogicUnitsCmd,
     },
     /// Screenshots maintenance commands
     Screenshots {
@@ -3026,6 +3040,18 @@ fn main() {
                 }
             }
         },
+        Some(Commands::Recipes { cmd }) => {
+            if let Err(e) = recipes::run(cmd) {
+                eprintln!("{}", e);
+                std::process::exit(1);
+            }
+        }
+        Some(Commands::LogicUnits { cmd }) => {
+            if let Err(e) = logic_units::run(cmd) {
+                eprintln!("{}", e);
+                std::process::exit(1);
+            }
+        }
         Some(Commands::Screenshots { cmd }) => match cmd {
             ScreenshotsCmd::BackfillOcr(args) => {
                 if let Err(e) = cmd_backfill_ocr(&args) {
@@ -10181,13 +10207,13 @@ fn push_filter_usize(filters: &mut Vec<String>, label: &str, value: Option<usize
     }
 }
 
-fn resolve_admin_token(opt: &Option<String>) -> Option<String> {
+pub(crate) fn resolve_admin_token(opt: &Option<String>) -> Option<String> {
     opt.clone()
         .or_else(|| std::env::var("ARW_ADMIN_TOKEN").ok())
         .filter(|s| !s.trim().is_empty())
 }
 
-fn with_admin_headers(
+pub(crate) fn with_admin_headers(
     mut req: reqwest::blocking::RequestBuilder,
     token: Option<&str>,
 ) -> reqwest::blocking::RequestBuilder {

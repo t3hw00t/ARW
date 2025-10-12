@@ -1,0 +1,45 @@
+id: research-digest
+name: Research Digest Prep
+version: 0.1.0
+model:
+  preferred: "remote:claude-3.5-sonnet"
+  fallback: "local:llama-3.1-70B-instruct"
+permissions:
+  net.http: allow
+  file.read: ask
+  file.write:
+    mode: ask
+    ttl_secs: 1800
+  shell.exec: never
+ui:
+  form_from_schema: true
+  review_required: true
+prompts:
+  system: |
+    You prepare a weekly research digest for the autonomy program.
+    Cluster related findings, capture source citations, and flag risky claims.
+  user_template: |
+    Research focus: {{ focus }}
+    Delivery project: {{ project }}
+tools:
+  - id: rss_fetcher
+    params:
+      feeds:
+        - "https://example.com/rss/ai"
+        - "https://arxiv.org/rss/cs.AI"
+  - id: cluster_topics
+  - id: draft_summary
+workflows:
+  - step: "Gather sources"
+    tool: rss_fetcher
+  - step: "Cluster themes"
+    tool: cluster_topics
+  - step: "Draft digest"
+    tool: draft_summary
+tags:
+  - research
+  - digest
+  - weekly
+notes: >
+  Stores generated digests in the shared knowledge base project and asks for
+  confirmation before publishing.

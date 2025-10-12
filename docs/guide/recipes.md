@@ -50,6 +50,15 @@ Permissions
 - Capabilities: `fs(read|write)`, `net(http)`, `shell(exec)`, `mic`, `cam`, `gpu`, `sandbox:<kind>`
 - Decisions are emitted as `Policy.*` events and rendered inline in the sidecar
 
+Additional samples
+- [examples/recipes/incident-reviewer.yaml](https://github.com/t3hw00t/ARW/blob/main/examples/recipes/incident-reviewer.yaml) — SRE post-incident workflow with TTL-limited file access and multi-step outline generation.
+- [examples/recipes/research-digest.yaml](https://github.com/t3hw00t/ARW/blob/main/examples/recipes/research-digest.yaml) — Weekly research digest with feed aggregation, clustering, and project-specific delivery cues.
+
+CLI helpers
+- `arw-cli recipes inspect <path>` validates a manifest (file or folder) and prints a readable summary.
+- `arw-cli recipes install <path>` copies a validated manifest into `${ARW_STATE_DIR}/recipes/<id>` (pass `--force` to overwrite).
+- `arw-cli recipes list` shows installed recipes; add `--json` for machine-readable output.
+
 Distribution
 - Local folders inside the user’s state dir
 - Optional signed recipe index (static JSON) for curated catalogs (libraries, schools, unions)

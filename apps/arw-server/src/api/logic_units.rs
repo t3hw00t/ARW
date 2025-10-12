@@ -420,7 +420,8 @@ mod tests {
     use arw_wasi::NoopHost;
     use axum::http::{HeaderMap, HeaderValue};
     use serde_json::json;
-    use std::path::Path;
+    use serde_yaml;
+    use std::path::{Path, PathBuf};
     use std::sync::Arc;
     use std::time::{SystemTime, UNIX_EPOCH};
     use tempfile::tempdir;
@@ -493,5 +494,62 @@ mod tests {
         let items = after["items"].as_array().expect("items array");
         assert_eq!(items.len(), 1);
         assert_eq!(items[0]["remaining_hops"].as_u64(), Some(1));
+    }
+
+    #[test]
+    fn logic_unit_examples_validate_against_schema() {
+        let repo_root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("..")
+            .join("..");
+        let schema_path = repo_root.join("spec/schemas/logic_unit_manifest.json");
+        let schema_src = std::fs::read_to_string(&schema_path).expect("logic unit schema to load");
+        let schema_json: serde_json::Value =
+            serde_json::from_str(&schema_src).expect("logic unit schema to parse");
+        let schema = JSONSchema::options()
+            .with_draft(Draft::Draft7)
+            .compile(&schema_json)
+            .expect("logic unit schema to compile");
+
+        let examples_dir = repo_root.join("examples/logic-units");
+        let mut checked = 0usize;
+        for entry in std::fs::read_dir(&examples_dir).expect("examples/logic-units dir to exist") {
+            let entry = entry.expect("read_dir entries accessible");
+            let path = entry.path();
+            if !entry.file_type().map(|ft| ft.is_file()).unwrap_or(false) {
+                continue;
+            }
+            let ext = path
+                .extension()
+                .and_then(|ext| ext.to_str())
+                .unwrap_or_default();
+            if !matches!(ext.to_ascii_lowercase().as_str(), "yaml" | "yml" | "json") {
+                continue;
+            }
+            let raw = std::fs::read_to_string(&path).expect("logic unit manifest to load");
+            let manifest: serde_json::Value = if ext.eq_ignore_ascii_case("json") {
+                serde_json::from_str(&raw).expect("logic unit manifest json to parse")
+            } else {
+                serde_yaml::from_str(&raw).expect("logic unit manifest yaml to parse")
+            };
+            if let Err(errors) = schema.validate(&manifest) {
+                let mut joined = String::new();
+                for err in errors {
+                    if !joined.is_empty() {
+                        joined.push_str("; ");
+                    }
+                    joined.push_str(&format!("{}: {}", err.instance_path, err));
+                }
+                panic!(
+                    "example {} failed logic unit schema validation: {}",
+                    path.display(),
+                    joined
+                );
+            }
+            checked += 1;
+        }
+        assert!(
+            checked > 0,
+            "expected at least one logic unit example to validate"
+        );
     }
 }

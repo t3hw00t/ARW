@@ -1,5 +1,5 @@
 id: memory-hygiene
-name: Memory Hygiene: Summarize & Dedup
+name: "Memory Hygiene: Summarize & Dedup"
 version: 1.0.0
 category: memory
 kind: config
@@ -17,4 +17,3 @@ patches:
 metrics:
   expected_effect: smaller long-tail; better retrieval quality
   counters: [memory.distilled.count, memory.dedup.rate]
-

@@ -28,3 +28,6 @@ sha2 = "0.10"
 tempfile = "3"
 csv = "1"
 toml = "0.8"
+jsonschema = { workspace = true }
+serde_yaml = "0.9"
+once_cell = { workspace = true }

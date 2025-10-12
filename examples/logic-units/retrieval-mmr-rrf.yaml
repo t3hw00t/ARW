@@ -1,5 +1,5 @@
 id: retrieval-mmr-rrf
-name: Retrieval MMR+RRF
+name: "Retrieval MMR+RRF"
 version: 1.0.0
 category: retrieval
 kind: config
@@ -22,4 +22,3 @@ patches:
 metrics:
   expected_effect: improve diversity and coverage
   counters: [retrieval.diversity, retrieval.coverage]
-

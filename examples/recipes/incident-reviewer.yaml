@@ -1,0 +1,42 @@
+id: incident-reviewer
+name: Incident Review Companion
+version: 0.2.0
+model:
+  preferred: "remote:gpt-4.1-mini"
+  fallback: null
+permissions:
+  file.read:
+    mode: allow
+    ttl_secs: 3600
+  file.write: ask
+  net.http: ask
+  shell.exec: never
+ui:
+  form_from_schema: true
+  review_required: true
+prompts:
+  system: |
+    You assist the site reliability team in reviewing incidents.
+    Gather timelines, highlight regressions, and propose action items.
+    Never page anyone or close tickets on your own.
+tools:
+  - id: fetch_incident_log
+    params:
+      project: platform
+      lookback_hours: 6
+  - id: summarize_text
+  - id: draft_postmortem
+workflows:
+  - step: "Collect context"
+    tool: fetch_incident_log
+  - step: "Summarize contributing factors"
+    tool: summarize_text
+  - step: "Draft post-incident outline"
+    tool: draft_postmortem
+tags:
+  - sre
+  - incidents
+  - postmortem
+notes: >
+  Requires access to the incident log connector and prompts the operator before
+  sharing any draft outside the review channel.

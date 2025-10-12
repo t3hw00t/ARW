@@ -24,6 +24,14 @@ Flows
 Composer
 - Bind units to Agent Profile slots (Retrieval, Reasoning, Sampling, Policy, Memory, Evaluation); compatibility checker warns on conflicts.
 
+Examples
+- Browse `examples/logic-units/` for ready-to-use manifests like `retrieval-mmr-rrf.yaml` and `memory-hygiene.yaml`. Each sample is validated against [spec/schemas/logic_unit_manifest.json](https://github.com/t3hw00t/ARW/blob/main/spec/schemas/logic_unit_manifest.json).
+
+CLI helpers
+- `arw-cli logic-units inspect <path>` validates a manifest (file or folder) and prints a summary or JSON payload.
+- `arw-cli logic-units install <path>` sends the manifest to `/logic-units/install`; add `--dry-run` to review the payload before publishing.
+- `arw-cli logic-units list` lists registered units from the kernel (`--json` for raw output).
+
 Metrics panel
 - Show expected vs observed effects: solve‑rate, tool success, retrieval diversity, latency, cost; link to Evaluation Harness reports.
 

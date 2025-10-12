@@ -1,5 +1,5 @@
 id: sampling-self-consistency
-name: Self-Consistency Vote-k
+name: "Self-Consistency Vote-k"
 version: 1.0.0
 category: sampling
 kind: config
@@ -17,4 +17,3 @@ patches:
 metrics:
   expected_effect: higher solve-rate on reasoning tasks at modest cost
   counters: [solve.rate, tokens.out, cost.usd]
-

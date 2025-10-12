@@ -839,6 +839,7 @@ mod tests {
         http::{HeaderMap, HeaderValue},
         response::IntoResponse,
     };
+    use jsonschema::{Draft, JSONSchema};
     use serde_json::json;
     use std::collections::HashMap;
     use std::path::PathBuf;
@@ -1031,5 +1032,62 @@ mod tests {
         });
         let resp = patch_validate(admin_headers(), body).await.into_response();
         assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+    }
+
+    #[test]
+    fn recipe_examples_validate_against_schema() {
+        let repo_root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("..")
+            .join("..");
+        let schema_path = repo_root.join("spec/schemas/recipe_manifest.json");
+        let schema_src =
+            std::fs::read_to_string(&schema_path).expect("recipe manifest schema to load");
+        let schema_json: serde_json::Value =
+            serde_json::from_str(&schema_src).expect("recipe manifest schema to be valid JSON");
+        let schema = JSONSchema::options()
+            .with_draft(Draft::Draft7)
+            .compile(&schema_json)
+            .expect("recipe manifest schema to compile");
+
+        let examples_dir = repo_root.join("examples/recipes");
+        let mut checked = 0usize;
+        for entry in std::fs::read_dir(&examples_dir).expect("examples/recipes folder to exist") {
+            let entry = entry.expect("read_dir entries are accessible");
+            if !entry.file_type().map(|ft| ft.is_file()).unwrap_or(false) {
+                continue;
+            }
+            if entry
+                .path()
+                .extension()
+                .and_then(|ext| ext.to_str())
+                .map(|ext| ext.eq_ignore_ascii_case("yaml"))
+                != Some(true)
+            {
+                continue;
+            }
+            let doc =
+                std::fs::read_to_string(entry.path()).expect("example recipe manifest to load");
+            let candidate: serde_json::Value = serde_yaml::from_str(&doc)
+                .expect("example recipe manifest to parse as JSON-compatible YAML");
+            if let Err(errors) = schema.validate(&candidate) {
+                let mut joined = String::new();
+                for err in errors {
+                    if !joined.is_empty() {
+                        joined.push_str("; ");
+                    }
+                    joined.push_str(&format!("{}: {}", err.instance_path, err));
+                }
+                panic!(
+                    "example {} failed recipe schema validation: {}",
+                    entry.path().display(),
+                    joined
+                );
+            }
+            checked += 1;
+        }
+        assert!(
+            checked > 0,
+            "expected at least one recipe example to validate"
+        );
     }
 }
