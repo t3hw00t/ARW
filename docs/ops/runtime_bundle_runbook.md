@@ -36,6 +36,7 @@ Microsummary: Operational playbook for keeping managed runtime bundles signed, u
      --issuer bundle-ci@arw \
      --key-id preview-bundle-signing
    ```
+   Keep the public half of every active signing key in [`configs/runtime/bundle_signers.json`](../../configs/runtime/bundle_signers.json). The server and CLI load this registry automatically: `runtime bundles list` and `runtime bundles audit` now surface `trusted`/`untrusted` labels alongside signature health, and manifests signed by unknown keys are reported as failures when `--require-signed` (or `ARW_REQUIRE_SIGNED_BUNDLES=1`) is in effect.
 5. Publish artifacts + signed manifest to the bundle registry and update the matching `configs/runtime/bundles.*.json` catalog entry (URL + `sha256`).
 6. Notify operators (Launcher banner + `ops/runtime_bundle_runbook.md` change log) and document the new revision in the release notes.
 
@@ -44,7 +45,7 @@ Preview and stable channels share the same signing keys, but each channel increm
 ### Enforcement Modes
 
 - Set `ARW_REQUIRE_SIGNED_BUNDLES=1` on production servers to block unsigned or mismatched manifests during bundle reloads. When enabled, `runtime bundles reload` (CLI) and `/admin/runtime/bundles/reload` (remote) return an error until every installation passes signature validation.
-- `runtime bundles list --remote --json` includes `signature_summary.enforced=true` once the guard is active so dashboards can surface a clear "signature enforcement" badge.
+- `runtime bundles list --remote --json` includes `signature_summary.enforced=true` once the guard is active so dashboards can surface a clear "signature enforcement" badge; the summary now also carries `trusted`/`rejected` counts so observability panels can highlight untrusted signatures even when at least one trusted signer is present.
 
 ## Rollback Checklist
 

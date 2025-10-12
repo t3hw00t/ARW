@@ -44,9 +44,9 @@ Basics
   - Verify manifest signatures: `arw-cli runtime bundles manifest verify ~/.cache/arw/runtime/bundles/llama.cpp-preview/linux-x86_64-cpu/bundle.json`
   - Sign manifests before publishing: `arw-cli runtime bundles manifest sign dist/bundles/llama.cpp-preview/linux-x86_64-cpu/bundle.json --key-file ops/keys/runtime_bundle_ed25519.sk --issuer bundle-ci`
   - Add `--json`/`--pretty` to the rollback command for machine-readable history listings or outcome summaries
-  - `runtime bundles list --pretty` includes signature verification results for each installed bundle (look for `signature: verified/needs attention` lines)
-  - Offline audit: `arw-cli runtime bundles audit --require-signed` fails fast when any installed bundle lacks a verified manifest; add `--dest` to point at alternate roots
-  - Remote audit: `arw-cli runtime bundles audit --remote --base http://hub:8091 --require-signed` checks the running server and respects its `signature_summary.enforced` flag
+  - `runtime bundles list --pretty` includes signature verification results for each installed bundle, including aggregated `trusted`/`rejected` counts and per-key `[trusted]`/`[untrusted]` hints
+  - Offline audit: `arw-cli runtime bundles audit --require-signed` fails fast when any installed bundle lacks a trusted manifest; add `--dest` to point at alternate roots
+  - Remote audit: `arw-cli runtime bundles audit --remote --base http://hub:8091 --require-signed` checks the running server and surfaces both the enforcement flag and the trusted/untrusted totals exposed by `/state/runtime/bundles`
   - Production guardrail: set `ARW_REQUIRE_SIGNED_BUNDLES=1` so `runtime bundles reload` refuses unsigned manifests; `runtime bundles list --remote --json` will report `signature_summary.enforced:true`
   - Automation helper: `BASE_URL=https://hub scripts/verify_bundle_signatures.sh` wraps the remote audit and exits non-zero when signatures are missing—drop it into CI jobs.
   - Prefer `just verify-signatures --base https://hub --token $ARW_ADMIN_TOKEN` for local checks; it delegates to the same script.

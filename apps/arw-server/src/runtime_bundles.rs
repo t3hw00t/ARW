@@ -12,7 +12,8 @@ use tracing::{debug, info, warn};
 
 use arw_core::runtime_bundles::{
     load_catalogs_from_dir,
-    signature::{verify_manifest_signatures, ManifestVerification},
+    signature::{verify_manifest_signatures_with_registry, ManifestVerification},
+    signers::RuntimeBundleSignerRegistry,
     RuntimeBundle, RuntimeBundleCatalog, RuntimeBundleCatalogSource,
 };
 use arw_runtime::{RuntimeAccelerator, RuntimeModality};
@@ -52,15 +53,29 @@ pub struct RuntimeBundleStore {
     roots: Vec<PathBuf>,
     catalogs: RwLock<Vec<RuntimeBundleCatalogView>>,
     installations: RwLock<Vec<RuntimeBundleInstallation>>,
+    signers: RwLock<Option<Arc<RuntimeBundleSignerRegistry>>>,
 }
 
 impl RuntimeBundleStore {
     pub async fn load_default() -> Arc<Self> {
         let roots = discover_roots();
+        let initial_signers = match RuntimeBundleSignerRegistry::load_default() {
+            Ok(Some(registry)) => Some(Arc::new(registry)),
+            Ok(None) => None,
+            Err(err) => {
+                warn!(
+                    target: "arw::runtime",
+                    error = %err,
+                    "failed to load runtime bundle signer registry"
+                );
+                None
+            }
+        };
         let store = Arc::new(Self {
             roots,
             catalogs: RwLock::new(Vec::new()),
             installations: RwLock::new(Vec::new()),
+            signers: RwLock::new(initial_signers),
         });
         if let Err(err) = store.reload().await {
             warn!(
@@ -73,6 +88,23 @@ impl RuntimeBundleStore {
     }
 
     pub async fn reload(&self) -> Result<()> {
+        let signers = match RuntimeBundleSignerRegistry::load_default() {
+            Ok(Some(registry)) => Some(Arc::new(registry)),
+            Ok(None) => None,
+            Err(err) => {
+                warn!(
+                    target: "arw::runtime",
+                    error = %err,
+                    "failed to load runtime bundle signer registry"
+                );
+                None
+            }
+        };
+        {
+            let mut guard = self.signers.write().await;
+            *guard = signers.clone();
+        }
+
         let mut collected: Vec<RuntimeBundleCatalogView> = Vec::new();
         for root in &self.roots {
             let dir = root.clone();
@@ -106,7 +138,7 @@ impl RuntimeBundleStore {
 
         let mut installations: Vec<RuntimeBundleInstallation> = Vec::new();
         for root in &self.roots {
-            let mut items = match load_installations_from_root(root).await {
+            let mut items = match load_installations_from_root(root, signers.clone()).await {
                 Ok(list) => list,
                 Err(err) => {
                     warn!(
@@ -260,6 +292,8 @@ fn summarize_signatures(installations: &[RuntimeBundleInstallation]) -> Signatur
         match inst.signature.as_ref() {
             Some(sig) => {
                 summary.with_manifest += 1;
+                summary.trusted += sig.trusted_signatures;
+                summary.rejected += sig.rejected_signatures;
                 if sig.ok {
                     summary.verified += 1;
                     if !sig.warnings.is_empty() {
@@ -291,6 +325,8 @@ struct SignatureSummary {
     failed: usize,
     warnings: usize,
     missing_signatures: usize,
+    trusted: usize,
+    rejected: usize,
     ok: bool,
     enforced: bool,
 }
@@ -301,7 +337,10 @@ fn require_signed_bundles() -> bool {
         .unwrap_or(false)
 }
 
-async fn load_installations_from_root(root: &Path) -> Result<Vec<RuntimeBundleInstallation>> {
+async fn load_installations_from_root(
+    root: &Path,
+    signers: Option<Arc<RuntimeBundleSignerRegistry>>,
+) -> Result<Vec<RuntimeBundleInstallation>> {
     let mut installs = Vec::new();
     let mut dir = match fs::read_dir(root).await {
         Ok(dir) => dir,
@@ -323,7 +362,8 @@ async fn load_installations_from_root(root: &Path) -> Result<Vec<RuntimeBundleIn
                     continue;
                 }
                 if let Some(install) =
-                    load_installation_from_dir(root, entry.path().as_path()).await?
+                    load_installation_from_dir(root, entry.path().as_path(), signers.clone())
+                        .await?
                 {
                     installs.push(install);
                 }
@@ -343,6 +383,7 @@ async fn load_installations_from_root(root: &Path) -> Result<Vec<RuntimeBundleIn
 async fn load_installation_from_dir(
     root: &Path,
     dir: &Path,
+    signers: Option<Arc<RuntimeBundleSignerRegistry>>,
 ) -> Result<Option<RuntimeBundleInstallation>> {
     let metadata_path = dir.join("bundle.json");
     let metadata_value = match fs::read(&metadata_path).await {
@@ -381,7 +422,7 @@ async fn load_installation_from_dir(
     let mut profiles: Vec<String> = Vec::new();
     let mut modalities: Vec<RuntimeModality> = Vec::new();
     let mut accelerator: Option<RuntimeAccelerator> = None;
-    let mut channel: Option<String> = None;
+    let mut catalog_channel: Option<String> = None;
     let mut installed_at: Option<String> = None;
     let mut imported_at: Option<String> = None;
     let mut source: Option<Value> = None;
@@ -420,7 +461,7 @@ async fn load_installation_from_dir(
                     .and_then(parse_accelerator);
             }
         }
-        channel = metadata
+        catalog_channel = metadata
             .pointer("/catalog/channel")
             .and_then(|value| value.as_str())
             .map(|value| value.to_string());
@@ -438,7 +479,14 @@ async fn load_installation_from_dir(
     let artifacts_dir = dir.join("artifacts");
     let artifacts = load_artifact_summaries(&artifacts_dir).await;
 
-    let signature_status = metadata_value.as_ref().map(verify_manifest_signatures);
+    let signer_registry = signers.as_deref();
+    let signature_status = metadata_value.as_ref().map(|metadata| {
+        verify_manifest_signatures_with_registry(
+            metadata,
+            signer_registry,
+            catalog_channel.as_deref(),
+        )
+    });
 
     if bundle_full.is_none() && metadata_value.is_none() && artifacts.is_empty() {
         return Ok(None);
@@ -451,7 +499,7 @@ async fn load_installation_from_dir(
         profiles,
         modalities,
         accelerator,
-        channel,
+        channel: catalog_channel,
         installed_at,
         imported_at,
         source,

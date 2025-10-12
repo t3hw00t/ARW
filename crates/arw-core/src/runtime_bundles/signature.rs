@@ -6,6 +6,8 @@ use serde_json::{Map, Value};
 use sha2::{Digest, Sha256};
 use std::fmt::Write;
 
+use super::signers::RuntimeBundleSignerRegistry;
+
 /// Report describing validation for a single manifest signature entry.
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct ManifestSignatureReport {
@@ -25,6 +27,10 @@ pub struct ManifestSignatureReport {
     pub hash_matches: bool,
     #[serde(default)]
     pub signature_valid: bool,
+    #[serde(default)]
+    pub trusted: bool,
+    #[serde(default)]
+    pub rejected: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
 }
@@ -38,6 +44,12 @@ pub struct ManifestVerification {
     pub signatures: Vec<ManifestSignatureReport>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub warnings: Vec<String>,
+    #[serde(default)]
+    pub trust_enforced: bool,
+    #[serde(default)]
+    pub trusted_signatures: usize,
+    #[serde(default)]
+    pub rejected_signatures: usize,
     #[serde(default)]
     pub ok: bool,
 }
@@ -63,10 +75,31 @@ pub fn canonical_payload_bytes(manifest: &Value) -> Result<(Vec<u8>, String)> {
 /// Any malformed entry is reported in-place and results in `ok = false`, but the
 /// function never returns an error—callers receive structured warnings instead.
 pub fn verify_manifest_signatures(manifest: &Value) -> ManifestVerification {
+    verify_manifest_signatures_with_registry(manifest, None, None)
+}
+
+/// Verify signature entries with an optional trusted signer registry.
+pub fn verify_manifest_signatures_with_registry(
+    manifest: &Value,
+    registry: Option<&RuntimeBundleSignerRegistry>,
+    channel_hint: Option<&str>,
+) -> ManifestVerification {
+    let channel_normalized = channel_hint.and_then(|value| {
+        let trimmed = value.trim();
+        if trimmed.is_empty() {
+            None
+        } else {
+            Some(trimmed)
+        }
+    });
+
     let mut result = ManifestVerification {
         canonical_sha256: None,
         signatures: Vec::new(),
         warnings: Vec::new(),
+        trust_enforced: registry.is_some(),
+        trusted_signatures: 0,
+        rejected_signatures: 0,
         ok: true,
     };
 
@@ -109,6 +142,9 @@ pub fn verify_manifest_signatures(manifest: &Value) -> ManifestVerification {
         return result;
     }
 
+    let mut trusted_count = 0usize;
+    let mut rejected_count = 0usize;
+
     for (index, entry) in signatures.iter().enumerate() {
         let mut report = ManifestSignatureReport {
             index,
@@ -135,6 +171,8 @@ pub fn verify_manifest_signatures(manifest: &Value) -> ManifestVerification {
                 .map(|s| s.to_string()),
             hash_matches: false,
             signature_valid: false,
+            trusted: false,
+            rejected: false,
             error: None,
         };
 
@@ -238,6 +276,45 @@ pub fn verify_manifest_signatures(manifest: &Value) -> ManifestVerification {
             }
         }
 
+        if report.signature_valid {
+            if let Some(registry) = registry {
+                if registry.is_trusted(
+                    report.key_id.as_deref(),
+                    report.public_key_b64.as_deref(),
+                    channel_normalized,
+                ) {
+                    report.trusted = true;
+                    trusted_count += 1;
+                } else {
+                    report.rejected = true;
+                    rejected_count += 1;
+                    let message = if let Some(key_id) = report.key_id.as_deref() {
+                        if let Some(channel) = channel_normalized {
+                            format!(
+                                "signature with key_id {} is not trusted for channel {}",
+                                key_id, channel
+                            )
+                        } else {
+                            format!(
+                                "signature with key_id {} is not present in signer registry",
+                                key_id
+                            )
+                        }
+                    } else if let Some(channel) = channel_normalized {
+                        format!(
+                            "signature public key is not trusted for channel {}",
+                            channel
+                        )
+                    } else if let Some(pk) = report.public_key_b64.as_deref() {
+                        format!("signature public key {} is not trusted", pk)
+                    } else {
+                        "signature is not trusted by signer registry".to_string()
+                    };
+                    errors.push(message);
+                }
+            }
+        }
+
         if !report.hash_matches {
             result.ok = false;
         }
@@ -247,6 +324,22 @@ pub fn verify_manifest_signatures(manifest: &Value) -> ManifestVerification {
         }
 
         result.signatures.push(report);
+    }
+
+    result.trusted_signatures = trusted_count;
+    result.rejected_signatures = rejected_count;
+
+    if result.trust_enforced && trusted_count == 0 {
+        result.ok = false;
+        let warning = if let Some(channel) = channel_normalized {
+            format!(
+                "no trusted signatures matched signer registry for channel {}",
+                channel
+            )
+        } else {
+            "no trusted signatures matched signer registry".to_string()
+        };
+        result.warnings.push(warning);
     }
 
     result
@@ -308,6 +401,7 @@ fn compute_sha256_hex(bytes: &[u8]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::runtime_bundles::signers::{RuntimeBundleSignerEntry, RuntimeBundleSignerRegistry};
     use ed25519_dalek::{Signer, SigningKey};
     use serde_json::json;
 
@@ -364,7 +458,129 @@ mod tests {
         let report = &verification.signatures[0];
         assert!(report.signature_valid);
         assert!(report.hash_matches);
+        assert!(
+            !report.trusted,
+            "no registry provided so signature remains untrusted"
+        );
+        assert!(!report.rejected);
+        assert!(!verification.trust_enforced);
+        assert_eq!(verification.trusted_signatures, 0);
+        assert_eq!(verification.rejected_signatures, 0);
         assert!(report.error.is_none());
+        Ok(())
+    }
+
+    #[test]
+    fn verify_manifest_flags_untrusted_signer() -> Result<()> {
+        let manifest = json!({
+            "bundle": { "id": "example", "name": "Example", "adapter": "process" }
+        });
+        let (payload_bytes, payload_sha) = canonical_payload_bytes(&manifest)?;
+        let signing_key = SigningKey::from_bytes(&rand::random::<[u8; 32]>());
+        let verifying_key = signing_key.verifying_key();
+        let signature = signing_key.sign(&payload_bytes);
+        let key_id = default_manifest_key_id(&verifying_key.to_bytes());
+        let public_key_b64 =
+            base64::engine::general_purpose::STANDARD.encode(verifying_key.to_bytes());
+
+        let signed_manifest = json!({
+            "bundle": manifest.get("bundle").cloned().unwrap(),
+            "signatures": [{
+                "alg": "ed25519",
+                "key_id": key_id,
+                "public_key_b64": public_key_b64,
+                "signature": base64::engine::general_purpose::STANDARD.encode(signature.to_bytes()),
+                "manifest_sha256": format!("sha256:{}", payload_sha),
+                "issued_at": "2025-10-12T00:00:00Z"
+            }]
+        });
+
+        let registry = RuntimeBundleSignerRegistry::from_entries(
+            1,
+            vec![RuntimeBundleSignerEntry {
+                key_id: "preview-signer".to_string(),
+                public_key_b64: base64::engine::general_purpose::STANDARD
+                    .encode(rand::random::<[u8; 32]>()),
+                issuer: Some("ci@example.com".to_string()),
+                channels: vec!["preview".to_string()],
+                notes: None,
+                expires_at: None,
+            }],
+        )?;
+
+        let verification = verify_manifest_signatures_with_registry(
+            &signed_manifest,
+            Some(&registry),
+            Some("preview"),
+        );
+        assert!(!verification.ok, "no trusted signatures should fail");
+        assert_eq!(verification.trusted_signatures, 0);
+        assert_eq!(verification.rejected_signatures, 1);
+        assert_eq!(verification.signatures.len(), 1);
+        let report = &verification.signatures[0];
+        assert!(report.signature_valid);
+        assert!(report.rejected);
+        assert!(!report.trusted);
+        assert!(report
+            .error
+            .as_deref()
+            .unwrap_or("")
+            .contains("not present"));
+        Ok(())
+    }
+
+    #[test]
+    fn verify_manifest_accepts_trusted_signer() -> Result<()> {
+        let manifest = json!({
+            "bundle": { "id": "example", "name": "Example", "adapter": "process" }
+        });
+        let (payload_bytes, payload_sha) = canonical_payload_bytes(&manifest)?;
+        let signing_key = SigningKey::from_bytes(&rand::random::<[u8; 32]>());
+        let verifying_key = signing_key.verifying_key();
+        let signature = signing_key.sign(&payload_bytes);
+        let public_key = verifying_key.to_bytes();
+        let public_key_b64 = base64::engine::general_purpose::STANDARD.encode(public_key);
+        let key_id = default_manifest_key_id(&public_key);
+
+        let signed_manifest = json!({
+            "bundle": manifest.get("bundle").cloned().unwrap(),
+            "signatures": [{
+                "alg": "ed25519",
+                "key_id": key_id.clone(),
+                "public_key_b64": public_key_b64.clone(),
+                "signature": base64::engine::general_purpose::STANDARD.encode(signature.to_bytes()),
+                "manifest_sha256": format!("sha256:{}", payload_sha),
+                "issued_at": "2025-10-12T00:00:00Z"
+            }]
+        });
+
+        let registry = RuntimeBundleSignerRegistry::from_entries(
+            1,
+            vec![RuntimeBundleSignerEntry {
+                key_id: key_id.clone(),
+                public_key_b64: public_key_b64.clone(),
+                issuer: Some("ci@example.com".to_string()),
+                channels: vec!["preview".to_string()],
+                notes: Some("trusted signer".to_string()),
+                expires_at: None,
+            }],
+        )?;
+
+        let verification = verify_manifest_signatures_with_registry(
+            &signed_manifest,
+            Some(&registry),
+            Some("preview"),
+        );
+        assert!(verification.ok, "trusted signature should pass");
+        assert_eq!(verification.trusted_signatures, 1);
+        assert_eq!(verification.rejected_signatures, 0);
+        assert!(verification.trust_enforced);
+        assert_eq!(verification.signatures.len(), 1);
+        let report = &verification.signatures[0];
+        assert!(report.signature_valid);
+        assert!(report.hash_matches);
+        assert!(report.trusted);
+        assert!(!report.rejected);
         Ok(())
     }
 }

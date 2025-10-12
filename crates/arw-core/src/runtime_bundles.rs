@@ -2,6 +2,7 @@ use std::fs::File;
 use std::path::{Path, PathBuf};
 
 pub mod signature;
+pub mod signers;
 
 use anyhow::{Context, Result};
 use arw_runtime::{RuntimeAccelerator, RuntimeModality};

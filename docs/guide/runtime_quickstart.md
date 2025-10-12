@@ -77,7 +77,7 @@ If the helper used the simulated mode (because no real binary or weights were av
 
 Need to understand how bundle updates roll out or how to roll back a bad release? See [Runtime Bundle Runbook](../ops/runtime_bundle_runbook.md) for the signed update cadence, manifest verification workflow, and the operator rollback checklist.
 
-When you flip the guardrail on (`export ARW_REQUIRE_SIGNED_BUNDLES=1`), the server rejects bundle reloads unless every installed runtime carries a valid signature. Pair it with `arw-cli runtime bundles audit --require-signed` before deployments to catch missing signatures locally.
+When you flip the guardrail on (`export ARW_REQUIRE_SIGNED_BUNDLES=1`), the server rejects bundle reloads unless every installed runtime carries a trusted signature. Pair it with `arw-cli runtime bundles audit --require-signed` before deployments to catch missing signatures locally, and keep the authorized public keys in `configs/runtime/bundle_signers.json` (or point `ARW_RUNTIME_BUNDLE_SIGNERS` to a bespoke registry) so the CLI and supervisor can distinguish `[trusted]` versus `[untrusted]` manifests.
 
 For more detail on the runtime matrix and supervisor roadmap, see `docs/guide/runtime_matrix.md`.
 

@@ -26,4 +26,10 @@ workflows:
     tool: fill_pdf_form
   - step: "Summarize differences for review"
     tool: summarize_text
-
+tags:
+  - paperwork
+  - compliance
+  - review
+notes: >
+  Designed for paperwork review desks: every proposed change stays in draft mode
+  and requires an operator check before exporting or filing forms.

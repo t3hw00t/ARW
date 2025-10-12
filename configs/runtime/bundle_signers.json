@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "signers": [
+    {
+      "key_id": "preview-bundle-signing",
+      "public_key_b64": "+JLRDX15yB0QCU6Drn7UPUyZ8GH4unNF2xjOveKoAVQ=",
+      "issuer": "bundle-ci@arw",
+      "channels": ["preview"],
+      "notes": "Preview channel bundle signing key placeholder; rotate once the publishing pipeline lands."
+    }
+  ]
+}

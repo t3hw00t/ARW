@@ -1,9 +1,12 @@
 use anyhow::{anyhow, bail, ensure, Context, Result};
 mod logic_units;
 mod recipes;
-use arw_core::runtime_bundles::signature::{
-    canonical_payload_bytes, default_manifest_key_id, verify_manifest_signatures,
-    ManifestVerification,
+use arw_core::runtime_bundles::{
+    signature::{
+        canonical_payload_bytes, default_manifest_key_id, verify_manifest_signatures_with_registry,
+        ManifestVerification,
+    },
+    signers::RuntimeBundleSignerRegistry,
 };
 use arw_core::{
     capsule_presets, capsule_trust, effective_paths, gating, gating_keys, hello_core,
@@ -35,6 +38,7 @@ use std::io::{self, BufRead, BufReader, Read as _, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::str::FromStr;
+use std::sync::Arc;
 use std::thread;
 use std::time::{Duration, Instant};
 use tempfile::TempDir;
@@ -186,7 +190,7 @@ mod runtime_bundle_audit_tests {
         let manifest_path = bundle_dir.join("bundle.json");
         std::fs::write(&manifest_path, serde_json::to_vec_pretty(&manifest)?)?;
 
-        let (_pk, sk) = generate_ed25519_pair_b64()?;
+        let (pk, sk) = generate_ed25519_pair_b64()?;
         let sign_args = RuntimeBundlesManifestSignArgs {
             manifest: manifest_path.clone(),
             key_b64: Some(sk),
@@ -198,6 +202,22 @@ mod runtime_bundle_audit_tests {
         };
         cmd_runtime_bundles_manifest_sign(&sign_args)?;
 
+        let registry_path = root.join("bundle_signers.json");
+        let registry = json!({
+            "version": 1,
+            "signers": [{
+                "key_id": "test-signer",
+                "public_key_b64": pk,
+                "issuer": "test",
+                "channels": ["preview"]
+            }]
+        });
+        std::fs::write(&registry_path, serde_json::to_vec_pretty(&registry)?)?;
+        let previous_signers = std::env::var("ARW_RUNTIME_BUNDLE_SIGNERS").ok();
+        std::env::set_var(
+            "ARW_RUNTIME_BUNDLE_SIGNERS",
+            registry_path.to_string_lossy().as_ref(),
+        );
         let args = RuntimeBundlesAuditArgs {
             dest: Some(root.to_path_buf()),
             json: false,
@@ -210,7 +230,13 @@ mod runtime_bundle_audit_tests {
                 timeout: 5,
             },
         };
-        cmd_runtime_bundles_audit(&args)?;
+        let result = cmd_runtime_bundles_audit(&args);
+        if let Some(value) = previous_signers {
+            std::env::set_var("ARW_RUNTIME_BUNDLE_SIGNERS", value);
+        } else {
+            std::env::remove_var("ARW_RUNTIME_BUNDLE_SIGNERS");
+        }
+        result?;
         Ok(())
     }
 }
@@ -1733,10 +1759,12 @@ fn print_bundle_summary(
     }
     if let Some(summary) = signature_summary {
         println!(
-            "Signatures: total {} | with manifest {} | verified {} | failed {} | warnings {} | missing {} | enforced {}",
+            "Signatures: total {} | with manifest {} | verified {} | trusted {} | rejected {} | failed {} | warnings {} | missing {} | enforced {}",
             summary.total,
             summary.with_manifest,
             summary.verified,
+            summary.trusted,
+            summary.rejected,
             summary.failed,
             summary.warnings,
             summary.missing_signatures,
@@ -2318,6 +2346,10 @@ struct CliSignatureSummary {
     #[serde(default)]
     missing_signatures: usize,
     #[serde(default)]
+    trusted: usize,
+    #[serde(default)]
+    rejected: usize,
+    #[serde(default)]
     ok: bool,
     #[serde(default)]
     enforced: bool,
@@ -2332,6 +2364,8 @@ impl From<SignatureSummary> for CliSignatureSummary {
             failed: src.failed,
             warnings: src.warnings,
             missing_signatures: src.missing_signatures,
+            trusted: src.trusted,
+            rejected: src.rejected,
             ok: src.ok,
             enforced: src.enforced,
         }
@@ -2384,6 +2418,14 @@ fn load_local_runtime_bundle_installations(
     root: &Path,
 ) -> Result<Vec<CliRuntimeBundleInstallation>> {
     let mut installs = Vec::new();
+    let signers = match RuntimeBundleSignerRegistry::load_default() {
+        Ok(Some(registry)) => Some(Arc::new(registry)),
+        Ok(None) => None,
+        Err(err) => {
+            eprintln!("warning: failed to load runtime bundle signer registry: {err}");
+            None
+        }
+    };
     let read_dir = match std::fs::read_dir(root) {
         Ok(entries) => entries,
         Err(err) if err.kind() == io::ErrorKind::NotFound => return Ok(installs),
@@ -2411,7 +2453,8 @@ fn load_local_runtime_bundle_installations(
         if !file_type.is_dir() {
             continue;
         }
-        if let Some(install) = load_local_runtime_bundle_installation(root, &path)? {
+        if let Some(install) = load_local_runtime_bundle_installation(root, &path, signers.clone())?
+        {
             installs.push(install);
         }
     }
@@ -2422,6 +2465,7 @@ fn load_local_runtime_bundle_installations(
 fn load_local_runtime_bundle_installation(
     root: &Path,
     dir: &Path,
+    signers: Option<Arc<RuntimeBundleSignerRegistry>>,
 ) -> Result<Option<CliRuntimeBundleInstallation>> {
     let metadata_path = dir.join("bundle.json");
     let metadata_value = match std::fs::read(&metadata_path) {
@@ -2444,9 +2488,6 @@ fn load_local_runtime_bundle_installation(
             None
         }
     };
-
-    let signature_status = metadata_value.as_ref().map(verify_manifest_signatures);
-
     let mut bundle_struct: Option<runtime_bundles::RuntimeBundle> = None;
     let mut id = dir
         .file_name()
@@ -2458,7 +2499,7 @@ fn load_local_runtime_bundle_installation(
     let mut profiles: Vec<String> = Vec::new();
     let mut modalities: Vec<String> = Vec::new();
     let mut accelerator: Option<String> = None;
-    let mut channel: Option<String> = None;
+    let mut catalog_channel: Option<String> = None;
     let mut installed_at: Option<String> = None;
     let mut imported_at: Option<String> = None;
     let mut source: Option<JsonValue> = None;
@@ -2506,7 +2547,7 @@ fn load_local_runtime_bundle_installation(
                     .map(|value| value.to_string());
             }
         }
-        channel = metadata
+        catalog_channel = metadata
             .pointer("/catalog/channel")
             .and_then(|value| value.as_str())
             .map(|value| value.to_string());
@@ -2537,6 +2578,15 @@ fn load_local_runtime_bundle_installation(
             .map(|value| value.to_string());
     }
 
+    let signer_registry = signers.as_deref();
+    let signature_status = metadata_value.as_ref().map(|metadata| {
+        verify_manifest_signatures_with_registry(
+            metadata,
+            signer_registry,
+            catalog_channel.as_deref(),
+        )
+    });
+
     let artifacts_dir = dir.join("artifacts");
     let artifacts = load_local_runtime_bundle_artifacts(&artifacts_dir);
 
@@ -2551,7 +2601,7 @@ fn load_local_runtime_bundle_installation(
         profiles,
         modalities,
         accelerator,
-        channel,
+        channel: catalog_channel,
         installed_at,
         imported_at,
         source,
@@ -7408,7 +7458,19 @@ fn cmd_runtime_bundles_manifest_verify(args: &RuntimeBundlesManifestVerifyArgs) 
         anyhow::bail!("bundle manifest root must be a JSON object");
     }
 
-    let verification = verify_manifest_signatures(&manifest);
+    let signer_registry = match RuntimeBundleSignerRegistry::load_default() {
+        Ok(Some(registry)) => Some(registry),
+        Ok(None) => None,
+        Err(err) => {
+            eprintln!("warning: failed to load runtime bundle signer registry: {err}");
+            None
+        }
+    };
+    let channel_hint = manifest
+        .pointer("/catalog/channel")
+        .and_then(|value| value.as_str());
+    let verification =
+        verify_manifest_signatures_with_registry(&manifest, signer_registry.as_ref(), channel_hint);
     let summary = json!({
         "manifest": manifest_path.display().to_string(),
         "canonical_sha256": verification.canonical_sha256,
@@ -7450,10 +7512,16 @@ fn cmd_runtime_bundles_manifest_verify(args: &RuntimeBundlesManifestVerifyArgs) 
                     "hash mismatch"
                 };
                 let issuer = report.issuer.as_deref().unwrap_or("unknown issuer");
-                println!(
+                let mut line = format!(
                     "  - key {} ({}, {}) – issuer: {}",
                     key_id, status, hash_status, issuer
                 );
+                if report.trusted {
+                    line.push_str(" [trusted]");
+                } else if report.rejected {
+                    line.push_str(" [untrusted]");
+                }
+                println!("{}", line);
                 if let Some(err) = report.error.as_deref() {
                     println!("    error: {}", err);
                 }
@@ -7482,6 +7550,8 @@ struct SignatureSummary {
     failed: usize,
     warnings: usize,
     missing_signatures: usize,
+    trusted: usize,
+    rejected: usize,
     ok: bool,
     enforced: bool,
 }
@@ -7495,6 +7565,8 @@ impl From<&CliSignatureSummary> for SignatureSummary {
             failed: src.failed,
             warnings: src.warnings,
             missing_signatures: src.missing_signatures,
+            trusted: src.trusted,
+            rejected: src.rejected,
             ok: src.ok,
             enforced: src.enforced,
         }
@@ -7515,6 +7587,8 @@ fn summarize_installations(
         match inst.signature.as_ref() {
             Some(sig) => {
                 summary.with_manifest += 1;
+                summary.trusted += sig.trusted_signatures;
+                summary.rejected += sig.rejected_signatures;
                 if sig.ok {
                     summary.verified += 1;
                     if !sig.warnings.is_empty() {
@@ -7607,10 +7681,12 @@ fn cmd_runtime_bundles_audit(args: &RuntimeBundlesAuditArgs) -> Result<()> {
             context_label
         );
         println!(
-            "Signatures: total {} | with manifest {} | verified {} | failed {} | warnings {} | missing {} | enforced {}",
+            "Signatures: total {} | with manifest {} | verified {} | trusted {} | rejected {} | failed {} | warnings {} | missing {} | enforced {}",
             summary.total,
             summary.with_manifest,
             summary.verified,
+            summary.trusted,
+            summary.rejected,
             summary.failed,
             summary.warnings,
             summary.missing_signatures,
@@ -7654,6 +7730,11 @@ fn cmd_runtime_bundles_audit(args: &RuntimeBundlesAuditArgs) -> Result<()> {
                                 let mut line = format!("    key {} -> {}", key, status);
                                 if let Some(issuer) = entry.issuer.as_deref() {
                                     line.push_str(&format!(" (issuer: {})", issuer));
+                                }
+                                if entry.trusted {
+                                    line.push_str(" [trusted]");
+                                } else if entry.rejected {
+                                    line.push_str(" [untrusted]");
                                 }
                                 println!("{}", line);
                                 if let Some(err) = entry.error.as_deref() {
