@@ -3,7 +3,7 @@ title: Training Park
 ---
 
 # Training Park
-Updated: 2025-10-09
+Updated: 2025-10-12
 Type: How‑to
 
 Status: **Telemetry and launcher controls are live; richer charts are still in flight.** `arw-server` now exposes `/state/training/telemetry` plus `training_metrics` and `context_metrics` read-models, and the launcher streams live metrics, job actions, and logic-unit history while we finish the advanced visualization pass.
@@ -13,7 +13,7 @@ The goal remains: a third primary perspective for tuning instincts, memory, and 
 ## What Ships Today
 
 - Shared right-sidecar lanes (Timeline, Context, Policy, Metrics, Models) via the general SSE connection.
-- `GET /state/training/telemetry` snapshot with route stats, tool success rate, cache/gov/capsule health, and bus metrics, plus `state.read.model.patch` ids `training_metrics` and `context_metrics` for live updates. The context portion now includes aggregate slot-gap analytics (`coverage.top_slots`, `recall_risk.top_slots`) so you can spot recurring under-filled slots without diffing raw events.
+- `GET /state/training/telemetry` snapshot with route stats, tool success rate, cache/gov/capsule health, and bus metrics, plus `state.read.model.patch` ids `training_metrics` and `context_metrics` for live updates. The context portion now includes aggregate slot-gap analytics (`coverage.top_slots`, `recall_risk.top_slots`) so you can spot recurring under-filled slots without diffing raw events. Additional `context.assembly` and `context.retriever` sections surface iteration summaries, lane/slot diagnostics, and timing averages, while the top-level `memory` block reports recent lane counts and modular review status.
 - Prometheus metrics (`arw_context_slot_gap`, `arw_context_slot_gap_latest`, `arw_context_slot_fill_ratio`, `arw_context_slot_underfilled_total`) persist slot-gap trends beyond the in-memory replay window so dashboards can chart regressions over longer horizons.
 - Launcher controls submit training runs through `/orchestrator/mini_agents/start_training`, sending preset/diversity/recency/compression hints and streaming job progress back into the results panel.
 - Job table filters allow you to focus on running/completed/failed runs, while inline details expand to show payloads captured in `/state/orchestrator/jobs`. Each entry now echoes the submitted training hints (mode/preset/diversity/recency/compression) directly beneath the goal and repeats them in the details drawer alongside the canonical `status_slug` + `status_label` fields so launchers, CLIs, and scripts stay aligned without bespoke mappings. The orchestrator normalises and applies the same bundle to `governor.hints` as soon as the run starts, the details drawer includes an “Apply hints to governor” button for follow-up runs, and suggested Logic Units arrive with the ready-to-reapply patch for later promotion. The controls card keeps a short history of recent governor profiles so you can replay or clear them without rerunning training. Capsule telemetry mirrors this convention (`sample[].status_slug` + `sample[].status_label`) so countdown cards reuse the same labels without local lookup tables.
@@ -23,7 +23,7 @@ The goal remains: a third primary perspective for tuning instincts, memory, and 
 
 ## Implementation Plan (`arw-server` + Launcher)
 
-1. **Expand telemetry** — extend the current read-model with context assembly stats, memory coverage, and retriever diagnostics (`t-250918120201-tp01`). _Progress_: cache hit/miss, governor hints, capsule lease health, and feedback cues now ship in the snapshot; context/memory metrics remain.
+1. **Expand telemetry** — extend the current read-model with context assembly stats, memory coverage, and retriever diagnostics (`t-250918120201-tp01`). _Progress_: context assembly snapshots, retriever diagnostics, memory lane coverage, cache hit/miss, governor hints, capsule lease health, and feedback cues now ship in the snapshot.
 2. **Expose controls** — model tunable presets (`ARW_CONTEXT_*`, `ARW_PERF_PRESET`) as structured actions so adjustments flow through `/actions` with policy/lease checks. _Status: live in the launcher; iterating on preset quality._
 3. **Upgrade UI** — finish the richer charts, sparklines, and adjustment controls now that the launcher streams live telemetry (`t-250918120205-tp02`).
 4. **Record sessions** — append adjustments to the kernel so Training runs can promote configs into Logic Units or project hints with provenance.
@@ -32,6 +32,7 @@ The goal remains: a third primary perspective for tuning instincts, memory, and 
 
 - Poll `GET /state/training/telemetry` for a JSON snapshot or stream the `state.read.model.patch` feeds `training_metrics` and `context_metrics` for live updates.
 - Prefer `arw-cli context telemetry --base http://127.0.0.1:8091 --watch` to stream quick terminal summaries of coverage/recall gaps, cache counters, and working-set scope without copying URLs (drop `--watch` for a single snapshot, append `--json --pretty` for raw output). Add `--output logs/trial-context.log` (or another path) to append each snapshot to a file for daily logs. Shortcut: `just context-watch` writes to `docs/ops/trials/logs/<DATE>/context.log` and keeps running until you press Ctrl+C. Configure `ARW_CONTEXT_WATCH_BASE` / `ARW_CONTEXT_WATCH_OUTPUT_ROOT` / `ARW_CONTEXT_WATCH_SESSION` for different defaults when working against remote hosts or custom log directories (see `ops/context_watch.env.example` for ready-to-source exports), and add `--date YYYY-MM-DD` / `--session <slug>` when you need to backfill or split a specific day’s log without manual file edits.
+- Review the `context.assembly` and `context.retriever` sections for lane/slot coverage summaries, iteration counts, and timing averages, and check the top-level `memory` block for recent lane totals plus modular review status when diagnosing recall issues.
 - For cache instrumentation, run `arw-cli tools cache --base http://127.0.0.1:8091` to print hit/miss, stampede suppression, and latency/payload savings (append `--json` for raw stats that scripts can consume).
 - Key indicators: route latencies (`/context/assemble`, `/actions`), action success rate, bus health, cache stampede suppression, governor profile/hints, capsule lease expirations, and feedback cues—all emitted from the same telemetry endpoint powering the launcher view.
 - Context telemetry now streams `context.recall.risk` (score, level, component gaps) alongside the coverage verdicts so dashboards can surface why recall dipped without diffing raw events.
@@ -64,6 +65,9 @@ The goal remains: a third primary perspective for tuning instincts, memory, and 
 | `feedback` | `auto_apply`, signal count + recent five, suggestion count + three-sample. |
 | `compatibility` | Legacy gauges (e.g., capsule header sightings). |
 | `context` | Latest coverage verdict (needs_more, reasons, summary/spec), aggregated slot-gap analytics (`top_slots` identifies recurring `slot_underfilled:*` reasons), recall-risk rollups (score, level distribution, average/max slot gaps), and the most recent assembled snapshot (counts + final spec). Mirrors the `context_metrics` read-model so SSE dashboards and the launcher stay aligned without recomputing the journal replay. |
+| `context.assembly` | Recent iteration summaries, needs-more ratio, lane/slot aggregates, and average timing metrics backing the CRAG loop. |
+| `context.retriever` | Retriever diagnostics with counts, lane/slot aggregates, and phase timing averages. |
+| `memory` | Recent lane totals from the memory store plus modular review counters (pending, blocked, recent). |
 
 ## Optimization & Refactor Notes
 

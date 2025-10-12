@@ -3,7 +3,7 @@ title: Context Telemetry Checklist
 ---
 
 # Context Telemetry Checklist
-Updated: 2025-10-09
+Updated: 2025-10-12
 Type: How‑to
 
 Use this checklist whenever you touch the context assembly loop, coverage heuristics, or the dashboards that depend on them. It keeps the `context.coverage` and `context.recall.risk` streams healthy and ensures downstream read-models expose slot budgets and counts for UI meters.
@@ -12,6 +12,7 @@ Use this checklist whenever you touch the context assembly loop, coverage heuris
 - `context.coverage` events always ship the latest summary + spec snapshots, including `slots.counts` and `slots.budgets`.
 - `context.recall.risk` events emit a populated `components.slots` map alongside the blended score and level.
 - Training telemetry (`/state/training/telemetry`) captures the same data so the launcher and dashboards stay in sync.
+- Training telemetry also exposes `context.assembly`, `context.retriever`, and `memory` blocks with lane/slot aggregates and timing summaries for deeper triage.
 
 ## Checklist
 
@@ -53,11 +54,14 @@ Use this checklist whenever you touch the context assembly loop, coverage heuris
   ```bash
   curl -sS -H "X-ARW-Admin: $ARW_ADMIN_TOKEN" \
     http://127.0.0.1:8091/state/training/telemetry | \
-    jq '.context | {latest_verdict: .coverage.latest, top_slots: .coverage.top_slots, recall_rollup: .recall_risk}'
+    jq '{coverage: {latest: .context.coverage.latest, top_slots: .context.coverage.top_slots}, recall: .context.recall_risk, assembly: .context.assembly, retriever: .context.retriever, memory: .memory}'
   ```
   Check that:
   - `coverage.latest.summary.slots.budgets` mirrors your request AND the new `coverage.top_slots` lists any `slot_underfilled:*` issues.
   - `recall_risk.top_slots` highlights the same gaps you saw on the event stream (averages and max gaps line up with raw events).
+  - `assembly.needs_more_ratio`, `assembly.lanes`, and `assembly.metrics` reflect the same slot budgets and iteration outcomes seen on the live stream.
+  - `retriever.timings_ms` and lane/slot aggregates align with the `working_set.*` events you inspected.
+  - The top-level `memory.lanes` totals and modular counters match the recent records in `/state/memory/recent`.
 
 - **Metrics scrape** — Confirm slot metrics reach Prometheus-friendly gauges/counters:
   ```bash

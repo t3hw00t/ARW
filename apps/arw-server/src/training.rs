@@ -5,7 +5,9 @@ use tokio::fs as afs;
 use tokio::sync::Mutex;
 use tracing::warn;
 
-use crate::{capsule_guard::CAPSULE_EXPIRING_SOON_WINDOW_MS, feedback::FeedbackState, AppState};
+use crate::{
+    capsule_guard::CAPSULE_EXPIRING_SOON_WINDOW_MS, feedback::FeedbackState, read_models, AppState,
+};
 use arw_topics as topics;
 
 const LOGIC_HISTORY_LIMIT: usize = 10;
@@ -85,6 +87,25 @@ pub async fn telemetry_snapshot(state: &AppState) -> serde_json::Value {
     let feedback_summary = summarize_feedback(feedback_state);
 
     let logic_history = state.logic_history().recent(LOGIC_HISTORY_LIMIT).await;
+    let memory_overview = if state.kernel_enabled() {
+        match state.kernel().list_recent_memory_async(None, 120).await {
+            Ok(items) if !items.is_empty() => {
+                let summary = read_models::summarize_memory_recent_items(&items);
+                build_memory_overview(&summary)
+            }
+            Ok(_) => Value::Null,
+            Err(err) => {
+                warn!(
+                    target: "training",
+                    error = %err,
+                    "failed to summarize memory coverage"
+                );
+                Value::Null
+            }
+        }
+    } else {
+        Value::Null
+    };
 
     json!({
         "generated": generated,
@@ -119,8 +140,33 @@ pub async fn telemetry_snapshot(state: &AppState) -> serde_json::Value {
         "feedback": feedback_summary,
         "compatibility": compatibility,
         "context": context,
+        "memory": memory_overview,
         "logic_history": logic_history,
     })
+}
+
+fn build_memory_overview(summary: &Value) -> Value {
+    let mut out = serde_json::Map::new();
+    if let Some(lanes) = summary.get("lanes") {
+        out.insert("lanes".into(), lanes.clone());
+        if let Some(lanes_obj) = lanes.as_object() {
+            let mut total: u64 = 0;
+            for value in lanes_obj.values() {
+                if let Some(count) = value.as_u64() {
+                    total += count;
+                }
+            }
+            out.insert("total_recent".into(), Value::Number(total.into()));
+        }
+    }
+    if let Some(modular) = summary.get("modular") {
+        out.insert("modular".into(), modular.clone());
+    }
+    if out.is_empty() {
+        Value::Null
+    } else {
+        Value::Object(out)
+    }
 }
 
 #[derive(Debug)]
@@ -636,6 +682,23 @@ mod tests {
         if let Some(next_expiry_in) = summary["next_expiry_in_ms"].as_u64() {
             assert!(next_expiry_in > 0);
         }
+    }
+
+    #[test]
+    fn build_memory_overview_extracts_lane_counts() {
+        let summary = json!({
+            "lanes": {"episodic": 5, "semantic": 3},
+            "modular": {
+                "recent": [],
+                "pending_human_review": 1,
+                "blocked": 0
+            }
+        });
+        let overview = build_memory_overview(&summary);
+        let obj = overview.as_object().expect("memory overview object");
+        assert_eq!(obj["total_recent"], json!(8));
+        assert_eq!(obj["lanes"]["episodic"], json!(5));
+        assert!(obj.get("modular").is_some());
     }
 
     #[test]
