@@ -5,7 +5,7 @@ title: Asimov Capsule Guard
 # Asimov Capsule Guard
 { .topic-trio style="--exp:.5; --complex:.7; --complicated:.6" data-exp=".5" data-complex=".7" data-complicated=".6" }
 
-Updated: 2025-10-09
+Updated: 2025-10-12
 Status: Alpha (hardening in progress)
 Type: Explanation
 
@@ -46,9 +46,34 @@ The remaining gap is operational coverage: workers and higher-level runners stil
 3. ✅ Update Logic Unit / Recipe runners to request capsule refresh when executing automation bundles so packaged strategies inherit the guard. Installer flow now refreshes capsules and ships with coverage.
 
 ### Phase 3 — UX & Operational Controls
-1. ⏭ (Backlog) Add UI toggles to treat capsules as posture presets (e.g., "Strict Egress"), showing TTL countdowns and renewal status.
+1. ✅ (Launcher 0.2.0-dev) Capsule presets land in the Models → Egress console: the **Strict Egress** toggle ships a signed capsule (`configs/capsules/strict_egress.json`), surfaces renewal windows, and shows TTL countdowns as capsules auto-refresh (2025-10-12).
 2. ✅ Provide CLI/admin endpoints to mint, inspect, and revoke capsules—including emergency teardown hooks for misconfigurations (`/admin/policy/capsules/teardown`, `arw-cli capsule teardown`).
-3. ⏭ (Backlog) Document deployment patterns: seeding base capsules via `configs/gating.toml` or env vars, layering runtime capsules for incidents, and rolling keys via the trust store.
+3. ✅ Documented capsule deployment patterns: boot-time seeding via `configs/gating.toml` / env, Launcher/CLI runtime layers for incidents, and trust-store rotation via `/admin/rpu/reload` (2025-10-12).
+
+## Deployment Patterns
+
+### Seed baseline guardrails
+- Store signed capsule manifests under `configs/capsules/`; the repository now ships `configs/capsules/strict_egress.json` as the canonical preset.
+- Reference baseline denies via `configs/gating.toml` or the `ARW_GATING_DENY` environment variable so guardrails load before any runtime traffic. Capsules adopted during boot remain immutable until you rotate the configuration.
+- When packaging for teams, include the preset capsule and update `configs/trust_capsules.json` with the public key that will sign rotations.
+
+### Layer runtime presets and incidents
+- Use the Launcher (Models → Egress → **Policy capsules**) to toggle posture presets. The **Strict Egress** toggle sends the signed capsule in HTTP headers (`X-ARW-Capsule`) and shows renewal/expiry countdowns so operators can watch leases in real time.
+- CLI automation: `arw-cli capsule adopt configs/capsules/strict_egress.json --base http://127.0.0.1:8091 --show-status` verifies the signature against `configs/trust_capsules.json`, adopts the preset, and prints a post-adoption summary. Pass `--skip-verify` if you need to bypass local verification (for example during bootstrapping).
+- Raw HTTP flows can replay the header directly when needed:
+
+  ```bash
+  HDR=$(jq -c '.' configs/capsules/strict_egress.json)
+  curl -s -H "X-ARW-Capsule: $HDR" -H "X-ARW-Admin: $ARW_ADMIN_TOKEN" \
+    http://127.0.0.1:8091/state/policy/capsules >/dev/null
+  ```
+
+- Inspect active capsules and renewal health with `arw-cli capsule status --base http://127.0.0.1:8091` or the Launcher telemetry cards; remove layers with `arw-cli capsule teardown --id capsule.strict-egress` or the UI toggle.
+
+### Rotate trust issuers
+- Trust issuers live in `configs/trust_capsules.json`. Commit the new public key (for example from `arw-cli capsule gen-ed25519`) before distributing a refreshed capsule.
+- Reload the trust store without restarting the service via `curl -X POST -H "X-ARW-Admin: $ARW_ADMIN_TOKEN" http://127.0.0.1:8091/admin/rpu/reload`.
+- Use `/admin/rpu/trust` or `arw-cli capsule status --json` to audit the issuer list after rotation.
 
 ## Dependencies & Interactions
 - Builds on `policy_leases` for capability prompts and telemetry, and `guardrail_gateway` for egress enforcement.

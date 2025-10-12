@@ -1,0 +1,23 @@
+{
+  "id": "capsule.strict-egress",
+  "version": "1",
+  "issued_at_ms": 0,
+  "issuer": "local-admin",
+  "hop_ttl": 4,
+  "propagate": "children",
+  "denies": [
+    "net.http.*",
+    "net.https.*",
+    "net.tcp.*",
+    "net:http",
+    "net:https",
+    "net:tcp",
+    "net:domain:*",
+    "net:host:*",
+    "net:port:*"
+  ],
+  "contracts": [],
+  "lease_duration_ms": 600000,
+  "renew_within_ms": 240000,
+  "signature": "vl4YZkykkbCTtxmiwHEYvzBizTPbM65YCqd2cHmUDEWGDfLxspWcKH5Zk7vm5lnsSD3ixD2b1OjC++fC54DGAA=="
+}

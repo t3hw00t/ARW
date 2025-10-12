@@ -10,6 +10,7 @@
     <link rel="stylesheet" href="models.css" />
     <script src="common.js" defer></script>
     <script type="module" src="sidecar.js"></script>
+    <script src="capsule_presets.js" defer></script>
     <script src="models.js" defer></script>
   </head>
   <body data-page="models">
@@ -192,6 +193,17 @@
         <section class="card models-egress" role="region" aria-labelledby="modelsEgressTitle" data-mode="expert-only">
           <h2 id="modelsEgressTitle">Egress scopes</h2>
           <div id="egress-scopes-summary" class="dim"></div>
+          <div id="capsule-presets" class="capsule-presets" aria-live="polite">
+            <div class="capsule-presets-head">
+              <div>
+                <h3 class="capsule-presets-title">Policy capsules</h3>
+                <p class="capsule-presets-lead dim">Apply posture presets that adopt signed policy capsules. Active capsules refresh automatically until you disable them.</p>
+              </div>
+              <div id="capsule-presets-summary" class="capsule-presets-summary mono dim" role="status" aria-live="polite"></div>
+            </div>
+            <div id="capsule-presets-list" class="capsule-presets-list" role="list"></div>
+            <div id="capsule-presets-status" class="capsule-presets-status dim" role="alert" aria-live="assertive"></div>
+          </div>
           <div class="scope-controls">
             <button id="btn-scope-add" class="pill">Add Scope</button>
           </div>

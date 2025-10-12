@@ -16,6 +16,13 @@ let currentEgressScopes = [];
 let scopeCapabilityIndex = new Map();
 let activeMode = (window.ARW?.mode?.current === 'expert') ? 'expert' : 'guided';
 let expertInitialized = false;
+const CAPSULE_PRESETS = Array.isArray(window.ARW_CAPSULE_PRESETS) ? window.ARW_CAPSULE_PRESETS.slice() : [];
+const CAPSULE_EXPIRING_SOON_MS = 60_000;
+let capsuleSnapshot = null;
+let capsuleStatusMap = new Map();
+let capsulePresetRows = new Map();
+let capsuleBusy = new Set();
+let capsuleCountdownTimer = null;
 
 function ensureSseIndicator() {
   const wrap = document.getElementById('statusBadges');
@@ -201,6 +208,258 @@ function escapeAttr(value){
     .replace(/&/g, '&amp;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;');
+}
+
+function formatDurationMs(ms){
+  const totalSeconds = Math.max(0, Math.floor(Math.abs(ms) / 1000));
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  const parts = [];
+  if (hours) parts.push(`${hours}h`);
+  if (minutes) parts.push(`${minutes}m`);
+  if (!hours && seconds && parts.length < 2) parts.push(`${seconds}s`);
+  if (!parts.length) parts.push('0s');
+  return parts.join(' ');
+}
+
+function formatRelativeMs(deltaMs){
+  const signPositive = deltaMs >= 0;
+  const label = formatDurationMs(deltaMs);
+  return signPositive ? `in ${label}` : `${label} ago`;
+}
+
+function capsuleStatusSummary(item){
+  if (!item) {
+    return {
+      badgeText: 'Off',
+      badgeVariant: 'off',
+      statusText: 'Not active.',
+    };
+  }
+  const now = Date.now();
+  const status = String(item.status || '').toLowerCase();
+  const badgeText = item.status_label || item.status || 'Active';
+  let badgeVariant = 'active';
+  if (status === 'renew_due') badgeVariant = 'warn';
+  if (status === 'expired') badgeVariant = 'bad';
+  const parts = [];
+  if (item.renew_window_started) {
+    parts.push('Renewal window open');
+  }
+  const renewIn = Number(item.renew_in_ms);
+  if (Number.isFinite(renewIn)) {
+    parts.push(`Renews ${formatRelativeMs(renewIn)}`);
+  }
+  const leaseUntil = Number(item.lease_until_ms);
+  if (Number.isFinite(leaseUntil)) {
+    parts.push(`Expires ${formatRelativeMs(leaseUntil - now)}`);
+  } else {
+    const expiresIn = Number(item.expires_in_ms);
+    if (Number.isFinite(expiresIn)) {
+      parts.push(`Expires ${formatRelativeMs(expiresIn)}`);
+    }
+  }
+  const statusText = parts.length ? parts.join(' · ') : (item.aria_hint || badgeText);
+  return { badgeText, badgeVariant, statusText };
+}
+
+function updateCapsuleSummary(snapshot){
+  const summaryEl = document.getElementById('capsule-presets-summary');
+  if (!summaryEl) return;
+  if (!snapshot || !Array.isArray(snapshot.items) || snapshot.items.length === 0) {
+    summaryEl.textContent = 'No policy capsules active.';
+    return;
+  }
+  const items = snapshot.items;
+  const now = Date.now();
+  let renewDue = 0;
+  let expiringSoon = 0;
+  let expired = 0;
+  let nextExpiry = null;
+  const seenExpired = new Set();
+  for (const item of items) {
+    if (!item || typeof item !== 'object') continue;
+    const status = String(item.status || '').toLowerCase();
+    if (status === 'renew_due') renewDue += 1;
+    if (status === 'expiring') expiringSoon += 1;
+    if (status === 'expired') {
+      expired += 1;
+      seenExpired.add(item.id || String(expired));
+    }
+    const leaseUntil = Number(item.lease_until_ms);
+    if (Number.isFinite(leaseUntil)) {
+      if (leaseUntil <= now && !seenExpired.has(item.id)) {
+        expired += 1;
+        seenExpired.add(item.id || String(expired));
+      } else if (leaseUntil > now && leaseUntil - now <= CAPSULE_EXPIRING_SOON_MS) {
+        expiringSoon += 1;
+      }
+      if (leaseUntil > now) {
+        if (!nextExpiry || leaseUntil < nextExpiry.when) {
+          nextExpiry = { when: leaseUntil, label: item.status_label || 'Expiry', id: item.id || 'capsule' };
+        }
+      }
+      continue;
+    }
+    const expiresIn = Number(item.expires_in_ms);
+    if (Number.isFinite(expiresIn) && expiresIn > 0) {
+      if (expiresIn <= CAPSULE_EXPIRING_SOON_MS) expiringSoon += 1;
+      const future = now + expiresIn;
+      if (!nextExpiry || future < nextExpiry.when) {
+        nextExpiry = { when: future, label: item.status_label || 'Expiry', id: item.id || 'capsule' };
+      }
+    }
+  }
+  const total = items.length;
+  const healthy = Math.max(0, total - renewDue - expiringSoon - expired);
+  const parts = [
+    `${total} active`,
+    `${healthy} healthy`,
+    `${renewDue} awaiting renewal`,
+    `${expiringSoon} expiring`,
+    `${expired} expired`,
+  ];
+  if (nextExpiry) {
+    parts.push(`Next expiry ${formatRelativeMs(nextExpiry.when - now)} (${nextExpiry.id})`);
+  }
+  summaryEl.textContent = parts.join(' · ');
+}
+
+function ensureCapsuleTimer(){
+  if (capsuleCountdownTimer != null) return;
+  capsuleCountdownTimer = window.setInterval(() => {
+    capsulePresetRows.forEach((_, id) => updateCapsulePresetRow(id));
+  }, 1000);
+}
+
+function setCapsuleBusy(id, busy){
+  if (busy) capsuleBusy.add(id);
+  else capsuleBusy.delete(id);
+  updateCapsulePresetRow(id);
+}
+
+function updateCapsulePresetRow(id){
+  const entry = capsulePresetRows.get(id);
+  if (!entry) return;
+  const item = capsuleStatusMap.get(id);
+  const summary = capsuleStatusSummary(item);
+  entry.row.classList.toggle('capsule-active', !!item);
+  entry.badge.textContent = summary.badgeText;
+  entry.badge.className = `capsule-preset-badge ${summary.badgeVariant}`;
+  entry.status.textContent = summary.statusText;
+  entry.button.setAttribute('aria-pressed', item ? 'true' : 'false');
+  entry.button.textContent = item ? 'Disable' : 'Enable';
+  entry.button.disabled = capsuleBusy.has(id);
+}
+
+function renderCapsulePresets(){
+  const list = document.getElementById('capsule-presets-list');
+  const statusEl = document.getElementById('capsule-presets-status');
+  if (statusEl) statusEl.textContent = '';
+  if (!list) return;
+  list.innerHTML = '';
+  capsulePresetRows = new Map();
+  if (!CAPSULE_PRESETS.length) {
+    const empty = document.createElement('p');
+    empty.className = 'dim';
+    empty.textContent = 'No capsule presets registered.';
+    list.appendChild(empty);
+    return;
+  }
+  CAPSULE_PRESETS.forEach((preset) => {
+    const row = document.createElement('div');
+    row.className = 'capsule-preset';
+    row.setAttribute('role', 'listitem');
+    const main = document.createElement('div');
+    main.className = 'capsule-preset-main';
+    const titleRow = document.createElement('div');
+    titleRow.className = 'capsule-preset-title';
+    const title = document.createElement('span');
+    title.textContent = preset.label;
+    const badge = document.createElement('span');
+    badge.className = 'capsule-preset-badge';
+    titleRow.appendChild(title);
+    titleRow.appendChild(badge);
+    const desc = document.createElement('p');
+    desc.className = 'capsule-preset-description';
+    desc.textContent = preset.description || '';
+    const status = document.createElement('div');
+    status.className = 'capsule-preset-status';
+    main.appendChild(titleRow);
+    main.appendChild(desc);
+    main.appendChild(status);
+    const actions = document.createElement('div');
+    actions.className = 'capsule-preset-actions';
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'capsule-preset-toggle';
+    button.addEventListener('click', () => handleCapsuleToggle(preset, !capsuleStatusMap.has(preset.id)));
+    actions.appendChild(button);
+    row.appendChild(main);
+    row.appendChild(actions);
+    list.appendChild(row);
+    capsulePresetRows.set(preset.id, {
+      row,
+      badge,
+      status,
+      button,
+      preset,
+    });
+    updateCapsulePresetRow(preset.id);
+  });
+  ensureCapsuleTimer();
+}
+
+function updateCapsulePresets(snapshot){
+  capsuleSnapshot = snapshot || null;
+  capsuleStatusMap = new Map();
+  if (snapshot && Array.isArray(snapshot.items)) {
+    snapshot.items.forEach((item) => {
+      if (item && item.id) {
+        capsuleStatusMap.set(String(item.id), item);
+      }
+    });
+  }
+  renderCapsulePresets();
+  updateCapsuleSummary(snapshot);
+}
+
+async function adoptCapsulePreset(preset){
+  const meta = updateBaseMeta();
+  const baseUrl = meta.base;
+  const headers = { 'X-ARW-Capsule': preset.serialized, Accept: 'application/json' };
+  const resp = await ARW.http.fetch(baseUrl, '/state/policy/capsules', { headers });
+  if (!resp.ok) {
+    const text = await resp.text().catch(() => '');
+    throw new Error(`Failed to adopt capsule (${resp.status})${text ? `: ${text}` : ''}`);
+  }
+}
+
+async function teardownCapsulePreset(preset){
+  await postAdminJson('admin/policy/capsules/teardown', { ids: [preset.id], reason: 'launcher_toggle' });
+}
+
+async function handleCapsuleToggle(preset, enable){
+  if (!preset) return;
+  const statusEl = document.getElementById('capsule-presets-status');
+  setCapsuleBusy(preset.id, true);
+  try{
+    if (enable) {
+      await adoptCapsulePreset(preset);
+      ARW.toast(`${preset.label} enabled`);
+    } else {
+      await teardownCapsulePreset(preset);
+      ARW.toast(`${preset.label} disabled`);
+    }
+    await loadEgressScopes();
+  } catch (err) {
+    console.error(err);
+    if (statusEl) statusEl.textContent = err?.message || 'Capsule update failed.';
+    ARW.toast(err?.message || 'Capsule update failed');
+  } finally {
+    setCapsuleBusy(preset.id, false);
+  }
 }
 
 function renderModelsCell(models){
@@ -1459,13 +1718,18 @@ async function loadEgressScopes() {
     const data = await fetchAdminJson('state/egress/settings');
     if (data && data.egress) {
       updateEgressScopes(data.egress);
+      updateCapsulePresets(data.capsules && data.capsules.snapshot ? data.capsules.snapshot : null);
     } else {
       updateEgressScopes(null);
+      updateCapsulePresets(null);
     }
   }catch(err){
     console.error(err);
     const container = document.getElementById('egress-scopes');
     if (container) container.textContent = 'Unable to load scopes.';
+    updateCapsulePresets(null);
+    const statusEl = document.getElementById('capsule-presets-status');
+    if (statusEl) statusEl.textContent = err?.message || 'Unable to load capsule presets.';
   }
 }
 
@@ -1548,6 +1812,7 @@ async function previewLedger(corrId, opts = {}){
 
 // Initialize toggles
 document.addEventListener('DOMContentLoaded', ()=>{
+  updateCapsulePresets(capsuleSnapshot);
   const auto = document.getElementById('jobs-auto');
   if (auto) auto.addEventListener('change', (e)=> setJobsAuto(!!e.target.checked));
   const addScopeBtn = document.getElementById('btn-scope-add');

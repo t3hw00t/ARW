@@ -3,7 +3,7 @@ title: Egress Settings
 ---
 
 # Egress Settings
-Updated: 2025-10-09
+Updated: 2025-10-12
 Type: How‑to
 
 Control the egress proxy, DNS guard, IP‑literal blocking, allowlist, and structured network scopes (domains/IPs/ports/protocols with optional TTL) at runtime, and persist these settings via the unified config snapshot.
@@ -12,6 +12,10 @@ Endpoints (service)
 - `GET /state/egress/settings` → runtime summary `{ egress: {...}, recommended: {...}, capsules: {...}, leases: {...} }`
 - `POST /egress/settings` (admin‑gated) → update toggles and persist to config under `egress` (validated against [spec/schemas/egress_settings.json](https://github.com/t3hw00t/ARW/blob/main/spec/schemas/egress_settings.json))
 - `POST /egress/preview` → dry‑run a URL+method against policy/guards: `{ allow, reason?, host, port, protocol }`
+
+Launcher shortcut
+- The desktop Launcher (Models → Egress → **Policy capsules**) exposes signed presets such as **Strict Egress**. Enabling a preset adopts `configs/capsules/strict_egress.json`, shows live renewal and expiry countdowns, and disabling it tears the capsule down via `/admin/policy/capsules/teardown`.
+- Prefer CLI? Run `arw-cli capsule adopt configs/capsules/strict_egress.json --base http://127.0.0.1:8091 --show-status` to apply the preset, verifying the signature against `configs/trust_capsules.json` before adoption. Omit `--show-status` for a quiet run or add `--skip-verify` when you intentionally bypass local trust checks.
 
 Dynamic proxy
 - The proxy starts/stops/rebinds to `proxy_port` immediately after a successful settings update. No restart needed.

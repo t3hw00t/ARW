@@ -357,6 +357,7 @@ version = "0.2.0-dev"
 dependencies = [
  "anyhow",
  "arw-core",
+ "arw-protocol",
  "arw-runtime",
  "base64 0.22.1",
  "chrono",

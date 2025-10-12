@@ -1,5 +1,9 @@
 {
   "issuers": [
-    { "id": "local-admin", "alg": "ed25519", "key_b64": "" }
+    {
+      "id": "local-admin",
+      "alg": "ed25519",
+      "key_b64": "zWkWczzyn3I7FdUyqXgDfIbh9sFvdr4CxUHSltYbmfY="
+    }
   ]
 }

@@ -3,6 +3,7 @@ use arw_core::{
     effective_paths, gating, gating_keys, hello_core, introspect_tools, load_effective_paths,
     resolve_config_path, runtime_bundles,
 };
+use arw_protocol::GatingCapsule;
 use arw_runtime::{RuntimeAccelerator, RuntimeModality, RuntimeSeverity, RuntimeState};
 use base64::Engine;
 use chrono::{DateTime, Local, SecondsFormat, TimeZone, Utc};
@@ -175,6 +176,8 @@ enum CapCmd {
     SignEd25519(SignArgs),
     /// Verify a capsule file signature with ed25519 public key (b64)
     VerifyEd25519(VerifyArgs),
+    /// Adopt a signed capsule manifest by sending it to the server
+    Adopt(CapsuleAdoptArgs),
     /// Fetch active policy capsules from the server
     Status(CapsuleStatusArgs),
     /// Emergency teardown for active policy capsules
@@ -1014,6 +1017,28 @@ struct VerifyArgs {
     capsule_json: String,
     /// Signature (b64)
     sig_b64: String,
+}
+
+#[derive(Args)]
+struct CapsuleAdoptArgs {
+    /// Capsule manifest to adopt (must include signature)
+    #[arg(value_name = "FILE", value_hint = clap::ValueHint::FilePath)]
+    file: PathBuf,
+    /// Base URL of the service (e.g., http://127.0.0.1:8091)
+    #[arg(long, default_value = "http://127.0.0.1:8091")]
+    base: String,
+    /// Admin token; falls back to ARW_ADMIN_TOKEN env
+    #[arg(long)]
+    admin_token: Option<String>,
+    /// Timeout seconds
+    #[arg(long, default_value_t = 5)]
+    timeout: u64,
+    /// Show capsule status after adoption
+    #[arg(long)]
+    show_status: bool,
+    /// Skip local signature verification before sending
+    #[arg(long)]
+    skip_verify: bool,
 }
 
 #[derive(Args)]
@@ -2748,6 +2773,12 @@ fn main() {
                     std::process::exit(1);
                 } else {
                     println!("ok");
+                }
+            }
+            CapCmd::Adopt(args) => {
+                if let Err(e) = cmd_capsule_adopt(&args) {
+                    eprintln!("{}", e);
+                    std::process::exit(1);
                 }
             }
             CapCmd::Status(args) => {
@@ -10076,6 +10107,72 @@ fn format_reset_time_local(dt: &DateTime<Utc>) -> String {
     dt.with_timezone(&Local)
         .format("%Y-%m-%d %H:%M %Z")
         .to_string()
+}
+
+fn cmd_capsule_adopt(args: &CapsuleAdoptArgs) -> Result<()> {
+    let contents = std::fs::read_to_string(&args.file)
+        .with_context(|| format!("reading capsule file {}", args.file.display()))?;
+    let capsule: GatingCapsule = serde_json::from_str(&contents)
+        .with_context(|| format!("parsing capsule file {}", args.file.display()))?;
+    let signature_missing = capsule
+        .signature
+        .as_ref()
+        .map(|s| s.trim().is_empty())
+        .unwrap_or(true);
+    if signature_missing {
+        bail!(
+            "capsule '{}' is missing a signature; sign it with `arw-cli capsule sign-ed25519` first",
+            args.file.display()
+        );
+    }
+
+    if !args.skip_verify && !arw_core::rpu::verify_capsule(&capsule) {
+        bail!(
+            "capsule '{}' failed local signature verification. Update configs/trust_capsules.json or pass --skip-verify to override.",
+            args.file.display()
+        );
+    }
+
+    let serialized =
+        serde_json::to_string(&capsule).context("serializing capsule payload for request")?;
+
+    let client = Client::builder()
+        .timeout(Duration::from_secs(args.timeout))
+        .build()
+        .context("building HTTP client")?;
+    let token = resolve_admin_token(&args.admin_token);
+    let base = args.base.trim_end_matches('/');
+    let url = format!("{}/state/policy/capsules", base);
+
+    let mut req = client.get(&url);
+    req = req.header("X-ARW-Capsule", &serialized);
+    req = req.header(ACCEPT, "application/json");
+    req = with_admin_headers(req, token.as_deref());
+
+    let resp = req.send().with_context(|| format!("requesting {}", url))?;
+
+    if !resp.status().is_success() {
+        let status = resp.status();
+        let text = resp.text().unwrap_or_default();
+        bail!("capsule adoption failed with {}: {}", status, text.trim());
+    }
+
+    println!("Capsule '{}' adopted via {}.", args.file.display(), url);
+
+    if args.show_status {
+        println!();
+        let status_args = CapsuleStatusArgs {
+            base: args.base.clone(),
+            admin_token: args.admin_token.clone(),
+            timeout: args.timeout,
+            json: false,
+            pretty: false,
+            limit: 5,
+        };
+        cmd_capsule_status(&status_args)?;
+    }
+
+    Ok(())
 }
 
 fn cmd_capsule_status(args: &CapsuleStatusArgs) -> Result<()> {
