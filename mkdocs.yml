@@ -69,6 +69,7 @@ nav:
       - Security Hardening: guide/security_hardening.md
       - Network Posture: guide/network_posture.md
       - Egress Settings: guide/egress_settings.md
+      - Web Browsing: guide/web_browsing.md
       - Desktop Launcher: guide/launcher.md
       - Mascot Overlay: guide/mascot_overlay.md
       - Windows:
@@ -144,6 +145,7 @@ nav:
       - Event Topics: reference/topics.md
       - Interface Deprecations: reference/deprecations.md
       - Interface Catalog: reference/interface-catalog.md
+      - Connector Catalog: reference/connectors.md
       - Configuration: CONFIGURATION.md
       - CLI Reference: reference/cli.md
       - Specs Index: reference/specs.md

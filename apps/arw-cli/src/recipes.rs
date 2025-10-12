@@ -5,6 +5,7 @@ use jsonschema::{Draft, JSONSchema};
 use once_cell::sync::Lazy;
 use serde::Serialize;
 use serde_json::{json, Value};
+use std::collections::HashSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 use walkdir::WalkDir;
@@ -120,12 +121,12 @@ impl Recipe {
             .canonicalize()
             .with_context(|| format!("failed to canonicalize {}", path.display()))?;
         let manifest = load_manifest_from_file(&canonical)?;
-        Ok(Self::from_manifest(
+        Self::from_manifest(
             manifest,
             canonical.clone(),
             canonical,
             RecipeSourceKind::File,
-        ))
+        )
     }
 
     fn load_from_dir(dir: &Path) -> Result<Self> {
@@ -137,12 +138,18 @@ impl Recipe {
             let candidate_path = root.join(candidate);
             if candidate_path.is_file() {
                 if let Ok(manifest) = load_manifest_from_file(&candidate_path) {
-                    return Ok(Self::from_manifest(
+                    return match Self::from_manifest(
                         manifest,
-                        candidate_path,
-                        root,
+                        candidate_path.clone(),
+                        root.clone(),
                         RecipeSourceKind::Directory,
-                    ));
+                    ) {
+                        Ok(recipe) => Ok(recipe),
+                        Err(err) => Err(err.context(format!(
+                            "manifest candidate {} invalid",
+                            candidate_path.display()
+                        ))),
+                    };
                 }
             }
         }
@@ -160,12 +167,18 @@ impl Recipe {
         for path in entries {
             match load_manifest_from_file(&path) {
                 Ok(manifest) => {
-                    return Ok(Self::from_manifest(
+                    return match Self::from_manifest(
                         manifest,
-                        path,
+                        path.clone(),
                         root.clone(),
                         RecipeSourceKind::Directory,
-                    ))
+                    ) {
+                        Ok(recipe) => Ok(recipe),
+                        Err(err) => {
+                            Err(err
+                                .context(format!("manifest candidate {} invalid", path.display())))
+                        }
+                    };
                 }
                 Err(err) => {
                     last_err = Some(err);
@@ -186,15 +199,21 @@ impl Recipe {
         manifest_path: PathBuf,
         source_root: PathBuf,
         kind: RecipeSourceKind,
-    ) -> Self {
+    ) -> Result<Self> {
         let summary = build_summary(&manifest, &manifest_path);
-        Self {
+        validate_manifest(&manifest).with_context(|| {
+            format!(
+                "manifest {} failed additional validation",
+                manifest_path.display()
+            )
+        })?;
+        Ok(Self {
             summary,
             manifest,
             manifest_path,
             source_root,
             kind,
-        }
+        })
     }
 
     fn tool_ids(&self) -> Vec<String> {
@@ -267,6 +286,50 @@ fn load_manifest_from_file(path: &Path) -> Result<Value> {
         bail!("{} does not satisfy schema: {}", path.display(), joined);
     }
     Ok(value)
+}
+
+fn validate_manifest(manifest: &Value) -> Result<()> {
+    let tools = manifest
+        .get("tools")
+        .and_then(|v| v.as_array())
+        .ok_or_else(|| anyhow!("tools array missing after schema validation"))?;
+    let mut tool_ids = HashSet::new();
+    for entry in tools {
+        if let Some(id) = entry.get("id").and_then(|v| v.as_str()) {
+            tool_ids.insert(id.to_string());
+        }
+    }
+
+    if let Some(workflows) = manifest.get("workflows").and_then(|v| v.as_array()) {
+        let mut seen_steps: HashSet<String> = HashSet::new();
+        for (idx, wf) in workflows.iter().enumerate() {
+            let step = wf
+                .get("step")
+                .and_then(|v| v.as_str())
+                .unwrap_or_default()
+                .trim()
+                .to_string();
+            if step.is_empty() {
+                bail!("workflows[{idx}] step is empty after schema validation");
+            }
+            if !seen_steps.insert(step.clone()) {
+                bail!("duplicate workflow step `{step}` detected");
+            }
+            let tool = wf
+                .get("tool")
+                .and_then(|v| v.as_str())
+                .unwrap_or_default()
+                .to_string();
+            if tool.is_empty() {
+                bail!("workflow step `{step}` has empty tool reference");
+            }
+            if !tool_ids.contains(&tool) {
+                bail!("workflow step `{step}` references undeclared tool `{tool}`");
+            }
+        }
+    }
+
+    Ok(())
 }
 
 fn build_summary(manifest: &Value, manifest_path: &Path) -> RecipeSummary {
@@ -687,5 +750,217 @@ workflows:
         let dest = state.join("recipes").join(recipe.summary.id);
         assert!(dest.join("manifest.yaml").exists());
         assert!(dest.join("notes.txt").exists());
+    }
+
+    #[test]
+    fn reject_recipe_with_invalid_version() {
+        let temp = tempdir().unwrap();
+        let path = temp.path().join("recipe.yaml");
+        fs::write(
+            &path,
+            r#"id: invalid-version
+name: Invalid Version
+version: not-a-semver
+model:
+  preferred: "local:llama"
+permissions:
+  file.read: allow
+prompts:
+  system: "Test invalid version"
+tools:
+  - id: sample_tool
+"#,
+        )
+        .unwrap();
+        match Recipe::load(&path) {
+            Ok(_) => panic!("expected schema validation to fail"),
+            Err(err) => assert!(
+                err.to_string().contains("does not satisfy schema"),
+                "unexpected error: {err:?}"
+            ),
+        }
+    }
+
+    #[test]
+    fn reject_recipe_with_duplicate_tools() {
+        let temp = tempdir().unwrap();
+        let path = temp.path().join("recipe.yaml");
+        fs::write(
+            &path,
+            r#"id: duplicate-tools
+name: Duplicate Tools
+version: 1.2.3
+model:
+  preferred: "local:llama"
+permissions:
+  file.read: allow
+prompts:
+  system: "Test duplicate tools"
+tools:
+  - id: sample_tool
+  - id: sample_tool
+"#,
+        )
+        .unwrap();
+        match Recipe::load(&path) {
+            Ok(_) => panic!("expected schema validation to fail"),
+            Err(err) => assert!(
+                err.to_string().contains("does not satisfy schema"),
+                "unexpected error: {err:?}"
+            ),
+        }
+    }
+
+    #[test]
+    fn documentation_example_matches_canonical_recipe() {
+        let repo_root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("..")
+            .join("..");
+        let doc_path = repo_root.join("docs/guide/recipes.md");
+        let doc = fs::read_to_string(&doc_path).expect("guide to load");
+
+        let mut in_block = false;
+        let mut snippet = Vec::new();
+        for line in doc.lines() {
+            if line.starts_with("```") {
+                if in_block {
+                    break;
+                } else {
+                    in_block = true;
+                    continue;
+                }
+            }
+            if in_block {
+                snippet.push(line);
+            }
+        }
+        let snippet = snippet.join("\n");
+        assert!(
+            !snippet.trim().is_empty(),
+            "expected YAML code block in {}",
+            doc_path.display()
+        );
+
+        let example_path = repo_root.join("examples/recipes/paperwork-helper.yaml");
+        let example_src = fs::read_to_string(&example_path).expect("example recipe to load");
+
+        let snippet_trimmed = snippet.trim();
+        let doc_yaml = if let Some(include_line) = snippet_trimmed
+            .lines()
+            .find(|line| line.trim_start().starts_with("--8<--"))
+        {
+            let directive = include_line.trim_start();
+            let path_part = directive
+                .trim_start_matches("--8<--")
+                .trim()
+                .trim_matches('"');
+            let include_path = repo_root.join(path_part);
+            fs::read_to_string(&include_path)
+                .unwrap_or_else(|_| panic!("snippet include {} missing", include_path.display()))
+        } else {
+            snippet_trimmed.to_string()
+        };
+
+        let doc_recipe: Value =
+            serde_yaml::from_str(&doc_yaml).expect("doc recipe snippet to parse as YAML");
+        let example_recipe: Value =
+            serde_yaml::from_str(&example_src).expect("example recipe to parse as YAML");
+
+        assert_eq!(
+            doc_recipe,
+            example_recipe,
+            "documentation recipe example diverges from {}",
+            example_path.display()
+        );
+
+        let validation_errors: Vec<String> = match RECIPE_SCHEMA.validate(&doc_recipe) {
+            Ok(_) => Vec::new(),
+            Err(errors) => errors
+                .map(|err| format!("{}: {}", err.instance_path, err))
+                .collect(),
+        };
+        if !validation_errors.is_empty() {
+            panic!(
+                "documentation recipe example failed schema validation: {}",
+                validation_errors.join("; ")
+            );
+        }
+    }
+
+    #[test]
+    fn reject_workflow_referencing_unknown_tool() {
+        let temp = tempdir().unwrap();
+        let path = temp.path().join("recipe.yaml");
+        fs::write(
+            &path,
+            r#"id: workflow-missing-tool
+name: Workflow Missing Tool
+version: 1.0.0
+model:
+  preferred: "local:llama"
+permissions:
+  file.read: allow
+prompts:
+  system: "Test missing tool"
+tools:
+  - id: sample_tool
+workflows:
+  - step: "Use missing tool"
+    tool: missing_tool
+"#,
+        )
+        .unwrap();
+        match Recipe::load(&path) {
+            Ok(_) => panic!("expected missing tool validation to fail"),
+            Err(err) => {
+                let chain: Vec<String> = err.chain().map(|e| e.to_string()).collect();
+                assert!(
+                    chain
+                        .iter()
+                        .any(|msg| msg.contains("references undeclared tool `missing_tool`")),
+                    "unexpected error chain: {chain:?}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn reject_duplicate_workflow_steps() {
+        let temp = tempdir().unwrap();
+        let path = temp.path().join("recipe.yaml");
+        fs::write(
+            &path,
+            r#"id: workflow-duplicate-steps
+name: Workflow Duplicate Steps
+version: 1.0.0
+model:
+  preferred: "local:llama"
+permissions:
+  file.read: allow
+prompts:
+  system: "Test duplicate workflow steps"
+tools:
+  - id: sample_tool
+  - id: sample_tool_b
+workflows:
+  - step: "Do thing"
+    tool: sample_tool
+  - step: "Do thing"
+    tool: sample_tool_b
+"#,
+        )
+        .unwrap();
+        match Recipe::load(&path) {
+            Ok(_) => panic!("expected duplicate workflow validation to fail"),
+            Err(err) => {
+                let chain: Vec<String> = err.chain().map(|e| e.to_string()).collect();
+                assert!(
+                    chain
+                        .iter()
+                        .any(|msg| msg.contains("duplicate workflow step `Do thing`")),
+                    "unexpected error chain: {chain:?}"
+                );
+            }
+        }
     }
 }

@@ -1,0 +1,29 @@
+id: web-browsing
+name: Web Browsing Assistant
+version: 0.1.0
+model:
+  preferred: "local:llama-3.1-8B-instruct"
+permissions:
+  net.http:
+    mode: allow
+    ttl_secs: 900
+  file.read: ask
+  file.write: never
+prompts:
+  system: |
+    You fetch webpages on demand, capture relevant excerpts, and summarize findings.
+    Always cite the source URL and warn when information may be out of date or unverified.
+tools:
+  - id: http.fetch
+  - id: summarize_text
+workflows:
+  - step: "Fetch requested URL"
+    tool: http.fetch
+  - step: "Summarize response"
+    tool: summarize_text
+tags:
+  - browsing
+  - research
+notes: >
+  Grants a time-limited net.http lease so the assistant can retrieve webpages and
+  stream back summaries. Pair with guardrails or policy leases to scope outbound access.

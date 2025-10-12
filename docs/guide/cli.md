@@ -25,6 +25,11 @@ Basics
 - Tools
   - `arw-cli tools` — list registered tools (id/version/caps)
   - `arw-cli tools --pretty` — pretty JSON
+- HTTP fetch
+  - `arw-cli http fetch https://example.com --wait-timeout-secs 45` — submits `net.http.get`, waits for completion, and prints status/headers plus a UTF-8 preview (decoded from the built-in `http.fetch` head capture). Requires an active `net:http` or `io:egress` lease.
+  - `--header "User-Agent: MyBot/1.0"` (repeatable) adds request headers; `--method post --data '{"q":"search"}' --content-type application/json` sends a JSON body; `--preview-kb 128` enlarges the streamed preview head (1–1024 KB) per request; `--connector-id search-searxng` routes through the optional SearXNG metasearch proxy.
+  - `--output page.html` writes the preview bytes to disk (full body when small; otherwise the truncated head). Use `--raw-preview` to print base64 instead of attempting UTF-8 decoding.
+  - Pair with `arw-cli gate lease` or `/leases` helpers to grant temporary `net:http` access when the workspace posture requires it.
 - Managed runtime bundles
   - Local catalogs: `arw-cli runtime bundles list --dir ./configs/runtime --pretty`
   - Alternate install root: `arw-cli runtime bundles list --install-dir ~/.cache/arw/bundles`

@@ -1,0 +1,13 @@
+{
+  "id": "search-searxng",
+  "kind": "service",
+  "provider": "searxng",
+  "scopes": ["cloud:searxng:search"],
+  "meta": {
+    "base_url": "http://127.0.0.1:8080",
+    "search_path": "/search",
+    "format": "json",
+    "allowed_hosts": ["127.0.0.1", "localhost"],
+    "note": "Optional local SearXNG instance used for metasearch aggregation."
+  }
+}

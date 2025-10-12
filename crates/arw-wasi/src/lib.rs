@@ -2,7 +2,10 @@ use anyhow::Result;
 use arw_core::util::parse_bool_flag;
 use async_trait::async_trait;
 use base64::Engine; // for base64 encode
-use serde_json::Value;
+use reqwest::header::CONTENT_TYPE;
+use serde_json::{json, Value};
+use std::collections::BTreeMap;
+use std::time::Instant;
 
 fn env_flag(key: &str, default: bool) -> bool {
     match std::env::var(key) {
@@ -233,10 +236,19 @@ impl ToolHost for LocalHost {
                     .and_then(|v| v.as_str())
                     .unwrap_or("GET")
                     .to_ascii_uppercase();
-                let head_kb: usize = std::env::var("ARW_HTTP_BODY_HEAD_KB")
+                let req_body = input.get("body").and_then(|v| v.as_str());
+                let bytes_out = req_body.map(|b| b.as_bytes().len() as i64).unwrap_or(0);
+                let mut head_kb: usize = std::env::var("ARW_HTTP_BODY_HEAD_KB")
                     .ok()
                     .and_then(|s| s.parse().ok())
                     .unwrap_or(64);
+                if let Some(custom) = input
+                    .get("head_kb")
+                    .and_then(|v| v.as_u64())
+                    .filter(|v| *v > 0)
+                {
+                    head_kb = std::cmp::min(custom as usize, 1024);
+                }
                 let mut req = match method.as_str() {
                     "GET" => self.client.get(url.clone()),
                     "POST" => {
@@ -244,7 +256,7 @@ impl ToolHost for LocalHost {
                         if let Some(ct) = input.get("content_type").and_then(|v| v.as_str()) {
                             rb = rb.header("content-type", ct);
                         }
-                        if let Some(body) = input.get("body").and_then(|v| v.as_str()) {
+                        if let Some(body) = req_body {
                             rb = rb.body(body.to_string());
                         }
                         rb
@@ -264,11 +276,21 @@ impl ToolHost for LocalHost {
                 if let Some(tok) = &auth_token {
                     req = req.header("authorization", format!("Bearer {}", tok));
                 }
+                let started = Instant::now();
                 let resp = req
                     .send()
                     .await
                     .map_err(|e| WasiError::Runtime(e.to_string()))?;
-                let status = resp.status().as_u16();
+                let elapsed_ms = started.elapsed().as_millis() as u64;
+                let status = resp.status();
+                let status_code = status.as_u16();
+                let status_text = status.canonical_reason().map(|s| s.to_string());
+                let final_url = resp.url().to_string();
+                let response_headers = resp.headers().clone();
+                let content_type = response_headers
+                    .get(CONTENT_TYPE)
+                    .and_then(|v| v.to_str().ok())
+                    .map(|s| s.to_string());
                 let body = resp
                     .bytes()
                     .await
@@ -276,14 +298,54 @@ impl ToolHost for LocalHost {
                 let bytes_in = body.len() as i64;
                 let head = &body[..std::cmp::min(body.len(), head_kb * 1024)];
                 let head_b64 = base64::engine::general_purpose::STANDARD.encode(head);
-                let out = serde_json::json!({
-                    "status": status,
+                let body_truncated = head.len() < body.len();
+                let body_preview_utf8 = std::str::from_utf8(head).ok().map(|s| s.to_string());
+
+                let mut header_map: BTreeMap<String, Vec<String>> = BTreeMap::new();
+                for (name, value) in response_headers.iter() {
+                    if let Ok(val) = value.to_str() {
+                        header_map
+                            .entry(name.as_str().to_string())
+                            .or_default()
+                            .push(val.to_string());
+                    }
+                }
+                let headers_value = header_map
+                    .into_iter()
+                    .map(|(k, vals)| {
+                        let value = if vals.len() == 1 {
+                            Value::String(vals[0].clone())
+                        } else {
+                            Value::Array(vals.into_iter().map(Value::String).collect())
+                        };
+                        (k, value)
+                    })
+                    .collect::<serde_json::Map<_, _>>();
+
+                let full_body_b64 = if !body_truncated {
+                    Some(base64::engine::general_purpose::STANDARD.encode(&body))
+                } else {
+                    None
+                };
+
+                let out = json!({
+                    "status": status_code,
+                    "status_text": status_text,
                     "url": url.as_str(),
+                    "final_url": final_url,
                     "dest_host": host,
                     "dest_port": port,
                     "protocol": scheme,
                     "bytes_in": bytes_in,
-                    "body_head_b64": head_b64
+                    "bytes_out": bytes_out,
+                    "body_head_b64": head_b64,
+                    "body_preview_utf8": body_preview_utf8,
+                    "body_preview_bytes": head.len() as i64,
+                    "body_truncated": body_truncated,
+                    "body_base64": full_body_b64,
+                    "headers": Value::Object(headers_value),
+                    "content_type": content_type,
+                    "elapsed_ms": elapsed_ms,
                 });
                 Ok(out)
             }

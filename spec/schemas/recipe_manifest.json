@@ -6,20 +6,25 @@
   "type": "object",
   "required": ["id", "name", "version", "prompts", "tools", "permissions"],
   "properties": {
-    "id": { "type": "string", "pattern": "^[a-z0-9-_.]+$" },
+    "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-_.]{0,63}$" },
     "name": { "type": "string", "minLength": 1 },
-    "version": { "type": "string" },
+    "version": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(?:-[0-9A-Za-z.-]+)?(?:\\+[0-9A-Za-z.-]+)?$"
+    },
     "model": {
       "type": "object",
       "properties": {
-        "preferred": { "type": "string" },
-        "fallback": { "type": ["string", "null"], "default": null }
+        "preferred": { "type": "string", "minLength": 1 },
+        "fallback": { "type": ["string", "null"], "default": null, "minLength": 1 }
       },
       "additionalProperties": false,
       "required": ["preferred"]
     },
     "permissions": {
       "type": "object",
+      "minProperties": 1,
+      "propertyNames": { "pattern": "^[a-z][a-z0-9._:-]{0,63}$" },
       "additionalProperties": {
         "type": ["string", "object"],
         "oneOf": [
@@ -47,7 +52,7 @@
     "prompts": {
       "type": "object",
       "properties": {
-        "system": { "type": "string" },
+        "system": { "type": "string", "minLength": 1 },
         "user_template": { "type": ["string", "null"], "default": null }
       },
       "required": ["system"],
@@ -55,10 +60,11 @@
     },
     "tools": {
       "type": "array",
+      "uniqueItems": true,
       "items": {
         "type": "object",
         "properties": {
-          "id": { "type": "string" },
+          "id": { "type": "string", "minLength": 1, "pattern": "^[a-z0-9][a-z0-9-_.:]*$" },
           "params": { "type": ["object", "null"], "default": null }
         },
         "required": ["id"],
@@ -68,11 +74,12 @@
     },
     "workflows": {
       "type": "array",
+      "uniqueItems": true,
       "items": {
         "type": "object",
         "properties": {
-          "step": { "type": "string" },
-          "tool": { "type": "string" },
+          "step": { "type": "string", "minLength": 1 },
+          "tool": { "type": "string", "minLength": 1 },
           "params": { "type": ["object", "null"], "default": null }
         },
         "required": ["step", "tool"],
@@ -82,10 +89,11 @@
     },
     "tags": {
       "type": "array",
-      "items": { "type": "string" },
+      "items": { "type": "string", "minLength": 1 },
+      "uniqueItems": true,
       "default": []
     },
-    "notes": { "type": ["string", "null"], "default": null }
+    "notes": { "type": ["string", "null"], "default": null, "minLength": 1 }
   },
   "additionalProperties": false
 }

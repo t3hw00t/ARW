@@ -135,6 +135,7 @@ Notes
 - Settings persist in the server config snapshot under `egress`; use the Config Plane or `/patch/*` to manage snapshots.
 - `multi_label_suffixes` entries should be effective TLDs (e.g., `internal.test` or `gov.bc.ca`). The runtime automatically prepends the registrant label when collapsing hostnames.
 - When `proxy_enable=1`, built‑in `http.fetch` routes via `127.0.0.1:proxy_port` automatically.
+- `http.fetch` responses include `status_text`, `headers`, `elapsed_ms`, and decoded `body_preview_utf8`/`body_truncated` fields so agents can summarize content without manually base64-decoding the preview. Clients can override the preview size per call by passing `head_kb` (mirrors `--preview-kb` in `arw-cli http fetch`) up to 1024 KB.
 - Add correlation headers (`X-ARW-Corr`, `X-ARW-Project`) to proxy requests to tag ledger rows and events.
 - Changing `posture` without specifying booleans adopts the `recommended` defaults (block IP literals, DNS guard, proxy, and ledger) so posture/ledger stay aligned. Provide explicit values in the patch body to override.
 - `scopes` supplement posture allowlists with structured network grants. Entries first expire client-side (`expires_at`) and are ignored without deleting them, so you can pre-stage time-bound access.

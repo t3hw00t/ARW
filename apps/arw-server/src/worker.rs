@@ -1207,11 +1207,22 @@ mod tests {
         ) -> Result<serde_json::Value, arw_wasi::WasiError> {
             match id {
                 "http.fetch" => Ok(json!({
+                    "status": 200,
+                    "status_text": "OK",
+                    "url": "https://example.com",
+                    "final_url": "https://example.com",
                     "dest_host": "example.com",
                     "dest_port": 443,
                     "protocol": "https",
                     "bytes_in": 2048,
                     "bytes_out": 512,
+                    "body_head_b64": "T0s=",
+                    "body_preview_utf8": "OK",
+                    "body_preview_bytes": 2,
+                    "body_truncated": false,
+                    "headers": json!({"content-type": "text/plain"}),
+                    "content_type": "text/plain",
+                    "elapsed_ms": 5,
                 })),
                 "fs.patch" => Ok(json!({"path": "/tmp/file.txt", "sha256": "abc123"})),
                 "app.vscode.open" => Ok(json!({"opened": true})),
