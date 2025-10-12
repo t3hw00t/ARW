@@ -1,0 +1,347 @@
+{
+  "$comment": "SPDX-License-Identifier: MIT OR Apache-2.0",
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/t3hw00t/ARW/spec/schemas/mini_agent.json",
+  "title": "MiniAgentCatalogEntry",
+  "type": "object",
+  "required": [
+    "id",
+    "name",
+    "version",
+    "summary",
+    "description",
+    "category",
+    "owner",
+    "training"
+  ],
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-_.]{2,63}$"
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 120
+    },
+    "version": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(?:-[0-9A-Za-z.-]+)?(?:\\+[0-9A-Za-z.-]+)?$"
+    },
+    "summary": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 240
+    },
+    "description": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 4000
+    },
+    "category": {
+      "type": "string",
+      "enum": [
+        "memory",
+        "validation",
+        "governor",
+        "planner",
+        "tooling",
+        "support"
+      ]
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "alpha",
+        "beta",
+        "stable",
+        "incubating"
+      ],
+      "default": "beta"
+    },
+    "owner": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 120
+    },
+    "tags": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 64
+      },
+      "uniqueItems": true,
+      "default": []
+    },
+    "docs": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 400
+      },
+      "uniqueItems": true,
+      "default": []
+    },
+    "notes": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 400
+      },
+      "uniqueItems": true,
+      "default": []
+    },
+    "training": {
+      "type": "object",
+      "required": [
+        "goal_template",
+        "preset",
+        "mode"
+      ],
+      "properties": {
+        "goal_template": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2000
+        },
+        "preset": {
+          "type": "string",
+          "enum": [
+            "balanced",
+            "performance",
+            "power_saver",
+            "deep",
+            "quick"
+          ]
+        },
+        "mode": {
+          "type": "string",
+          "enum": [
+            "guided",
+            "expert"
+          ]
+        },
+        "defaults": {
+          "type": "object",
+          "properties": {
+            "diversity": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            },
+            "recency": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            },
+            "compression": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            },
+            "budget_tokens": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 1000000
+            },
+            "episodes": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100
+            }
+          },
+          "additionalProperties": false,
+          "default": {}
+        },
+        "lanes": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80
+          },
+          "uniqueItems": true,
+          "default": []
+        },
+        "est_runtime_minutes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 480
+        },
+        "notes": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 400
+          },
+          "uniqueItems": true,
+          "default": []
+        }
+      },
+      "additionalProperties": false
+    },
+    "requirements": {
+      "type": "object",
+      "properties": {
+        "leases": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9._:-]{0,63}$"
+          },
+          "uniqueItems": true,
+          "default": []
+        },
+        "datasets": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "id",
+              "description"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 160
+              },
+              "description": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 500
+              },
+              "required": {
+                "type": "boolean",
+                "default": true
+              }
+            },
+            "additionalProperties": false
+          },
+          "default": []
+        },
+        "tools": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 160
+          },
+          "uniqueItems": true,
+          "default": []
+        },
+        "models": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 160
+          },
+          "uniqueItems": true,
+          "default": []
+        },
+        "notes": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 400
+          },
+          "uniqueItems": true,
+          "default": []
+        }
+      },
+      "additionalProperties": false,
+      "default": {}
+    },
+    "outputs": {
+      "type": "object",
+      "properties": {
+        "logic_unit": {
+          "type": "object",
+          "required": [
+            "kind",
+            "summary"
+          ],
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": [
+                "config",
+                "transform",
+                "plugin"
+              ]
+            },
+            "summary": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 500
+            },
+            "notes": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 400
+              },
+              "uniqueItems": true,
+              "default": []
+            }
+          },
+          "additionalProperties": false
+        },
+        "metrics": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 160
+          },
+          "uniqueItems": true,
+          "default": []
+        },
+        "artifacts": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 160
+          },
+          "uniqueItems": true,
+          "default": []
+        }
+      },
+      "additionalProperties": false
+    },
+    "links": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "title",
+          "href"
+        ],
+        "properties": {
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 160
+          },
+          "href": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 400
+          }
+        },
+        "additionalProperties": false
+      },
+      "uniqueItems": true,
+      "default": []
+    }
+  },
+  "additionalProperties": false
+}

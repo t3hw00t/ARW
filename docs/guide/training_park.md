@@ -13,6 +13,7 @@ The goal remains: a third primary perspective for tuning instincts, memory, and 
 ## What Ships Today
 
 - Shared right-sidecar lanes (Timeline, Context, Policy, Metrics, Models) via the general SSE connection.
+- Mini-agent catalog lives in `catalog/mini_agents/`; run `just mini-catalog-gen` to refresh `interfaces/mini_agents.json` so Training Park surfaces stay reproducible.
 - `GET /state/training/telemetry` snapshot with route stats, tool success rate, cache/gov/capsule health, and bus metrics, plus `state.read.model.patch` ids `training_metrics` and `context_metrics` for live updates. The context portion now includes aggregate slot-gap analytics (`coverage.top_slots`, `recall_risk.top_slots`) so you can spot recurring under-filled slots without diffing raw events. Additional `context.assembly` and `context.retriever` sections surface iteration summaries, lane/slot diagnostics, and timing averages, while the top-level `memory` block reports recent lane counts and modular review status.
 - Prometheus metrics (`arw_context_slot_gap`, `arw_context_slot_gap_latest`, `arw_context_slot_fill_ratio`, `arw_context_slot_underfilled_total`) persist slot-gap trends beyond the in-memory replay window so dashboards can chart regressions over longer horizons.
 - Launcher controls submit training runs through `/orchestrator/mini_agents/start_training`, sending preset/diversity/recency/compression hints and streaming job progress back into the results panel.

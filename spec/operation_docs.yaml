@@ -369,8 +369,8 @@
 
 /orchestrator/mini_agents:
   get:
-    summary: List mini-agent templates
-    description: Return placeholder metadata about available mini-agents while the orchestrator capability is incubating.
+    summary: List cataloged mini-agents
+    description: Return the curated mini-agent catalog with training defaults, requirements, and documentation pointers.
 
 /orchestrator/mini_agents/start_training:
   post:

@@ -1,5 +1,5 @@
 # Schema Reference (JSON)
-Updated: 2025-09-30
+Updated: 2025-10-12
 Type: Reference
 
 Microsummary: First‑class JSON Schemas for recipes, tools, and runtime artifacts with links for tooling. Stable anchors.
@@ -9,6 +9,7 @@ Locations
 
 Highlighted schemas
 - Recipe manifest: [spec/schemas/recipe_manifest.json](https://github.com/t3hw00t/ARW/blob/main/spec/schemas/recipe_manifest.json) — installable strategy packs (prompts, tools, permissions, workflows).
+- Mini-agent catalog entry: [spec/schemas/mini_agent.json](https://github.com/t3hw00t/ARW/blob/main/spec/schemas/mini_agent.json) — curated Training Park entries with presets, requirements, and documentation.
 - Model manifest: [spec/schemas/model_manifest.json](https://github.com/t3hw00t/ARW/blob/main/spec/schemas/model_manifest.json) — installed model metadata (CAS filename/hash/bytes/provider).
 - Logic unit manifest: [spec/schemas/logic_unit_manifest.json](https://github.com/t3hw00t/ARW/blob/main/spec/schemas/logic_unit_manifest.json) — config-first strategy packs with patches and permission leases.
 - Egress ledger: [spec/schemas/egress_ledger.json](https://github.com/t3hw00t/ARW/blob/main/spec/schemas/egress_ledger.json) — append-only egress records (allow/deny, posture, attribution).

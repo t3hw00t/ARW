@@ -1,0 +1,59 @@
+id: context-coverage-tuner
+name: Context Coverage Tuner
+version: 0.1.0
+summary: Tune retrieval diversity to lift slot coverage for long-running projects.
+description: >
+  This mini-agent trains the retrieval governor to close coverage gaps by exploring diversity and
+  recency weights alongside compression budgets. It is designed for teams that rely on the modular
+  context working set and want guardrails that keep important slots filled without overfetching or
+  blowing past token budgets.
+category: memory
+status: beta
+owner: research
+tags:
+  - context
+  - coverage
+  - retrieval
+docs:
+  - docs/architecture/context_working_set.md
+  - docs/guide/training_park.md
+training:
+  goal_template: >
+    Improve working-set coverage for project {{ project }} by balancing diversity and recency weights.
+  preset: balanced
+  mode: guided
+  defaults:
+    diversity: 0.4
+    recency: 0.6
+    compression: 0.5
+    episodes: 12
+  lanes:
+    - timeline
+    - context
+    - metrics
+  est_runtime_minutes: 18
+  notes:
+    - Replays recent context assembly episodes and compares slot gap deltas.
+requirements:
+  leases:
+    - context:governor
+  datasets:
+    - id: memory://project/{{ project }}
+      description: Working-set episodes scoped to the selected project.
+      required: true
+  tools:
+    - context.assemble
+    - context.retriever.adjust
+  models:
+    - local:llama-3.1-8B-instruct
+  notes:
+    - Ensure the project memory snapshots are up to date before starting a run.
+outputs:
+  logic_unit:
+    kind: config
+    summary: Suggests governor hint patches tuned for coverage lift while respecting recall risk thresholds.
+    notes:
+      - Promotion applies the hint patch to the selected governor profile.
+  metrics:
+    - context.coverage
+    - context.recall.risk

@@ -1482,21 +1482,22 @@ paths:
     get:
       tags:
       - Orchestrator
-      summary: List available mini-agents (placeholder).
+      summary: List cataloged mini-agents.
       operationId: orchestrator_mini_agents_doc
       responses:
         '200':
-          description: ''
+          description: Mini-agent catalog
           content:
             application/json:
-              schema: {}
+              schema:
+                $ref: '#/components/schemas/MiniAgentCatalog'
         '501':
           description: Kernel disabled
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ProblemDetails'
-      description: List available mini-agents (placeholder).
+      description: Return the curated mini-agent catalog with training defaults, requirements, and documentation pointers.
   /orchestrator/mini_agents/start_training:
     post:
       tags:
@@ -2499,6 +2500,260 @@ components:
           - 'null'
         ok:
           type: boolean
+    MiniAgentCatalog:
+      type: object
+      required:
+      - version
+      - items
+      properties:
+        version:
+          type: integer
+          minimum: 1
+        generated_at:
+          type:
+          - string
+          - 'null'
+          format: date-time
+        schema:
+          type:
+          - string
+          - 'null'
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/MiniAgentEntry'
+    MiniAgentEntry:
+      type: object
+      required:
+      - id
+      - name
+      - version
+      - summary
+      - description
+      - category
+      - owner
+      - training
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        version:
+          type: string
+        summary:
+          type: string
+        description:
+          type: string
+        category:
+          $ref: '#/components/schemas/MiniAgentCategory'
+        status:
+          $ref: '#/components/schemas/MiniAgentStatus'
+        owner:
+          type: string
+        tags:
+          type: array
+          items:
+            type: string
+          uniqueItems: true
+        docs:
+          type: array
+          items:
+            type: string
+          uniqueItems: true
+        notes:
+          type: array
+          items:
+            type: string
+          uniqueItems: true
+        training:
+          $ref: '#/components/schemas/MiniAgentTraining'
+        requirements:
+          $ref: '#/components/schemas/MiniAgentRequirements'
+        outputs:
+          $ref: '#/components/schemas/MiniAgentOutputs'
+        links:
+          type: array
+          items:
+            $ref: '#/components/schemas/MiniAgentLink'
+          uniqueItems: true
+    MiniAgentCategory:
+      type: string
+      enum:
+      - memory
+      - validation
+      - governor
+      - planner
+      - tooling
+      - support
+    MiniAgentStatus:
+      type: string
+      enum:
+      - alpha
+      - beta
+      - stable
+      - incubating
+    MiniAgentPreset:
+      type: string
+      enum:
+      - balanced
+      - performance
+      - power_saver
+      - deep
+      - quick
+    MiniAgentMode:
+      type: string
+      enum:
+      - guided
+      - expert
+    MiniAgentTraining:
+      type: object
+      required:
+      - goal_template
+      - preset
+      - mode
+      properties:
+        goal_template:
+          type: string
+        preset:
+          $ref: '#/components/schemas/MiniAgentPreset'
+        mode:
+          $ref: '#/components/schemas/MiniAgentMode'
+        defaults:
+          $ref: '#/components/schemas/MiniAgentTrainingDefaults'
+        lanes:
+          type: array
+          items:
+            type: string
+          uniqueItems: true
+        est_runtime_minutes:
+          type:
+          - integer
+          - 'null'
+          minimum: 1
+          maximum: 480
+        notes:
+          type: array
+          items:
+            type: string
+          uniqueItems: true
+    MiniAgentTrainingDefaults:
+      type: object
+      properties:
+        diversity:
+          type:
+          - number
+          - 'null'
+          minimum: 0
+          maximum: 1
+        recency:
+          type:
+          - number
+          - 'null'
+          minimum: 0
+          maximum: 1
+        compression:
+          type:
+          - number
+          - 'null'
+          minimum: 0
+          maximum: 1
+        budget_tokens:
+          type:
+          - integer
+          - 'null'
+          minimum: 0
+        episodes:
+          type:
+          - integer
+          - 'null'
+          minimum: 1
+          maximum: 100
+    MiniAgentRequirements:
+      type: object
+      properties:
+        leases:
+          type: array
+          items:
+            type: string
+          uniqueItems: true
+        datasets:
+          type: array
+          items:
+            $ref: '#/components/schemas/MiniAgentDataset'
+        tools:
+          type: array
+          items:
+            type: string
+          uniqueItems: true
+        models:
+          type: array
+          items:
+            type: string
+          uniqueItems: true
+        notes:
+          type: array
+          items:
+            type: string
+          uniqueItems: true
+    MiniAgentDataset:
+      type: object
+      required:
+      - id
+      - description
+      properties:
+        id:
+          type: string
+        description:
+          type: string
+        required:
+          type: boolean
+          default: true
+    MiniAgentOutputs:
+      type: object
+      properties:
+        logic_unit:
+          $ref: '#/components/schemas/MiniAgentLogicUnit'
+        metrics:
+          type: array
+          items:
+            type: string
+          uniqueItems: true
+        artifacts:
+          type: array
+          items:
+            type: string
+          uniqueItems: true
+    MiniAgentLogicUnit:
+      type: object
+      required:
+      - kind
+      - summary
+      properties:
+        kind:
+          $ref: '#/components/schemas/MiniAgentLogicUnitKind'
+        summary:
+          type: string
+        notes:
+          type: array
+          items:
+            type: string
+          uniqueItems: true
+    MiniAgentLogicUnitKind:
+      type: string
+      enum:
+      - config
+      - transform
+      - plugin
+    MiniAgentLink:
+      type: object
+      required:
+      - title
+      - href
+      properties:
+        title:
+          type: string
+        href:
+          type: string
     CasGcRequest:
       type: object
       properties:

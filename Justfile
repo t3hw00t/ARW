@@ -309,6 +309,14 @@ features-gen:
 feature-catalog-gen:
   python3 scripts/gen_feature_catalog.py
 
+# Generate mini-agent catalog (interfaces/mini_agents.json)
+mini-catalog-gen:
+  python3 scripts/gen_mini_catalog.py
+
+# Check mini-agent catalog without writing
+mini-catalog-check:
+  python3 scripts/gen_mini_catalog.py --check
+
 # Validate feature registry integrity
 features-validate:
   python3 scripts/check_feature_integrity.py

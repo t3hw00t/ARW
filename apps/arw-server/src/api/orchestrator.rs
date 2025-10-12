@@ -4,6 +4,7 @@ use axum::{
     extract::{Path, Query, State},
     Json,
 };
+use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use utoipa::ToSchema;
@@ -16,18 +17,201 @@ use chrono::{Duration as ChronoDuration, SecondsFormat as ChronoSecondsFormat};
 use tracing::warn;
 use uuid::Uuid;
 
-/// List available mini-agents (placeholder).
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct MiniAgentCatalog {
+    pub version: u32,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub generated_at: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub schema: Option<String>,
+    pub items: Vec<MiniAgentEntry>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct MiniAgentEntry {
+    pub id: String,
+    pub name: String,
+    pub version: String,
+    pub summary: String,
+    pub description: String,
+    pub category: MiniAgentCategory,
+    #[serde(default)]
+    pub status: MiniAgentStatus,
+    pub owner: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub tags: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub docs: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub notes: Vec<String>,
+    pub training: MiniAgentTraining,
+    #[serde(default)]
+    pub requirements: MiniAgentRequirements,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub outputs: Option<MiniAgentOutputs>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub links: Vec<MiniAgentLink>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "lowercase")]
+pub enum MiniAgentCategory {
+    Memory,
+    Validation,
+    Governor,
+    Planner,
+    Tooling,
+    Support,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "lowercase")]
+pub enum MiniAgentStatus {
+    Alpha,
+    Beta,
+    Stable,
+    Incubating,
+}
+
+impl Default for MiniAgentStatus {
+    fn default() -> Self {
+        MiniAgentStatus::Beta
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "lowercase")]
+pub enum MiniAgentPreset {
+    Balanced,
+    Performance,
+    #[serde(rename = "power_saver")]
+    PowerSaver,
+    Deep,
+    Quick,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "lowercase")]
+pub enum MiniAgentMode {
+    Guided,
+    Expert,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct MiniAgentTraining {
+    pub goal_template: String,
+    pub preset: MiniAgentPreset,
+    pub mode: MiniAgentMode,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub defaults: Option<MiniAgentTrainingDefaults>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub lanes: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schema(minimum = 1, maximum = 480)]
+    pub est_runtime_minutes: Option<u32>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub notes: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema, Default)]
+pub struct MiniAgentTrainingDefaults {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schema(minimum = 0.0, maximum = 1.0)]
+    pub diversity: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schema(minimum = 0.0, maximum = 1.0)]
+    pub recency: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schema(minimum = 0.0, maximum = 1.0)]
+    pub compression: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schema(minimum = 0)]
+    pub budget_tokens: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schema(minimum = 1, maximum = 100)]
+    pub episodes: Option<u32>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema, Default)]
+pub struct MiniAgentRequirements {
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub leases: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub datasets: Vec<MiniAgentDataset>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub tools: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub models: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub notes: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct MiniAgentDataset {
+    pub id: String,
+    pub description: String,
+    #[serde(default = "MiniAgentDataset::default_required")]
+    pub required: bool,
+}
+
+impl MiniAgentDataset {
+    fn default_required() -> bool {
+        true
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema, Default)]
+pub struct MiniAgentOutputs {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub logic_unit: Option<MiniAgentLogicUnit>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub metrics: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub artifacts: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "lowercase")]
+pub enum MiniAgentLogicUnitKind {
+    Config,
+    Transform,
+    Plugin,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct MiniAgentLogicUnit {
+    pub kind: MiniAgentLogicUnitKind,
+    pub summary: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub notes: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct MiniAgentLink {
+    pub title: String,
+    pub href: String,
+}
+
+static MINI_AGENT_CATALOG: Lazy<MiniAgentCatalog> = Lazy::new(|| {
+    let raw = include_str!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../interfaces/mini_agents.json"
+    ));
+    serde_json::from_str(raw).expect("mini agent catalog json")
+});
+
+/// List available mini-agents and their training defaults.
 #[utoipa::path(
     get,
     path = "/orchestrator/mini_agents",
     tag = "Orchestrator",
     responses(
-        (status = 200, body = serde_json::Value),
+        (status = 200, body = MiniAgentCatalog),
         (status = 501, description = "Kernel disabled", body = arw_protocol::ProblemDetails)
     )
 )]
 pub async fn orchestrator_mini_agents() -> impl IntoResponse {
-    Json(json!({"items": []}))
+    Json(MINI_AGENT_CATALOG.clone())
 }
 
 async fn ensure_runtime_policy(state: &AppState, action: &str) -> Result<(), Response> {
@@ -725,6 +909,21 @@ mod tests {
     use std::sync::Arc;
     use tempfile::tempdir;
     use tower::ServiceExt;
+
+    #[test]
+    fn mini_agent_catalog_includes_entries() {
+        assert!(
+            !MINI_AGENT_CATALOG.items.is_empty(),
+            "expected mini-agent catalog to contain at least one entry"
+        );
+        for entry in MINI_AGENT_CATALOG.items.iter() {
+            assert!(
+                !entry.training.goal_template.trim().is_empty(),
+                "mini-agent {} missing goal template",
+                entry.id
+            );
+        }
+    }
 
     #[derive(Debug)]
     struct StubRuntimeAdapter;

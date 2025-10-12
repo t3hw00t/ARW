@@ -1,0 +1,63 @@
+id: validation-feedback-coach
+name: Validation Feedback Coach
+version: 0.1.0
+summary: Coach the validation lane to raise feedback precision on risky outputs.
+description: >
+  This catalog entry seeds a validation-focused mini-agent that reviews recent automation actions,
+  proposes targeted feedback, and tunes guardrail thresholds for the Validation Agent lane. It helps
+  teams keep human-in-the-loop workflows calm by spotlighting regressions and tightening confidence
+  checks before promotion.
+category: validation
+status: alpha
+owner: platform
+tags:
+  - validation
+  - feedback
+docs:
+  - docs/guide/training_park.md
+  - docs/architecture/modular_cognitive_stack.md
+training:
+  goal_template: >
+    Coach the validation lane for project {{ project }} by increasing feedback precision on risky outputs.
+  preset: performance
+  mode: expert
+  defaults:
+    diversity: 0.2
+    recency: 0.5
+    compression: 0.4
+    episodes: 8
+  lanes:
+    - timeline
+    - approvals
+    - metrics
+    - policy
+  est_runtime_minutes: 22
+  notes:
+    - Requires the Validation Agent lane to be enabled with recent feedback samples.
+requirements:
+  leases:
+    - validation:lane
+  datasets:
+    - id: feedback://recent/{{ project }}
+      description: Validation feedback history for the selected project.
+      required: true
+    - id: memory://episodes/latest
+      description: Latest episodes to replay risky outputs during evaluation.
+      required: false
+  tools:
+    - validation.review
+    - feedback.summarize
+  models:
+    - remote:gpt-4o-mini
+  notes:
+    - Keep the staging approvals queue under 50 items to avoid training delays.
+outputs:
+  logic_unit:
+    kind: config
+    summary: Produces a validation logic-unit patch that adjusts feedback heuristics and guardrail thresholds.
+  metrics:
+    - validation.feedback.precision
+    - validation.feedback.recall
+links:
+  - title: Validation lane overview
+    href: docs/architecture/ux_invariants.md

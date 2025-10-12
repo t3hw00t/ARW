@@ -1,0 +1,163 @@
+{
+  "version": 1,
+  "generated_at": "2025-10-12T15:27:52Z",
+  "schema": "spec/schemas/mini_agent.json",
+  "items": [
+    {
+      "id": "context-coverage-tuner",
+      "name": "Context Coverage Tuner",
+      "version": "0.1.0",
+      "summary": "Tune retrieval diversity to lift slot coverage for long-running projects.",
+      "description": "This mini-agent trains the retrieval governor to close coverage gaps by exploring diversity and recency weights alongside compression budgets. It is designed for teams that rely on the modular context working set and want guardrails that keep important slots filled without overfetching or blowing past token budgets.\n",
+      "category": "memory",
+      "status": "beta",
+      "owner": "research",
+      "tags": [
+        "context",
+        "coverage",
+        "retrieval"
+      ],
+      "docs": [
+        "docs/architecture/context_working_set.md",
+        "docs/guide/training_park.md"
+      ],
+      "training": {
+        "goal_template": "Improve working-set coverage for project {{ project }} by balancing diversity and recency weights.\n",
+        "preset": "balanced",
+        "mode": "guided",
+        "defaults": {
+          "diversity": 0.4,
+          "recency": 0.6,
+          "compression": 0.5,
+          "episodes": 12
+        },
+        "lanes": [
+          "timeline",
+          "context",
+          "metrics"
+        ],
+        "est_runtime_minutes": 18,
+        "notes": [
+          "Replays recent context assembly episodes and compares slot gap deltas."
+        ]
+      },
+      "requirements": {
+        "leases": [
+          "context:governor"
+        ],
+        "datasets": [
+          {
+            "id": "memory://project/{{ project }}",
+            "description": "Working-set episodes scoped to the selected project.",
+            "required": true
+          }
+        ],
+        "tools": [
+          "context.assemble",
+          "context.retriever.adjust"
+        ],
+        "models": [
+          "local:llama-3.1-8B-instruct"
+        ],
+        "notes": [
+          "Ensure the project memory snapshots are up to date before starting a run."
+        ]
+      },
+      "outputs": {
+        "logic_unit": {
+          "kind": "config",
+          "summary": "Suggests governor hint patches tuned for coverage lift while respecting recall risk thresholds.",
+          "notes": [
+            "Promotion applies the hint patch to the selected governor profile."
+          ]
+        },
+        "metrics": [
+          "context.coverage",
+          "context.recall.risk"
+        ]
+      }
+    },
+    {
+      "id": "validation-feedback-coach",
+      "name": "Validation Feedback Coach",
+      "version": "0.1.0",
+      "summary": "Coach the validation lane to raise feedback precision on risky outputs.",
+      "description": "This catalog entry seeds a validation-focused mini-agent that reviews recent automation actions, proposes targeted feedback, and tunes guardrail thresholds for the Validation Agent lane. It helps teams keep human-in-the-loop workflows calm by spotlighting regressions and tightening confidence checks before promotion.\n",
+      "category": "validation",
+      "status": "alpha",
+      "owner": "platform",
+      "tags": [
+        "validation",
+        "feedback"
+      ],
+      "docs": [
+        "docs/guide/training_park.md",
+        "docs/architecture/modular_cognitive_stack.md"
+      ],
+      "training": {
+        "goal_template": "Coach the validation lane for project {{ project }} by increasing feedback precision on risky outputs.\n",
+        "preset": "performance",
+        "mode": "expert",
+        "defaults": {
+          "diversity": 0.2,
+          "recency": 0.5,
+          "compression": 0.4,
+          "episodes": 8
+        },
+        "lanes": [
+          "timeline",
+          "approvals",
+          "metrics",
+          "policy"
+        ],
+        "est_runtime_minutes": 22,
+        "notes": [
+          "Requires the Validation Agent lane to be enabled with recent feedback samples."
+        ]
+      },
+      "requirements": {
+        "leases": [
+          "validation:lane"
+        ],
+        "datasets": [
+          {
+            "id": "feedback://recent/{{ project }}",
+            "description": "Validation feedback history for the selected project.",
+            "required": true
+          },
+          {
+            "id": "memory://episodes/latest",
+            "description": "Latest episodes to replay risky outputs during evaluation.",
+            "required": false
+          }
+        ],
+        "tools": [
+          "validation.review",
+          "feedback.summarize"
+        ],
+        "models": [
+          "remote:gpt-4o-mini"
+        ],
+        "notes": [
+          "Keep the staging approvals queue under 50 items to avoid training delays."
+        ]
+      },
+      "outputs": {
+        "logic_unit": {
+          "kind": "config",
+          "summary": "Produces a validation logic-unit patch that adjusts feedback heuristics and guardrail thresholds."
+        },
+        "metrics": [
+          "validation.feedback.precision",
+          "validation.feedback.recall"
+        ]
+      },
+      "links": [
+        {
+          "title": "Validation lane overview",
+          "href": "docs/architecture/ux_invariants.md"
+        }
+      ]
+    }
+  ]
+}
