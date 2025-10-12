@@ -104,6 +104,38 @@ function Update-LauncherPrefs {
   } catch {}
 }
 
+function Resolve-WorkspaceBinary {
+  param(
+    [Parameter(Mandatory = $true)][string]$Root,
+    [Parameter(Mandatory = $true)][string]$Binary
+  )
+  $profiles = @('release', 'maxperf', 'debug')
+  foreach ($profile in $profiles) {
+    $dir = Join-Path (Join-Path $Root 'target') $profile
+    $candidate = Join-Path $dir $Binary
+    if (Test-Path $candidate) {
+      return $candidate
+    }
+  }
+
+  $targetRoot = Join-Path $Root 'target'
+  if (Test-Path $targetRoot) {
+    $subdirs = Get-ChildItem -Path $targetRoot -Directory -ErrorAction SilentlyContinue
+    foreach ($subdir in $subdirs) {
+      if ($profiles -contains $subdir.Name) { continue }
+      foreach ($profile in $profiles) {
+        $dir = Join-Path $subdir.FullName $profile
+        $candidate = Join-Path $dir $Binary
+        if (Test-Path $candidate) {
+          return $candidate
+        }
+      }
+    }
+  }
+
+  return $null
+}
+
 # Compatibility: PowerShell 5 vs 7 for Invoke-WebRequest
 $script:IwrArgs = @{}
 try { if ($PSVersionTable.PSVersion.Major -lt 6) { $script:IwrArgs = @{ UseBasicParsing = $true } } } catch {}
@@ -274,10 +306,10 @@ $launcherExe = 'arw-launcher.exe'
 $svc = if ($UseDist) {
   $zipBase = Get-ChildItem -Path (Join-Path $root 'dist') -Filter 'arw-*-windows-*' -Directory -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending | Select-Object -First 1
   if ($zipBase) { Join-Path $zipBase.FullName (Join-Path 'bin' $exe) } else { $null }
-} else { Join-Path (Join-Path $root 'target\release') $exe }
+} else { Resolve-WorkspaceBinary -Root $root -Binary $exe }
 $launcher = if ($UseDist) {
   if ($zipBase) { Join-Path $zipBase.FullName (Join-Path 'bin' $launcherExe) } else { $null }
-} else { Join-Path (Join-Path $root 'target\release') $launcherExe }
+} else { Resolve-WorkspaceBinary -Root $root -Binary $launcherExe }
 
 if ($ServiceOnly) {
   $startLauncher = $false
@@ -358,7 +390,7 @@ if ($startLauncher -and -not $DryRun) {
 if ($startService -and (-not $svc -or -not (Test-Path $svc))) {
   if ($DryRun) {
     Write-Warning "Service binary not found ($svc). [dryrun] would build release (arw-server)."
-    $svc = Join-Path (Join-Path $root 'target\release') $exe
+    $svc = Resolve-WorkspaceBinary -Root $root -Binary $exe
   } elseif ($NoBuild) {
     Write-Error "Service binary not found and -NoBuild specified. Build first or remove -NoBuild."
     exit 1
@@ -375,7 +407,7 @@ if ($startService -and (-not $svc -or -not (Test-Path $svc))) {
     } finally {
       if ((Get-Location).Path -ne $root) { try { Pop-Location } catch {} }
     }
-    $svc = Join-Path (Join-Path $root 'target\release') $exe
+    $svc = Resolve-WorkspaceBinary -Root $root -Binary $exe
   }
 }
 
@@ -397,7 +429,7 @@ if ($startLauncher -and (-not $launcher -or -not (Test-Path $launcher))) {
       try { Pop-Location } catch {}
     }
   }
-  $launcher = Join-Path (Join-Path $root 'target\release') $launcherExe
+  $launcher = Resolve-WorkspaceBinary -Root $root -Binary $launcherExe
 }
 
 # Helper utilities

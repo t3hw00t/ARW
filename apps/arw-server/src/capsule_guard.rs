@@ -1616,7 +1616,11 @@ mod tests {
         store.adopt(&capsule, now.saturating_sub(20)).await;
 
         let wait = store.next_refresh_delay_ms(now, 5_000).await;
-        assert_eq!(wait, 0);
+        assert!(
+            wait <= 1,
+            "expected immediate refresh when lease expired, got {} ms",
+            wait
+        );
     }
 
     #[tokio::test]

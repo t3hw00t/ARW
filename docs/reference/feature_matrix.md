@@ -6,7 +6,7 @@ title: Feature Matrix
 
 # Feature Matrix
 
-Updated: 2025-10-07
+Updated: 2025-10-11
 Status: Stable
 Type: Reference
 

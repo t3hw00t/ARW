@@ -64,19 +64,14 @@ pub enum MiniAgentCategory {
     Support,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema, Default)]
 #[serde(rename_all = "lowercase")]
 pub enum MiniAgentStatus {
     Alpha,
+    #[default]
     Beta,
     Stable,
     Incubating,
-}
-
-impl Default for MiniAgentStatus {
-    fn default() -> Self {
-        MiniAgentStatus::Beta
-    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]

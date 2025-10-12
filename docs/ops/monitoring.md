@@ -4,7 +4,7 @@ title: Monitoring & Alerts
 
 # Monitoring & Alerts
 
-Updated: 2025-10-09
+Updated: 2025-10-11
 Type: How‑to
 
 This note captures the minimal wiring needed to surface ARW metrics in Prometheus/Grafana and keep an eye on the legacy shut-down counter.

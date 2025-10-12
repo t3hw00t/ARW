@@ -98,7 +98,7 @@ $binDir = Join-Path $out 'bin'
 New-Item -ItemType Directory -Force $binDir | Out-Null
 
 $exe = ''
-if ($isWindows) { $exe = '.exe' }
+if ($onWindows) { $exe = '.exe' }
 $serverSrc = Join-Path $binRoot "arw-server$exe"
 $cliSrc = Join-Path $binRoot "arw-cli$exe"
 $launcherSrc = Join-Path $binRoot "arw-launcher$exe"

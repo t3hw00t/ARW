@@ -8,7 +8,7 @@ title: Admin Endpoints
 
 The unified `arw-server` binary exposes an HTTP surface built around the **actions → events → state** triad. Administrative tooling — debug panels, orchestration helpers, policy/config writers — lives under the `/admin/*` namespace so it is easy to secure as a group. The server records every mounted route at build time and streams a live index from `/about`, which keeps clients and docs in sync without hand-maintained tables.
 
-Updated: 2025-10-09
+Updated: 2025-10-11
 Type: How-to
 
 - Service: `arw-server` (default bind `127.0.0.1:8091`)

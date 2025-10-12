@@ -3,7 +3,7 @@ title: Logic Units Library
 ---
 
 # Logic Units Library
-Updated: 2025-10-09
+Updated: 2025-10-12
 Type: How‑to
 
 A first‑class surface to install, try, apply, and govern Logic Units (config‑first strategy packs) safely.
