@@ -519,7 +519,7 @@ async fn send_one(
         .ok_or_else(|| anyhow!("response missing id"))?
         .to_string();
     let ready = {
-        let mut entry = timeline.entry(id.clone()).or_insert_with(Timeline::default);
+        let mut entry = timeline.entry(id.clone()).or_default();
         entry.start.get_or_insert(start);
         entry.http_accepted.get_or_insert(http_accepted);
         entry.ready()
@@ -612,7 +612,7 @@ async fn handle_sse_message(
     };
     let now = Instant::now();
     let ready = {
-        let mut entry = timeline.entry(id.clone()).or_insert_with(Timeline::default);
+        let mut entry = timeline.entry(id.clone()).or_default();
         match envelope.kind.as_str() {
             "actions.submitted" => {
                 entry.submitted.get_or_insert(now);

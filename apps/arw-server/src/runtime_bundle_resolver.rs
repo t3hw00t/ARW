@@ -100,7 +100,7 @@ fn definition_from_installation(
 
     let mut descriptor = RuntimeDescriptor::new(runtime_id.clone(), adapter_id.clone());
     descriptor.name = Some(bundle.name.clone());
-    descriptor.profile = bundle.profiles.iter().cloned().next();
+    descriptor.profile = bundle.profiles.first().cloned();
     descriptor.modalities = bundle.modalities.clone();
     descriptor.accelerator = bundle.accelerator.clone();
 
@@ -166,7 +166,7 @@ fn definition_from_installation(
         descriptor,
         adapter_id,
         false,
-        bundle.profiles.iter().cloned().next(),
+        bundle.profiles.first().cloned(),
         Some(format!("{}{}", SOURCE_PREFIX, runtime_id)),
     );
 
@@ -347,7 +347,7 @@ mod tests {
             tags.get(CONSENT_REQUIRED_KEY).map(String::as_str),
             Some("false")
         );
-        assert!(tags.get(CONSENT_MODALITIES_KEY).is_none());
+        assert!(!tags.contains_key(CONSENT_MODALITIES_KEY));
         assert_eq!(
             tags.get(CONSENT_NOTE_KEY).map(String::as_str),
             Some("text-only runtime")

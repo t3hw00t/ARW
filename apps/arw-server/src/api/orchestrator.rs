@@ -45,7 +45,7 @@ async fn ensure_runtime_policy(state: &AppState, action: &str) -> Result<(), Res
         {
             Ok(Some(_)) => Ok(()),
             Ok(None) => {
-                let _ = state.bus().publish(
+                state.bus().publish(
                     topics::TOPIC_POLICY_DECISION,
                     &json!({
                         "action": action,
@@ -83,7 +83,7 @@ async fn ensure_runtime_policy(state: &AppState, action: &str) -> Result<(), Res
             }
         }
     } else {
-        let _ = state.bus().publish(
+        state.bus().publish(
             topics::TOPIC_POLICY_DECISION,
             &json!({
                 "action": action,

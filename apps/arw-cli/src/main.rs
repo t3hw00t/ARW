@@ -1870,11 +1870,7 @@ fn print_bundle_summary(
             if installations.len() == 1 { "" } else { "s" }
         );
         for inst in installations {
-            let label = inst
-                .name
-                .as_ref()
-                .map(|name| name.as_str())
-                .unwrap_or(inst.id.as_str());
+            let label = inst.name.as_deref().unwrap_or(inst.id.as_str());
             println!("  - {} [{}]", label, inst.id);
             let mut detail_parts: Vec<String> = Vec::new();
             if let Some(adapter) = inst.adapter.as_deref() {
@@ -2449,9 +2445,7 @@ fn load_local_runtime_bundle_installation(
         }
     };
 
-    let signature_status = metadata_value
-        .as_ref()
-        .map(|value| verify_manifest_signatures(value));
+    let signature_status = metadata_value.as_ref().map(verify_manifest_signatures);
 
     let mut bundle_struct: Option<runtime_bundles::RuntimeBundle> = None;
     let mut id = dir
@@ -7511,8 +7505,10 @@ fn summarize_installations(
     installs: &[CliRuntimeBundleInstallation],
     enforced: bool,
 ) -> (SignatureSummary, Vec<String>) {
-    let mut summary = SignatureSummary::default();
-    summary.enforced = enforced;
+    let mut summary = SignatureSummary {
+        enforced,
+        ..SignatureSummary::default()
+    };
     let mut failing: Vec<String> = Vec::new();
     for inst in installs {
         summary.total += 1;
@@ -7561,7 +7557,7 @@ fn cmd_runtime_bundles_audit(args: &RuntimeBundlesAuditArgs) -> Result<()> {
             failing,
             snapshot
                 .roots
-                .get(0)
+                .first()
                 .cloned()
                 .unwrap_or_else(|| args.base.base_url().to_string()),
             "remote",
@@ -7626,11 +7622,7 @@ fn cmd_runtime_bundles_audit(args: &RuntimeBundlesAuditArgs) -> Result<()> {
         } else {
             println!();
             for inst in &installs {
-                let label = inst
-                    .name
-                    .as_ref()
-                    .map(|name| name.as_str())
-                    .unwrap_or(inst.id.as_str());
+                let label = inst.name.as_deref().unwrap_or(inst.id.as_str());
                 println!("{} [{}]", label, inst.id);
                 match inst.signature.as_ref() {
                     Some(sig) => {
@@ -11992,8 +11984,8 @@ fn cmd_capsule_preset_list(args: &CapsulePresetListArgs) -> Result<()> {
     }
 
     println!(
-        "{:<28} {:<10} {:<14} {:>6} {:>7} {}",
-        "ID", "Version", "Issuer", "Denies", "Contracts", "Source"
+        "{:<28} {:<10} {:<14} {:>6} {:>7} Source",
+        "ID", "Version", "Issuer", "Denies", "Contracts"
     );
     println!("{}", "-".repeat(80));
     for preset in &summaries {
@@ -12206,7 +12198,7 @@ fn cmd_capsule_trust_list(args: &CapsuleTrustListArgs) -> Result<()> {
         println!("No trusted capsule issuers.");
         return Ok(());
     }
-    println!("{:<24} {:<10} {}", "ID", "Algorithm", "Key (base64)");
+    println!("{:<24} {:<10} Key (base64)", "ID", "Algorithm");
     println!("{}", "-".repeat(72));
     for entry in entries {
         println!(

@@ -438,9 +438,7 @@ async fn load_installation_from_dir(
     let artifacts_dir = dir.join("artifacts");
     let artifacts = load_artifact_summaries(&artifacts_dir).await;
 
-    let signature_status = metadata_value
-        .as_ref()
-        .map(|value| verify_manifest_signatures(value));
+    let signature_status = metadata_value.as_ref().map(verify_manifest_signatures);
 
     if bundle_full.is_none() && metadata_value.is_none() && artifacts.is_empty() {
         return Ok(None);

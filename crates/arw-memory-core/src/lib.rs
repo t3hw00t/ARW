@@ -206,19 +206,26 @@ struct RankedCandidate {
     fts_hit: bool,
 }
 
-fn build_ranked_candidate(
+struct CandidateRow {
     id: String,
     updated: Option<String>,
     score: Option<f64>,
     embed_text: Option<String>,
     embed_blob: Option<Vec<u8>>,
+}
+
+fn build_ranked_candidate(
+    row: CandidateRow,
     embed: Option<&[f32]>,
     now: &DateTime<Utc>,
     fts_hit: bool,
 ) -> RankedCandidate {
-    let embed_vec = match embed_blob {
+    let embed_vec = match row.embed_blob {
         Some(blob) => decode_embed_blob(&blob),
-        None => embed_text.and_then(|s| parse_embedding(s.as_str()).ok()),
+        None => row
+            .embed_text
+            .as_ref()
+            .and_then(|s| parse_embedding(s.as_str()).ok()),
     };
     let mut sim = 0f32;
     if let (Some(candidate_embed), Some(target_embed)) = (embed_vec.as_ref(), embed) {
@@ -226,7 +233,8 @@ fn build_ranked_candidate(
             sim = cosine_sim(target_embed, candidate_embed);
         }
     }
-    let recency = updated
+    let recency = row
+        .updated
         .as_deref()
         .and_then(parse_timestamp)
         .map(|t| {
@@ -235,7 +243,7 @@ fn build_ranked_candidate(
             ((-age / hl).exp()) as f32
         })
         .unwrap_or(0.5);
-    let util = score.map(|s| s.clamp(0.0, 1.0) as f32).unwrap_or(0.0);
+    let util = row.score.map(|s| s.clamp(0.0, 1.0) as f32).unwrap_or(0.0);
     let w_sim = 0.5f32;
     let w_fts = 0.2f32;
     let w_rec = 0.2f32;
@@ -243,7 +251,7 @@ fn build_ranked_candidate(
     let fts_score = if fts_hit { 1.0 } else { 0.0 };
     let cscore = w_sim * sim + w_fts * fts_score + w_rec * recency + w_util * util;
     RankedCandidate {
-        id,
+        id: row.id,
         cscore,
         sim,
         fts_hit,
@@ -609,11 +617,13 @@ impl<'c> MemoryStore<'c> {
             let embed_text: Option<String> = row.get(3)?;
             let embed_blob: Option<Vec<u8>> = row.get(4)?;
             ranked.push(build_ranked_candidate(
-                id,
-                updated,
-                score,
-                embed_text,
-                embed_blob,
+                CandidateRow {
+                    id,
+                    updated,
+                    score,
+                    embed_text,
+                    embed_blob,
+                },
                 Some(embed),
                 &now,
                 false,
@@ -670,7 +680,16 @@ impl<'c> MemoryStore<'c> {
                     let embed_text: Option<String> = row.get(3)?;
                     let embed_blob: Option<Vec<u8>> = row.get(4)?;
                     ranked.push(build_ranked_candidate(
-                        id, updated, score, embed_text, embed_blob, embed, &now, true,
+                        CandidateRow {
+                            id,
+                            updated,
+                            score,
+                            embed_text,
+                            embed_blob,
+                        },
+                        embed,
+                        &now,
+                        true,
                     ));
                 }
             }
@@ -698,7 +717,16 @@ impl<'c> MemoryStore<'c> {
                 let embed_text: Option<String> = row.get(3)?;
                 let embed_blob: Option<Vec<u8>> = row.get(4)?;
                 ranked.push(build_ranked_candidate(
-                    id, updated, score, embed_text, embed_blob, embed, &now, false,
+                    CandidateRow {
+                        id,
+                        updated,
+                        score,
+                        embed_text,
+                        embed_blob,
+                    },
+                    embed,
+                    &now,
+                    false,
                 ));
             }
         }
@@ -1559,7 +1587,7 @@ mod tests {
         }
 
         let links = store
-            .list_memory_links_many(&vec!["seed-a".into(), "seed-b".into()], 2)
+            .list_memory_links_many(&["seed-a".into(), "seed-b".into()], 2)
             .unwrap();
 
         let seed_a = links.get("seed-a").expect("seed-a entries");

@@ -64,7 +64,6 @@ pub fn save_trust_entries(entries: &[TrustEntry]) -> Result<(), io::Error> {
     let cfg = TrustConfig {
         issuers: entries.to_vec(),
     };
-    let serialized = serde_json::to_string_pretty(&cfg)
-        .map_err(|err| io::Error::new(io::ErrorKind::Other, err))?;
+    let serialized = serde_json::to_string_pretty(&cfg).map_err(io::Error::other)?;
     fs::write(path, serialized)
 }

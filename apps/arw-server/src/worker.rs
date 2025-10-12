@@ -27,7 +27,7 @@ pub(crate) fn desired_worker_count() -> usize {
             let parallelism = std::thread::available_parallelism()
                 .map(|n| n.get())
                 .unwrap_or(1);
-            let mut target = parallelism.saturating_mul(2).max(1).min(32);
+            let mut target = parallelism.saturating_mul(2).clamp(1, 32);
             if let Some(max_env) = std::env::var("ARW_WORKERS_MAX")
                 .ok()
                 .and_then(|s| s.parse::<usize>().ok())

@@ -446,7 +446,7 @@ impl AutonomyRegistry {
     fn spawn_persist_worker(self: &Arc<Self>, mut rx: mpsc::Receiver<()>) {
         let this = Arc::clone(self);
         tokio::spawn(async move {
-            while let Some(_) = rx.recv().await {
+            while rx.recv().await.is_some() {
                 let mut channel_closed = false;
                 loop {
                     match timeout(PERSIST_DEBOUNCE, rx.recv()).await {

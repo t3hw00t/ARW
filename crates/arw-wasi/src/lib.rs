@@ -237,7 +237,7 @@ impl ToolHost for LocalHost {
                     .unwrap_or("GET")
                     .to_ascii_uppercase();
                 let req_body = input.get("body").and_then(|v| v.as_str());
-                let bytes_out = req_body.map(|b| b.as_bytes().len() as i64).unwrap_or(0);
+                let bytes_out = req_body.map(|b| b.len() as i64).unwrap_or(0);
                 let mut head_kb: usize = std::env::var("ARW_HTTP_BODY_HEAD_KB")
                     .ok()
                     .and_then(|s| s.parse().ok())

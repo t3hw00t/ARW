@@ -1600,7 +1600,7 @@ mod tests {
         capsule.signature = None;
         store.adopt(&capsule, now).await;
 
-        let wait = store.next_refresh_delay_ms(now, 5_000).await;
+        let wait = store.next_refresh_delay_ms(now + 20, 5_000).await;
         assert!(wait <= 200);
         assert!(wait > 0);
     }

@@ -1123,24 +1123,9 @@ pub mod harness {
 
         pub fn build(&self) -> working_set::WorkingSet {
             working_set::WorkingSet {
-                items: self
-                    .items
-                    .iter()
-                    .cloned()
-                    .map(|value| Arc::new(value))
-                    .collect(),
-                seeds: self
-                    .seeds
-                    .iter()
-                    .cloned()
-                    .map(|value| Arc::new(value))
-                    .collect(),
-                expanded: self
-                    .expanded
-                    .iter()
-                    .cloned()
-                    .map(|value| Arc::new(value))
-                    .collect(),
+                items: self.items.iter().cloned().map(Arc::new).collect(),
+                seeds: self.seeds.iter().cloned().map(Arc::new).collect(),
+                expanded: self.expanded.iter().cloned().map(Arc::new).collect(),
                 diagnostics: Arc::new(self.diagnostics.clone()),
                 summary: self.summary.clone(),
             }

@@ -487,7 +487,7 @@ impl WorkingSetBuilder {
         if spec.expand_query {
             let expand_start = Instant::now();
             let added = self.pseudo_relevance_expand(
-                &spec,
+                spec,
                 &lanes,
                 &seed_infos,
                 &mut candidates,
@@ -576,9 +576,9 @@ impl WorkingSetBuilder {
         )
         .record(expand_elapsed.as_secs_f64() * 1000.0);
 
-        let world_cap = world_candidate_cap(&spec);
+        let world_cap = world_candidate_cap(spec);
         self.ingest_world_beliefs(
-            &spec,
+            spec,
             &mut candidates,
             &mut expanded_raw,
             observer,
@@ -593,7 +593,7 @@ impl WorkingSetBuilder {
 
         let select_start = Instant::now();
         let (selected, lane_counts, slot_counts) =
-            select_candidates(all_candidates, &spec, has_above, scorer.as_ref(), observer);
+            select_candidates(all_candidates, spec, has_above, scorer.as_ref(), observer);
         let select_elapsed = select_start.elapsed();
         histogram!(
             "arw_context_phase_duration_ms",
@@ -603,7 +603,7 @@ impl WorkingSetBuilder {
 
         let items: Vec<SharedValue> = selected.iter().map(|c| Arc::clone(&c.value)).collect();
         let summary = WorkingSetSummary::from_selection(
-            &spec,
+            spec,
             &selected,
             &lane_counts,
             &slot_counts,
@@ -620,7 +620,7 @@ impl WorkingSetBuilder {
         .record(total_elapsed.as_secs_f64() * 1000.0);
 
         let diagnostics = Arc::new(build_diagnostics(
-            &spec,
+            spec,
             &seed_infos,
             &expanded_raw,
             &lane_counts,
@@ -1034,7 +1034,7 @@ fn select_candidates<O: WorkingSetObserver>(
         } else {
             None
         };
-        if let (true, Some(ref key)) = (use_slots, slot_key.as_ref()) {
+        if let (true, Some(key)) = (use_slots, slot_key.as_ref()) {
             if let Some(limit) = resolve_slot_limit(key.as_str()) {
                 let current = slot_counts.get(key.as_str()).copied().unwrap_or(0);
                 if current >= limit {
@@ -1047,7 +1047,7 @@ fn select_candidates<O: WorkingSetObserver>(
             Some(cand) => cand,
             None => continue,
         };
-        if let Some(ref key) = slot_key {
+        if let Some(key) = slot_key.as_ref() {
             *slot_counts.entry(key.clone()).or_insert(0) += 1;
         }
         let lane_label = cand.lane_label().to_string();
@@ -2070,10 +2070,11 @@ mod tests {
         let payload = Arc::new(json!({"foo": "bar"}));
         composite.emit("custom.event", Arc::clone(&payload));
 
-        let stored = events.lock().unwrap();
-        assert_eq!(stored.len(), 1);
-        assert!(StdArc::ptr_eq(&payload, &stored[0]));
-        drop(stored);
+        {
+            let stored = events.lock().unwrap();
+            assert_eq!(stored.len(), 1);
+            assert!(StdArc::ptr_eq(&payload, &stored[0]));
+        }
 
         let envelope = bus_rx.recv().await.expect("bus event");
         assert_eq!(envelope.kind, "custom.event");
