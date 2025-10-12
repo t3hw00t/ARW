@@ -192,6 +192,69 @@ runtime-mirrors *args:
 verify-signatures base='http://127.0.0.1:8091' token='':
   BASE_URL='{{base}}' ARW_ADMIN_TOKEN='{{token}}' bash scripts/verify_bundle_signatures.sh
 
+research-watcher-list status='pending' limit='' base='http://127.0.0.1:8091' token='':
+  bash -ceu '
+  base="$1"; status="$2"; limit="$3"; token="$4";
+  args=(research-watcher list --base "$base");
+  if [ -n "$status" ]; then args+=(--status "$status"); fi
+  if [ -n "$limit" ]; then args+=(--limit "$limit"); fi
+  if command -v arw-cli >/dev/null 2>&1; then
+    cli=(arw-cli)
+  else
+    cli=(cargo run --quiet -p arw-cli --)
+  fi
+  if [ -n "$token" ]; then export ARW_ADMIN_TOKEN="$token"; fi
+  exec "${cli[@]}" "${args[@]}"
+  ' _ {{base}} {{status}} {{limit}} {{token}}
+
+research-watcher-approve base='http://127.0.0.1:8091' token='' from_status='pending' filter_source='' filter_contains='' limit='' note='' dry_run='false' json='false' pretty='false' *ids:
+  bash -ceu '
+  base="$1"; token="$2"; from_status="$3"; filter_source="$4"; filter_contains="$5"; limit="$6"; note="$7"; dry_run="$8"; json="$9"; pretty="${10}"; shift 10; ids=("$@");
+  args=(research-watcher approve --base "$base");
+  if [ -n "$from_status" ]; then args+=(--from-status "$from_status"); fi
+  if [ -n "$filter_source" ]; then args+=(--filter-source "$filter_source"); fi
+  if [ -n "$filter_contains" ]; then args+=(--filter-contains "$filter_contains"); fi
+  if [ -n "$limit" ]; then args+=(--limit "$limit"); fi
+  if [ -n "$note" ]; then args+=(--note "$note"); fi
+  if [ "$dry_run" = "true" ]; then args+=(--dry-run); fi
+  if [ "$json" = "true" ]; then
+    args+=(--json)
+    if [ "$pretty" = "true" ]; then args+=(--pretty); fi
+  fi
+  if [ "${#ids[@]}" -gt 0 ]; then args+=("${ids[@]}"); fi
+  if command -v arw-cli >/dev/null 2>&1; then
+    cli=(arw-cli)
+  else
+    cli=(cargo run --quiet -p arw-cli --)
+  fi
+  if [ -n "$token" ]; then export ARW_ADMIN_TOKEN="$token"; fi
+  exec "${cli[@]}" "${args[@]}"
+  ' _ {{base}} {{token}} {{from_status}} {{filter_source}} {{filter_contains}} {{limit}} {{note}} {{dry_run}} {{json}} {{pretty}} {{ids}}
+
+research-watcher-archive base='http://127.0.0.1:8091' token='' from_status='' filter_source='' filter_contains='' limit='' note='' dry_run='false' json='false' pretty='false' *ids:
+  bash -ceu '
+  base="$1"; token="$2"; from_status="$3"; filter_source="$4"; filter_contains="$5"; limit="$6"; note="$7"; dry_run="$8"; json="$9"; pretty="${10}"; shift 10; ids=("$@");
+  args=(research-watcher archive --base "$base");
+  if [ -n "$from_status" ]; then args+=(--from-status "$from_status"); fi
+  if [ -n "$filter_source" ]; then args+=(--filter-source "$filter_source"); fi
+  if [ -n "$filter_contains" ]; then args+=(--filter-contains "$filter_contains"); fi
+  if [ -n "$limit" ]; then args+=(--limit "$limit"); fi
+  if [ -n "$note" ]; then args+=(--note "$note"); fi
+  if [ "$dry_run" = "true" ]; then args+=(--dry-run); fi
+  if [ "$json" = "true" ]; then
+    args+=(--json)
+    if [ "$pretty" = "true" ]; then args+=(--pretty); fi
+  fi
+  if [ "${#ids[@]}" -gt 0 ]; then args+=("${ids[@]}"); fi
+  if command -v arw-cli >/dev/null 2>&1; then
+    cli=(arw-cli)
+  else
+    cli=(cargo run --quiet -p arw-cli --)
+  fi
+  if [ -n "$token" ]; then export ARW_ADMIN_TOKEN="$token"; fi
+  exec "${cli[@]}" "${args[@]}"
+  ' _ {{base}} {{token}} {{from_status}} {{filter_source}} {{filter_contains}} {{limit}} {{note}} {{dry_run}} {{json}} {{pretty}} {{ids}}
+
 context-ci:
   bash scripts/context_ci.sh
 

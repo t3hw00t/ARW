@@ -1,6 +1,7 @@
 use anyhow::{anyhow, bail, ensure, Context, Result};
 mod logic_units;
 mod recipes;
+mod research_watcher;
 use arw_core::runtime_bundles::{
     signature::{
         canonical_payload_bytes, default_manifest_key_id, verify_manifest_signatures_with_registry,
@@ -26,6 +27,7 @@ use logic_units::LogicUnitsCmd;
 use rand::RngCore;
 use recipes::RecipesCmd;
 use reqwest::{blocking::Client, header::ACCEPT, StatusCode};
+use research_watcher::ResearchWatcherCmd;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Map as JsonMap, Number as JsonNumber, Value as JsonValue};
@@ -101,12 +103,21 @@ mod runtime_bundle_manifest_tests {
             .expect("signatures array present");
         assert_eq!(signatures.len(), 1);
 
-        let verify_args = RuntimeBundlesManifestVerifyArgs {
+        let mut verify_args = RuntimeBundlesManifestVerifyArgs {
             manifest: sign_args.manifest.clone(),
             json: false,
             pretty: false,
+            require_trusted: false,
         };
         cmd_runtime_bundles_manifest_verify(&verify_args)?;
+        verify_args.require_trusted = true;
+        let err = cmd_runtime_bundles_manifest_verify(&verify_args)
+            .expect_err("require_trusted should fail for unsigned test key");
+        assert!(
+            err.to_string()
+                .contains("no trusted signatures matched the signer registry"),
+            "expected failure due to untrusted signatures, got {err:?}"
+        );
         Ok(())
     }
 }
@@ -291,6 +302,11 @@ enum Commands {
     LogicUnits {
         #[command(subcommand)]
         cmd: LogicUnitsCmd,
+    },
+    /// Research watcher helpers (list, approve, archive)
+    ResearchWatcher {
+        #[command(subcommand)]
+        cmd: ResearchWatcherCmd,
     },
     /// Screenshots maintenance commands
     Screenshots {
@@ -2247,6 +2263,9 @@ struct RuntimeBundlesManifestVerifyArgs {
     /// Pretty-print JSON output (requires --json)
     #[arg(long, requires = "json")]
     pretty: bool,
+    /// Require at least one trusted signature (fails when registry has no match)
+    #[arg(long)]
+    require_trusted: bool,
 }
 
 #[derive(Args)]
@@ -3562,6 +3581,12 @@ fn main() {
         }
         Some(Commands::LogicUnits { cmd }) => {
             if let Err(e) = logic_units::run(cmd) {
+                eprintln!("{}", e);
+                std::process::exit(1);
+            }
+        }
+        Some(Commands::ResearchWatcher { cmd }) => {
+            if let Err(e) = research_watcher::run(cmd) {
                 eprintln!("{}", e);
                 std::process::exit(1);
             }
@@ -7472,12 +7497,27 @@ fn cmd_runtime_bundles_manifest_verify(args: &RuntimeBundlesManifestVerifyArgs) 
         .and_then(|value| value.as_str());
     let verification =
         verify_manifest_signatures_with_registry(&manifest, signer_registry.as_ref(), channel_hint);
+    let trust_shortfall = verification.trust_enforced && verification.trusted_signatures == 0;
+    let only_trust_failure = trust_shortfall
+        && verification
+            .signatures
+            .iter()
+            .all(|report| report.signature_valid && report.hash_matches);
+    let overall_ok = if only_trust_failure {
+        true
+    } else {
+        verification.ok
+    };
+
     let summary = json!({
         "manifest": manifest_path.display().to_string(),
         "canonical_sha256": verification.canonical_sha256,
         "signatures": verification.signatures,
         "warnings": verification.warnings,
-        "ok": verification.ok,
+        "ok": overall_ok,
+        "trusted_signatures": verification.trusted_signatures,
+        "rejected_signatures": verification.rejected_signatures,
+        "trust_enforced": verification.trust_enforced,
     });
 
     if args.json {
@@ -7538,6 +7578,20 @@ fn cmd_runtime_bundles_manifest_verify(args: &RuntimeBundlesManifestVerifyArgs) 
 
     if verification.ok {
         Ok(())
+    } else if only_trust_failure && !args.require_trusted {
+        if !args.json {
+            println!(
+                "Note: signatures verified but none matched the trusted signer registry. \
+pass --require-trusted to fail in this scenario."
+            );
+        }
+        Ok(())
+    } else if args.require_trusted && trust_shortfall {
+        anyhow::bail!(
+            "bundle manifest verification failed: no trusted signatures matched the signer registry"
+        )
+    } else if only_trust_failure {
+        anyhow::bail!("bundle manifest verification failed")
     } else {
         anyhow::bail!("bundle manifest verification failed")
     }

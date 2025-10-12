@@ -45,6 +45,14 @@ Example seed item:
 - Deduplicate via `source` + `source_id`; replays update in place without creating duplicates.
 - Pair approvals with logic-unit promotion flows so the Suggested tab stays synchronized with what you ship.
 
+## CLI Helpers
+
+- `arw-cli research-watcher list --status pending --base http://127.0.0.1:8091 --admin-token $ARW_ADMIN_TOKEN --json --pretty` — inspect the queue without leaving the terminal; omit `--status` to see the latest 100 items across all states and add `--limit N` to tune the slice.
+- `arw-cli research-watcher approve --from-status pending --filter-source arxiv --filter-contains retrieval --limit 25 --note "Cleared for Suggested" --base http://127.0.0.1:8091 --admin-token $ARW_ADMIN_TOKEN` — bulk-approve matching items; the CLI verifies each signature, adds the note, and reports updated statuses.
+- `arw-cli research-watcher archive --ids t-20251012-0012 t-20251012-0045 --note "Superseded by revised manifest" --base http://127.0.0.1:8091 --admin-token $ARW_ADMIN_TOKEN` — archive explicit ids while preserving audit history.
+- Add `--dry-run` to either decision command to print the candidate ids without mutating state; pair with `--json --pretty` to feed change logs into scripts or shared runbooks.
+- `just research-watcher-list` / `just research-watcher-approve` / `just research-watcher-archive` — thin wrappers around the CLI with sensible defaults (pending queue, base `http://127.0.0.1:8091`). Override with flags such as `base=https://hub token=$ARW_ADMIN_TOKEN limit=50` and append ids to the end of the command for explicit targeting.
+
 ## Roadmap
 
 1. **Richer payloads** — convert RSS/HTML sources on ingest, add provenance previews, and store extended metadata for launcher cards (`t-250918120101-rw01`).

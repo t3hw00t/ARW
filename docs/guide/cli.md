@@ -42,6 +42,7 @@ Basics
   - Offline import: `arw-cli runtime bundles import --bundle llama.cpp-preview/linux-x86_64-cpu ./llama-build`
   - Roll back to a previous snapshot: `arw-cli runtime bundles rollback --bundle llama.cpp-preview/linux-x86_64-cpu --list`
   - Verify manifest signatures: `arw-cli runtime bundles manifest verify ~/.cache/arw/runtime/bundles/llama.cpp-preview/linux-x86_64-cpu/bundle.json`
+  - Add `--require-trusted` to the verify command when you need a hard failure unless at least one signature matches the configured signer registry; without the flag the CLI emits a note and exits zero so you can inspect warnings interactively.
   - Sign manifests before publishing: `arw-cli runtime bundles manifest sign dist/bundles/llama.cpp-preview/linux-x86_64-cpu/bundle.json --key-file ops/keys/runtime_bundle_ed25519.sk --issuer bundle-ci`
   - Add `--json`/`--pretty` to the rollback command for machine-readable history listings or outcome summaries
   - `runtime bundles list --pretty` includes signature verification results for each installed bundle, including aggregated `trusted`/`rejected` counts and per-key `[trusted]`/`[untrusted]` hints
@@ -58,6 +59,13 @@ Logic Units
 - Install to the kernel: `arw-cli logic-units install examples/logic-units/memory-hygiene.yaml --base http://127.0.0.1:8091 --admin-token $ARW_ADMIN_TOKEN` (pair with `--dry-run` to preview payloads and `--id` to override manifest ids at publish time)
 - List registered units: `arw-cli logic-units list --base http://127.0.0.1:8091 --admin-token $ARW_ADMIN_TOKEN --json --pretty`
 - Examples in `examples/logic-units/` stay schema-validated via `cargo test -p arw-cli logic_unit_examples_validate_against_schema`, so you can treat the gallery as a starting point for new packs.
+
+Research Watcher
+- Inspect queue snapshots: `arw-cli research-watcher list --status pending --base http://127.0.0.1:8091 --admin-token $ARW_ADMIN_TOKEN --json --pretty`
+- Approve curated items in bulk: `arw-cli research-watcher approve --from-status pending --filter-source arxiv --filter-contains retrieval --limit 25 --note "Cleared for Suggested" --base http://127.0.0.1:8091 --admin-token $ARW_ADMIN_TOKEN`
+- Archive stale entries: `arw-cli research-watcher archive --ids t-20251012-0012 t-20251012-0045 --note "Superseded by revised manifest" --base http://127.0.0.1:8091 --admin-token $ARW_ADMIN_TOKEN`
+- Dry-run any decision first with `--dry-run` to print the targeted ids without mutating the queue; combine with `--json --pretty` for machine processing or journaling.
+- Prefer quick shortcuts when you already use `just`: `just research-watcher-list` (defaults to `--status pending`) and `just research-watcher-approve`/`just research-watcher-archive` wrap the CLI, respect `ARW_ADMIN_TOKEN`, and accept overrides such as `token=... base=https://hub limit=50`. Append ids at the end of the command (`just research-watcher-archive ... t-123 t-456`) or let the helpers pull from `--from-status`.
 
 Admin Tokens
 - Generate, hash, and persist `ARW_ADMIN_TOKEN` values without committing secrets:
