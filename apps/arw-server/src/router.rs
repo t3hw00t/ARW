@@ -176,6 +176,9 @@ pub(crate) mod paths {
     pub const POLICY_RELOAD: &str = "/policy/reload";
     pub const POLICY_SIMULATE: &str = "/policy/simulate";
     pub const POLICY_GUARDRAILS_APPLY: &str = "/policy/guardrails/apply";
+    pub const ADMIN_POLICY_CAPSULES_PRESETS: &str = "/admin/policy/capsules/presets";
+    pub const ADMIN_POLICY_CAPSULES_ADOPT: &str = "/admin/policy/capsules/adopt";
+    pub const ADMIN_POLICY_CAPSULES_AUDIT: &str = "/admin/policy/capsules/audit";
     pub const ADMIN_POLICY_CAPSULES_TEARDOWN: &str = "/admin/policy/capsules/teardown";
     pub const STATE_MODELS: &str = "/state/models";
     pub const STATE_MODELS_METRICS: &str = "/state/models_metrics";
@@ -1098,6 +1101,21 @@ fn register_admin_management_routes(builder: &mut RouterBuilder) {
     builder.route_post(
         paths::ADMIN_FEEDBACK_ROLLBACK,
         api::feedback::feedback_rollback,
+        Some(Stability::Experimental),
+    );
+    builder.route_get(
+        paths::ADMIN_POLICY_CAPSULES_PRESETS,
+        api::policy::policy_capsules_presets,
+        Some(Stability::Experimental),
+    );
+    builder.route_post(
+        paths::ADMIN_POLICY_CAPSULES_ADOPT,
+        api::policy::policy_capsules_adopt,
+        Some(Stability::Experimental),
+    );
+    builder.route_get(
+        paths::ADMIN_POLICY_CAPSULES_AUDIT,
+        api::policy::policy_capsules_audit,
         Some(Stability::Experimental),
     );
     builder.route_post(

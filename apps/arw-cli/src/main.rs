@@ -1,7 +1,7 @@
 use anyhow::{anyhow, bail, ensure, Context, Result};
 use arw_core::{
-    effective_paths, gating, gating_keys, hello_core, introspect_tools, load_effective_paths,
-    resolve_config_path, runtime_bundles,
+    capsule_presets, capsule_trust, effective_paths, gating, gating_keys, hello_core,
+    introspect_tools, load_effective_paths, resolve_config_path, runtime_bundles,
 };
 use arw_protocol::GatingCapsule;
 use arw_runtime::{RuntimeAccelerator, RuntimeModality, RuntimeSeverity, RuntimeState};
@@ -182,6 +182,18 @@ enum CapCmd {
     Status(CapsuleStatusArgs),
     /// Emergency teardown for active policy capsules
     Teardown(CapsuleTeardownArgs),
+    /// Capsule preset helpers
+    Preset {
+        #[command(subcommand)]
+        cmd: CapsulePresetCmd,
+    },
+    /// Tail capsule audit events
+    Audit(CapsuleAuditArgs),
+    /// Trust store helpers
+    Trust {
+        #[command(subcommand)]
+        cmd: CapsuleTrustCmd,
+    },
 }
 
 #[derive(Args)]
@@ -549,6 +561,160 @@ struct AdminAutonomyListArgs {
     pretty: bool,
 }
 
+#[derive(Subcommand)]
+enum CapsulePresetCmd {
+    /// List capsule presets known to the server or local configs
+    List(CapsulePresetListArgs),
+    /// Adopt a preset by id via the admin API
+    Adopt(CapsulePresetAdoptArgs),
+}
+
+#[derive(Args)]
+struct CapsulePresetListArgs {
+    /// Base URL of the service (e.g., http://127.0.0.1:8091)
+    #[arg(long, default_value = "http://127.0.0.1:8091")]
+    base: String,
+    /// Admin token; falls back to ARW_ADMIN_TOKEN env
+    #[arg(long)]
+    admin_token: Option<String>,
+    /// Timeout seconds
+    #[arg(long, default_value_t = 5)]
+    timeout: u64,
+    /// Emit raw JSON instead of a table
+    #[arg(long)]
+    json: bool,
+    /// Pretty-print JSON output
+    #[arg(long)]
+    pretty: bool,
+    /// Read presets from configs/capsules instead of calling the server
+    #[arg(long)]
+    local: bool,
+}
+
+#[derive(Args)]
+struct CapsulePresetAdoptArgs {
+    /// Capsule preset identifier (e.g., capsule.strict-egress)
+    id: String,
+    /// Base URL of the service (e.g., http://127.0.0.1:8091)
+    #[arg(long, default_value = "http://127.0.0.1:8091")]
+    base: String,
+    /// Admin token; falls back to ARW_ADMIN_TOKEN env
+    #[arg(long)]
+    admin_token: Option<String>,
+    /// Timeout seconds
+    #[arg(long, default_value_t = 5)]
+    timeout: u64,
+    /// Optional audit reason to persist with the adoption
+    #[arg(long)]
+    reason: Option<String>,
+    /// Show capsule status after adoption
+    #[arg(long)]
+    show_status: bool,
+}
+
+#[derive(Args)]
+struct CapsuleAuditArgs {
+    /// Base URL of the service (e.g., http://127.0.0.1:8091)
+    #[arg(long, default_value = "http://127.0.0.1:8091")]
+    base: String,
+    /// Admin token; falls back to ARW_ADMIN_TOKEN env
+    #[arg(long)]
+    admin_token: Option<String>,
+    /// Timeout seconds
+    #[arg(long, default_value_t = 5)]
+    timeout: u64,
+    /// Maximum entries to return (default 50, max 500)
+    #[arg(long, default_value_t = 50)]
+    limit: usize,
+    /// Additional CSV of prefixes to include alongside policy.capsule.*
+    #[arg(long)]
+    prefix: Option<String>,
+    /// Emit raw JSON instead of a table
+    #[arg(long)]
+    json: bool,
+    /// Pretty-print JSON output
+    #[arg(long)]
+    pretty: bool,
+}
+
+#[derive(Subcommand)]
+enum CapsuleTrustCmd {
+    /// List trusted capsule issuers
+    List(CapsuleTrustListArgs),
+    /// Add or replace a trusted capsule issuer
+    Add(CapsuleTrustAddArgs),
+    /// Remove a trusted capsule issuer
+    Remove(CapsuleTrustRemoveArgs),
+    /// Rotate a trusted issuer's keypair (ed25519 only)
+    Rotate(CapsuleTrustRotateArgs),
+}
+
+#[derive(Args)]
+struct CapsuleTrustListArgs {
+    /// Emit raw JSON instead of a table
+    #[arg(long)]
+    json: bool,
+    /// Pretty-print JSON output
+    #[arg(long)]
+    pretty: bool,
+}
+
+#[derive(Args)]
+struct CapsuleTrustAddArgs {
+    /// Issuer identifier (e.g., local-admin)
+    #[arg(long)]
+    id: String,
+    /// Signing algorithm (ed25519 or secp256k1)
+    #[arg(long, default_value = "ed25519")]
+    alg: String,
+    /// Public key (base64)
+    #[arg(long, conflicts_with = "key_file")]
+    key: Option<String>,
+    /// Read public key (base64) from file
+    #[arg(long = "key-file", value_hint = clap::ValueHint::FilePath, conflicts_with = "key")]
+    key_file: Option<PathBuf>,
+    /// Replace existing issuer entry if present
+    #[arg(long)]
+    replace: bool,
+}
+
+#[derive(Args)]
+struct CapsuleTrustRemoveArgs {
+    /// Issuer identifier to remove
+    #[arg(long)]
+    id: String,
+    /// Succeed silently if the issuer is missing
+    #[arg(long)]
+    allow_missing: bool,
+}
+
+#[derive(Args)]
+struct CapsuleTrustRotateArgs {
+    /// Issuer identifier to rotate (ed25519)
+    #[arg(long)]
+    id: String,
+    /// Signing algorithm (currently only ed25519 is supported)
+    #[arg(long, default_value = "ed25519")]
+    alg: String,
+    /// Write new public key (base64) to file
+    #[arg(long = "out-pub", value_hint = clap::ValueHint::FilePath)]
+    out_pub: Option<PathBuf>,
+    /// Write new private key (base64) to file
+    #[arg(long = "out-priv", value_hint = clap::ValueHint::FilePath)]
+    out_priv: Option<PathBuf>,
+    /// Base URL of the service when --reload is supplied
+    #[arg(long, default_value = "http://127.0.0.1:8091")]
+    base: String,
+    /// Admin token for --reload; falls back to ARW_ADMIN_TOKEN env
+    #[arg(long)]
+    admin_token: Option<String>,
+    /// Timeout seconds for --reload
+    #[arg(long, default_value_t = 5)]
+    timeout: u64,
+    /// Call POST /admin/rpu/reload after rotating
+    #[arg(long)]
+    reload: bool,
+}
 #[derive(Args, Clone)]
 struct AdminAutonomyShowArgs {
     #[command(flatten)]
@@ -2793,6 +2959,52 @@ fn main() {
                     std::process::exit(1);
                 }
             }
+            CapCmd::Preset { cmd } => match cmd {
+                CapsulePresetCmd::List(args) => {
+                    if let Err(e) = cmd_capsule_preset_list(&args) {
+                        eprintln!("{}", e);
+                        std::process::exit(1);
+                    }
+                }
+                CapsulePresetCmd::Adopt(args) => {
+                    if let Err(e) = cmd_capsule_preset_adopt(&args) {
+                        eprintln!("{}", e);
+                        std::process::exit(1);
+                    }
+                }
+            },
+            CapCmd::Audit(args) => {
+                if let Err(e) = cmd_capsule_audit(&args) {
+                    eprintln!("{}", e);
+                    std::process::exit(1);
+                }
+            }
+            CapCmd::Trust { cmd } => match cmd {
+                CapsuleTrustCmd::List(args) => {
+                    if let Err(e) = cmd_capsule_trust_list(&args) {
+                        eprintln!("{}", e);
+                        std::process::exit(1);
+                    }
+                }
+                CapsuleTrustCmd::Add(args) => {
+                    if let Err(e) = cmd_capsule_trust_add(&args) {
+                        eprintln!("{}", e);
+                        std::process::exit(1);
+                    }
+                }
+                CapsuleTrustCmd::Remove(args) => {
+                    if let Err(e) = cmd_capsule_trust_remove(&args) {
+                        eprintln!("{}", e);
+                        std::process::exit(1);
+                    }
+                }
+                CapsuleTrustCmd::Rotate(args) => {
+                    if let Err(e) = cmd_capsule_trust_rotate(&args) {
+                        eprintln!("{}", e);
+                        std::process::exit(1);
+                    }
+                }
+            },
         },
         Some(Commands::Completions(args)) => {
             if let Err(e) = cmd_completions(args.shell, args.out_dir.as_deref()) {
@@ -9489,17 +9701,7 @@ fn cmd_gen_ed25519(
     out_priv: Option<&str>,
     issuer: Option<&str>,
 ) -> Result<()> {
-    use ed25519_dalek::SigningKey;
-    use rand::rngs::OsRng;
-    use rand_core::TryRngCore;
-    let mut rng = OsRng;
-    let mut sk_bytes = [0u8; 32];
-    rng.try_fill_bytes(&mut sk_bytes)
-        .map_err(|e| anyhow::anyhow!(e.to_string()))?;
-    let sk = SigningKey::from_bytes(&sk_bytes);
-    let pk = sk.verifying_key();
-    let sk_b64 = base64::engine::general_purpose::STANDARD.encode(sk.to_bytes());
-    let pk_b64 = base64::engine::general_purpose::STANDARD.encode(pk.to_bytes());
+    let (pk_b64, sk_b64) = generate_ed25519_pair_b64()?;
     if let Some(p) = out_pub {
         std::fs::write(p, &pk_b64)?;
     }
@@ -10442,6 +10644,469 @@ fn cmd_capsule_teardown(args: &CapsuleTeardownArgs) -> Result<()> {
     Ok(())
 }
 
+#[derive(Deserialize)]
+struct CapsulePresetListHttp {
+    presets: Vec<capsule_presets::CapsulePresetSummary>,
+}
+
+#[derive(Deserialize)]
+struct CapsuleAdoptHttpResponse {
+    ok: bool,
+    notify: bool,
+    #[serde(default)]
+    preset_id: Option<String>,
+    capsule_id: String,
+}
+
+#[derive(Deserialize)]
+struct CapsuleAuditHttpResponse {
+    limit: usize,
+    total_matched: usize,
+    truncated: bool,
+    entries: Vec<CapsuleAuditEntry>,
+}
+
+#[derive(Deserialize)]
+struct CapsuleAuditEntry {
+    time: String,
+    kind: String,
+    payload: JsonValue,
+}
+
+fn cmd_capsule_preset_list(args: &CapsulePresetListArgs) -> Result<()> {
+    let summaries = if args.local {
+        let presets = capsule_presets::list_capsule_presets()
+            .context("loading capsule presets from configs/capsules")?;
+        presets.into_iter().map(|p| p.summary).collect::<Vec<_>>()
+    } else {
+        let client = Client::builder()
+            .timeout(Duration::from_secs(args.timeout))
+            .build()
+            .context("building HTTP client")?;
+        let base = args.base.trim_end_matches('/');
+        let url = format!("{}/admin/policy/capsules/presets", base);
+        let token = resolve_admin_token(&args.admin_token);
+        let resp = with_admin_headers(
+            client.get(&url).header(ACCEPT, "application/json"),
+            token.as_deref(),
+        )
+        .send()
+        .with_context(|| format!("requesting {}", url))?;
+        if !resp.status().is_success() {
+            let status = resp.status();
+            let text = resp.text().unwrap_or_default();
+            bail!("server returned {}: {}", status, text.trim());
+        }
+        let body: CapsulePresetListHttp =
+            resp.json().context("parsing capsule presets response")?;
+        body.presets
+    };
+
+    if args.json {
+        let value = json!({
+            "count": summaries.len(),
+            "presets": summaries,
+        });
+        if args.pretty {
+            println!("{}", serde_json::to_string_pretty(&value)?);
+        } else {
+            println!("{}", serde_json::to_string(&value)?);
+        }
+        return Ok(());
+    }
+
+    if summaries.is_empty() {
+        if args.local {
+            println!("No capsule presets found under configs/capsules.");
+        } else {
+            println!("Server reports no capsule presets.");
+        }
+        return Ok(());
+    }
+
+    println!(
+        "{:<28} {:<10} {:<14} {:>6} {:>7} {}",
+        "ID", "Version", "Issuer", "Denies", "Contracts", "Source"
+    );
+    println!("{}", "-".repeat(80));
+    for preset in &summaries {
+        let issuer = preset.issuer.as_deref().unwrap_or("-");
+        println!(
+            "{:<28} {:<10} {:<14} {:>6} {:>7} {}",
+            preset.id,
+            preset.version.as_deref().unwrap_or("1"),
+            issuer,
+            preset.denies,
+            preset.contracts,
+            if args.local {
+                preset.path.clone()
+            } else {
+                preset.file_name.clone()
+            }
+        );
+    }
+    println!();
+    if args.local {
+        let dir = summaries
+            .first()
+            .and_then(|summary| {
+                Path::new(&summary.path)
+                    .parent()
+                    .map(|p| p.display().to_string())
+            })
+            .unwrap_or_else(|| "configs/capsules".to_string());
+        println!("Source directory: {}", dir);
+    }
+
+    Ok(())
+}
+
+fn cmd_capsule_preset_adopt(args: &CapsulePresetAdoptArgs) -> Result<()> {
+    let client = Client::builder()
+        .timeout(Duration::from_secs(args.timeout))
+        .build()
+        .context("building HTTP client")?;
+    let base = args.base.trim_end_matches('/');
+    let url = format!("{}/admin/policy/capsules/adopt", base);
+    let token = resolve_admin_token(&args.admin_token);
+    let mut body = json!({ "preset_id": args.id.trim() });
+    if let Some(reason) = args
+        .reason
+        .as_ref()
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty())
+    {
+        body.as_object_mut()
+            .unwrap()
+            .insert("reason".to_string(), JsonValue::String(reason.to_string()));
+    }
+    let resp = with_admin_headers(client.post(&url).json(&body), token.as_deref())
+        .send()
+        .with_context(|| format!("requesting {}", url))?;
+    if !resp.status().is_success() {
+        let status = resp.status();
+        let text = resp.text().unwrap_or_default();
+        bail!("server returned {}: {}", status, text.trim());
+    }
+    let adopted: CapsuleAdoptHttpResponse =
+        resp.json().context("parsing capsule adopt response")?;
+    if !adopted.ok {
+        bail!("server reported failure adopting preset {}", args.id);
+    }
+    println!(
+        "Adopted preset '{}' (capsule {}) — notify={}.",
+        args.id, adopted.capsule_id, adopted.notify
+    );
+    if let Some(preset_id) = adopted.preset_id {
+        println!("Server preset id: {}", preset_id);
+    }
+    if args.show_status {
+        println!();
+        let status_args = CapsuleStatusArgs {
+            base: args.base.clone(),
+            admin_token: args.admin_token.clone(),
+            timeout: args.timeout,
+            json: false,
+            pretty: false,
+            limit: 5,
+        };
+        cmd_capsule_status(&status_args)?;
+    }
+    Ok(())
+}
+
+fn cmd_capsule_audit(args: &CapsuleAuditArgs) -> Result<()> {
+    let client = Client::builder()
+        .timeout(Duration::from_secs(args.timeout))
+        .build()
+        .context("building HTTP client")?;
+    let base = args.base.trim_end_matches('/');
+    let mut url = reqwest::Url::parse(&format!("{}/admin/policy/capsules/audit", base))?;
+    {
+        let mut qp = url.query_pairs_mut();
+        qp.append_pair("limit", &args.limit.min(500).to_string());
+        if let Some(prefix) = args
+            .prefix
+            .as_ref()
+            .map(|s| s.trim())
+            .filter(|s| !s.is_empty())
+        {
+            qp.append_pair("prefix", prefix);
+        }
+    }
+    let token = resolve_admin_token(&args.admin_token);
+    let resp = with_admin_headers(
+        client.get(url).header(ACCEPT, "application/json"),
+        token.as_deref(),
+    )
+    .send()
+    .context("requesting capsule audit stream")?;
+    if !resp.status().is_success() {
+        let status = resp.status();
+        let text = resp.text().unwrap_or_default();
+        bail!("server returned {}: {}", status, text.trim());
+    }
+    if args.json {
+        let value: JsonValue = resp.json().context("parsing capsule audit response")?;
+        if args.pretty {
+            println!("{}", serde_json::to_string_pretty(&value)?);
+        } else {
+            println!("{}", serde_json::to_string(&value)?);
+        }
+        return Ok(());
+    }
+    let audit: CapsuleAuditHttpResponse = resp.json().context("parsing capsule audit response")?;
+
+    println!(
+        "Entries: {} (limit {}); total matched {}; truncated: {}",
+        audit.entries.len(),
+        audit.limit,
+        audit.total_matched,
+        audit.truncated
+    );
+    for entry in audit.entries {
+        let ts = format_observation_timestamp(&entry.time);
+        let capsule_id = entry
+            .payload
+            .get("id")
+            .and_then(JsonValue::as_str)
+            .unwrap_or("-");
+        let issuer = entry
+            .payload
+            .get("issuer")
+            .and_then(JsonValue::as_str)
+            .unwrap_or("-");
+        let status = entry
+            .payload
+            .get("status_label")
+            .and_then(JsonValue::as_str)
+            .or_else(|| entry.payload.get("status").and_then(JsonValue::as_str))
+            .unwrap_or("-");
+        let note = entry
+            .payload
+            .get("reason")
+            .and_then(JsonValue::as_str)
+            .or_else(|| entry.payload.get("aria_hint").and_then(JsonValue::as_str));
+        println!(
+            "[{}] {:<26} {:<26} issuer {:<14} status {}",
+            ts,
+            truncate_payload(&entry.kind, 26),
+            truncate_payload(capsule_id, 26),
+            truncate_payload(issuer, 14),
+            truncate_payload(status, 24),
+        );
+        if let Some(note) = note {
+            println!("      note: {}", truncate_payload(note, 90));
+        }
+        if entry.kind == "policy.capsule.teardown" {
+            if let Some(removed) = entry.payload.get("removed").and_then(JsonValue::as_array) {
+                let preview = removed
+                    .iter()
+                    .map(|item| {
+                        item.get("id")
+                            .and_then(JsonValue::as_str)
+                            .unwrap_or("capsule")
+                    })
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                if !preview.is_empty() {
+                    println!("      removed: {}", truncate_payload(&preview, 90));
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+fn cmd_capsule_trust_list(args: &CapsuleTrustListArgs) -> Result<()> {
+    let path = capsule_trust::trust_store_path();
+    let entries = capsule_trust::load_trust_entries()
+        .with_context(|| format!("reading {}", path.display()))?;
+    if args.json {
+        let value = json!({
+            "path": path.display().to_string(),
+            "entries": entries,
+        });
+        if args.pretty {
+            println!("{}", serde_json::to_string_pretty(&value)?);
+        } else {
+            println!("{}", serde_json::to_string(&value)?);
+        }
+        return Ok(());
+    }
+    println!("Trust store: {}", path.display());
+    if entries.is_empty() {
+        println!("No trusted capsule issuers.");
+        return Ok(());
+    }
+    println!("{:<24} {:<10} {}", "ID", "Algorithm", "Key (base64)");
+    println!("{}", "-".repeat(72));
+    for entry in entries {
+        println!(
+            "{:<24} {:<10} {}",
+            entry.id,
+            entry.alg,
+            truncate_payload(&entry.key_b64, 44)
+        );
+    }
+    Ok(())
+}
+
+fn read_key_b64(args: &CapsuleTrustAddArgs) -> Result<String> {
+    if let Some(key) = args.key.as_ref() {
+        Ok(key.trim().to_string())
+    } else if let Some(path) = args.key_file.as_ref() {
+        Ok(std::fs::read_to_string(path)
+            .with_context(|| format!("reading key from {}", path.display()))?
+            .trim()
+            .to_string())
+    } else {
+        bail!("provide --key <b64> or --key-file <path>");
+    }
+}
+
+fn validate_trust_key(alg: &str, key_b64: &str) -> Result<()> {
+    let bytes = base64::engine::general_purpose::STANDARD
+        .decode(key_b64)
+        .context("decoding base64 key")?;
+    match alg {
+        "ed25519" => {
+            if bytes.len() != 32 {
+                bail!("ed25519 keys must be 32 bytes (got {})", bytes.len());
+            }
+        }
+        "secp256k1" => {
+            if !(bytes.len() == 33 || bytes.len() == 64 || bytes.len() == 65) {
+                bail!(
+                    "secp256k1 keys should be 33, 64, or 65 bytes (got {})",
+                    bytes.len()
+                );
+            }
+        }
+        _ => bail!("unsupported algorithm '{}'", alg),
+    }
+    Ok(())
+}
+
+fn cmd_capsule_trust_add(args: &CapsuleTrustAddArgs) -> Result<()> {
+    let mut entries =
+        capsule_trust::load_trust_entries().context("loading existing trust entries")?;
+    let key_b64 = read_key_b64(args)?;
+    validate_trust_key(&args.alg, &key_b64)?;
+    if let Some(entry) = entries.iter_mut().find(|e| e.id == args.id) {
+        if !args.replace {
+            bail!(
+                "issuer '{}' already exists; pass --replace to overwrite",
+                args.id
+            );
+        }
+        entry.alg = args.alg.clone();
+        entry.key_b64 = key_b64;
+    } else {
+        entries.push(capsule_trust::TrustEntry {
+            id: args.id.clone(),
+            alg: args.alg.clone(),
+            key_b64,
+        });
+        entries.sort_by(|a, b| a.id.cmp(&b.id));
+    }
+    capsule_trust::save_trust_entries(&entries).context("writing trust store")?;
+    arw_core::rpu::reload_trust();
+    println!(
+        "Issuer '{}' ({}) saved to {}",
+        args.id,
+        args.alg,
+        capsule_trust::trust_store_path().display()
+    );
+    Ok(())
+}
+
+fn cmd_capsule_trust_remove(args: &CapsuleTrustRemoveArgs) -> Result<()> {
+    let mut entries =
+        capsule_trust::load_trust_entries().context("loading existing trust entries")?;
+    let before = entries.len();
+    entries.retain(|entry| entry.id != args.id);
+    if entries.len() == before {
+        if args.allow_missing {
+            println!("Issuer '{}' not present; nothing to do.", args.id);
+            return Ok(());
+        } else {
+            bail!("issuer '{}' not found", args.id);
+        }
+    }
+    capsule_trust::save_trust_entries(&entries).context("writing trust store")?;
+    arw_core::rpu::reload_trust();
+    println!(
+        "Removed issuer '{}' from {}",
+        args.id,
+        capsule_trust::trust_store_path().display()
+    );
+    Ok(())
+}
+
+fn cmd_capsule_trust_rotate(args: &CapsuleTrustRotateArgs) -> Result<()> {
+    if args.alg != "ed25519" {
+        bail!("only ed25519 rotation is currently supported");
+    }
+    let mut entries =
+        capsule_trust::load_trust_entries().context("loading existing trust entries")?;
+    let entry = entries
+        .iter_mut()
+        .find(|entry| entry.id == args.id)
+        .ok_or_else(|| anyhow!("issuer '{}' not found", args.id))?;
+
+    let (pub_b64, priv_b64) = generate_ed25519_pair_b64()?;
+    entry.alg = args.alg.clone();
+    entry.key_b64 = pub_b64.clone();
+    capsule_trust::save_trust_entries(&entries).context("writing trust store")?;
+    arw_core::rpu::reload_trust();
+
+    if let Some(path) = args.out_pub.as_ref() {
+        std::fs::write(path, &pub_b64)
+            .with_context(|| format!("writing public key to {}", path.display()))?;
+    }
+    if let Some(path) = args.out_priv.as_ref() {
+        std::fs::write(path, &priv_b64)
+            .with_context(|| format!("writing private key to {}", path.display()))?;
+    }
+
+    let output = json!({
+        "issuer": args.id,
+        "alg": args.alg,
+        "pubkey_b64": pub_b64,
+        "privkey_b64": priv_b64,
+        "trust_store": capsule_trust::trust_store_path().display().to_string(),
+    });
+    println!("{}", serde_json::to_string_pretty(&output)?);
+    eprintln!("Note: store the private key securely and distribute the public key to peers.");
+
+    if args.reload {
+        let client = Client::builder()
+            .timeout(Duration::from_secs(args.timeout))
+            .build()
+            .context("building HTTP client for reload")?;
+        let base = args.base.trim_end_matches('/');
+        let url = format!("{}/admin/rpu/reload", base);
+        let token = resolve_admin_token(&args.admin_token);
+        let resp = with_admin_headers(client.post(&url), token.as_deref())
+            .send()
+            .with_context(|| format!("requesting {}", url))?;
+        let status = resp.status();
+        if status.is_success() {
+            println!("Trust store reload requested via {}", url);
+        } else {
+            let text = resp.text().unwrap_or_default();
+            eprintln!(
+                "Warning: reload request returned {}: {}",
+                status,
+                text.trim()
+            );
+        }
+    }
+
+    Ok(())
+}
+
 fn summarize_teardown_capsule(value: &JsonValue) -> String {
     let id = value
         .get("id")
@@ -10517,6 +11182,21 @@ fn format_relative_from_now(target_ms: u64, now_ms: u64) -> String {
     } else {
         format!("{} ago", label)
     }
+}
+
+fn generate_ed25519_pair_b64() -> Result<(String, String)> {
+    use ed25519_dalek::SigningKey;
+    use rand::rngs::OsRng;
+    use rand_core::TryRngCore;
+    let mut rng = OsRng;
+    let mut sk_bytes = [0u8; 32];
+    rng.try_fill_bytes(&mut sk_bytes)
+        .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+    let sk = SigningKey::from_bytes(&sk_bytes);
+    let pk = sk.verifying_key();
+    let sk_b64 = base64::engine::general_purpose::STANDARD.encode(sk.to_bytes());
+    let pk_b64 = base64::engine::general_purpose::STANDARD.encode(pk.to_bytes());
+    Ok((pk_b64, sk_b64))
 }
 
 fn cmd_sign_ed25519(sk_b64: &str, capsule_file: &str, out: Option<&str>) -> Result<()> {

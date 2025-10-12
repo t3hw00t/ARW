@@ -192,7 +192,7 @@ Alpha capsule lifecycle that refreshes reversible denies at runtime boundaries a
 - Notes:
   - Extends gating capsules with leases so protections renew without restarts.
   - Instruments admin middleware, tool execution, and egress to refresh capsules proactively.
-  - Outstanding backlog: proxy refresh + UX/CLI tooling tracked under Security & Admin → Asimov Capsule Guard.
+- Admin tooling surfaces capsule presets, live status, and audit trails via the web models console and CLI (`arw-cli capsule preset|audit|trust`).
 
 ### Cache Policy & Action Cache
 

@@ -695,6 +695,85 @@ pub fn start_refresh_task(state: AppState) -> TaskHandle {
     )
 }
 
+#[derive(Debug)]
+pub enum CapsuleAdoptError {
+    VerificationFailed,
+}
+
+pub async fn adopt_capsule_direct(
+    state: &AppState,
+    capsule: &GatingCapsule,
+    corr: Option<&RequestCorrelation>,
+) -> Result<AdoptOutcome, CapsuleAdoptError> {
+    if !arw_core::rpu::verify_capsule(capsule) {
+        publish_failure(state, Some(&capsule.id), "verification failed", corr).await;
+        return Err(CapsuleAdoptError::VerificationFailed);
+    }
+    let now = now_ms();
+    let outcome = state.capsules().adopt(capsule, now).await;
+    if outcome.notify {
+        publish_capsule_applied(state, &outcome.snapshot, corr).await;
+    }
+    Ok(outcome)
+}
+
+async fn publish_capsule_applied(
+    state: &AppState,
+    snapshot: &CapsuleSnapshot,
+    corr: Option<&RequestCorrelation>,
+) {
+    let mut event = Map::with_capacity(9);
+    event.insert("id".into(), Value::String(snapshot.id.clone()));
+    event.insert("version".into(), Value::String(snapshot.version.clone()));
+    event.insert(
+        "issuer".into(),
+        snapshot
+            .issuer
+            .as_ref()
+            .map(|issuer| Value::String(issuer.clone()))
+            .unwrap_or(Value::Null),
+    );
+    event.insert(
+        "applied_ms".into(),
+        Value::Number(snapshot.applied_ms.into()),
+    );
+    event.insert(
+        "hop_ttl".into(),
+        snapshot
+            .hop_ttl
+            .map(|ttl| Value::Number((ttl as u64).into()))
+            .unwrap_or(Value::Null),
+    );
+    event.insert(
+        "denies".into(),
+        Value::Number((snapshot.denies as u64).into()),
+    );
+    event.insert(
+        "contracts".into(),
+        Value::Number((snapshot.contracts as u64).into()),
+    );
+    event.insert(
+        "lease_until_ms".into(),
+        snapshot
+            .lease_until_ms
+            .map(|v| Value::Number(v.into()))
+            .unwrap_or(Value::Null),
+    );
+    event.insert(
+        "renew_within_ms".into(),
+        snapshot
+            .renew_within_ms
+            .map(|v| Value::Number(v.into()))
+            .unwrap_or(Value::Null),
+    );
+    add_corr_fields(&mut event, corr);
+    state
+        .bus()
+        .publish(TOPIC_POLICY_CAPSULE_APPLIED, &Value::Object(event));
+    let snapshot_json = state.capsules().snapshot().await;
+    read_models::publish_read_model_patch(&state.bus(), "policy_capsules", &snapshot_json);
+}
+
 pub async fn capsule_mw(state: AppState, req: Request<Body>, next: Next) -> Response {
     let corr = request_ctx::context(&req);
     match apply_capsule(&state, req.headers(), corr.as_ref()).await {
@@ -739,76 +818,14 @@ async fn apply_capsule(
             return Err(resp);
         }
     };
-    if !arw_core::rpu::verify_capsule(&capsule) {
-        publish_failure(state, Some(&capsule.id), "verification failed", corr).await;
-        return Err(error_response(
+    match adopt_capsule_direct(state, &capsule, corr).await {
+        Ok(_) => Ok(()),
+        Err(CapsuleAdoptError::VerificationFailed) => Err(error_response(
             StatusCode::FORBIDDEN,
             "capsule_verification_failed",
             "Capsule verification failed",
-        ));
+        )),
     }
-    let now = now_ms();
-    let outcome = state.capsules().adopt(&capsule, now).await;
-    if outcome.notify {
-        let mut event = Map::with_capacity(9);
-        event.insert("id".into(), Value::String(outcome.snapshot.id.clone()));
-        event.insert(
-            "version".into(),
-            Value::String(outcome.snapshot.version.clone()),
-        );
-        event.insert(
-            "issuer".into(),
-            outcome
-                .snapshot
-                .issuer
-                .as_ref()
-                .map(|issuer| Value::String(issuer.clone()))
-                .unwrap_or(Value::Null),
-        );
-        event.insert(
-            "applied_ms".into(),
-            Value::Number(outcome.snapshot.applied_ms.into()),
-        );
-        event.insert(
-            "hop_ttl".into(),
-            outcome
-                .snapshot
-                .hop_ttl
-                .map(|ttl| Value::Number((ttl as u64).into()))
-                .unwrap_or(Value::Null),
-        );
-        event.insert(
-            "denies".into(),
-            Value::Number((outcome.snapshot.denies as u64).into()),
-        );
-        event.insert(
-            "contracts".into(),
-            Value::Number((outcome.snapshot.contracts as u64).into()),
-        );
-        event.insert(
-            "lease_until_ms".into(),
-            outcome
-                .snapshot
-                .lease_until_ms
-                .map(|v| Value::Number(v.into()))
-                .unwrap_or(Value::Null),
-        );
-        event.insert(
-            "renew_within_ms".into(),
-            outcome
-                .snapshot
-                .renew_within_ms
-                .map(|v| Value::Number(v.into()))
-                .unwrap_or(Value::Null),
-        );
-        add_corr_fields(&mut event, corr);
-        state
-            .bus()
-            .publish(TOPIC_POLICY_CAPSULE_APPLIED, &Value::Object(event));
-        let snapshot = state.capsules().snapshot().await;
-        read_models::publish_read_model_patch(&state.bus(), "policy_capsules", &snapshot);
-    }
-    Ok(())
 }
 
 fn extract_header(headers: &HeaderMap) -> CapsuleHeader<'_> {

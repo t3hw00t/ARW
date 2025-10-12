@@ -50,6 +50,33 @@
       <div id="runtimeHints"></div>
       <div id="errorHints" class="models-runtime__errors"></div>
     </div>
+    <div class="card capsule-card" id="capsuleCard">
+      <div class="capsule-header">
+        <h2>Policy capsules</h2>
+        <div class="capsule-actions" role="toolbar" aria-label="Capsule presets">
+          <select id="capsulePresetSelect" aria-label="Preset selection"></select>
+          <button id="capsuleAdoptBtn">Adopt preset</button>
+          <button id="capsuleRefreshBtn">Refresh status</button>
+        </div>
+      </div>
+      <div class="capsule-reason">
+        <label for="capsuleReason" class="capsule-reason__label">Audit reason (optional)</label>
+        <input id="capsuleReason" class="models-input" placeholder="Optional reason for audit trail" autocomplete="off">
+      </div>
+      <div id="capsuleActionStatus" class="capsule-status capsule-status--message" role="status" aria-live="polite"></div>
+      <div id="capsuleStatusSummary" class="capsule-status" role="status" aria-live="polite"></div>
+      <div id="capsuleStatusList" class="capsule-list" aria-live="polite"></div>
+      <div class="capsule-actions-row">
+        <button id="capsuleTeardownAllBtn">Tear down all</button>
+      </div>
+      <div class="capsule-audit">
+        <div class="capsule-audit-header">
+          <h3>Audit trail</h3>
+          <button id="capsuleAuditRefresh">Refresh audit</button>
+        </div>
+        <div id="capsuleAuditLog" class="capsule-audit-log" aria-live="polite"></div>
+      </div>
+    </div>
     </main>
     <script src="/admin/ui/assets/models.js"></script>
   </body>

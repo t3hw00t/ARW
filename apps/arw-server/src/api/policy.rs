@@ -1,6 +1,9 @@
 use axum::http::HeaderMap;
 use axum::response::IntoResponse;
-use axum::{extract::State, Json};
+use axum::{
+    extract::{Query, State},
+    Json,
+};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
@@ -9,9 +12,18 @@ use std::path::Path;
 use tokio::fs as afs;
 use utoipa::ToSchema;
 
+use super::events::EventsJournalResponse;
 use crate::config;
-use crate::{capsule_guard, request_ctx, tools::guardrails, AppState};
+use crate::{
+    capsule_guard::{self, CapsuleAdoptError},
+    request_ctx,
+    tools::guardrails,
+    AppState,
+};
+use arw_core::capsule_presets::{self, CapsulePresetError};
+use arw_events::Envelope;
 use arw_policy::{AbacRequest, Entity};
+use arw_protocol::GatingCapsule;
 use arw_topics as topics;
 use tracing::{info, warn};
 
@@ -245,6 +257,334 @@ pub async fn policy_guardrails_apply(
         request_id: corr.as_ref().map(|c| c.request_id().to_string()),
     })
     .into_response()
+}
+
+#[derive(Serialize, ToSchema)]
+pub struct CapsulePresetSummaryResponse {
+    pub id: String,
+    pub file_name: String,
+    pub path: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub version: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub issuer: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub hop_ttl: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub lease_duration_ms: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub renew_within_ms: Option<u64>,
+    pub denies: usize,
+    pub contracts: usize,
+    pub signature_present: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sha256: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub modified_ms: Option<u64>,
+}
+
+impl From<capsule_presets::CapsulePresetSummary> for CapsulePresetSummaryResponse {
+    fn from(summary: capsule_presets::CapsulePresetSummary) -> Self {
+        Self {
+            id: summary.id,
+            file_name: summary.file_name,
+            path: summary.path,
+            version: summary.version,
+            issuer: summary.issuer,
+            hop_ttl: summary.hop_ttl,
+            lease_duration_ms: summary.lease_duration_ms,
+            renew_within_ms: summary.renew_within_ms,
+            denies: summary.denies,
+            contracts: summary.contracts,
+            signature_present: summary.signature_present,
+            sha256: summary.sha256,
+            modified_ms: summary.modified_ms,
+        }
+    }
+}
+
+#[derive(Serialize, ToSchema)]
+pub struct CapsulePresetListResponse {
+    pub presets: Vec<CapsulePresetSummaryResponse>,
+    pub count: usize,
+}
+
+/// List capsule presets packaged with the install.
+#[utoipa::path(
+    get,
+    path = "/admin/policy/capsules/presets",
+    tag = "Policy",
+    responses(
+        (status = 200, description = "Available capsule presets", body = CapsulePresetListResponse),
+        (status = 401, description = "Unauthorized", body = arw_protocol::ProblemDetails),
+        (status = 500, description = "Preset load failed", body = arw_protocol::ProblemDetails)
+    )
+)]
+pub async fn policy_capsules_presets(headers: HeaderMap) -> impl IntoResponse {
+    if let Err(resp) = crate::responses::require_admin(&headers).await {
+        return *resp;
+    }
+    match capsule_presets::list_capsule_presets() {
+        Ok(presets) => {
+            let presets: Vec<CapsulePresetSummaryResponse> = presets
+                .into_iter()
+                .map(|preset| CapsulePresetSummaryResponse::from(preset.summary))
+                .collect();
+            let response = CapsulePresetListResponse {
+                count: presets.len(),
+                presets,
+            };
+            Json(response).into_response()
+        }
+        Err(err) => {
+            tracing::error!(
+                target: "arw::policy",
+                error = %err,
+                "failed to list capsule presets"
+            );
+            crate::responses::problem_response(
+                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                "Preset Load Failed",
+                Some(&err.to_string()),
+            )
+        }
+    }
+}
+
+#[derive(Deserialize, ToSchema)]
+pub struct CapsuleAdoptRequest {
+    #[serde(default)]
+    pub preset_id: Option<String>,
+    #[serde(default)]
+    pub capsule: Option<Value>,
+    #[serde(default)]
+    pub reason: Option<String>,
+}
+
+#[derive(Serialize, ToSchema)]
+pub struct CapsuleAdoptResponse {
+    pub ok: bool,
+    pub notify: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub preset_id: Option<String>,
+    pub capsule_id: String,
+    pub snapshot: Value,
+}
+
+/// Adopt a capsule preset or inline capsule payload.
+#[utoipa::path(
+    post,
+    path = "/admin/policy/capsules/adopt",
+    tag = "Policy",
+    request_body = CapsuleAdoptRequest,
+    responses(
+        (status = 200, description = "Capsule adopted", body = CapsuleAdoptResponse),
+        (status = 400, description = "Invalid request", body = arw_protocol::ProblemDetails),
+        (status = 401, description = "Unauthorized", body = arw_protocol::ProblemDetails),
+        (status = 403, description = "Verification failed", body = arw_protocol::ProblemDetails),
+        (status = 404, description = "Preset not found", body = arw_protocol::ProblemDetails),
+        (status = 500, description = "Preset load failed", body = arw_protocol::ProblemDetails)
+    )
+)]
+pub async fn policy_capsules_adopt(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(req): Json<CapsuleAdoptRequest>,
+) -> impl IntoResponse {
+    if let Err(resp) = crate::responses::require_admin(&headers).await {
+        return *resp;
+    }
+
+    let preset_opt = req.preset_id.as_ref().and_then(|raw| {
+        let trimmed = raw.trim();
+        if trimmed.is_empty() {
+            None
+        } else {
+            Some(trimmed)
+        }
+    });
+    let has_capsule_payload = req.capsule.is_some();
+
+    if preset_opt.is_some() && has_capsule_payload {
+        return crate::responses::problem_response(
+            axum::http::StatusCode::BAD_REQUEST,
+            "Bad Request",
+            Some("provide either `preset_id` or `capsule`, not both"),
+        );
+    }
+    if preset_opt.is_none() && !has_capsule_payload {
+        return crate::responses::problem_response(
+            axum::http::StatusCode::BAD_REQUEST,
+            "Bad Request",
+            Some("provide `preset_id` or an inline `capsule` payload"),
+        );
+    }
+
+    let (capsule, preset_id) = match preset_opt {
+        Some(id) => match capsule_presets::load_capsule_preset(id) {
+            Ok(preset) => (preset.capsule, Some(id.to_string())),
+            Err(CapsulePresetError::NotFound(_)) => {
+                return crate::responses::problem_response(
+                    axum::http::StatusCode::NOT_FOUND,
+                    "Preset Not Found",
+                    Some("capsule preset not found"),
+                );
+            }
+            Err(err) => {
+                tracing::error!(
+                    target: "arw::policy",
+                    preset_id = id,
+                    error = %err,
+                    "failed to load capsule preset"
+                );
+                return crate::responses::problem_response(
+                    axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                    "Preset Load Failed",
+                    Some(&err.to_string()),
+                );
+            }
+        },
+        None => {
+            let value = req.capsule.clone().unwrap();
+            match serde_json::from_value::<GatingCapsule>(value) {
+                Ok(cap) => (cap, None),
+                Err(err) => {
+                    return crate::responses::problem_response(
+                        axum::http::StatusCode::BAD_REQUEST,
+                        "Invalid Capsule",
+                        Some(&err.to_string()),
+                    );
+                }
+            }
+        }
+    };
+
+    let corr = request_ctx::current();
+    match capsule_guard::adopt_capsule_direct(&state, &capsule, corr.as_ref()).await {
+        Ok(outcome) => {
+            if let Some(reason) = req.reason.as_deref() {
+                info!(
+                    target: "arw::policy",
+                    capsule_id = %outcome.snapshot.id,
+                    preset = preset_id.as_deref().unwrap_or("inline"),
+                    reason,
+                    "policy capsule adopted via admin endpoint"
+                );
+            } else {
+                info!(
+                    target: "arw::policy",
+                    capsule_id = %outcome.snapshot.id,
+                    preset = preset_id.as_deref().unwrap_or("inline"),
+                    "policy capsule adopted via admin endpoint"
+                );
+            }
+            let snapshot = state.capsules().snapshot().await;
+            Json(CapsuleAdoptResponse {
+                ok: true,
+                notify: outcome.notify,
+                preset_id,
+                capsule_id: outcome.snapshot.id,
+                snapshot,
+            })
+            .into_response()
+        }
+        Err(CapsuleAdoptError::VerificationFailed) => crate::responses::problem_response(
+            axum::http::StatusCode::FORBIDDEN,
+            "Capsule Verification Failed",
+            Some("capsule verification failed"),
+        ),
+    }
+}
+
+#[derive(Deserialize, ToSchema)]
+pub struct CapsuleAuditQuery {
+    #[serde(default)]
+    pub limit: Option<usize>,
+    #[serde(default)]
+    pub prefix: Option<String>,
+}
+
+/// Return recent capsule audit events (policy.capsule.*).
+#[utoipa::path(
+    get,
+    path = "/admin/policy/capsules/audit",
+    tag = "Policy",
+    params(
+        ("limit" = Option<usize>, Query, description = "Max entries to return (default 50, max 500)"),
+        ("prefix" = Option<String>, Query, description = "CSV of additional prefixes to include")
+    ),
+    responses(
+        (status = 200, description = "Capsule audit entries", body = EventsJournalResponse),
+        (status = 401, description = "Unauthorized", body = arw_protocol::ProblemDetails),
+        (status = 404, description = "Journal disabled", body = arw_protocol::ProblemDetails),
+        (status = 500, description = "Journal read failed", body = arw_protocol::ProblemDetails)
+    )
+)]
+pub async fn policy_capsules_audit(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Query(query): Query<CapsuleAuditQuery>,
+) -> impl IntoResponse {
+    if let Err(resp) = crate::responses::require_admin(&headers).await {
+        return *resp;
+    }
+    if !state.kernel_enabled() {
+        return crate::responses::problem_response(
+            axum::http::StatusCode::NOT_FOUND,
+            "Journal Disabled",
+            Some("Capsule audit requires the kernel event journal"),
+        );
+    }
+    let limit = query.limit.unwrap_or(50).min(500);
+    let mut prefixes: Vec<String> = vec!["policy.capsule.".to_string()];
+    if let Some(extra) = &query.prefix {
+        for raw in extra.split(',') {
+            let trimmed = raw.trim();
+            if trimmed.is_empty() {
+                continue;
+            }
+            let lower = trimmed.to_ascii_lowercase();
+            if !prefixes.iter().any(|p| p == &lower) {
+                prefixes.push(lower);
+            }
+        }
+    }
+    let query_prefixes = prefixes.clone();
+    match state
+        .kernel()
+        .tail_events_async(limit as i64, query_prefixes.clone())
+        .await
+    {
+        Ok((rows, total)) => {
+            let entries: Vec<Envelope> = rows
+                .into_iter()
+                .map(|row| Envelope {
+                    time: row.time,
+                    kind: row.kind,
+                    payload: row.payload,
+                    policy: None,
+                    ce: None,
+                })
+                .collect();
+            let total_i64 = total.max(0);
+            let truncated = total_i64 > entries.len() as i64;
+            let response = EventsJournalResponse {
+                prefixes: Some(query_prefixes),
+                limit,
+                total_matched: total_i64 as usize,
+                truncated,
+                skipped_lines: 0,
+                source_files: vec!["sqlite:events".to_string()],
+                entries,
+            };
+            (axum::http::StatusCode::OK, Json(response)).into_response()
+        }
+        Err(err) => crate::responses::problem_response(
+            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+            "Journal Read Failed",
+            Some(&err.to_string()),
+        ),
+    }
 }
 
 #[derive(Deserialize, ToSchema)]

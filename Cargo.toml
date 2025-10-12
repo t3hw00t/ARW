@@ -77,6 +77,7 @@ sysinfo = "0.30"
 os_info = "3"
 base64 = "0.22"
 ipnet = "2"
+sha2 = "0.10"
 
 [profile.dev]
 opt-level = 1

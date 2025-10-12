@@ -182,7 +182,7 @@ Operational Excellence & Release Engineering
   - [Kernel] [t-250916130001-asg01] RPU telemetry + `/state/policy/capsules` read-model surfacing adoption and TTL — done (capsule leases, expired events)
   - [Kernel] [t-250916130002-asg02] Layered gating denies/contracts with lease sweeper + emergency teardown hook — done (lease sweeper + emergency teardown API/CLI shipped; Launcher UX polish remains)
   - [Kernel] [t-250916130003-asg03] Auto-replay verified capsules before actions/tools/egress/policy evaluation — done (proxy + logic unit entry points now refresh capsules; coverage via egress/policy regression tests)
-  - [Kernel] [t-250916130004-asg04] Admin UX + CLI for capsule presets, rotation, and audit trails — backlog (ties into Phase 3 UX controls)
+- [Kernel] [t-250916130004-asg04] Admin UX + CLI for capsule presets, rotation, and audit trails — done (admin models UI now manages presets/audit; CLI adds preset/audit/trust commands)
 Caching & Performance (High Priority)
 - [Kernel] [t-250913001000-1001] Llama.cpp prompt cache: set `cache_prompt: true` in requests; doc server `--prompt-cache` for persistence — done (requests enforce the flag, smoke helper appends `--prompt-cache`, and tests cover the payload shape)
 - [Kernel] [t-250913001003-1002] CAS HTTP caching: add `ETag`, `Last-Modified`, long‑lived `Cache-Control`, and 304 handling to `/admin/models/by-hash/{sha256}` — done

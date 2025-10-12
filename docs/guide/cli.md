@@ -87,6 +87,16 @@ Policy Capsules
 - Inspect active capsules
   - `arw-cli capsule status --limit 10`
   - JSON mode: `arw-cli capsule status --json --pretty`
+- List server-managed presets
+  - `arw-cli capsule preset list --base http://127.0.0.1:8091`
+  - Local configs only: `arw-cli capsule preset list --local --json --pretty`
+- Adopt a preset via the server
+  - `arw-cli capsule preset adopt --id capsule.strict-egress --base http://127.0.0.1:8091 --reason "incident response" --show-status`
+- Audit capsule events
+  - `arw-cli capsule audit --base http://127.0.0.1:8091 --limit 25`
+- Manage trust issuers
+  - Inspect current entries: `arw-cli capsule trust list`
+  - Rotate keys and reload trust store: `arw-cli capsule trust rotate --id local-admin --reload --base http://127.0.0.1:8091`
 - Emergency teardown (admin)
   - Preview: `arw-cli capsule teardown --id capsule-http --dry-run`
   - Remove all: `arw-cli capsule teardown --all --reason "reset misconfigured policy"`

@@ -65,6 +65,131 @@ h1{
   margin-top: var(--sp2);
 }
 
+.capsule-card{
+  margin-top: var(--sp3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp2);
+}
+
+.capsule-header{
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: var(--sp2);
+  align-items: center;
+}
+
+.capsule-actions{
+  display: inline-flex;
+  gap: var(--sp1);
+  flex-wrap: wrap;
+}
+
+#capsulePresetSelect{
+  min-width: 200px;
+  padding: 6px;
+}
+
+.capsule-reason{
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp1);
+}
+
+.capsule-reason__label{
+  font-size: 12px;
+  color: var(--color-ink-subtle);
+}
+
+.capsule-status{
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.capsule-status--message{
+  font-weight: 500;
+  color: var(--color-ink-subtle);
+}
+
+.capsule-status--message.error{
+  color: var(--color-danger, #b00020);
+}
+
+.capsule-list{
+  display: grid;
+  gap: var(--sp1);
+}
+
+.capsule-entry{
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-2);
+  padding: var(--sp1);
+  gap: var(--sp1);
+  background: var(--surface);
+}
+
+.capsule-entry__meta{
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 13px;
+}
+
+.capsule-entry__meta strong{
+  font-size: 14px;
+}
+
+.capsule-entry__buttons{
+  display: flex;
+  align-items: center;
+}
+
+.capsule-entry__buttons button{
+  white-space: nowrap;
+}
+
+.capsule-actions-row{
+  display: flex;
+  justify-content: flex-end;
+}
+
+.capsule-audit{
+  border-top: 1px solid var(--color-line);
+  padding-top: var(--sp2);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp1);
+}
+
+.capsule-audit-header{
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.capsule-audit-log{
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  max-height: 220px;
+  overflow-y: auto;
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-2);
+  padding: var(--sp1);
+  background: rgba(0,0,0,0.02);
+}
+
+.capsule-audit-entry{
+  margin-bottom: var(--sp1);
+}
+
+.capsule-audit-entry:last-child{
+  margin-bottom: 0;
+}
+
 @media (max-width: 720px){
   .models-status{
     flex-wrap: wrap;

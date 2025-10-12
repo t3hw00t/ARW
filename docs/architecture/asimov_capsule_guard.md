@@ -46,8 +46,8 @@ The remaining gap is operational coverage: workers and higher-level runners stil
 3. ✅ Update Logic Unit / Recipe runners to request capsule refresh when executing automation bundles so packaged strategies inherit the guard. Installer flow now refreshes capsules and ships with coverage.
 
 ### Phase 3 — UX & Operational Controls
-1. ✅ (Launcher 0.2.0-dev) Capsule presets land in the Models → Egress console: the **Strict Egress** toggle ships a signed capsule (`configs/capsules/strict_egress.json`), surfaces renewal windows, and shows TTL countdowns as capsules auto-refresh (2025-10-12).
-2. ✅ Provide CLI/admin endpoints to mint, inspect, and revoke capsules—including emergency teardown hooks for misconfigurations (`/admin/policy/capsules/teardown`, `arw-cli capsule teardown`).
+1. ✅ (Launcher 0.2.0-dev / Admin console) Capsule presets land in the Launcher and the web models page: the **Strict Egress** toggle ships a signed capsule (`configs/capsules/strict_egress.json`), surfaces renewal windows, and shows TTL countdowns as capsules auto-refresh (2025-10-12).
+2. ✅ Provide CLI/admin endpoints to mint, inspect, and revoke capsules—including presets and audit trails—via `/admin/policy/capsules/{presets,adopt,audit,teardown}` and the associated CLI commands (`arw-cli capsule preset list|adopt`, `arw-cli capsule audit`, `arw-cli capsule teardown`).
 3. ✅ Documented capsule deployment patterns: boot-time seeding via `configs/gating.toml` / env, Launcher/CLI runtime layers for incidents, and trust-store rotation via `/admin/rpu/reload` (2025-10-12).
 
 ## Deployment Patterns
@@ -58,8 +58,9 @@ The remaining gap is operational coverage: workers and higher-level runners stil
 - When packaging for teams, include the preset capsule and update `configs/trust_capsules.json` with the public key that will sign rotations.
 
 ### Layer runtime presets and incidents
-- Use the Launcher (Models → Egress → **Policy capsules**) to toggle posture presets. The **Strict Egress** toggle sends the signed capsule in HTTP headers (`X-ARW-Capsule`) and shows renewal/expiry countdowns so operators can watch leases in real time.
-- CLI automation: `arw-cli capsule adopt configs/capsules/strict_egress.json --base http://127.0.0.1:8091 --show-status` verifies the signature against `configs/trust_capsules.json`, adopts the preset, and prints a post-adoption summary. Pass `--skip-verify` if you need to bypass local verification (for example during bootstrapping).
+- Use the Launcher (Models → Egress → **Policy capsules**) or the admin models page to toggle posture presets. The card surfaces renewal/expiry countdowns so operators can watch leases in real time.
+- CLI automation: `arw-cli capsule preset list --base http://127.0.0.1:8091` enumerates available presets and `arw-cli capsule preset adopt --id capsule.strict-egress --base http://127.0.0.1:8091` applies one through the new `/admin/policy/capsules/{presets,adopt}` endpoints. Legacy flows that adopt a local file remain available via `arw-cli capsule adopt configs/capsules/strict_egress.json`.
+- Tail capsule events with `arw-cli capsule audit --base http://127.0.0.1:8091 --limit 25` or use the admin models page audit panel for a live view.
 - Raw HTTP flows can replay the header directly when needed:
 
   ```bash
@@ -68,10 +69,10 @@ The remaining gap is operational coverage: workers and higher-level runners stil
     http://127.0.0.1:8091/state/policy/capsules >/dev/null
   ```
 
-- Inspect active capsules and renewal health with `arw-cli capsule status --base http://127.0.0.1:8091` or the Launcher telemetry cards; remove layers with `arw-cli capsule teardown --id capsule.strict-egress` or the UI toggle.
+- Inspect active capsules and renewal health with `arw-cli capsule status --base http://127.0.0.1:8091` or the UI; remove layers with `arw-cli capsule teardown --id capsule.strict-egress` / `--all` or the on-page teardown controls.
 
 ### Rotate trust issuers
-- Trust issuers live in `configs/trust_capsules.json`. Commit the new public key (for example from `arw-cli capsule gen-ed25519`) before distributing a refreshed capsule.
+- Trust issuers live in `configs/trust_capsules.json`. Use `arw-cli capsule trust list` to inspect the current set and `arw-cli capsule trust rotate --id local-admin --reload` to generate a new ed25519 pair, persist it, and trigger `/admin/rpu/reload`.
 - Reload the trust store without restarting the service via `curl -X POST -H "X-ARW-Admin: $ARW_ADMIN_TOKEN" http://127.0.0.1:8091/admin/rpu/reload`.
 - Use `/admin/rpu/trust` or `arw-cli capsule status --json` to audit the issuer list after rotation.
 

@@ -20,6 +20,10 @@ Commands (summary)
 - `arw-cli capsule verify-ed25519 <pk_b64> <capsule.json> <sig_b64>` — verify signature
 - `arw-cli capsule status [--json] [--limit N]` — inspect active capsules
 - `arw-cli capsule teardown [--id ID] [--all] [--reason TEXT] [--dry-run]` — revoke capsules via the emergency teardown API
+- `arw-cli capsule preset list [--base URL] [--local] [--json {--pretty}]` — enumerate capsule presets served by `/admin/policy/capsules/presets` (or from configs/capsules when `--local`)
+- `arw-cli capsule preset adopt --id ID [--base URL] [--reason TEXT] [--show-status]` — adopt a server-managed preset via `/admin/policy/capsules/adopt`
+- `arw-cli capsule audit [--base URL] [--limit N] [--json {--pretty}]` — tail capsule adoption/teardown events through `/admin/policy/capsules/audit`
+- `arw-cli capsule trust list|add|remove|rotate [...]` — inspect and rotate trusted capsule issuers (writes `configs/trust_capsules.json`; `rotate` can trigger `/admin/rpu/reload`)
 - `arw-cli screenshots backfill-ocr [--lang <code>] [--force] [--dry-run]` — regenerate OCR sidecars via `/admin/tools/run`
 - `arw-cli runtime bundles list [--dir PATH] [--install-dir PATH] [--remote] [--json {--pretty}]` — inspect managed runtime bundle catalogs and installed bundles locally or via `/state/runtime/bundles`
 - `arw-cli runtime bundles reload [--json {--pretty}]` — trigger `/admin/runtime/bundles/reload` to rescan bundle catalogs on the server

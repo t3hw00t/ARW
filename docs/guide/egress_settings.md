@@ -15,7 +15,9 @@ Endpoints (service)
 
 Launcher shortcut
 - The desktop Launcher (Models → Egress → **Policy capsules**) exposes signed presets such as **Strict Egress**. Enabling a preset adopts `configs/capsules/strict_egress.json`, shows live renewal and expiry countdowns, and disabling it tears the capsule down via `/admin/policy/capsules/teardown`.
-- Prefer CLI? Run `arw-cli capsule adopt configs/capsules/strict_egress.json --base http://127.0.0.1:8091 --show-status` to apply the preset, verifying the signature against `configs/trust_capsules.json` before adoption. Omit `--show-status` for a quiet run or add `--skip-verify` when you intentionally bypass local trust checks.
+- The admin models page ships the same capsule controls with a live status list and audit panel backed by `/admin/policy/capsules/{presets,adopt,audit,teardown}`.
+- Prefer CLI? `arw-cli capsule preset list --base http://127.0.0.1:8091` enumerates server-managed presets and `arw-cli capsule preset adopt --id capsule.strict-egress --base http://127.0.0.1:8091 --show-status` applies one while recording an optional audit reason. Legacy flows that adopt local files remain available via `arw-cli capsule adopt configs/capsules/strict_egress.json`.
+- Tail capsule events with `arw-cli capsule audit --base http://127.0.0.1:8091 --limit 25` or the on-page audit trail.
 
 Dynamic proxy
 - The proxy starts/stops/rebinds to `proxy_port` immediately after a successful settings update. No restart needed.
@@ -24,6 +26,12 @@ Examples
 ```bash
 # Inspect
 curl -s http://127.0.0.1:8091/state/egress/settings | jq
+
+# List presets exposed by the server
+arw-cli capsule preset list --base http://127.0.0.1:8091
+
+# Adopt a packaged preset by id and show status afterwards
+arw-cli capsule preset adopt --id capsule.strict-egress --base http://127.0.0.1:8091 --show-status
 
 # Sample
 # {
@@ -116,6 +124,11 @@ arw-cli admin egress scope update --id github \
 
 # Remove a scope
 arw-cli admin egress scope remove --id github
+
+# Review recent capsule events and rotate trust keys
+arw-cli capsule audit --base http://127.0.0.1:8091 --limit 20
+arw-cli capsule trust list
+arw-cli capsule trust rotate --id local-admin --reload --base http://127.0.0.1:8091
 ```
 
 Notes
