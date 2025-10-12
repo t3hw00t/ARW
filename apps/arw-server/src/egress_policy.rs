@@ -886,7 +886,7 @@ fn merge_allowlists(base: Vec<String>, extra: Vec<String>) -> Vec<AllowRule> {
 }
 
 pub async fn resolve_policy(state: &AppState) -> ResolvedPolicy {
-    let _ = capsule_guard::refresh_capsules_if_needed(state).await;
+    let _ = capsule_guard::refresh_capsules(state).await;
     let cfg = state.config_state().lock().await.clone();
     set_configured_multi_label_suffixes(config_multi_label_suffixes(&cfg));
     let posture_str = env_posture()

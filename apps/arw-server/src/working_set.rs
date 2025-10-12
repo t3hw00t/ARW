@@ -10,6 +10,7 @@ use std::collections::{BTreeMap, BinaryHeap};
 use std::sync::Arc;
 use std::time::Duration;
 use std::time::Instant;
+use tokio::sync::mpsc::error::TrySendError;
 
 use arw_topics as topics;
 
@@ -253,7 +254,19 @@ impl WorkingSetObserver for ChannelObserver {
             kind: kind.to_string(),
             payload,
         };
-        let _ = self.tx.blocking_send(evt);
+        if let Err(err) = self.tx.try_send(evt) {
+            match err {
+                TrySendError::Full(evt) => {
+                    let tx = self.tx.clone();
+                    tokio::spawn(async move {
+                        let _ = tx.send(evt).await;
+                    });
+                }
+                TrySendError::Closed(_) => {
+                    // receiver dropped; nothing else to do
+                }
+            }
+        }
     }
 }
 
@@ -345,10 +358,9 @@ where
             "event" => kind
         )
         .increment(1);
+        self.first.emit(kind, Arc::clone(&payload));
         let enriched = self.second.enrich_value(payload.as_ref());
-        let shared = Arc::new(enriched);
-        self.first.emit(kind, Arc::clone(&shared));
-        self.second.publish_enriched(kind, shared.as_ref());
+        self.second.publish_enriched(kind, &enriched);
     }
 }
 
