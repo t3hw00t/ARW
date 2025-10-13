@@ -1,4 +1,5 @@
 use anyhow::Result as AnyResult;
+use arw_core::recipes;
 use chrono::{DateTime, SecondsFormat, Utc};
 use once_cell::sync::{Lazy, OnceCell};
 use serde_json::{json, Value};
@@ -436,6 +437,13 @@ pub(crate) fn start_read_models(state: AppState) -> Vec<TaskHandle> {
 
     handles.push(spawn_read_model(
         &state,
+        "recipes_gallery",
+        Duration::from_millis(5000),
+        |_st| async move { Some(recipes_snapshot().await) },
+    ));
+
+    handles.push(spawn_read_model(
+        &state,
         "route_stats",
         Duration::from_millis(4000),
         |st| async move {
@@ -739,6 +747,13 @@ fn start_read_models_smoke(state: AppState) -> Vec<TaskHandle> {
         "runtime_bundles",
         Duration::from_millis(8_000),
         |st| async move { Some(st.runtime_bundles().snapshot().await) },
+    ));
+
+    handles.push(spawn_read_model(
+        &state,
+        "recipes_gallery",
+        Duration::from_millis(8_000),
+        |_st| async move { Some(recipes_snapshot().await) },
     ));
 
     handles.push(spawn_service_health(&state));
@@ -1438,6 +1453,160 @@ fn env_csv(key: &str, default: &str) -> Vec<String> {
         .collect()
 }
 
+pub(crate) async fn recipes_snapshot() -> Value {
+    with_read_model_singleflight("recipes_gallery", || async {
+        build_recipes_snapshot().await
+    })
+    .await
+}
+
+async fn build_recipes_snapshot() -> Value {
+    let state_dir = crate::util::state_dir();
+    let recipes_dir = state_dir.join("recipes");
+    let generated = Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true);
+
+    if !recipes_dir.exists() {
+        return json!({
+            "generated": generated,
+            "items": [],
+            "invalid": [],
+            "total": 0,
+            "invalid_count": 0,
+        });
+    }
+
+    let state_dir_clone = state_dir.clone();
+    let recipes_dir_clone = recipes_dir.clone();
+    let index = tokio::task::spawn_blocking(move || {
+        collect_recipes_blocking(&state_dir_clone, &recipes_dir_clone)
+    })
+    .await
+    .unwrap_or_default();
+
+    json!({
+        "generated": generated,
+        "items": index.items,
+        "invalid": index.invalid,
+        "total": index.items.len(),
+        "invalid_count": index.invalid.len(),
+    })
+}
+
+#[derive(Default)]
+struct RecipesIndex {
+    items: Vec<Value>,
+    invalid: Vec<Value>,
+}
+
+fn collect_recipes_blocking(state_dir: &Path, recipes_dir: &Path) -> RecipesIndex {
+    let mut index = RecipesIndex::default();
+    let entries = match std::fs::read_dir(recipes_dir) {
+        Ok(entries) => entries,
+        Err(err) => {
+            index.invalid.push(json!({
+                "path": normalized_path_string(recipes_dir),
+                "error": format!("read_dir_failed: {}", err),
+            }));
+            return index;
+        }
+    };
+
+    for entry in entries {
+        let entry = match entry {
+            Ok(entry) => entry,
+            Err(err) => {
+                index.invalid.push(json!({
+                    "path": normalized_path_string(recipes_dir),
+                    "error": format!("entry_error: {}", err),
+                }));
+                continue;
+            }
+        };
+        let path = entry.path();
+        let meta = match entry.metadata() {
+            Ok(meta) => meta,
+            Err(err) => {
+                index.invalid.push(json!({
+                    "path": normalized_path_string(&path),
+                    "error": format!("metadata_error: {}", err),
+                }));
+                continue;
+            }
+        };
+
+        if meta.is_dir() || (meta.is_file() && recipes::looks_like_manifest_candidate(&path)) {
+            match recipes::Recipe::load(&path) {
+                Ok(recipe) => {
+                    index.items.push(build_recipe_entry(&recipe, state_dir));
+                }
+                Err(err) => {
+                    index.invalid.push(json!({
+                        "path": normalized_path_string(&path),
+                        "error": err.to_string(),
+                    }));
+                }
+            }
+        }
+    }
+
+    index.items.sort_by(|a, b| {
+        let a_id = a
+            .get("summary")
+            .and_then(|v| v.get("id"))
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+        let b_id = b
+            .get("summary")
+            .and_then(|v| v.get("id"))
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+        a_id.cmp(b_id)
+    });
+
+    index.invalid.sort_by(|a, b| {
+        let a_path = a.get("path").and_then(|v| v.as_str()).unwrap_or("");
+        let b_path = b.get("path").and_then(|v| v.as_str()).unwrap_or("");
+        a_path.cmp(b_path)
+    });
+
+    index
+}
+
+fn build_recipe_entry(recipe: &recipes::Recipe, state_dir: &Path) -> Value {
+    let summary = recipe.summary().clone();
+    let summary_value = serde_json::to_value(&summary).unwrap_or_else(|_| json!({}));
+    let manifest_json = recipe.manifest().clone();
+    let manifest_bytes = serde_json::to_vec(&manifest_json).unwrap_or_default();
+    let manifest_sha = format!("{:x}", Sha256::digest(&manifest_bytes));
+    let manifest_meta = std::fs::metadata(recipe.manifest_path()).ok();
+    let manifest_modified = manifest_meta
+        .as_ref()
+        .and_then(|meta| meta.modified().ok())
+        .and_then(system_time_to_rfc3339);
+    let manifest_size = manifest_meta.as_ref().map(|meta| meta.len());
+    let manifest_path = normalized_path_string(recipe.manifest_path());
+    let manifest_rel = relative_path_string(state_dir, recipe.manifest_path());
+
+    let source_root = normalized_path_string(recipe.source_root());
+    let source_rel = relative_path_string(state_dir, recipe.source_root());
+
+    json!({
+        "summary": summary_value,
+        "manifest": manifest_json,
+        "manifest_sha256": manifest_sha,
+        "manifest_path": manifest_path,
+        "manifest_rel": manifest_rel,
+        "manifest_modified": manifest_modified,
+        "manifest_size": manifest_size,
+        "source_root": source_root,
+        "source_rel": source_rel,
+        "source_kind": recipe.kind(),
+        "tool_ids": recipe.tool_ids(),
+        "workflow_steps": recipe.workflow_steps(),
+        "permission_modes": recipe.permission_modes(),
+    })
+}
+
 pub(crate) async fn screenshots_snapshot() -> Value {
     with_read_model_singleflight("screenshots_index", || async {
         build_screenshots_snapshot().await
@@ -2088,6 +2257,25 @@ mod tests {
     use tokio::sync::Notify;
     use tokio::time::timeout;
 
+    fn sample_recipe_manifest() -> &'static str {
+        r#"id: sample-recipe
+name: Sample Recipe
+version: "1.0.0"
+model:
+  preferred: "local:llama"
+permissions:
+  file.read: allow
+prompts:
+  system: "Do sample things"
+tools:
+  - id: sample_tool
+    params: {}
+workflows:
+  - step: "do"
+    tool: sample_tool
+"#
+    }
+
     #[tokio::test]
     async fn notes_snapshot_includes_sha_and_content() {
         let dir = tempdir().unwrap();
@@ -2690,6 +2878,33 @@ mod tests {
         assert!(langs_set.contains("eng"));
         assert!(langs_set.contains("de"));
         assert_eq!(items[0]["more_langs"].as_bool(), Some(false));
+    }
+
+    #[tokio::test]
+    async fn recipes_snapshot_collects_installed_manifests() {
+        remove_cached_read_model_for_test("recipes_gallery");
+        let temp = tempdir().expect("tempdir");
+        let mut ctx = crate::test_support::begin_state_env(temp.path());
+        ctx.env
+            .set("ARW_STATE_DIR", temp.path().display().to_string());
+
+        let recipe_dir = temp.path().join("recipes/sample");
+        std::fs::create_dir_all(&recipe_dir).unwrap();
+        std::fs::write(recipe_dir.join("manifest.yaml"), sample_recipe_manifest()).unwrap();
+
+        let snapshot = build_recipes_snapshot().await;
+        assert_eq!(snapshot["total"].as_u64(), Some(1));
+        let items = snapshot["items"].as_array().expect("items array");
+        assert_eq!(items.len(), 1);
+        let first = &items[0];
+        assert_eq!(first["summary"]["id"].as_str(), Some("sample-recipe"));
+        assert_eq!(first["tool_ids"].as_array().map(|arr| arr.len()), Some(1));
+        assert_eq!(
+            first["permission_modes"].as_array().map(|arr| arr.len()),
+            Some(1)
+        );
+
+        remove_cached_read_model_for_test("recipes_gallery");
     }
 
     #[test]

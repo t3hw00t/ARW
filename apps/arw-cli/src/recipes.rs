@@ -1,35 +1,13 @@
-use anyhow::{anyhow, bail, Context, Result};
-use arw_core::effective_paths;
+use anyhow::{bail, Context, Result};
+use arw_core::{
+    effective_paths,
+    recipes::{self, Recipe, RecipeSourceKind, RecipeSummary},
+};
 use clap::{Args, Subcommand};
-use jsonschema::{Draft, JSONSchema};
-use once_cell::sync::Lazy;
-use serde::Serialize;
-use serde_json::{json, Value};
-use std::collections::HashSet;
+use serde_json::json;
 use std::fs;
 use std::path::{Path, PathBuf};
 use walkdir::WalkDir;
-
-static RECIPE_SCHEMA: Lazy<JSONSchema> = Lazy::new(|| {
-    let raw = include_str!(concat!(
-        env!("CARGO_MANIFEST_DIR"),
-        "/../../spec/schemas/recipe_manifest.json"
-    ));
-    let schema_json: Value = serde_json::from_str(raw).expect("recipe schema json to parse");
-    JSONSchema::options()
-        .with_draft(Draft::Draft7)
-        .compile(&schema_json)
-        .expect("recipe schema to compile")
-});
-
-const MANIFEST_CANDIDATES: &[&str] = &[
-    "manifest.yaml",
-    "manifest.yml",
-    "recipe.yaml",
-    "recipe.yml",
-    "manifest.json",
-    "recipe.json",
-];
 
 #[derive(Subcommand)]
 pub enum RecipesCmd {
@@ -75,328 +53,6 @@ pub struct RecipesInstallArgs {
     pub id: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize)]
-pub struct RecipeSummary {
-    pub id: String,
-    pub name: String,
-    pub version: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub preferred_model: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub fallback_model: Option<String>,
-    #[serde(skip_serializing_if = "Vec::is_empty")]
-    pub tags: Vec<String>,
-    pub manifest_path: String,
-}
-
-struct Recipe {
-    summary: RecipeSummary,
-    manifest: Value,
-    manifest_path: PathBuf,
-    source_root: PathBuf,
-    kind: RecipeSourceKind,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum RecipeSourceKind {
-    File,
-    Directory,
-}
-
-impl Recipe {
-    fn load(source: &Path) -> Result<Self> {
-        let meta = fs::metadata(source)
-            .with_context(|| format!("failed to access {}", source.display()))?;
-        if meta.is_dir() {
-            Self::load_from_dir(source)
-        } else if meta.is_file() {
-            Self::load_from_file(source)
-        } else {
-            bail!("{} is neither file nor directory", source.display());
-        }
-    }
-
-    fn load_from_file(path: &Path) -> Result<Self> {
-        let canonical = path
-            .canonicalize()
-            .with_context(|| format!("failed to canonicalize {}", path.display()))?;
-        let manifest = load_manifest_from_file(&canonical)?;
-        Self::from_manifest(
-            manifest,
-            canonical.clone(),
-            canonical,
-            RecipeSourceKind::File,
-        )
-    }
-
-    fn load_from_dir(dir: &Path) -> Result<Self> {
-        let root = dir
-            .canonicalize()
-            .with_context(|| format!("failed to canonicalize {}", dir.display()))?;
-        // Prefer common manifest names first.
-        for candidate in MANIFEST_CANDIDATES {
-            let candidate_path = root.join(candidate);
-            if candidate_path.is_file() {
-                if let Ok(manifest) = load_manifest_from_file(&candidate_path) {
-                    return match Self::from_manifest(
-                        manifest,
-                        candidate_path.clone(),
-                        root.clone(),
-                        RecipeSourceKind::Directory,
-                    ) {
-                        Ok(recipe) => Ok(recipe),
-                        Err(err) => Err(err.context(format!(
-                            "manifest candidate {} invalid",
-                            candidate_path.display()
-                        ))),
-                    };
-                }
-            }
-        }
-
-        // Fallback: scan for any YAML/JSON that validates.
-        let mut last_err: Option<anyhow::Error> = None;
-        let mut entries: Vec<PathBuf> = Vec::new();
-        for entry in fs::read_dir(&root)? {
-            let entry = entry?;
-            let path = entry.path();
-            if path.is_file() && looks_like_manifest_candidate(&path) {
-                entries.push(path);
-            }
-        }
-        for path in entries {
-            match load_manifest_from_file(&path) {
-                Ok(manifest) => {
-                    return match Self::from_manifest(
-                        manifest,
-                        path.clone(),
-                        root.clone(),
-                        RecipeSourceKind::Directory,
-                    ) {
-                        Ok(recipe) => Ok(recipe),
-                        Err(err) => {
-                            Err(err
-                                .context(format!("manifest candidate {} invalid", path.display())))
-                        }
-                    };
-                }
-                Err(err) => {
-                    last_err = Some(err);
-                }
-            }
-        }
-        Err(last_err.unwrap_or_else(|| {
-            anyhow!(
-                "no manifest matching {:?} found under {}",
-                MANIFEST_CANDIDATES,
-                root.display()
-            )
-        }))
-    }
-
-    fn from_manifest(
-        manifest: Value,
-        manifest_path: PathBuf,
-        source_root: PathBuf,
-        kind: RecipeSourceKind,
-    ) -> Result<Self> {
-        let summary = build_summary(&manifest, &manifest_path);
-        validate_manifest(&manifest).with_context(|| {
-            format!(
-                "manifest {} failed additional validation",
-                manifest_path.display()
-            )
-        })?;
-        Ok(Self {
-            summary,
-            manifest,
-            manifest_path,
-            source_root,
-            kind,
-        })
-    }
-
-    fn tool_ids(&self) -> Vec<String> {
-        self.manifest
-            .get("tools")
-            .and_then(|tools| tools.as_array())
-            .map(|arr| {
-                arr.iter()
-                    .filter_map(|entry| {
-                        entry
-                            .get("id")
-                            .and_then(|v| v.as_str())
-                            .map(|id| id.to_string())
-                    })
-                    .collect()
-            })
-            .unwrap_or_default()
-    }
-
-    fn workflow_steps(&self) -> usize {
-        self.manifest
-            .get("workflows")
-            .and_then(|wf| wf.as_array())
-            .map(|arr| arr.len())
-            .unwrap_or(0)
-    }
-
-    fn permission_modes(&self) -> Vec<String> {
-        let mut out = Vec::new();
-        if let Some(perms) = self.manifest.get("permissions").and_then(|p| p.as_object()) {
-            for (key, value) in perms {
-                let mode = match value {
-                    Value::String(s) => s.to_string(),
-                    Value::Object(map) => map
-                        .get("mode")
-                        .and_then(|v| v.as_str())
-                        .unwrap_or("<unknown>")
-                        .to_string(),
-                    _ => "<unknown>".to_string(),
-                };
-                let ttl = match value {
-                    Value::Object(map) => map
-                        .get("ttl_secs")
-                        .and_then(|v| v.as_i64())
-                        .map(|v| format!("@{}s", v)),
-                    _ => None,
-                };
-                if let Some(ttl) = ttl {
-                    out.push(format!("{}={}{}", key, mode, ttl));
-                } else {
-                    out.push(format!("{}={}", key, mode));
-                }
-            }
-            out.sort();
-        }
-        out
-    }
-}
-
-fn load_manifest_from_file(path: &Path) -> Result<Value> {
-    let data = fs::read_to_string(path)
-        .with_context(|| format!("failed to read manifest {}", path.display()))?;
-    let value: Value = serde_yaml::from_str(&data)
-        .with_context(|| format!("failed to parse manifest {}", path.display()))?;
-    if let Err(errors) = RECIPE_SCHEMA.validate(&value) {
-        let joined = errors
-            .map(|err| format!("{}: {}", err.instance_path, err))
-            .collect::<Vec<_>>()
-            .join("; ");
-        bail!("{} does not satisfy schema: {}", path.display(), joined);
-    }
-    Ok(value)
-}
-
-fn validate_manifest(manifest: &Value) -> Result<()> {
-    let tools = manifest
-        .get("tools")
-        .and_then(|v| v.as_array())
-        .ok_or_else(|| anyhow!("tools array missing after schema validation"))?;
-    let mut tool_ids = HashSet::new();
-    for entry in tools {
-        if let Some(id) = entry.get("id").and_then(|v| v.as_str()) {
-            tool_ids.insert(id.to_string());
-        }
-    }
-
-    if let Some(workflows) = manifest.get("workflows").and_then(|v| v.as_array()) {
-        let mut seen_steps: HashSet<String> = HashSet::new();
-        for (idx, wf) in workflows.iter().enumerate() {
-            let step = wf
-                .get("step")
-                .and_then(|v| v.as_str())
-                .unwrap_or_default()
-                .trim()
-                .to_string();
-            if step.is_empty() {
-                bail!("workflows[{idx}] step is empty after schema validation");
-            }
-            if !seen_steps.insert(step.clone()) {
-                bail!("duplicate workflow step `{step}` detected");
-            }
-            let tool = wf
-                .get("tool")
-                .and_then(|v| v.as_str())
-                .unwrap_or_default()
-                .to_string();
-            if tool.is_empty() {
-                bail!("workflow step `{step}` has empty tool reference");
-            }
-            if !tool_ids.contains(&tool) {
-                bail!("workflow step `{step}` references undeclared tool `{tool}`");
-            }
-        }
-    }
-
-    Ok(())
-}
-
-fn build_summary(manifest: &Value, manifest_path: &Path) -> RecipeSummary {
-    let id = manifest
-        .get("id")
-        .and_then(|v| v.as_str())
-        .unwrap_or_default()
-        .to_string();
-    let name = manifest
-        .get("name")
-        .and_then(|v| v.as_str())
-        .unwrap_or_default()
-        .to_string();
-    let version = manifest
-        .get("version")
-        .and_then(|v| v.as_str())
-        .unwrap_or_default()
-        .to_string();
-    let preferred_model = manifest
-        .get("model")
-        .and_then(|m| m.get("preferred"))
-        .and_then(|v| v.as_str())
-        .map(|s| s.to_string());
-    let fallback_model = manifest
-        .get("model")
-        .and_then(|m| m.get("fallback"))
-        .and_then(|v| match v {
-            Value::Null => None,
-            _ => v.as_str(),
-        })
-        .map(|s| s.to_string());
-    let tags = manifest
-        .get("tags")
-        .and_then(|v| v.as_array())
-        .map(|arr| {
-            arr.iter()
-                .filter_map(|item| item.as_str().map(|s| s.to_string()))
-                .collect()
-        })
-        .unwrap_or_default();
-
-    RecipeSummary {
-        id,
-        name,
-        version,
-        preferred_model,
-        fallback_model,
-        tags,
-        manifest_path: manifest_path.to_string_lossy().to_string(),
-    }
-}
-
-fn looks_like_manifest_candidate(path: &Path) -> bool {
-    match path.extension().and_then(|ext| ext.to_str()) {
-        Some(ext) => matches!(ext.to_ascii_lowercase().as_str(), "yaml" | "yml" | "json"),
-        None => false,
-    }
-}
-
-fn detect_state_dir(override_dir: Option<PathBuf>) -> Result<PathBuf> {
-    if let Some(dir) = override_dir {
-        return Ok(dir);
-    }
-    let paths = effective_paths();
-    Ok(PathBuf::from(paths.state_dir))
-}
-
 pub fn run(cmd: RecipesCmd) -> Result<()> {
     match cmd {
         RecipesCmd::List(args) => list(args),
@@ -424,7 +80,7 @@ fn list(args: RecipesListArgs) -> Result<()> {
         let entry = entry?;
         let path = entry.path();
         let meta = entry.metadata()?;
-        if meta.is_dir() || (meta.is_file() && looks_like_manifest_candidate(&path)) {
+        if meta.is_dir() || (meta.is_file() && recipes::looks_like_manifest_candidate(&path)) {
             match Recipe::load(&path) {
                 Ok(recipe) => recipes.push(recipe),
                 Err(err) => {
@@ -434,10 +90,14 @@ fn list(args: RecipesListArgs) -> Result<()> {
         }
     }
 
-    recipes.sort_by(|a, b| a.summary.id.cmp(&b.summary.id));
+    recipes.sort_by(|a, b| {
+        let a_sum = a.summary();
+        let b_sum = b.summary();
+        a_sum.id.cmp(&b_sum.id)
+    });
     let summaries: Vec<RecipeSummary> = recipes
         .iter()
-        .map(|recipe| recipe.summary.clone())
+        .map(|recipe| recipe.summary().clone())
         .collect();
 
     if args.json {
@@ -457,29 +117,35 @@ fn inspect(args: RecipesInspectArgs) -> Result<()> {
     let recipe = Recipe::load(&args.source)?;
     if args.json {
         let out = json!({
-            "summary": recipe.summary,
-            "manifest": recipe.manifest,
-            "source_root": recipe.source_root.to_string_lossy(),
+            "summary": recipe.summary().clone(),
+            "manifest": recipe.manifest().clone(),
+            "source_root": recipe.source_root().to_string_lossy(),
+            "manifest_path": recipe.manifest_path().to_string_lossy(),
+            "kind": recipe.kind(),
+            "tools": recipe.tool_ids(),
+            "workflow_steps": recipe.workflow_steps(),
+            "permissions": recipe.permission_modes(),
         });
         println!(
             "{}",
             serde_json::to_string_pretty(&out).unwrap_or_else(|_| "{}".to_string())
         );
     } else {
-        println!("Recipe: {}", recipe.summary.id);
-        println!("  Name: {}", recipe.summary.name);
-        println!("  Version: {}", recipe.summary.version);
-        if let Some(model) = &recipe.summary.preferred_model {
+        let summary = recipe.summary();
+        println!("Recipe: {}", summary.id);
+        println!("  Name: {}", summary.name);
+        println!("  Version: {}", summary.version);
+        if let Some(model) = &summary.preferred_model {
             println!("  Model (preferred): {}", model);
         }
-        if let Some(model) = &recipe.summary.fallback_model {
+        if let Some(model) = &summary.fallback_model {
             println!("  Model (fallback): {}", model);
         }
-        if !recipe.summary.tags.is_empty() {
-            println!("  Tags: {}", recipe.summary.tags.join(", "));
+        if !summary.tags.is_empty() {
+            println!("  Tags: {}", summary.tags.join(", "));
         }
-        println!("  Manifest: {}", recipe.summary.manifest_path);
-        println!("  Source: {}", recipe.source_root.display());
+        println!("  Manifest: {}", summary.manifest_path);
+        println!("  Source: {}", recipe.source_root().display());
         let tools = recipe.tool_ids();
         if tools.is_empty() {
             println!("  Tools: none");
@@ -505,7 +171,7 @@ fn install(args: RecipesInstallArgs) -> Result<()> {
     fs::create_dir_all(&recipes_dir)
         .with_context(|| format!("failed to create {}", recipes_dir.display()))?;
 
-    let dest_id = args.id.unwrap_or_else(|| recipe.summary.id.clone());
+    let dest_id = args.id.unwrap_or_else(|| recipe.summary().id.clone());
     if dest_id.is_empty() {
         bail!("manifest id is empty; use --id to supply a destination id");
     }
@@ -514,9 +180,9 @@ fn install(args: RecipesInstallArgs) -> Result<()> {
         let dest_real = dest_dir
             .canonicalize()
             .with_context(|| format!("failed to canonicalize {}", dest_dir.display()))?;
-        let source_real = match recipe.kind {
-            RecipeSourceKind::File => recipe.manifest_path.clone(),
-            RecipeSourceKind::Directory => recipe.source_root.clone(),
+        let source_real = match recipe.kind() {
+            RecipeSourceKind::File => recipe.manifest_path().to_path_buf(),
+            RecipeSourceKind::Directory => recipe.source_root().to_path_buf(),
         };
         let source_real = source_real
             .canonicalize()
@@ -549,35 +215,43 @@ fn install(args: RecipesInstallArgs) -> Result<()> {
         }
     }
 
-    match recipe.kind {
+    match recipe.kind() {
         RecipeSourceKind::File => {
             fs::create_dir_all(&dest_dir)
                 .with_context(|| format!("failed to create {}", dest_dir.display()))?;
             let manifest_name = recipe
-                .manifest_path
+                .manifest_path()
                 .file_name()
                 .map(|s| s.to_os_string())
                 .unwrap_or_else(|| "manifest.yaml".into());
             let dest_path = dest_dir.join(manifest_name);
-            fs::copy(&recipe.manifest_path, &dest_path).with_context(|| {
+            fs::copy(recipe.manifest_path(), &dest_path).with_context(|| {
                 format!(
                     "failed to copy {} to {}",
-                    recipe.manifest_path.display(),
+                    recipe.manifest_path().display(),
                     dest_path.display()
                 )
             })?;
         }
         RecipeSourceKind::Directory => {
-            copy_directory(&recipe.source_root, &dest_dir)?;
+            copy_directory(recipe.source_root(), &dest_dir)?;
         }
     }
 
     println!(
         "Installed recipe {} → {}",
-        recipe.summary.id,
+        recipe.summary().id,
         dest_dir.display()
     );
     Ok(())
+}
+
+fn detect_state_dir(override_dir: Option<PathBuf>) -> Result<PathBuf> {
+    if let Some(dir) = override_dir {
+        return Ok(dir);
+    }
+    let paths = effective_paths();
+    Ok(PathBuf::from(paths.state_dir))
 }
 
 fn copy_directory(src: &Path, dest: &Path) -> Result<()> {
@@ -684,6 +358,7 @@ fn print_summary_table(entries: &[RecipeSummary]) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serde_json::Value;
     use tempfile::tempdir;
 
     fn sample_manifest() -> &'static str {
@@ -706,29 +381,6 @@ workflows:
     }
 
     #[test]
-    fn load_recipe_from_file() {
-        let temp = tempdir().unwrap();
-        let path = temp.path().join("recipe.yaml");
-        fs::write(&path, sample_manifest()).unwrap();
-        let recipe = Recipe::load(&path).unwrap();
-        assert_eq!(recipe.summary.id, "sample-recipe");
-        assert_eq!(recipe.summary.name, "Sample Recipe");
-        assert_eq!(recipe.tool_ids(), vec!["sample_tool"]);
-        assert_eq!(recipe.workflow_steps(), 1);
-    }
-
-    #[test]
-    fn load_recipe_from_directory() {
-        let temp = tempdir().unwrap();
-        let dir = temp.path().join("pkg");
-        fs::create_dir_all(&dir).unwrap();
-        fs::write(dir.join("manifest.yaml"), sample_manifest()).unwrap();
-        let recipe = Recipe::load(&dir).unwrap();
-        assert_eq!(recipe.summary.id, "sample-recipe");
-        assert_eq!(recipe.kind, RecipeSourceKind::Directory);
-    }
-
-    #[test]
     fn install_recipe_as_directory_copy() {
         let temp = tempdir().unwrap();
         let src = temp.path().join("src");
@@ -738,7 +390,6 @@ workflows:
         let state = temp.path().join("state");
         fs::create_dir_all(&state).unwrap();
 
-        let recipe = Recipe::load(&src).unwrap();
         install(RecipesInstallArgs {
             source: src.clone(),
             state_dir: Some(state.clone()),
@@ -747,68 +398,10 @@ workflows:
         })
         .unwrap();
 
-        let dest = state.join("recipes").join(recipe.summary.id);
+        let recipe = Recipe::load(&src).unwrap();
+        let dest = state.join("recipes").join(recipe.summary().id.clone());
         assert!(dest.join("manifest.yaml").exists());
         assert!(dest.join("notes.txt").exists());
-    }
-
-    #[test]
-    fn reject_recipe_with_invalid_version() {
-        let temp = tempdir().unwrap();
-        let path = temp.path().join("recipe.yaml");
-        fs::write(
-            &path,
-            r#"id: invalid-version
-name: Invalid Version
-version: not-a-semver
-model:
-  preferred: "local:llama"
-permissions:
-  file.read: allow
-prompts:
-  system: "Test invalid version"
-tools:
-  - id: sample_tool
-"#,
-        )
-        .unwrap();
-        match Recipe::load(&path) {
-            Ok(_) => panic!("expected schema validation to fail"),
-            Err(err) => assert!(
-                err.to_string().contains("does not satisfy schema"),
-                "unexpected error: {err:?}"
-            ),
-        }
-    }
-
-    #[test]
-    fn reject_recipe_with_duplicate_tools() {
-        let temp = tempdir().unwrap();
-        let path = temp.path().join("recipe.yaml");
-        fs::write(
-            &path,
-            r#"id: duplicate-tools
-name: Duplicate Tools
-version: 1.2.3
-model:
-  preferred: "local:llama"
-permissions:
-  file.read: allow
-prompts:
-  system: "Test duplicate tools"
-tools:
-  - id: sample_tool
-  - id: sample_tool
-"#,
-        )
-        .unwrap();
-        match Recipe::load(&path) {
-            Ok(_) => panic!("expected schema validation to fail"),
-            Err(err) => assert!(
-                err.to_string().contains("does not satisfy schema"),
-                "unexpected error: {err:?}"
-            ),
-        }
     }
 
     #[test]
@@ -873,94 +466,9 @@ tools:
             example_path.display()
         );
 
-        let validation_errors: Vec<String> = match RECIPE_SCHEMA.validate(&doc_recipe) {
-            Ok(_) => Vec::new(),
-            Err(errors) => errors
-                .map(|err| format!("{}: {}", err.instance_path, err))
-                .collect(),
-        };
-        if !validation_errors.is_empty() {
-            panic!(
-                "documentation recipe example failed schema validation: {}",
-                validation_errors.join("; ")
-            );
-        }
-    }
-
-    #[test]
-    fn reject_workflow_referencing_unknown_tool() {
-        let temp = tempdir().unwrap();
-        let path = temp.path().join("recipe.yaml");
-        fs::write(
-            &path,
-            r#"id: workflow-missing-tool
-name: Workflow Missing Tool
-version: 1.0.0
-model:
-  preferred: "local:llama"
-permissions:
-  file.read: allow
-prompts:
-  system: "Test missing tool"
-tools:
-  - id: sample_tool
-workflows:
-  - step: "Use missing tool"
-    tool: missing_tool
-"#,
-        )
-        .unwrap();
-        match Recipe::load(&path) {
-            Ok(_) => panic!("expected missing tool validation to fail"),
-            Err(err) => {
-                let chain: Vec<String> = err.chain().map(|e| e.to_string()).collect();
-                assert!(
-                    chain
-                        .iter()
-                        .any(|msg| msg.contains("references undeclared tool `missing_tool`")),
-                    "unexpected error chain: {chain:?}"
-                );
-            }
-        }
-    }
-
-    #[test]
-    fn reject_duplicate_workflow_steps() {
-        let temp = tempdir().unwrap();
-        let path = temp.path().join("recipe.yaml");
-        fs::write(
-            &path,
-            r#"id: workflow-duplicate-steps
-name: Workflow Duplicate Steps
-version: 1.0.0
-model:
-  preferred: "local:llama"
-permissions:
-  file.read: allow
-prompts:
-  system: "Test duplicate workflow steps"
-tools:
-  - id: sample_tool
-  - id: sample_tool_b
-workflows:
-  - step: "Do thing"
-    tool: sample_tool
-  - step: "Do thing"
-    tool: sample_tool_b
-"#,
-        )
-        .unwrap();
-        match Recipe::load(&path) {
-            Ok(_) => panic!("expected duplicate workflow validation to fail"),
-            Err(err) => {
-                let chain: Vec<String> = err.chain().map(|e| e.to_string()).collect();
-                assert!(
-                    chain
-                        .iter()
-                        .any(|msg| msg.contains("duplicate workflow step `Do thing`")),
-                    "unexpected error chain: {chain:?}"
-                );
-            }
-        }
+        let temp = tempdir().expect("doc temp dir");
+        let manifest = temp.path().join("manifest.yaml");
+        fs::write(&manifest, doc_yaml).expect("write doc manifest");
+        recipes::Recipe::load(&manifest).expect("doc manifest to validate against schema");
     }
 }
