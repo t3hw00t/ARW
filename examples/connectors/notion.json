@@ -1,0 +1,11 @@
+{
+  "id": "notion-workspace",
+  "kind": "cloud",
+  "provider": "notion",
+  "scopes": ["cloud:notion:workspace:rw"],
+  "meta": {
+    "base_url": "https://api.notion.com/v1",
+    "allowed_hosts": ["api.notion.com"],
+    "note": "Notion integration token limited to required databases/pages."
+  }
+}

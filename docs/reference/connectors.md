@@ -3,7 +3,7 @@ title: Connector Catalog
 ---
 
 # Connector Catalog
-Updated: 2025-10-12
+Updated: 2025-10-13
 Type: Reference
 
 Canonical catalog of connector blueprints supported (or incubating) in ARW. Each entry includes the recommended `provider`, `scopes`, security notes, and links to manifest examples.
@@ -13,8 +13,8 @@ Canonical catalog of connector blueprints supported (or incubating) in ARW. Each
 | Provider | Kind  | Scopes (examples)             | Notes                                                                 | Example Manifest |
 |----------|-------|-------------------------------|-----------------------------------------------------------------------|------------------|
 | GitHub   | cloud | `cloud:github:repo:rw`        | Personal Access Token (PAT) or GitHub App token; prefer fine-grained scopes. Configure `meta.allowed_hosts` to `["api.github.com"]`. | [snippet](../guide/connectors.md#register-a-github-connector-and-set-a-token) |
-| Slack    | cloud | `cloud:slack:bot`             | Bot token with limited channel access. Set `meta.allowed_hosts` to Slack API domains.                        | _pending_ |
-| Notion   | cloud | `cloud:notion:workspace:rw`   | Integration token; restrict database/page scope via Notion UI.                                          | _pending_ |
+| Slack    | cloud | `cloud:slack:bot`             | Bot token with limited channel access. Set `meta.allowed_hosts` to Slack API domains.                        | [examples/connectors/slack.json](https://github.com/t3hw00t/ARW/blob/main/examples/connectors/slack.json) |
+| Notion   | cloud | `cloud:notion:workspace:rw`   | Integration token; restrict database/page scope via Notion UI.                                          | [examples/connectors/notion.json](https://github.com/t3hw00t/ARW/blob/main/examples/connectors/notion.json) |
 | Google Workspace | cloud | `cloud:google:drive:ro`, `cloud:google:gmail:send` | Requires service account or OAuth; plan to supply connector helper.                                       | _future_ |
 | Microsoft Graph | cloud | `cloud:microsoft:graph:mail.send` | Use application registration with least privilege; obey tenant consents.                                   | _future_ |
 | SearXNG | service | `cloud:searxng:search`       | Local metasearch proxy. Keeps upstream search traffic behind a single connector.                           | [examples/connectors/searxng.json](https://github.com/t3hw00t/ARW/blob/main/examples/connectors/searxng.json) |

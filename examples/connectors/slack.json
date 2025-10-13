@@ -1,0 +1,11 @@
+{
+  "id": "slack-bot",
+  "kind": "cloud",
+  "provider": "slack",
+  "scopes": ["cloud:slack:bot"],
+  "meta": {
+    "base_url": "https://slack.com/api",
+    "allowed_hosts": ["api.slack.com", "slack.com"],
+    "note": "Slack bot token scoped to required channels; set via /connectors/token."
+  }
+}

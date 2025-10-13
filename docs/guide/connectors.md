@@ -3,7 +3,7 @@ title: Connectors (Cloud & Local Apps)
 ---
 
 # Connectors (Cloud & Local Apps)
-Updated: 2025-10-12
+Updated: 2025-10-13
 Type: How‑to
 
 Safely connect agents to cloud apps and local desktop apps with explicit scopes and leases.
@@ -52,6 +52,44 @@ curl -s -X POST localhost:8091/actions -H 'content-type: application/json' \
       }' | jq
 ```
 The runtime injects `Authorization: Bearer <token>` and still enforces egress allowlists. If the lease is missing, the action returns `connector lease required` and emits a `policy.decision`. Optionally restrict hosts per connector by setting `meta.allowed_hosts` in the connector manifest (e.g., `["api.github.com"]`).
+
+### Slack bot connector sample {#slack-bot-connector-sample}
+
+Register the sample manifest and supply a bot token scoped to the channels you plan to automate:
+
+```bash
+curl -s -X POST localhost:8091/connectors/register \
+  -H 'content-type: application/json' -H "Authorization: Bearer $ARW_ADMIN_TOKEN" \
+  --data-binary @examples/connectors/slack.json
+
+curl -s -X POST localhost:8091/connectors/token \
+  -H 'content-type: application/json' -H "Authorization: Bearer $ARW_ADMIN_TOKEN" \
+  -d '{"id":"slack-bot","token":"xoxb-REDACTED"}'
+
+curl -s -X POST localhost:8091/leases -H 'content-type: application/json' \
+  -d '{"capability":"cloud:slack:bot","ttl_secs":900}' | jq
+```
+
+The manifest pins `meta.allowed_hosts` to Slack APIs and notes the default `https://slack.com/api` base. Populate optional fields (for example, `refresh_token`) via `/connectors/token` if your workspace issues short-lived credentials.
+
+### Notion workspace connector sample {#notion-workspace-connector-sample}
+
+Use the Notion sample manifest for workspace-wide integrations:
+
+```bash
+curl -s -X POST localhost:8091/connectors/register \
+  -H 'content-type: application/json' -H "Authorization: Bearer $ARW_ADMIN_TOKEN" \
+  --data-binary @examples/connectors/notion.json
+
+curl -s -X POST localhost:8091/connectors/token \
+  -H 'content-type: application/json' -H "Authorization: Bearer $ARW_ADMIN_TOKEN" \
+  -d '{"id":"notion-workspace","token":"secret_notion_token"}'
+
+curl -s -X POST localhost:8091/leases -H 'content-type: application/json' \
+  -d '{"capability":"cloud:notion:workspace:rw","ttl_secs":900}' | jq
+```
+
+The sample manifest sets the Notion API base and locks allowed hosts to `api.notion.com`. Remember to send the integration invitation from the Notion UI so it can access the pages and databases you expect ARW to use.
 
 ### Optional SearXNG metasearch connector {#optional-searxng-metasearch-connector}
 
