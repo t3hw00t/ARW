@@ -54,6 +54,10 @@ If the helper used the simulated mode (because no real binary or weights were av
   ```bash
   just runtime-weights
   ```
+- Preview the smoke without executing anything:
+  ```bash
+  just runtime-smoke-dry-run
+  ```
 - Supply custom Hugging Face sources:
   ```bash
   LLAMA_MODEL_SOURCES="repo::file,repo2::file2" just runtime-weights
@@ -80,6 +84,13 @@ If the helper used the simulated mode (because no real binary or weights were av
     RUNTIME_SMOKE_LLAMA_MODEL_PATH=/path/to/model.gguf \
     just runtime-smoke
   ```
+- Prefer existing builds and lower resource impact:
+  ```bash
+  export RUNTIME_SMOKE_SKIP_BUILD=1          # never trigger cargo build
+  export RUNTIME_SMOKE_USE_RELEASE=1         # prefer target/release/arw-server when present
+  export RUNTIME_SMOKE_NICE=1                # run arw-server / llama-server under nice/ionice
+  just runtime-smoke
+  ```
 
 ### Memory guardrails
 
@@ -94,6 +105,8 @@ Memory thresholds can be tuned with environment variables:
 - `RUNTIME_SMOKE_ALLOW_HIGH_MEM=1` bypasses the guard entirely when you’re certain enough RAM is available.
 
 Running on 16 GB hosts? Stick to 4-bit TinyLlama weights, keep `LLAMA_GPU_LAYERS` below 8, and leave the suite in `auto` mode so it falls back to simulated GPU coverage if buffers would exceed the available headroom.
+
+Need a quick capacity check without launching anything? Use `RUNTIME_SMOKE_DRY_RUN=1 just runtime-smoke` (or the `runtime-smoke-dry-run` recipe) to print the preflight plan and memory guard hints.
 
 When you want the temporary run directory to stick around for an investigation, export `RUNTIME_SMOKE_KEEP_TMP=1`. The helper writes a `.keep` marker so the automatic pruning that maintains `.smoke/runtime/` won’t delete the run later. Use `RUNTIME_SMOKE_KEEP_RECENT` and `RUNTIME_SMOKE_RETENTION_SECS` to tune how many historical runs the cleanup script keeps.
 

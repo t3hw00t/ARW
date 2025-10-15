@@ -130,6 +130,57 @@ mkdir -p "$SMOKE_ROOT"
 prune_old_runs "$SMOKE_ROOT"
 
 MEM_CHECK_OUTPUT=""
+RESOLVED_SERVER_BIN=""
+RESOLVED_SERVER_BUILD=""  # debug|release
+RESOLVED_SERVER_NEEDS_BUILD=0
+
+resolve_server_candidate() {
+  local candidate=""
+  local needs_build=0
+  local profile="debug"
+
+  if [[ -n "${ARW_SERVER_BIN:-}" ]]; then
+    candidate="$ARW_SERVER_BIN"
+    if [[ ! -x "$candidate" ]]; then
+      needs_build=1
+    fi
+    echo "$candidate|$needs_build|$profile"
+    return
+  fi
+
+  local release_path="$PROJECT_ROOT/target/release/arw-server"
+  local debug_path="$PROJECT_ROOT/target/debug/arw-server"
+
+  local prefer_release=0
+  if is_truthy "${RUNTIME_SMOKE_USE_RELEASE:-0}"; then
+    prefer_release=1
+  fi
+
+  if [[ $prefer_release -eq 1 ]]; then
+    if [[ -x "$release_path" ]]; then
+      candidate="$release_path"
+      profile="release"
+    else
+      candidate="$release_path"
+      profile="release"
+      needs_build=1
+    fi
+  else
+    if [[ -x "$debug_path" ]]; then
+      candidate="$debug_path"
+      profile="debug"
+    elif [[ -x "$release_path" ]]; then
+      candidate="$release_path"
+      profile="release"
+    else
+      candidate="$debug_path"
+      profile="debug"
+      needs_build=1
+    fi
+  fi
+
+  echo "$candidate|$needs_build|$profile"
+}
 
 check_memory_budget() {
   local model_path="$1"
@@ -351,6 +402,20 @@ PY
   fi
   if [[ -n "${ARW_SERVER_BIN:-}" ]]; then
     echo "[runtime-smoke] plan: arw-server=${ARW_SERVER_BIN}" >&2
+  fi
+
+  local server_info
+  server_info=$(resolve_server_candidate)
+  IFS='|' read -r RESOLVED_SERVER_BIN RESOLVED_SERVER_NEEDS_BUILD RESOLVED_SERVER_BUILD <<<"$server_info"
+  if [[ -n "$RESOLVED_SERVER_BIN" ]]; then
+    local build_note="ready"
+    if [[ "$RESOLVED_SERVER_NEEDS_BUILD" = "1" ]]; then
+      build_note="build-required"
+      if is_truthy "${RUNTIME_SMOKE_SKIP_BUILD:-0}"; then
+        build_note="missing-skip-build"
+      fi
+    fi
+    echo "[runtime-smoke] plan: arw-server-target=${RESOLVED_SERVER_BIN:-unknown} (${RESOLVED_SERVER_BUILD:-debug}, ${build_note})" >&2
   fi
 
   # Optional memory preview for real GPU
@@ -847,25 +912,42 @@ start_server() {
   export RUST_LOG=${RUST_LOG:-info}
   export ARW_EGRESS_PROXY_ENABLE=0
 
-  local server_bin="${ARW_SERVER_BIN:-}"
+  local server_bin="${RESOLVED_SERVER_BIN:-${ARW_SERVER_BIN:-}}"
+  local build_profile="${RESOLVED_SERVER_BUILD:-debug}"
+  local needs_build="${RESOLVED_SERVER_NEEDS_BUILD:-0}"
+  if [[ -n "${ARW_SERVER_BIN:-}" && ! -x "${ARW_SERVER_BIN}" ]]; then
+    echo "[runtime-smoke] ARW_SERVER_BIN is set but not executable: ${ARW_SERVER_BIN}" >&2
+    exit 1
+  fi
+
   if [[ -z "$server_bin" ]]; then
-    if [[ -x "$PROJECT_ROOT/target/debug/arw-server" ]]; then
-      server_bin="$PROJECT_ROOT/target/debug/arw-server"
-    else
-      if is_truthy "${RUNTIME_SMOKE_SKIP_BUILD:-0}"; then
-        echo "[runtime-smoke] arw-server binary not found and RUNTIME_SMOKE_SKIP_BUILD=1 set; aborting. Build once via 'cargo build -p arw-server' or set ARW_SERVER_BIN to an existing binary." >&2
-        exit 1
+    server_bin="$PROJECT_ROOT/target/debug/arw-server"
+  fi
+
+  if [[ "$needs_build" = "1" ]]; then
+    if is_truthy "${RUNTIME_SMOKE_SKIP_BUILD:-0}"; then
+      echo "[runtime-smoke] arw-server binary not found and RUNTIME_SMOKE_SKIP_BUILD=1 set; aborting. Build once via 'cargo build -p arw-server' (use --release to target release) or set ARW_SERVER_BIN to an existing binary." >&2
+      exit 1
+    fi
+    echo "[runtime-smoke] building arw-server binary (${build_profile})" >&2
+    local build_log
+    build_log=$(mktemp -t runtime-smoke-build.XXXX.log)
+    local build_cmd=(cargo build -p arw-server)
+    if [[ "$build_profile" = "release" ]]; then
+      build_cmd=(cargo build -p arw-server --release)
+    fi
+    if ! (cd "$PROJECT_ROOT" && "${build_cmd[@]}" &>"$build_log"); then
+      echo "[runtime-smoke] cargo build failed; log preserved at $build_log" >&2
+      tail -n 200 "$build_log" >&2 || true
+      exit 1
+    fi
+    rm -f "$build_log"
+    if [[ -z "${ARW_SERVER_BIN:-}" ]]; then
+      if [[ "$build_profile" = "release" ]]; then
+        server_bin="$PROJECT_ROOT/target/release/arw-server"
+      else
+        server_bin="$PROJECT_ROOT/target/debug/arw-server"
       fi
-      echo "[runtime-smoke] building arw-server binary" >&2
-      local build_log
-      build_log=$(mktemp -t runtime-smoke-build.XXXX.log)
-      if ! (cd "$PROJECT_ROOT" && cargo build -p arw-server &>"$build_log"); then
-        echo "[runtime-smoke] cargo build failed; log preserved at $build_log" >&2
-        tail -n 200 "$build_log" >&2 || true
-        exit 1
-      fi
-      rm -f "$build_log"
-      server_bin="$PROJECT_ROOT/target/debug/arw-server"
     fi
   fi
 
