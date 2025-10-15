@@ -136,6 +136,10 @@ if is_truthy "${RUNTIME_SMOKE_SKIP_STUB:-0}"; then
   RUN_STUB=0
 fi
 
+if ! is_truthy "${RUNTIME_SMOKE_SAFE_DEFAULTS:-0}"; then
+  log "Reminder: apply safe defaults via 'source scripts/smoke_safe.sh' or 'just runtime-smoke-safe' before running heavy smokes."
+fi
+
 if [[ $RUN_STUB -eq 1 ]]; then
   log "Plan: stub stage enabled"
   if [[ "${RUNTIME_SMOKE_DRY_RUN:-0}" = "1" ]]; then

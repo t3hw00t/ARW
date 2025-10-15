@@ -177,6 +177,12 @@ runtime-smoke-gpu-sim:
 runtime-smoke-dry-run:
   RUNTIME_SMOKE_DRY_RUN=1 RUNTIME_SMOKE_GPU_POLICY="${RUNTIME_SMOKE_GPU_POLICY:-auto}" bash scripts/runtime_smoke_suite.sh
 
+smoke-safe:
+  bash scripts/smoke_safe.sh
+
+runtime-smoke-safe:
+  bash -c '. scripts/smoke_safe.sh; bash scripts/runtime_smoke_suite.sh'
+
 runtime-smoke-vision:
   # Uses ARW_SERVER_BIN when provided; auto-builds arw-server otherwise.
   bash scripts/runtime_vision_smoke.sh
