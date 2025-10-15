@@ -22,9 +22,19 @@ ARW seeds a runtime matrix read-model from `runtime.health` events. Today it mer
 - CLI shortcuts: `arw-cli runtime status` prints the same snapshot (or `--json` for raw), and `arw-cli runtime restore --id <runtime>` triggers supervised restores while echoing the remaining budget or budget exhaustion.
   - Text mode now reports the active `ttl_seconds` so operators know when the matrix snapshot should be considered stale.
   - JSON mode emits `{ "supervisor": ..., "matrix": ... }` so scripts can consume both views (including `ttl_seconds`) in one call.
-- Smoke check: `just runtime-smoke` launches a stub llama endpoint, points the server at it, and verifies `chat.respond` flows end-to-end without needing model weights (extend with MODE=real once hardware-backed smoke rigs land). The helper exits automatically after `RUNTIME_SMOKE_TIMEOUT_SECS` seconds (defaults to the shared `SMOKE_TIMEOUT_SECS`, falling back to 600). Set either knob to `0` to disable the guard during manual debugging.
+- Smoke check: `just runtime-smoke` launches a stub llama endpoint, points the server at it, and verifies `chat.respond` flows end-to-end without needing model weights. The target now delegates to `scripts/runtime_smoke_suite.sh`, which runs the stub stage first and then a GPU stage based on `RUNTIME_SMOKE_GPU_POLICY` (`auto` by default). The helper exits automatically after `RUNTIME_SMOKE_TIMEOUT_SECS` seconds (defaults to the shared `SMOKE_TIMEOUT_SECS`, falling back to 600). Set either knob to `0` to disable the guard during manual debugging.
   - The smoke now also fetches `/state/runtime_matrix` and asserts every snapshot carries the accessible status strings (`label`, `detail`, `aria_hint`, `severity_label`) plus a fresh `runtime.updated` timestamp and positive `ttl_seconds`, catching regressions in the matrix feed before they escape CI.
-  - To exercise a real llama.cpp build: `MODE=real LLAMA_SERVER_BIN=/path/to/server LLAMA_MODEL_PATH=/path/to/model.gguf just runtime-smoke`. Optionally pass `LLAMA_SERVER_ARGS="--your --flags"` or `LLAMA_SERVER_PORT=XXXX` to match your deployment.
+  - To exercise a real llama.cpp build with automatic fallback: `RUNTIME_SMOKE_GPU_POLICY=auto LLAMA_SERVER_BIN=/path/to/llama-server LLAMA_MODEL_PATH=/path/to/model.gguf just runtime-smoke`. Optionally pass `RUNTIME_SMOKE_LLAMA_SERVER_ARGS="--your --flags"` or `RUNTIME_SMOKE_LLAMA_SERVER_PORT=XXXX` to match your deployment. The suite falls back to a simulated GPU marker when the binary or weights are unavailable.
+  - Hard-require a hardware-backed run (helpful on CI nodes wired to dedicated GPUs): `RUNTIME_SMOKE_GPU_POLICY=require LLAMA_SERVER_BIN=/path/to/llama-server LLAMA_MODEL_PATH=/path/to/model.gguf just runtime-smoke`.
+  - Conserve memory on 16 GB hosts by pinning a 4-bit TinyLlama build and trimming GPU layers:
+
+    ```bash
+    export LLAMA_MODEL_PATH=$PWD/cache/models/tinyllama-1.1b-chat-q4_k_m.gguf
+    export RUNTIME_SMOKE_LLAMA_SERVER_ARGS="--gpu-layers 8 --threads 6"
+    # Or force an even smaller footprint:
+    # export LLAMA_GPU_LAYERS=4
+    RUNTIME_SMOKE_GPU_POLICY=require just runtime-smoke
+    ```
   - CI parity (`scripts/dev.sh verify --ci`) runs both the stub path and a simulated GPU mode (`LLAMA_GPU_SIMULATE=1 MODE=gpu`) to keep the accelerator detection and log parsing code paths covered even when real GPUs are absent.
   - GPU runs allocate a dedicated workspace under `.smoke/runtime/run.*` (override with `RUNTIME_SMOKE_ROOT`). Automatic pruning keeps the newest six runs unless you change `RUNTIME_SMOKE_KEEP_RECENT`/`RUNTIME_SMOKE_RETENTION_SECS` or pin an investigation with `RUNTIME_SMOKE_KEEP_TMP=1`.
   - Before launching `llama-server`, the helper estimates RAM usage from the GGUF size. If `MemAvailable` minus `RUNTIME_SMOKE_MEM_RESERVE_GB` falls short of `size × RUNTIME_SMOKE_MEM_FACTOR + RUNTIME_SMOKE_MEM_OVERHEAD_GB`, the script downgrades to the simulated GPU path and prints the shortfall (set `RUNTIME_SMOKE_ALLOW_HIGH_MEM=1` to bypass, or tweak the factors to match your hardware). With `LLAMA_GPU_REQUIRE_REAL=1`, the guard aborts instead of silently switching paths so CI never reports a false positive.

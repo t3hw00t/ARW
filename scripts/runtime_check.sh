@@ -26,7 +26,7 @@ done
 
 ROOT_DIR=$(cd -- "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 RUNTIME_WEIGHTS_SCRIPT="${ROOT_DIR}/scripts/runtime_weights.py"
-RUNTIME_SMOKE_SCRIPT="${ROOT_DIR}/scripts/runtime_llama_smoke.sh"
+RUNTIME_SMOKE_SUITE_SCRIPT="${ROOT_DIR}/scripts/runtime_smoke_suite.sh"
 DEFAULT_LLAMA_SERVER="${ROOT_DIR}/cache/llama.cpp/build/bin/llama-server"
 
 load_mirrors() {
@@ -155,11 +155,10 @@ step "Locating llama-server binary"
 detect_llama_server
 
 if [[ -z "${LLAMA_SERVER_BIN:-}" ]]; then
-  step "Running smoke test in simulated GPU mode"
-  HL_ENV="MODE=gpu LLAMA_GPU_SIMULATE=1"
-  env MODE=gpu LLAMA_GPU_SIMULATE=1 bash "$RUNTIME_SMOKE_SCRIPT"
+  step "Running managed runtime smoke suite (simulated GPU)"
+  RUNTIME_SMOKE_GPU_POLICY=simulate bash "$RUNTIME_SMOKE_SUITE_SCRIPT"
   exit 0
 fi
 
-step "Running smoke test with real GPU backend"
-env MODE=gpu LLAMA_GPU_REQUIRE_REAL=1 LLAMA_SERVER_BIN="$LLAMA_SERVER_BIN" bash "$RUNTIME_SMOKE_SCRIPT"
+step "Running managed runtime smoke suite with real GPU backend"
+RUNTIME_SMOKE_GPU_POLICY=require RUNTIME_SMOKE_LLAMA_SERVER_BIN="$LLAMA_SERVER_BIN" bash "$RUNTIME_SMOKE_SUITE_SCRIPT"

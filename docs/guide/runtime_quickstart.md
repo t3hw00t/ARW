@@ -59,9 +59,12 @@ If the helper used the simulated mode (because no real binary or weights were av
   LLAMA_MODEL_SOURCES="repo::file,repo2::file2" just runtime-weights
   ```
 - Provide a checksum for any source by adding a `"checksum": "sha256:..."` entry in `configs/runtime/model_sources.json`; the helper validates downloads automatically when a checksum is present.
-- Opt-in to automatic Hugging Face downloads from the smoke helper:
+- Opt-in to automatic Hugging Face downloads from the smoke helper (falls back to simulated GPU markers if the binary/weights are missing):
   ```bash
-  LLAMA_ALLOW_DOWNLOADS=1 MODE=gpu LLAMA_SERVER_BIN=/path/to/llama-server just runtime-smoke
+  LLAMA_ALLOW_DOWNLOADS=1 RUNTIME_SMOKE_GPU_POLICY=auto \
+    RUNTIME_SMOKE_LLAMA_SERVER_BIN=/path/to/llama-server \
+    RUNTIME_SMOKE_LLAMA_MODEL_PATH=/path/to/model.gguf \
+    just runtime-smoke
   ```
 - List configured mirrors without downloading anything:
   ```bash
@@ -72,7 +75,10 @@ If the helper used the simulated mode (because no real binary or weights were av
   ```
 - Skip the guided flow and run the smoke directly (requires all env vars to be set):
   ```bash
-  MODE=gpu LLAMA_SERVER_BIN=/path/to/llama-server just runtime-smoke
+  RUNTIME_SMOKE_GPU_POLICY=require \
+    RUNTIME_SMOKE_LLAMA_SERVER_BIN=/path/to/llama-server \
+    RUNTIME_SMOKE_LLAMA_MODEL_PATH=/path/to/model.gguf \
+    just runtime-smoke
   ```
 
 ### Memory guardrails
@@ -86,6 +92,8 @@ Memory thresholds can be tuned with environment variables:
 - `RUNTIME_SMOKE_MEM_RESERVE_GB` (default `1`) keeps system RAM free even if the factor check passes.
 - `RUNTIME_SMOKE_MIN_REQUIRED_GB` (default `0`) enforces an absolute minimum requirement.
 - `RUNTIME_SMOKE_ALLOW_HIGH_MEM=1` bypasses the guard entirely when you’re certain enough RAM is available.
+
+Running on 16 GB hosts? Stick to 4-bit TinyLlama weights, keep `LLAMA_GPU_LAYERS` below 8, and leave the suite in `auto` mode so it falls back to simulated GPU coverage if buffers would exceed the available headroom.
 
 When you want the temporary run directory to stick around for an investigation, export `RUNTIME_SMOKE_KEEP_TMP=1`. The helper writes a `.keep` marker so the automatic pruning that maintains `.smoke/runtime/` won’t delete the run later. Use `RUNTIME_SMOKE_KEEP_RECENT` and `RUNTIME_SMOKE_RETENTION_SECS` to tune how many historical runs the cleanup script keeps.
 

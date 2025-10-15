@@ -92,6 +92,7 @@ run_gpu_simulated() {
 
 run_gpu_real() {
   local server_bin="$1"
+  local strict="${2:-0}"
   export LLAMA_SERVER_BIN="$server_bin"
 
   if [[ -n "${RUNTIME_SMOKE_LLAMA_MODEL_PATH:-}" ]]; then
@@ -108,8 +109,23 @@ run_gpu_real() {
     export LLAMA_GPU_ENFORCE=1
   fi
 
+  if [[ "$strict" == "1" ]]; then
+    export LLAMA_GPU_REQUIRE_REAL=1
+  else
+    export LLAMA_GPU_REQUIRE_REAL=0
+  fi
+
   log "Running real GPU smoke via ${server_bin}"
-  env MODE=gpu LLAMA_GPU_REQUIRE_REAL=1 bash "$SMOKE_SCRIPT"
+  if env MODE=gpu bash "$SMOKE_SCRIPT"; then
+    return 0
+  fi
+
+  if [[ "$strict" == "1" ]]; then
+    return 1
+  fi
+
+  log "Real GPU smoke failed; falling back to simulated GPU run"
+  run_gpu_simulated
 }
 
 GPU_POLICY="${RUNTIME_SMOKE_GPU_POLICY:-skip}"
@@ -137,7 +153,10 @@ case "$GPU_POLICY" in
     ;;
   auto|detect|maybe)
     if server_path="$(resolve_llama_server)"; then
-      run_gpu_real "$server_path"
+      if run_gpu_real "$server_path" 0; then
+        exit 0
+      fi
+      # run_gpu_real already falls back to simulated on failure.
       exit 0
     fi
     log "No llama-server binary detected; falling back to simulated GPU markers"
@@ -146,8 +165,11 @@ case "$GPU_POLICY" in
     ;;
   require|must|force)
     if server_path="$(resolve_llama_server)"; then
-      run_gpu_real "$server_path"
-      exit 0
+      if run_gpu_real "$server_path" 1; then
+        exit 0
+      fi
+      log "GPU policy 'require' enforced and real run failed"
+      exit 1
     fi
     log "GPU policy 'require' set but no llama-server binary detected (set LLAMA_SERVER_BIN or RUNTIME_SMOKE_LLAMA_SERVER_BIN)"
     exit 1

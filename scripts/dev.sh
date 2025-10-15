@@ -292,11 +292,8 @@ PY
     echo "[verify] bash scripts/context_ci.sh"
     if ! bash "$REPO_ROOT/scripts/context_ci.sh"; then ok=1; fi
 
-    echo "[verify] MODE=stub bash scripts/runtime_llama_smoke.sh"
-    if ! MODE=stub bash "$REPO_ROOT/scripts/runtime_llama_smoke.sh"; then ok=1; fi
-
-    echo "[verify] LLAMA_GPU_SIMULATE=1 MODE=gpu bash scripts/runtime_llama_smoke.sh"
-    if ! LLAMA_GPU_SIMULATE=1 MODE=gpu bash "$REPO_ROOT/scripts/runtime_llama_smoke.sh"; then ok=1; fi
+    echo "[verify] RUNTIME_SMOKE_GPU_POLICY=${RUNTIME_SMOKE_GPU_POLICY:-simulate} bash scripts/runtime_smoke_suite.sh"
+    if ! RUNTIME_SMOKE_GPU_POLICY="${RUNTIME_SMOKE_GPU_POLICY:-simulate}" bash "$REPO_ROOT/scripts/runtime_smoke_suite.sh"; then ok=1; fi
 
     echo "[verify] ARW_SERVER_BIN=$REPO_ROOT/target/debug/arw-server bash scripts/runtime_vision_smoke.sh"
     if ! ARW_SERVER_BIN="$REPO_ROOT/target/debug/arw-server" bash "$REPO_ROOT/scripts/runtime_vision_smoke.sh"; then ok=1; fi
