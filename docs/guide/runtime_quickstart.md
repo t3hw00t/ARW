@@ -42,7 +42,7 @@ Follow the on-screen prompts. If you are missing a compiled `llama-server` binar
 
 At the end of the run you will see:
 
-- log locations (under `/tmp/arw-runtime-smoke.*` by default),
+- log locations (under `.smoke/runtime/run.*` by default, override with `RUNTIME_SMOKE_ROOT`),
 - whether the GPU acceleration markers were detected,
 - any policy gating or restart-budget warnings emitted by the supervisor.
 
@@ -74,6 +74,20 @@ If the helper used the simulated mode (because no real binary or weights were av
   ```bash
   MODE=gpu LLAMA_SERVER_BIN=/path/to/llama-server just runtime-smoke
   ```
+
+### Memory guardrails
+
+The GPU smoke automatically estimates how much RAM the configured GGUF weights will consume and compares it against the free memory reported by `/proc/meminfo`. If headroom is too tight the helper stops before launching `llama-server` and announces the shortfall, then falls back to simulated GPU mode (unless you set `LLAMA_GPU_REQUIRE_REAL=1`, in which case the run exits with an error).
+
+Memory thresholds can be tuned with environment variables:
+
+- `RUNTIME_SMOKE_MEM_FACTOR` (default `2.2`) multiplies the GGUF size to account for working buffers.
+- `RUNTIME_SMOKE_MEM_OVERHEAD_GB` (default `1`) adds a fixed cushion on top of the factor.
+- `RUNTIME_SMOKE_MEM_RESERVE_GB` (default `1`) keeps system RAM free even if the factor check passes.
+- `RUNTIME_SMOKE_MIN_REQUIRED_GB` (default `0`) enforces an absolute minimum requirement.
+- `RUNTIME_SMOKE_ALLOW_HIGH_MEM=1` bypasses the guard entirely when you’re certain enough RAM is available.
+
+When you want the temporary run directory to stick around for an investigation, export `RUNTIME_SMOKE_KEEP_TMP=1`. The helper writes a `.keep` marker so the automatic pruning that maintains `.smoke/runtime/` won’t delete the run later. Use `RUNTIME_SMOKE_KEEP_RECENT` and `RUNTIME_SMOKE_RETENTION_SECS` to tune how many historical runs the cleanup script keeps.
 
 Need to understand how bundle updates roll out or how to roll back a bad release? See [Runtime Bundle Runbook](../ops/runtime_bundle_runbook.md) for the signed update cadence, manifest verification workflow, and the operator rollback checklist.
 

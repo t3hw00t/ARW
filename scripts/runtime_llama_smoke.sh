@@ -28,6 +28,197 @@ BACKEND_KIND=""
 LLAMA_ACCEL="${LLAMA_ACCEL:-}"
 EXPECTED_CHAT_BACKEND="llama"
 
+resolve_smoke_root() {
+  local raw="$1"
+  python3 - "$raw" "$PROJECT_ROOT" <<'PY'
+import sys
+from pathlib import Path
+
+raw = Path(sys.argv[1])
+project_root = Path(sys.argv[2]).resolve()
+if not raw.is_absolute():
+    raw = project_root / raw
+try:
+    resolved = raw.resolve(strict=False)
+except FileNotFoundError:
+    resolved = raw
+try:
+    resolved.relative_to(project_root)
+except ValueError:
+    raise SystemExit("runtime smoke root must stay under the project root")
+if resolved == project_root:
+    raise SystemExit("runtime smoke root cannot equal the project root")
+print(resolved)
+PY
+}
+
+prune_old_runs() {
+  local root="$1"
+  local keep="${RUNTIME_SMOKE_KEEP_RECENT:-6}"
+  local ttl="${RUNTIME_SMOKE_RETENTION_SECS:-604800}"
+  if [[ "${RUNTIME_SMOKE_KEEP_TMP:-0}" = "1" ]] || [[ "${RUNTIME_SMOKE_DISABLE_PRUNE:-0}" = "1" ]]; then
+    return
+  fi
+  local removed
+  removed=$(
+    python3 - "$root" "$keep" "$ttl" <<'PY'
+import shutil
+import sys
+import time
+from pathlib import Path
+
+root = Path(sys.argv[1])
+try:
+    keep = max(0, int(sys.argv[2]))
+except ValueError:
+    keep = 0
+try:
+    ttl = max(0, int(sys.argv[3]))
+except ValueError:
+    ttl = 0
+
+if not root.exists():
+    raise SystemExit(0)
+
+entries = []
+for entry in root.iterdir():
+    if not entry.is_dir():
+        continue
+    if not entry.name.startswith("run."):
+        continue
+    keep_marker = entry / ".keep"
+    if keep_marker.exists():
+        continue
+    try:
+        stat = entry.stat()
+    except OSError:
+        continue
+    entries.append((stat.st_mtime, entry))
+
+entries.sort(key=lambda item: item[0], reverse=True)
+now = time.time()
+removed = []
+for index, (mtime, entry) in enumerate(entries):
+    should_remove = False
+    if index >= keep:
+        should_remove = True
+    if ttl > 0 and (now - mtime) > ttl:
+        should_remove = True
+    if not should_remove:
+        continue
+    try:
+        shutil.rmtree(entry)
+        removed.append(entry.name)
+    except OSError:
+        pass
+
+if removed:
+    print(" ".join(removed))
+PY
+  ) || return
+  if [[ -n "$removed" ]]; then
+    echo "[runtime-smoke] pruned old runs: $removed" >&2
+  fi
+}
+
+SMOKE_ROOT_RAW="${RUNTIME_SMOKE_ROOT:-$PROJECT_ROOT/.smoke/runtime}"
+if ! SMOKE_ROOT="$(resolve_smoke_root "$SMOKE_ROOT_RAW")"; then
+  echo "[runtime-smoke] invalid RUNTIME_SMOKE_ROOT (${SMOKE_ROOT_RAW}); adjust the path." >&2
+  exit 1
+fi
+mkdir -p "$SMOKE_ROOT"
+prune_old_runs "$SMOKE_ROOT"
+
+MEM_CHECK_OUTPUT=""
+
+check_memory_budget() {
+  local model_path="$1"
+  local output=""
+  local status=0
+  set +e
+  output=$(python3 - "$model_path" <<'PY'
+import os
+import sys
+from pathlib import Path
+
+path = Path(sys.argv[1])
+if not path.is_file():
+    sys.exit(0)
+
+def read_env_float(name, default):
+    raw = os.environ.get(name, "")
+    if not raw:
+        return default
+    try:
+        return float(raw)
+    except ValueError:
+        return default
+
+factor = read_env_float("RUNTIME_SMOKE_MEM_FACTOR", 2.2)
+overhead_gb = read_env_float("RUNTIME_SMOKE_MEM_OVERHEAD_GB", 1.0)
+reserve_gb = read_env_float("RUNTIME_SMOKE_MEM_RESERVE_GB", 1.0)
+min_required_gb = read_env_float("RUNTIME_SMOKE_MIN_REQUIRED_GB", 0.0)
+
+bytes_per_gb = 1024**3
+size_bytes = path.stat().st_size
+required = int(size_bytes * factor + overhead_gb * bytes_per_gb)
+min_required = int(min_required_gb * bytes_per_gb)
+if required < min_required:
+    required = min_required
+
+try:
+    meminfo = Path("/proc/meminfo").read_text(encoding="utf-8", errors="ignore").splitlines()
+except OSError:
+    sys.exit(0)
+
+available_bytes = 0
+for line in meminfo:
+    if line.startswith("MemAvailable:"):
+        parts = line.split()
+        if len(parts) >= 2:
+            try:
+                available_bytes = int(float(parts[1]) * 1024)
+            except ValueError:
+                available_bytes = 0
+        break
+
+if available_bytes <= 0:
+    sys.exit(0)
+
+reserve_bytes = int(reserve_gb * bytes_per_gb)
+available_after_reserve = max(available_bytes - reserve_bytes, 0)
+
+if available_after_reserve >= required:
+    sys.exit(0)
+
+def format_bytes(value):
+    units = ["B", "KB", "MB", "GB", "TB", "PB"]
+    value = float(value)
+    for unit in units:
+        if value < 1024 or unit == units[-1]:
+            if unit == "B":
+                return f"{int(value)}B"
+            return f"{value:.1f}{unit}"
+        value /= 1024
+    return f"{value:.1f}PB"
+
+print(
+    f"{required}\t{available_after_reserve}\t"
+    f"{format_bytes(required)}\t{format_bytes(available_after_reserve)}\t{format_bytes(size_bytes)}",
+    end=""
+)
+sys.exit(1)
+PY
+  )
+  MEM_CHECK_OUTPUT="$output"
+  status=$?
+  set -e
+  if [[ ${status:-0} -ne 0 ]]; then
+    return 1
+  fi
+  return 0
+}
+
 load_default_sources() {
   local config="${PROJECT_ROOT}/configs/runtime/model_sources.json"
   local python_bin=""
@@ -260,13 +451,38 @@ if [[ "$BACKEND_KIND" = "llama" && "$LLAMA_ACCEL" = "gpu" ]]; then
       GPU_SIMULATE=1
     fi
   fi
+  if [[ "$GPU_SIMULATE" != "1" ]]; then
+    local allow_high_mem=0
+    if is_truthy "${RUNTIME_SMOKE_ALLOW_HIGH_MEM:-0}"; then
+      allow_high_mem=1
+    fi
+    if [[ $allow_high_mem -eq 0 ]]; then
+      MEM_CHECK_OUTPUT=""
+      if ! check_memory_budget "${LLAMA_MODEL_PATH:-}"; then
+        local required available hr ha model_size
+        if [[ -n "$MEM_CHECK_OUTPUT" ]]; then
+          IFS=$'\t' read -r required available hr ha model_size <<<"$MEM_CHECK_OUTPUT"
+          echo "[runtime-smoke] insufficient free memory for real GPU smoke (need ~${hr} after reserve, have ~${ha}; model≈${model_size})." >&2
+          echo "[runtime-smoke] adjust RUNTIME_SMOKE_MEM_FACTOR/OVERHEAD_GB or set RUNTIME_SMOKE_ALLOW_HIGH_MEM=1 to bypass." >&2
+        else
+          echo "[runtime-smoke] insufficient free memory for real GPU smoke." >&2
+        fi
+        if [[ "$GPU_REQUIRE_REAL" = "1" ]]; then
+          echo "[runtime-smoke] aborting because LLAMA_GPU_REQUIRE_REAL=1 (no simulated fallback allowed)." >&2
+          exit 1
+        fi
+        echo "[runtime-smoke] falling back to simulated GPU markers due to memory guard." >&2
+        GPU_SIMULATE=1
+      fi
+    fi
+  fi
   if [[ "$GPU_SIMULATE" = "1" ]]; then
     SIMULATED_GPU_LOG=1
     BACKEND_KIND="stub"
   fi
 fi
 
-TMP_DIR=$(mktemp -d -t arw-runtime-smoke.XXXX)
+TMP_DIR=$(mktemp -d "$SMOKE_ROOT/run.XXXXXX")
 SERVER_LOG="$TMP_DIR/arw-server.log"
 BACKEND_LOG="$TMP_DIR/llama.log"
 CHAT_LOG="$TMP_DIR/chat-response.json"
@@ -295,7 +511,21 @@ cleanup() {
       tail -n 200 "$BACKEND_LOG" >&2 || true
     fi
   fi
-  rm -rf "$TMP_DIR"
+  local preserve=0
+  if [[ $status -ne 0 ]]; then
+    preserve=1
+  fi
+  if [[ "${RUNTIME_SMOKE_KEEP_TMP:-0}" = "1" ]]; then
+    preserve=1
+  fi
+  if [[ $preserve -eq 1 ]]; then
+    echo "[runtime-smoke] preserving run directory at ${TMP_DIR}" >&2
+    if [[ "${RUNTIME_SMOKE_KEEP_TMP:-0}" = "1" ]]; then
+      touch "$TMP_DIR/.keep" 2>/dev/null || true
+    fi
+  else
+    rm -rf "$TMP_DIR"
+  fi
   return "$status"
 }
 trap cleanup EXIT
