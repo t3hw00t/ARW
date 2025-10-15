@@ -293,6 +293,85 @@ is_truthy() {
   esac
 }
 
+# Return 0 if llama-server appears to support a given CLI flag
+supports_llama_flag() {
+  local flag="$1"
+  if [[ -z "${LLAMA_SERVER_BIN:-}" || ! -x "$LLAMA_SERVER_BIN" ]]; then
+    return 1
+  fi
+  "$LLAMA_SERVER_BIN" --help 2>&1 | grep -q -- "$flag"
+}
+
+# Print a short preflight plan before launching anything.
+print_preflight_plan() {
+  local accel_label="${LLAMA_ACCEL:-n/a}"
+  local backend_label="$BACKEND_KIND"
+  local gpu_mode="${GPU_SIMULATE:-0}"; [[ "$gpu_mode" = "1" ]] && gpu_mode="simulate" || gpu_mode="real"
+  local prompt_cache_note="auto"
+  if [[ -z "${LLAMA_PROMPT_CACHE_PATH:-}" ]]; then
+    prompt_cache_note="disabled"
+  elif supports_llama_flag "--prompt-cache"; then
+    prompt_cache_note="enabled"
+  else
+    prompt_cache_note="unsupported"
+  fi
+
+  local model_sz=""
+  if [[ -n "${LLAMA_MODEL_PATH:-}" && -f "${LLAMA_MODEL_PATH}" ]]; then
+    model_sz=$(python3 - <<'PY'
+import os,sys
+from pathlib import Path
+p=Path(os.environ.get('LLAMA_MODEL_PATH',''))
+print(f"{p.stat().st_size}") if p.is_file() else print()
+PY
+)
+  fi
+  local model_human=""
+  if [[ -n "$model_sz" ]]; then
+    model_human=$(python3 - <<'PY'
+import sys
+sz=int(sys.stdin.read().strip() or 0)
+u=['B','KB','MB','GB','TB']
+v=float(sz)
+for x in u:
+    if v<1024 or x==u[-1]:
+        print(f"{v:.1f}{x}")
+        break
+    v/=1024
+PY
+<<<"$model_sz")
+  fi
+
+  echo "[runtime-smoke] plan: backend=${backend_label}, accel=${accel_label}, gpu=${gpu_mode}, prompt-cache=${prompt_cache_note}" >&2
+  if [[ -n "${LLAMA_SERVER_BIN:-}" ]]; then
+    echo "[runtime-smoke] plan: llama-server=${LLAMA_SERVER_BIN}" >&2
+  fi
+  if [[ -n "${LLAMA_MODEL_PATH:-}" ]]; then
+    echo "[runtime-smoke] plan: model=${LLAMA_MODEL_PATH}${model_human:+ (${model_human})}" >&2
+  fi
+  if [[ -n "${ARW_SERVER_BIN:-}" ]]; then
+    echo "[runtime-smoke] plan: arw-server=${ARW_SERVER_BIN}" >&2
+  fi
+
+  # Optional memory preview for real GPU
+  if [[ "$BACKEND_KIND" = "llama" && "$LLAMA_ACCEL" = "gpu" && "${GPU_SIMULATE:-0}" != "1" ]]; then
+    if check_memory_budget "${LLAMA_MODEL_PATH:-}"; then
+      : # OK
+    else
+      local required available hr ha model_size
+      if [[ -n "$MEM_CHECK_OUTPUT" ]]; then
+        IFS=$'\t' read -r required available hr ha model_size <<<"$MEM_CHECK_OUTPUT"
+        echo "[runtime-smoke] pre-check: memory may be tight (need ~${hr} after reserve, have ~${ha}; model≈${model_size})." >&2
+      fi
+    fi
+  fi
+
+  if is_truthy "${RUNTIME_SMOKE_DRY_RUN:-0}"; then
+    echo "[runtime-smoke] dry-run requested; exiting before launch." >&2
+    exit 0
+  fi
+}
+
 print_hf_token_help() {
   cat >&2 <<'EOF'
 [runtime-smoke] To exercise a real llama.cpp build you need a Hugging Face access token so the weights download succeeds:
@@ -452,14 +531,18 @@ if [[ "$BACKEND_KIND" = "llama" && "$LLAMA_ACCEL" = "gpu" ]]; then
     fi
   fi
   if [[ "$GPU_SIMULATE" != "1" ]]; then
-    local allow_high_mem=0
+    allow_high_mem=0
     if is_truthy "${RUNTIME_SMOKE_ALLOW_HIGH_MEM:-0}"; then
       allow_high_mem=1
     fi
     if [[ $allow_high_mem -eq 0 ]]; then
       MEM_CHECK_OUTPUT=""
       if ! check_memory_budget "${LLAMA_MODEL_PATH:-}"; then
-        local required available hr ha model_size
+        required=""
+        available=""
+        hr=""
+        ha=""
+        model_size=""
         if [[ -n "$MEM_CHECK_OUTPUT" ]]; then
           IFS=$'\t' read -r required available hr ha model_size <<<"$MEM_CHECK_OUTPUT"
           echo "[runtime-smoke] insufficient free memory for real GPU smoke (need ~${hr} after reserve, have ~${ha}; model≈${model_size})." >&2
@@ -673,8 +756,12 @@ start_llama_backend() {
       fi
     done
     if [[ $has_prompt_cache -eq 0 ]]; then
-      cmd+=(--prompt-cache "$prompt_cache_path")
-      echo "[runtime-smoke] appended --prompt-cache ${prompt_cache_path}" >&2
+      if supports_llama_flag "--prompt-cache"; then
+        cmd+=(--prompt-cache "$prompt_cache_path")
+        echo "[runtime-smoke] appended --prompt-cache ${prompt_cache_path}" >&2
+      else
+        echo "[runtime-smoke] llama-server does not support --prompt-cache; skipping the flag" >&2
+      fi
     fi
   fi
 
@@ -708,7 +795,15 @@ start_llama_backend() {
   fi
 
   echo "[runtime-smoke] launching llama backend (${accel}) with command: ${cmd[*]}" >&2
-  (cd "$PROJECT_ROOT" && "${cmd[@]}" >"$BACKEND_LOG" 2>&1 &)
+  local run_prefix=()
+  if is_truthy "${RUNTIME_SMOKE_NICE:-0}"; then
+    if command -v ionice >/dev/null 2>&1; then
+      run_prefix=(nice -n "${RUNTIME_SMOKE_NICE_N:-10}" ionice -c2 -n "${RUNTIME_SMOKE_IONICE_N:-7}")
+    else
+      run_prefix=(nice -n "${RUNTIME_SMOKE_NICE_N:-10}")
+    fi
+  fi
+  (cd "$PROJECT_ROOT" && "${run_prefix[@]}" "${cmd[@]}" >"$BACKEND_LOG" 2>&1 &)
   BACKEND_PID=$!
   for _ in {1..240}; do
     if curl -fsS "http://127.0.0.1:${BACKEND_PORT}/health" >/dev/null 2>&1; then
@@ -757,6 +852,10 @@ start_server() {
     if [[ -x "$PROJECT_ROOT/target/debug/arw-server" ]]; then
       server_bin="$PROJECT_ROOT/target/debug/arw-server"
     else
+      if is_truthy "${RUNTIME_SMOKE_SKIP_BUILD:-0}"; then
+        echo "[runtime-smoke] arw-server binary not found and RUNTIME_SMOKE_SKIP_BUILD=1 set; aborting. Build once via 'cargo build -p arw-server' or set ARW_SERVER_BIN to an existing binary." >&2
+        exit 1
+      fi
       echo "[runtime-smoke] building arw-server binary" >&2
       local build_log
       build_log=$(mktemp -t runtime-smoke-build.XXXX.log)
@@ -770,7 +869,15 @@ start_server() {
     fi
   fi
 
-  (cd "$PROJECT_ROOT" && "$server_bin" >"$SERVER_LOG" 2>&1 &)
+  local run_prefix=()
+  if is_truthy "${RUNTIME_SMOKE_NICE:-0}"; then
+    if command -v ionice >/dev/null 2>&1; then
+      run_prefix=(nice -n "${RUNTIME_SMOKE_NICE_N:-10}" ionice -c2 -n "${RUNTIME_SMOKE_IONICE_N:-7}")
+    else
+      run_prefix=(nice -n "${RUNTIME_SMOKE_NICE_N:-10}")
+    fi
+  fi
+  (cd "$PROJECT_ROOT" && "${run_prefix[@]}" "$server_bin" >"$SERVER_LOG" 2>&1 &)
   SERVER_PID=$!
 
   local healthz="http://127.0.0.1:${ARW_PORT}/healthz"
@@ -955,6 +1062,7 @@ verify_llama_accel() {
   echo "[runtime-smoke] warning: GPU markers not found in llama backend log (pattern: $pattern)" >&2
 }
 
+print_preflight_plan
 start_backend
 start_server
 chat_probe

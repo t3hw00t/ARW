@@ -137,6 +137,11 @@ if is_truthy "${RUNTIME_SMOKE_SKIP_STUB:-0}"; then
 fi
 
 if [[ $RUN_STUB -eq 1 ]]; then
+  log "Plan: stub stage enabled"
+  if [[ "${RUNTIME_SMOKE_DRY_RUN:-0}" = "1" ]]; then
+    log "Dry-run requested; exiting before execution."
+    exit 0
+  fi
   run_stub
 else
   log "Skipping stub smoke (RUNTIME_SMOKE_SKIP_STUB=1)"
