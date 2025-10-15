@@ -189,8 +189,8 @@ Sample response (defaults)
     ```
 
 Egress
-- `GET /state/egress` — recent egress ledger rows `{ id, time, decision, reason?, dest_host?, dest_port?, protocol?, bytes_in?, bytes_out?, corr_id?, proj?, posture }`
-- `GET /state/egress/settings` — effective egress posture, allowlist, multi-label suffixes, and toggles
+- `GET /state/egress` — recent egress ledger rows `{ id, time, decision, reason?, dest_host?, dest_port?, protocol?, bytes_in?, bytes_out?, corr_id?, proj?, posture }` plus a `metrics` snapshot mirroring the Prometheus counters (`minted_total`, `refreshed_total`, and `scope_leases` summaries).
+- `GET /state/egress/settings` — effective egress posture, allowlist, multi-label suffixes, toggles, and a `leases.metrics` object with the same lease counters that power `/metrics`.
 - `POST /egress/settings` — update toggles, allowlist, or multi-label suffixes and persist to config (admin-gated)
 - `POST /egress/preview` — dry-run URL+method against policy, allowlist, and guards `{ allow, reason?, host, port, protocol }`
 
@@ -220,6 +220,8 @@ curl -sS "http://127.0.0.1:8091/state/egress?limit=1" | jq
   ]
 }
 ```
+
+Responses also include a `metrics` object (not shown above) that mirrors the lease counters surfaced in `/state/egress/settings` and Prometheus (`arw_egress_scope_lease_*`).
 
 SSE
 - `GET /events?prefix=egress.` — stream `egress.ledger.appended` events as they occur

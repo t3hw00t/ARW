@@ -207,9 +207,18 @@ async fn compose_egress_payload(state: &AppState) -> serde_json::Value {
         .get("count")
         .and_then(|v| v.as_u64())
         .unwrap_or(0);
+    let lease_metrics = state.metrics().egress_summary();
+    let lease_metrics_value = serde_json::to_value(&lease_metrics).unwrap_or_else(|_| {
+        json!({
+            "minted_total": 0,
+            "refreshed_total": 0,
+            "scope_leases": {}
+        })
+    });
     let leases_summary = if state.kernel_enabled() {
         match state.kernel().list_leases_async(200).await {
             Ok(items) => {
+                let metrics_snapshot = lease_metrics_value.clone();
                 let total = items.len();
                 let net = items
                     .iter()
@@ -218,16 +227,21 @@ async fn compose_egress_payload(state: &AppState) -> serde_json::Value {
                             .as_object()
                             .and_then(|obj| obj.get("capability"))
                             .and_then(|v| v.as_str())
-                            .map(|cap| cap.starts_with("net"))
-                            .unwrap_or(false)
-                    })
-                    .count();
-                json!({"total": total, "net": net, "items": items})
+                        .map(|cap| cap.starts_with("net"))
+                        .unwrap_or(false)
+                })
+                .count();
+                json!({
+                    "total": total,
+                    "net": net,
+                    "items": items,
+                    "metrics": metrics_snapshot
+                })
             }
             Err(err) => json!({"error": err.to_string()}),
         }
     } else {
-        json!({"enabled": false})
+        json!({"enabled": false, "metrics": lease_metrics_value})
     };
 
     json!({
@@ -542,4 +556,65 @@ pub async fn egress_settings_update(
         map.insert("snapshot_id".into(), json!(snapshot_id));
     }
     (axum::http::StatusCode::OK, Json(body)).into_response()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::test_support;
+    use serde_json::Value;
+    use tempfile::tempdir;
+
+    #[tokio::test]
+    async fn compose_payload_includes_scope_metrics() {
+        let temp = tempdir().expect("tempdir");
+        let mut ctx = test_support::begin_state_env(temp.path());
+        let state = test_support::build_state(temp.path(), &mut ctx.env).await;
+
+        // Record synthetic lease mint + refresh to populate metrics
+        state.metrics().record_scope_lease_mint(
+            Some("scope.github"),
+            "net:https",
+            Some("2099-01-01T00:00:00Z"),
+            false,
+        );
+        state.metrics().record_scope_lease_mint(
+            Some("scope.github"),
+            "net:https",
+            Some("2099-01-01T00:00:00Z"),
+            true,
+        );
+
+        let payload = compose_egress_payload(&state).await;
+        let leases = payload
+            .get("leases")
+            .and_then(Value::as_object)
+            .expect("leases object");
+        let metrics = leases
+            .get("metrics")
+            .and_then(Value::as_object)
+            .expect("metrics present");
+
+        assert_eq!(metrics.get("minted_total").and_then(Value::as_u64), Some(1));
+        assert_eq!(
+            metrics.get("refreshed_total").and_then(Value::as_u64),
+            Some(1)
+        );
+
+        let scopes = metrics
+            .get("scope_leases")
+            .and_then(Value::as_object)
+            .expect("scope map");
+        let scope_entry = scopes
+            .get("scope.github")
+            .and_then(Value::as_object)
+            .expect("scope entry");
+        assert_eq!(scope_entry.get("minted").and_then(Value::as_u64), Some(1));
+        assert_eq!(
+            scope_entry.get("refreshed").and_then(Value::as_u64),
+            Some(1)
+        );
+        assert!(scope_entry.get("last_capability").is_some());
+        assert!(scope_entry.get("last_minted_at").is_some());
+    }
 }

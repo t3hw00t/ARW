@@ -69,6 +69,21 @@ arw-cli capsule preset adopt --id capsule.strict-egress --base http://127.0.0.1:
 #   "leases": {
 #     "total": 3,
 #     "net": 2,
+#     "metrics": {
+#       "minted_total": 4,
+#       "refreshed_total": 3,
+#       "scope_leases": {
+#         "github": {
+#           "minted": 3,
+#           "refreshed": 2,
+#           "last_capability": "net:https",
+#           "last_reason": "refresh",
+#           "last_ttl_until": "2025-12-01T00:00:00Z",
+#           "last_minted_at": "2025-10-12T14:05:00.123Z",
+#           "last_minted_epoch": 1760201105
+#         }
+#       }
+#     },
 #     "items": [ ... ]
 #   }
 # }
@@ -142,6 +157,7 @@ Notes
 - Optional `lease_capabilities` on a scope mints/refreshes the listed capability leases whenever that scope allows traffic, so you can mirror policy intent into the lease ledger automatically.
 - Scope-minted leases default to a one-hour TTL and refresh when fewer than five minutes remain. Tune cadence with `ARW_EGRESS_SCOPE_LEASE_TTL_SECS` (min 60, max 86 400) and `ARW_EGRESS_SCOPE_LEASE_REFRESH_SECS` (min 10).
 - `arw-cli admin egress scopes` surfaces the active leases per scope with remaining TTL so you can confirm the automation at a glance.
+- `leases.metrics` includes the Prometheus-style counters exposed by `/metrics` (`minted_total`, `refreshed_total`, and per-scope details). The Launcher Models → Egress scopes panel now renders the same snapshot so operators can review mint/refresh cadence without leaving the UI.
 - `/admin/probe/metrics` (Prometheus output) now exports `arw_egress_scope_lease_*` counters so dashboards can track scope lease mints and refreshes per scope.
 
 Network scopes

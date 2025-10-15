@@ -780,11 +780,13 @@ pub async fn state_egress(
         return resp;
     }
     let settings = crate::api::egress_settings::current_settings(&state).await;
+    let metrics = state.metrics().egress_summary();
     let mut response = Json(json!({
         "version": version,
         "count": count,
         "items": items,
         "settings": settings,
+        "metrics": metrics,
     }))
     .into_response();
     crate::api::http_utils::apply_state_version_headers(response.headers_mut(), "egress", version);

@@ -675,6 +675,13 @@ impl Metrics {
         }
     }
 
+    pub fn egress_summary(&self) -> EgressSummary {
+        self.egress
+            .lock()
+            .map(|counters| counters.summary())
+            .unwrap_or_default()
+    }
+
     pub fn routes_version(&self) -> u64 {
         self.routes_version.load(Ordering::Relaxed)
     }

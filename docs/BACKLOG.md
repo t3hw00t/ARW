@@ -196,7 +196,7 @@ Caching & Performance (High Priority)
 - [Kernel] [t-250914210107-http03] Docs: consolidate HTTP caching semantics into a short reusable snippet and cross‑link from API/Guide — done
 
 Egress Firewall & Posture (Plan)
-- [Kernel] Policy: add network scopes (domain/IP/CIDR, port, protocol) and TTL leases; surface in UI — doing (structured scopes + TTL landed via `/egress/settings`; launcher scopes view + editing live; scope-backed leases now auto-mint/refresh; lease audit UI next).
+- [Kernel] Policy: add network scopes (domain/IP/CIDR, port, protocol) and TTL leases; surface in UI — doing (structured scopes + TTL landed via `/egress/settings`; launcher scopes view + editing live; scope-backed leases now auto-mint/refresh; lease audit UI shipped via Launcher metrics + `/state/egress/settings` counters).
 - [Kernel] Gateway: per‑node loopback proxy (HTTP(S)/WS CONNECT; optional SOCKS5) with allow/deny by SNI/Host and port; deny IP‑literals by default; no TLS MITM.
 - [Kernel] DNS Guard: force resolver, block UDP/53/DoH/DoT from tools; short TTLs; log lookups.
 - [Kernel] Routing: containers via proxy env + blocked direct egress; host processes with OS firewall rules (allow 127.0.0.1:proxy only for agent PIDs).

@@ -14,6 +14,7 @@ let modelsSseIndicator = null;
 let currentEgressSettings = null;
 let currentEgressScopes = [];
 let scopeCapabilityIndex = new Map();
+let currentScopeMetrics = null;
 let activeMode = (window.ARW?.mode?.current === 'expert') ? 'expert' : 'guided';
 let expertInitialized = false;
 const CAPSULE_PRESETS = Array.isArray(window.ARW_CAPSULE_PRESETS) ? window.ARW_CAPSULE_PRESETS.slice() : [];
@@ -1418,10 +1419,94 @@ function normalizeLedgerMeta(meta){
   return null;
 }
 
-function updateEgressScopes(egress){
+function renderLeaseMetricsSummary(metrics){
+  const container = document.getElementById('egress-lease-metrics');
+  if (!container) return;
+  if (!metrics || typeof metrics !== 'object') {
+    container.textContent = 'Lease telemetry unavailable.';
+    return;
+  }
+  const mintedRaw = Number(metrics.minted_total ?? 0);
+  const refreshedRaw = Number(metrics.refreshed_total ?? 0);
+  const mintedTotal = Number.isFinite(mintedRaw) ? mintedRaw : 0;
+  const refreshedTotal = Number.isFinite(refreshedRaw) ? refreshedRaw : 0;
+  const scopeMap = (metrics.scope_leases && typeof metrics.scope_leases === 'object')
+    ? metrics.scope_leases
+    : {};
+  const tracked = Object.keys(scopeMap).length;
+  const parts = [
+    `<strong>Lease telemetry</strong>`,
+    `Minted total: ${mintedTotal}`,
+    `Refreshed total: ${refreshedTotal}`,
+    `Tracked scopes: ${tracked}`
+  ];
+  container.innerHTML = parts.map((line, idx) => {
+    if (idx === 0) return `<div class="lease-metrics-head">${line}</div>`;
+    return `<div>${escapeHtml(line)}</div>`;
+  }).join('');
+}
+
+function findScopeMetrics(scope){
+  if (!currentScopeMetrics || typeof currentScopeMetrics !== 'object') return null;
+  const map = currentScopeMetrics.scope_leases;
+  if (!map || typeof map !== 'object') return null;
+  const labels = [];
+  const id = typeof scope.id === 'string' ? scope.id.trim() : '';
+  const desc = typeof scope.description === 'string' ? scope.description.trim() : '';
+  const label = scopeLabel(scope);
+  if (id) labels.push(id);
+  if (desc && !labels.includes(desc)) labels.push(desc);
+  if (label && !labels.includes(label)) labels.push(label);
+  if (!labels.includes('(unknown)')) labels.push('(unknown)');
+  for (const candidate of labels){
+    if (candidate && Object.prototype.hasOwnProperty.call(map, candidate)){
+      return map[candidate];
+    }
+  }
+  return null;
+}
+
+function formatScopeMetrics(scopeMetrics){
+  if (!scopeMetrics || typeof scopeMetrics !== 'object') return '—';
+  const mintedRaw = Number(scopeMetrics.minted ?? 0);
+  const refreshedRaw = Number(scopeMetrics.refreshed ?? 0);
+  const minted = Number.isFinite(mintedRaw) ? mintedRaw : 0;
+  const refreshed = Number.isFinite(refreshedRaw) ? refreshedRaw : 0;
+  const lastAt = typeof scopeMetrics.last_minted_at === 'string'
+    ? scopeMetrics.last_minted_at
+    : null;
+  const reason = typeof scopeMetrics.last_reason === 'string'
+    ? scopeMetrics.last_reason
+    : null;
+  const ttl = typeof scopeMetrics.last_ttl_until === 'string'
+    ? scopeMetrics.last_ttl_until
+    : null;
+  const cap = typeof scopeMetrics.last_capability === 'string'
+    ? scopeMetrics.last_capability
+    : null;
+  const rows = [
+    `<div><strong>${minted}</strong> minted</div>`,
+    `<div class="dim"><strong>${refreshed}</strong> refreshed</div>`
+  ];
+  if (lastAt){
+    const suffix = reason ? ` (${escapeHtml(reason)})` : '';
+    rows.push(`<div class="dim">Last: ${escapeHtml(lastAt)}${suffix}</div>`);
+  }
+  if (ttl){
+    rows.push(`<div class="dim">TTL: ${escapeHtml(ttl)}</div>`);
+  }
+  if (cap){
+    rows.push(`<div class="dim">Cap: ${escapeHtml(cap)}</div>`);
+  }
+  return rows.join('');
+}
+
+function updateEgressScopes(egress, metrics){
   const container = document.getElementById('egress-scopes');
   const summary = document.getElementById('egress-scopes-summary');
   currentEgressSettings = egress || null;
+  currentScopeMetrics = metrics || null;
+  window.__scopeLeaseMetrics = currentScopeMetrics;
   if (summary) {
     if (!egress) {
       summary.textContent = '';
@@ -1435,6 +1520,7 @@ function updateEgressScopes(egress){
       summary.textContent = bits.join(' · ');
     }
   }
+  renderLeaseMetricsSummary(currentScopeMetrics);
   if (!container) return;
   if (!egress) {
     container.textContent = 'Scopes unavailable.';
@@ -1473,6 +1559,7 @@ function updateEgressScopes(egress){
         <th>Ports</th>
         <th>Protocols</th>
         <th>Lease Caps</th>
+        <th>Lease Metrics</th>
         <th>Status</th>
         <th>Actions</th>
       </tr>
@@ -1492,6 +1579,7 @@ function updateEgressScopes(egress){
     const expired = !!scope.expired;
     const statusText = expired ? 'Expired' : 'Active';
     const label = scopeLabel(scope);
+    const leaseMetrics = formatScopeMetrics(findScopeMetrics(scope));
 
     const hostsLines = [];
     if (hosts) hostsLines.push(escapeHtml(hosts));
@@ -1510,6 +1598,7 @@ function updateEgressScopes(egress){
       <td>${escapeHtml(ports)}</td>
       <td>${escapeHtml(protocols)}</td>
       <td>${escapeHtml(leaseCaps)}</td>
+      <td class="scope-metrics">${leaseMetrics}</td>
       <td><span class="scope-status ${expired ? 'expired' : 'active'}">${statusText}</span></td>
       <td class="scope-actions"></td>
     `;
@@ -1679,9 +1768,11 @@ async function handleScopeFormSubmit(event){
 async function saveScopes(scopes, successMessage){
   try {
     const updated = await postAdminJson('egress/settings', { scopes });
-    const payload = updated?.egress ? updated.egress : updated?.data?.egress;
+    const body = updated?.egress ? updated : (updated?.data || {});
+    const payload = body.egress;
+    const metrics = body.leases && typeof body.leases === 'object' ? body.leases.metrics : null;
     if (payload) {
-      updateEgressScopes(payload);
+      updateEgressScopes(payload, metrics || null);
       ARW.toast(successMessage || 'Scopes updated.');
     }
   } catch (err) {
@@ -1717,10 +1808,11 @@ async function loadEgressScopes() {
   try{
     const data = await fetchAdminJson('state/egress/settings');
     if (data && data.egress) {
-      updateEgressScopes(data.egress);
+      const metrics = data.leases && typeof data.leases === 'object' ? data.leases.metrics : null;
+      updateEgressScopes(data.egress, metrics || null);
       updateCapsulePresets(data.capsules && data.capsules.snapshot ? data.capsules.snapshot : null);
     } else {
-      updateEgressScopes(null);
+      updateEgressScopes(null, null);
       updateCapsulePresets(null);
     }
   }catch(err){
@@ -1787,7 +1879,8 @@ async function previewLedger(corrId, opts = {}){
     if (!opts.silent) pre.textContent = corr ? `Loading ledger entries for ${corr}…` : 'Loading recent ledger entries…';
     const data = await fetchAdminJson('state/egress?limit=200');
     if (data && data.settings && data.settings.egress){
-      updateEgressScopes(data.settings.egress);
+      const metrics = (data.metrics && typeof data.metrics === 'object') ? data.metrics : null;
+      updateEgressScopes(data.settings.egress, metrics);
     }
     const items = Array.isArray(data.items) ? data.items : [];
     const filtered = corr ? items.filter(it => String(it.corr_id||'') === corr) : items;
