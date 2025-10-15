@@ -91,6 +91,7 @@ If the helper used the simulated mode (because no real binary or weights were av
   export RUNTIME_SMOKE_NICE=1                # run arw-server / llama-server under nice/ionice
   just runtime-smoke
   ```
+  Combine with `ARW_SERVER_BIN=/path/to/arw-server` when you already have a build artifact you want to reuse even across clean worktrees.
 
 ### Memory guardrails
 

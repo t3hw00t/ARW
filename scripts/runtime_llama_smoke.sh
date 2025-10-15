@@ -133,6 +133,7 @@ MEM_CHECK_OUTPUT=""
 RESOLVED_SERVER_BIN=""
 RESOLVED_SERVER_BUILD=""  # debug|release
 RESOLVED_SERVER_NEEDS_BUILD=0
+PROMPT_CACHE_SUPPORTED="unknown"
 
 resolve_server_candidate() {
   local candidate=""
@@ -350,7 +351,25 @@ supports_llama_flag() {
   if [[ -z "${LLAMA_SERVER_BIN:-}" || ! -x "$LLAMA_SERVER_BIN" ]]; then
     return 1
   fi
-  "$LLAMA_SERVER_BIN" --help 2>&1 | grep -q -- "$flag"
+
+  if [[ "$flag" = "--prompt-cache" ]]; then
+    case "$PROMPT_CACHE_SUPPORTED" in
+      yes) return 0 ;;
+      no) return 1 ;;
+    esac
+  fi
+
+  if "$LLAMA_SERVER_BIN" --help 2>&1 | grep -q -- "$flag"; then
+    if [[ "$flag" = "--prompt-cache" ]]; then
+      PROMPT_CACHE_SUPPORTED="yes"
+    fi
+    return 0
+  fi
+
+  if [[ "$flag" = "--prompt-cache" ]]; then
+    PROMPT_CACHE_SUPPORTED="no"
+  fi
+  return 1
 }
 
 # Print a short preflight plan before launching anything.

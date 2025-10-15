@@ -147,6 +147,11 @@ else
   log "Skipping stub smoke (RUNTIME_SMOKE_SKIP_STUB=1)"
 fi
 
+if [[ "${RUNTIME_SMOKE_DRY_RUN:-0}" = "1" ]]; then
+  log "Dry-run requested; skipping GPU stage."
+  exit 0
+fi
+
 case "$GPU_POLICY" in
   ""|skip|no|none|off)
     log "GPU smoke disabled (policy=${GPU_POLICY:-skip})"
