@@ -1126,6 +1126,47 @@ PY
   echo "[runtime-smoke] runtime matrix entry ${key}: ${label} (code=${code}, severity=${severity}, severity_label=${severity_label})"
 }
 
+match_backend_log_regex() {
+  local pattern="$1"
+  local status
+  python3 - "$pattern" "$BACKEND_LOG" <<'PY'
+import re
+import sys
+from pathlib import Path
+
+pattern = sys.argv[1]
+log_path = Path(sys.argv[2])
+try:
+    text = log_path.read_text(encoding='utf-8', errors='ignore')
+except OSError as exc:
+    print(f"[runtime-smoke] failed to read backend log for GPU validation: {exc}", file=sys.stderr)
+    sys.exit(3)
+try:
+    compiled = re.compile(pattern, re.IGNORECASE)
+except re.error as exc:
+    print(f"[runtime-smoke] invalid LLAMA_GPU_LOG_PATTERN regex: {exc}", file=sys.stderr)
+    sys.exit(2)
+sys.exit(0 if compiled.search(text) else 1)
+PY
+  status=$?
+  case "$status" in
+    0|1)
+      return "$status"
+      ;;
+    2)
+      echo "[runtime-smoke] invalid LLAMA_GPU_LOG_PATTERN regex (see error above)" >&2
+      exit 1
+      ;;
+    3)
+      echo "[runtime-smoke] failed to read backend log for GPU validation" >&2
+      exit 1
+      ;;
+    *)
+      return "$status"
+      ;;
+  esac
+}
+
 verify_llama_accel() {
   local accel="$1"
   [[ "$accel" == "gpu" ]] || return 0
@@ -1135,14 +1176,14 @@ verify_llama_accel() {
     return 0
   fi
 
-  if grep -Eiq 'fall(?:ing)? back to cpu|fallback to cpu' "$BACKEND_LOG"; then
+  if grep -Eiq 'fall(ing)? back to cpu|fallback to cpu' "$BACKEND_LOG"; then
     echo "[runtime-smoke] llama backend reported fallback to CPU" >&2
     exit 1
   fi
 
   local pattern="${LLAMA_GPU_LOG_PATTERN:-cuda|metal|vulkan|directml|hip|gpu acceleration}"
   if [[ "$SIMULATED_GPU_LOG" = "1" ]]; then
-    if grep -Eiq "$pattern" "$BACKEND_LOG"; then
+    if match_backend_log_regex "$pattern"; then
       echo "[runtime-smoke] GPU acceleration validated via simulated stub backend" >&2
       return 0
     fi
@@ -1150,7 +1191,7 @@ verify_llama_accel() {
     exit 1
   fi
 
-  if grep -Eiq "$pattern" "$BACKEND_LOG"; then
+  if match_backend_log_regex "$pattern"; then
     echo "[runtime-smoke] detected GPU markers in llama backend log" >&2
     return 0
   fi

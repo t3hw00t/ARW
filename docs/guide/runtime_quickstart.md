@@ -3,7 +3,7 @@ title: Runtime Quickstart (Non-Technical)
 ---
 
 # Runtime Quickstart (Non-Technical)
-Updated: 2025-10-12
+Updated: 2025-10-18
 Type: Tutorial
 
 This walkthrough is aimed at operators who want to validate the managed runtime supervisor without digging into the codebase. It uses the automation we ship (`just` commands and helper scripts) so you can prepare weights and run the smoke test with minimal manual tinkering.
@@ -29,7 +29,7 @@ The helper will:
 1. Ask for your Hugging Face token (it’s only stored in-memory).
 2. Download TinyLlama GGUF weights into `cache/models/`.
 3. Locate the `llama-server` binary (auto-detects `cache/llama.cpp/build/bin/llama-server`; otherwise it will prompt for a path).
-4. Launch the GPU smoke test.
+4. Launch the runtime smoke (stub by default, optional CPU/GPU stages when enabled).
 
 ```bash
 just runtime-check
@@ -43,10 +43,12 @@ Follow the on-screen prompts. If you are missing a compiled `llama-server` binar
 At the end of the run you will see:
 
 - log locations (under `.smoke/runtime/run.*` by default, override with `RUNTIME_SMOKE_ROOT`),
-- whether the GPU acceleration markers were detected,
+- whether the CPU/GPU acceleration markers were detected (depending on which stages ran),
 - any policy gating or restart-budget warnings emitted by the supervisor.
 
 If the helper used the simulated mode (because no real binary or weights were available) you can rerun `just runtime-check` (or `just runtime-check-weights-only`) after resolving the prerequisites; cached weights are reused automatically. You can adjust the upstream sources in `configs/runtime/model_sources.json` if your organization mirrors weights internally.
+
+> Tip: the CPU stage runs only when you export `RUNTIME_SMOKE_ALLOW_CPU=1`, and the GPU stage stays in simulated mode until you also set `RUNTIME_SMOKE_ALLOW_GPU=1`.
 
 ## Advanced options
 
@@ -63,9 +65,12 @@ If the helper used the simulated mode (because no real binary or weights were av
   LLAMA_MODEL_SOURCES="repo::file,repo2::file2" just runtime-weights
   ```
 - Provide a checksum for any source by adding a `"checksum": "sha256:..."` entry in `configs/runtime/model_sources.json`; the helper validates downloads automatically when a checksum is present.
-- Opt-in to automatic Hugging Face downloads from the smoke helper (falls back to simulated GPU markers if the binary/weights are missing):
+- Opt-in to automatic Hugging Face downloads from the smoke helper (falls back to simulated GPU markers if the binary/weights are missing; add `RUNTIME_SMOKE_ALLOW_CPU=1` when you want the CPU stage to run automatically):
   ```bash
-  LLAMA_ALLOW_DOWNLOADS=1 RUNTIME_SMOKE_GPU_POLICY=auto \
+  LLAMA_ALLOW_DOWNLOADS=1 \
+  RUNTIME_SMOKE_ALLOW_CPU=1 \
+  RUNTIME_SMOKE_CPU_POLICY=auto \
+  RUNTIME_SMOKE_GPU_POLICY=auto \
     RUNTIME_SMOKE_LLAMA_SERVER_BIN=/path/to/llama-server \
     RUNTIME_SMOKE_LLAMA_MODEL_PATH=/path/to/model.gguf \
     just runtime-smoke
@@ -79,11 +84,14 @@ If the helper used the simulated mode (because no real binary or weights were av
   ```
 - Skip the guided flow and run the smoke directly (requires all env vars to be set):
   ```bash
+  RUNTIME_SMOKE_ALLOW_CPU=1 \
+  RUNTIME_SMOKE_CPU_POLICY=auto \
   RUNTIME_SMOKE_ALLOW_GPU=1 \
   RUNTIME_SMOKE_GPU_POLICY=require \
     RUNTIME_SMOKE_LLAMA_SERVER_BIN=/path/to/llama-server \
     RUNTIME_SMOKE_LLAMA_MODEL_PATH=/path/to/model.gguf \
     just runtime-smoke
+  # Drop the GPU lines when you only need CPU coverage, or switch GPU policy to auto for best-effort accelerators.
   ```
 - Prefer existing builds and lower resource impact:
   ```bash

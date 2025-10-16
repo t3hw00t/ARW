@@ -10,8 +10,10 @@ set -euo pipefail
 #   require|must  → require a real llama.cpp server (fail if missing)
 #
 # Optional environment knobs:
+#   RUNTIME_SMOKE_CPU_POLICY         → skip|auto|require (default skip) for real CPU runs
+#   RUNTIME_SMOKE_ALLOW_CPU          → safety latch; set to 1 to allow CPU runs
 #   RUNTIME_SMOKE_LLAMA_SERVER_BIN   → preferred llama-server path
-#   RUNTIME_SMOKE_LLAMA_MODEL_PATH   → override LLAMA_MODEL_PATH for the GPU stage
+#   RUNTIME_SMOKE_LLAMA_MODEL_PATH   → override LLAMA_MODEL_PATH for CPU/GPU stages
 #   RUNTIME_SMOKE_LLAMA_SERVER_ARGS  → extra args for llama-server
 #   RUNTIME_SMOKE_LLAMA_SERVER_PORT  → fixed port for llama-server
 #   RUNTIME_SMOKE_STUB_MODE          → stub backend mode (defaults to "stub")
@@ -85,6 +87,34 @@ run_stub() {
   MODE="$stub_mode" bash "$SMOKE_SCRIPT"
 }
 
+run_cpu_real() {
+  local server_bin="$1"
+  local strict="${2:-0}"
+  export LLAMA_SERVER_BIN="$server_bin"
+
+  if [[ -n "${RUNTIME_SMOKE_LLAMA_MODEL_PATH:-}" ]]; then
+    export LLAMA_MODEL_PATH="$RUNTIME_SMOKE_LLAMA_MODEL_PATH"
+  fi
+  if [[ -n "${RUNTIME_SMOKE_LLAMA_SERVER_ARGS:-}" ]]; then
+    export LLAMA_SERVER_ARGS="$RUNTIME_SMOKE_LLAMA_SERVER_ARGS"
+  fi
+  if [[ -n "${RUNTIME_SMOKE_LLAMA_SERVER_PORT:-}" ]]; then
+    export LLAMA_SERVER_PORT="$RUNTIME_SMOKE_LLAMA_SERVER_PORT"
+  fi
+
+  log "Running real CPU smoke via ${server_bin}"
+  if env MODE=cpu bash "$SMOKE_SCRIPT"; then
+    return 0
+  fi
+
+  if [[ "$strict" == "1" ]]; then
+    return 1
+  fi
+
+  log "Real CPU smoke failed; continuing without CPU coverage (policy=auto)"
+  return 1
+}
+
 run_gpu_simulated() {
   log "Running simulated GPU smoke (llama backend stub)"
   env MODE=gpu LLAMA_GPU_SIMULATE=1 bash "$SMOKE_SCRIPT"
@@ -131,6 +161,9 @@ run_gpu_real() {
 GPU_POLICY="${RUNTIME_SMOKE_GPU_POLICY:-skip}"
 GPU_POLICY="$(to_lower "$GPU_POLICY")"
 
+CPU_POLICY="${RUNTIME_SMOKE_CPU_POLICY:-skip}"
+CPU_POLICY="$(to_lower "$CPU_POLICY")"
+
 RUN_STUB=1
 if is_truthy "${RUNTIME_SMOKE_SKIP_STUB:-0}"; then
   RUN_STUB=0
@@ -152,9 +185,43 @@ else
 fi
 
 if [[ "${RUNTIME_SMOKE_DRY_RUN:-0}" = "1" ]]; then
-  log "Dry-run requested; skipping GPU stage."
+  log "Dry-run requested; skipping CPU/GPU stages."
   exit 0
 fi
+
+case "$CPU_POLICY" in
+  ""|skip|no|none|off)
+    log "CPU smoke disabled (policy=${CPU_POLICY:-skip})"
+    ;;
+  auto|detect|maybe|cpu|real)
+    if ! is_truthy "${RUNTIME_SMOKE_ALLOW_CPU:-0}"; then
+      log "CPU policy '${CPU_POLICY}' requested but RUNTIME_SMOKE_ALLOW_CPU is not set; skipping CPU stage."
+    elif server_path="$(resolve_llama_server)"; then
+      run_cpu_real "$server_path" 0 || true
+    else
+      log "No llama-server binary detected; skipping CPU stage."
+    fi
+    ;;
+  require|must|force)
+    if ! is_truthy "${RUNTIME_SMOKE_ALLOW_CPU:-0}"; then
+      log "CPU policy '${CPU_POLICY}' requested but RUNTIME_SMOKE_ALLOW_CPU is not set; aborting before CPU stage."
+      exit 1
+    fi
+    if server_path="$(resolve_llama_server)"; then
+      if ! run_cpu_real "$server_path" 1; then
+        log "CPU policy 'require' enforced and real CPU run failed"
+        exit 1
+      fi
+    else
+      log "CPU policy 'require' set but no llama-server binary detected (set LLAMA_SERVER_BIN or RUNTIME_SMOKE_LLAMA_SERVER_BIN)"
+      exit 1
+    fi
+    ;;
+  *)
+    log "Unknown RUNTIME_SMOKE_CPU_POLICY value: ${CPU_POLICY}"
+    exit 1
+    ;;
+esac
 
 case "$GPU_POLICY" in
   ""|skip|no|none|off)
@@ -167,8 +234,9 @@ case "$GPU_POLICY" in
     ;;
   auto|detect|maybe)
     if ! is_truthy "${RUNTIME_SMOKE_ALLOW_GPU:-0}"; then
-      log "GPU policy '${GPU_POLICY}' requested but RUNTIME_SMOKE_ALLOW_GPU is not set; aborting before touching accelerators."
-      exit 1
+      log "GPU policy '${GPU_POLICY}' requested but RUNTIME_SMOKE_ALLOW_GPU is not set; falling back to simulated GPU markers."
+      run_gpu_simulated
+      exit 0
     fi
     if server_path="$(resolve_llama_server)"; then
       if run_gpu_real "$server_path" 0; then

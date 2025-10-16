@@ -21,6 +21,7 @@ export ARW_WORKERS_MAX="${ARW_WORKERS_MAX:-1}"
 
 # Default to stub-only runs unless explicitly overridden.
 export LLAMA_GPU_LAYERS="${LLAMA_GPU_LAYERS:-4}"
+export RUNTIME_SMOKE_CPU_POLICY="${RUNTIME_SMOKE_CPU_POLICY:-skip}"
 export RUNTIME_SMOKE_GPU_POLICY="${RUNTIME_SMOKE_GPU_POLICY:-skip}"
 
 # Flag that safe defaults are in effect (suppresses reminders in the smoke suite).

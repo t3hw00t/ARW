@@ -5,7 +5,7 @@ title: Runtime Matrix
 # Runtime Matrix
 
 > Need the short version? See [Runtime Quickstart (Non-Technical)](runtime_quickstart.md).
-Updated: 2025-10-16
+Updated: 2025-10-18
 Type: Blueprint
 Status: In progress
 
@@ -22,11 +22,12 @@ ARW seeds a runtime matrix read-model from `runtime.health` events. Today it mer
 - CLI shortcuts: `arw-cli runtime status` prints the same snapshot (or `--json` for raw), and `arw-cli runtime restore --id <runtime>` triggers supervised restores while echoing the remaining budget or budget exhaustion.
   - Text mode now reports the active `ttl_seconds` so operators know when the matrix snapshot should be considered stale.
   - JSON mode emits `{ "supervisor": ..., "matrix": ... }` so scripts can consume both views (including `ttl_seconds`) in one call.
- - Smoke check: `just runtime-smoke` launches a stub llama endpoint, points the server at it, and verifies `chat.respond` flows end-to-end without needing model weights. The target now delegates to `scripts/runtime_smoke_suite.sh`, which runs the stub stage first and then a GPU stage based on `RUNTIME_SMOKE_GPU_POLICY` (`auto` by default). The helper exits automatically after `RUNTIME_SMOKE_TIMEOUT_SECS` seconds (defaults to the shared `SMOKE_TIMEOUT_SECS`, falling back to 600). Set either knob to `0` to disable the guard during manual debugging.
+- Smoke check: `just runtime-smoke` launches a stub llama endpoint, points the server at it, and verifies `chat.respond` flows end-to-end without needing model weights. The target now delegates to `scripts/runtime_smoke_suite.sh`, which always runs the stub stage, optionally launches a real CPU backend when `RUNTIME_SMOKE_CPU_POLICY` is `auto`/`require` and `RUNTIME_SMOKE_ALLOW_CPU=1`, and finally executes the GPU stage governed by `RUNTIME_SMOKE_GPU_POLICY`. The helper exits automatically after `RUNTIME_SMOKE_TIMEOUT_SECS` seconds (defaults to the shared `SMOKE_TIMEOUT_SECS`, falling back to 600). Set either knob to `0` to disable the guard during manual debugging.
   - Resource controls: set `RUNTIME_SMOKE_SKIP_BUILD=1` to skip on-the-fly cargo builds (require `ARW_SERVER_BIN`); set `RUNTIME_SMOKE_USE_RELEASE=1` to prefer `target/release/arw-server` when present; set `RUNTIME_SMOKE_NICE=1` to start processes under `nice`/`ionice`. Use `RUNTIME_SMOKE_DRY_RUN=1` to print a preflight plan and exit without launching.
   - The smoke now also fetches `/state/runtime_matrix` and asserts every snapshot carries the accessible status strings (`label`, `detail`, `aria_hint`, `severity_label`) plus a fresh `runtime.updated` timestamp and positive `ttl_seconds`, catching regressions in the matrix feed before they escape CI.
-  - To exercise a real llama.cpp build with automatic fallback: `RUNTIME_SMOKE_GPU_POLICY=auto LLAMA_SERVER_BIN=/path/to/llama-server LLAMA_MODEL_PATH=/path/to/model.gguf just runtime-smoke`. Optionally pass `RUNTIME_SMOKE_LLAMA_SERVER_ARGS="--your --flags"` or `RUNTIME_SMOKE_LLAMA_SERVER_PORT=XXXX` to match your deployment. The suite falls back to a simulated GPU marker when the binary or weights are unavailable.
-  - Hard-require a hardware-backed run (helpful on CI nodes wired to dedicated GPUs): `RUNTIME_SMOKE_GPU_POLICY=require LLAMA_SERVER_BIN=/path/to/llama-server LLAMA_MODEL_PATH=/path/to/model.gguf just runtime-smoke`.
+  - Launch a real CPU run with automatic fallback: `RUNTIME_SMOKE_ALLOW_CPU=1 RUNTIME_SMOKE_CPU_POLICY=auto LLAMA_SERVER_BIN=/path/to/llama-server LLAMA_MODEL_PATH=/path/to/model.gguf just runtime-smoke`. The suite skips or downgrades to the stub path when binaries or weights are missing, keeping the guardrails green on constrained hosts.
+  - Launch a real GPU run with automatic fallback: `RUNTIME_SMOKE_ALLOW_GPU=1 RUNTIME_SMOKE_GPU_POLICY=auto LLAMA_SERVER_BIN=/path/to/llama-server LLAMA_MODEL_PATH=/path/to/model.gguf just runtime-smoke`. Optionally pass `RUNTIME_SMOKE_LLAMA_SERVER_ARGS="--your --flags"` or `RUNTIME_SMOKE_LLAMA_SERVER_PORT=XXXX` to match your deployment; without `RUNTIME_SMOKE_ALLOW_GPU=1` the stage stays in simulated mode.
+  - Hard-require a hardware-backed GPU run (helpful on CI nodes wired to dedicated accelerators): `RUNTIME_SMOKE_ALLOW_GPU=1 RUNTIME_SMOKE_GPU_POLICY=require LLAMA_SERVER_BIN=/path/to/llama-server LLAMA_MODEL_PATH=/path/to/model.gguf just runtime-smoke`.
   - Conserve memory on 16 GB hosts by pinning a 4-bit TinyLlama build and trimming GPU layers:
 
     ```bash
@@ -36,7 +37,7 @@ ARW seeds a runtime matrix read-model from `runtime.health` events. Today it mer
     # export LLAMA_GPU_LAYERS=4
     RUNTIME_SMOKE_GPU_POLICY=require just runtime-smoke
     ```
-  - CI parity (`scripts/dev.sh verify --ci`) runs both the stub path and a simulated GPU mode (`LLAMA_GPU_SIMULATE=1 MODE=gpu`) to keep the accelerator detection and log parsing code paths covered even when real GPUs are absent.
+  - CI parity (`scripts/dev.sh verify --ci`) runs both the stub path and a simulated GPU mode (`LLAMA_GPU_SIMULATE=1 MODE=gpu`) to keep the accelerator detection and log parsing code paths covered even when real GPUs are absent; the CPU stage remains disabled there unless you explicitly set `RUNTIME_SMOKE_ALLOW_CPU=1`.
   - GPU runs allocate a dedicated workspace under `.smoke/runtime/run.*` (override with `RUNTIME_SMOKE_ROOT`). Automatic pruning keeps the newest six runs unless you change `RUNTIME_SMOKE_KEEP_RECENT`/`RUNTIME_SMOKE_RETENTION_SECS` or pin an investigation with `RUNTIME_SMOKE_KEEP_TMP=1`.
 - Before launching `llama-server`, the helper estimates RAM usage from the GGUF size. If `MemAvailable` minus `RUNTIME_SMOKE_MEM_RESERVE_GB` falls short of `size × RUNTIME_SMOKE_MEM_FACTOR + RUNTIME_SMOKE_MEM_OVERHEAD_GB`, the script downgrades to the simulated GPU path and prints the shortfall (set `RUNTIME_SMOKE_ALLOW_HIGH_MEM=1` to bypass, or tweak the factors to match your hardware). With `LLAMA_GPU_REQUIRE_REAL=1`, the guard aborts instead of silently switching paths so CI never reports a false positive.
 - Signature summaries in `/state/runtime_matrix` now surface `trust_shortfall` counts. When bundle signatures verify but no trusted signer registry entry matches the channel, the matrix increments `signature_summary.trust_shortfall` and emits a warning instead of failing enforcement outright—install the matching signer (for example via `configs/runtime/bundle_signers.json` or `ARW_RUNTIME_BUNDLE_SIGNERS`) to promote those manifests to fully trusted.
@@ -55,12 +56,15 @@ When you are ready to run the runtime smoke against a real llama.cpp binary (CPU
      --include tinyllama-1.1b-chat-q4_k_m.gguf \
      --local-dir ./models
    ```
-5. Point the smoke test at the compiled server and the downloaded GGUF:
+5. Point the smoke test at the compiled server and the downloaded GGUF (CPU example shown; add GPU env to extend coverage):
    ```bash
-   MODE=gpu \
+   RUNTIME_SMOKE_ALLOW_CPU=1 \
+   RUNTIME_SMOKE_CPU_POLICY=require \
    LLAMA_SERVER_BIN=/path/to/llama.cpp/build/bin/llama-server \
    LLAMA_MODEL_PATH=$PWD/models/tinyllama-1.1b-chat-q4_k_m.gguf \
    just runtime-smoke
+   # Add for GPUs:
+   # RUNTIME_SMOKE_ALLOW_GPU=1 RUNTIME_SMOKE_GPU_POLICY=auto
    ```
 
 If the smoke script detects that a real run is missing weights, it now prints the same checklist so operators know how to proceed.
