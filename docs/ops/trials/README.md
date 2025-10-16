@@ -1,6 +1,6 @@
 # Trial Dossier
 
-Updated: 2025-10-01
+Updated: 2025-10-09
 Type: How‑to
 
 Use this folder to store lightweight records during the trial. Keep files short and human-friendly so anyone joining mid-stream can catch up.

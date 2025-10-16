@@ -165,6 +165,9 @@ triad-smoke:
 runtime-smoke:
   RUNTIME_SMOKE_GPU_POLICY="${RUNTIME_SMOKE_GPU_POLICY:-auto}" bash scripts/runtime_smoke_suite.sh
 
+runtime-llama-build:
+  bash scripts/runtime_llama_build.sh
+
 runtime-smoke-cpu:
   MODE=cpu bash scripts/runtime_llama_smoke.sh
 

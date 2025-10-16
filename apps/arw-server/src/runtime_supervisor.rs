@@ -589,6 +589,58 @@ impl RuntimeSupervisor {
                                     }),
                                 );
                             }
+                            if let Err(shutdown_err) = adapter.shutdown(handle.clone()).await {
+                                warn!(
+                                    target: "arw::runtime",
+                                    runtime = %runtime_id,
+                                    adapter = %adapter_id,
+                                    error = %shutdown_err,
+                                    "runtime shutdown after health failure reported error"
+                                );
+                            }
+                            {
+                                let mut guard = self.active.write().await;
+                                if let Some(existing) = guard.get(&runtime_id) {
+                                    if existing.adapter_id == adapter_id
+                                        && existing.handle.id == handle.id
+                                    {
+                                        guard.remove(&runtime_id);
+                                    }
+                                }
+                            }
+                            let restart_plan = {
+                                let guard = self.definitions.read().await;
+                                guard
+                                    .get(&runtime_id)
+                                    .map(|definition| (definition.auto_start, definition.preset.clone()))
+                            };
+                            if let Some((true, preset)) = restart_plan {
+                                let registry = self.registry.clone();
+                                let runtime_id_clone = runtime_id.clone();
+                                tokio::spawn(async move {
+                                    match registry
+                                        .request_restore(&runtime_id_clone, true, preset.clone(), None)
+                                        .await
+                                    {
+                                        Ok(_) => info!(
+                                            target: "arw::runtime",
+                                            runtime = %runtime_id_clone,
+                                            "auto-restart restore queued"
+                                        ),
+                                        Err(RuntimeRestoreError::RestartDenied { .. }) => warn!(
+                                            target: "arw::runtime",
+                                            runtime = %runtime_id_clone,
+                                            "auto-restart skipped: restart budget exhausted"
+                                        ),
+                                        Err(RuntimeRestoreError::RestoreFailed { reason }) => warn!(
+                                            target: "arw::runtime",
+                                            runtime = %runtime_id_clone,
+                                            error = %reason,
+                                            "auto-restart restore failed"
+                                        ),
+                                    }
+                                });
+                            }
                             break;
                         }
                     }
@@ -1128,6 +1180,64 @@ mod tests {
         }
     }
 
+    #[derive(Default)]
+    struct FlakyAdapter {
+        launch_calls: AtomicUsize,
+        health_calls: AtomicUsize,
+    }
+
+    #[async_trait]
+    impl RuntimeAdapter for FlakyAdapter {
+        fn id(&self) -> &'static str {
+            "flaky"
+        }
+
+        async fn prepare(
+            &self,
+            ctx: arw_runtime::PrepareContext<'_>,
+        ) -> Result<arw_runtime::PreparedRuntime, AdapterError> {
+            Ok(arw_runtime::PreparedRuntime {
+                command: ctx.descriptor.id.clone(),
+                args: Vec::new(),
+                runtime_id: Some(ctx.descriptor.id.clone()),
+            })
+        }
+
+        async fn launch(
+            &self,
+            prepared: arw_runtime::PreparedRuntime,
+        ) -> Result<arw_runtime::RuntimeHandle, AdapterError> {
+            self.launch_calls.fetch_add(1, Ordering::SeqCst);
+            Ok(arw_runtime::RuntimeHandle {
+                id: prepared
+                    .runtime_id
+                    .unwrap_or_else(|| prepared.command.clone()),
+                pid: Some(5150),
+            })
+        }
+
+        async fn shutdown(&self, _handle: arw_runtime::RuntimeHandle) -> Result<(), AdapterError> {
+            Ok(())
+        }
+
+        async fn health(
+            &self,
+            handle: &arw_runtime::RuntimeHandle,
+        ) -> Result<arw_runtime::RuntimeHealthReport, AdapterError> {
+            let call = self.health_calls.fetch_add(1, Ordering::SeqCst);
+            if call == 0 {
+                return Err(AdapterError::Unavailable(
+                    "simulated health failure".to_string(),
+                ));
+            }
+            let mut status = RuntimeStatus::new(handle.id.clone(), RuntimeState::Ready)
+                .with_summary("Runtime healthy after restart")
+                .touch();
+            status.set_severity(RuntimeSeverity::Info);
+            Ok(arw_runtime::RuntimeHealthReport { status })
+        }
+    }
+
     #[tokio::test]
     async fn supervisor_reports_health() {
         let bus = Bus::new(128);
@@ -1236,6 +1346,84 @@ mod tests {
             .expect("runtime present");
         assert_eq!(record.status.state, RuntimeState::Offline);
         assert_eq!(record.status.severity, RuntimeSeverity::Info);
+    }
+
+    #[tokio::test]
+    async fn auto_restart_requeues_restore_on_health_failure() {
+        let bus = Bus::new(128);
+        let registry = Arc::new(RuntimeRegistry::new(bus.clone()));
+        let supervisor = RuntimeSupervisor::new_with_options(
+            registry.clone(),
+            bus.clone(),
+            SupervisorOptions {
+                health_interval: Duration::from_millis(30),
+            },
+        )
+        .await;
+        let adapter = Arc::new(FlakyAdapter::default());
+        supervisor.register_adapter(adapter.clone()).await;
+
+        let descriptor = RuntimeDescriptor::new("flaky-runtime", "flaky");
+        supervisor
+            .install_definition(ManagedRuntimeDefinition::new(
+                descriptor.clone(),
+                "flaky".into(),
+                true,
+                None,
+                None,
+            ))
+            .await
+            .expect("definition install");
+
+        let mut rx = bus.subscribe();
+        timeout(Duration::from_secs(2), async {
+            loop {
+                if adapter.health_calls.load(Ordering::SeqCst) >= 1 {
+                    break;
+                }
+                tokio::time::sleep(Duration::from_millis(10)).await;
+            }
+        })
+        .await
+        .expect("first health check executed");
+
+        timeout(Duration::from_secs(3), async {
+            loop {
+                if adapter.launch_calls.load(Ordering::SeqCst) >= 2 {
+                    break;
+                }
+                tokio::time::sleep(Duration::from_millis(20)).await;
+            }
+        })
+        .await
+        .expect("auto-restart launched");
+
+        timeout(Duration::from_secs(3), async {
+            loop {
+                if let Ok(env) = rx.recv().await {
+                    if env.kind == arw_topics::TOPIC_RUNTIME_RESTORE_COMPLETED
+                        && env.payload["runtime"] == "flaky-runtime"
+                        && env.payload.get("ok").and_then(|value| value.as_bool()) == Some(true)
+                    {
+                        break;
+                    }
+                }
+            }
+        })
+        .await
+        .expect("saw successful restore completion");
+
+        let snapshot = registry.snapshot().await;
+        let record = snapshot
+            .runtimes
+            .iter()
+            .find(|r| r.descriptor.id == "flaky-runtime")
+            .expect("runtime present");
+        assert_eq!(record.status.state, RuntimeState::Ready);
+        assert!(
+            adapter.launch_calls.load(Ordering::SeqCst) >= 2,
+            "expected at least two launches"
+        );
     }
 
     #[tokio::test]

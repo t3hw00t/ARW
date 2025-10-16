@@ -1,6 +1,6 @@
 # Trial Stand-up Template
 
-Updated: 2025-10-05
+Updated: 2025-10-09
 Type: How‑to
 
 Use this outline for our quick daily sync (5–10 minutes). We can keep it in a shared note instead of slides while it’s just us.

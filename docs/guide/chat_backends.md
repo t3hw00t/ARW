@@ -9,7 +9,7 @@ The ARW debug Chat UI can use simple synthetic replies (echo/reverse/time) or ca
 
 > **Managed runtimes**: The upcoming runtime manager can download and launch llama.cpp/ONNX/vLLM bundles automatically (CPU, CUDA, ROCm, Metal, DirectML, CoreML, Vulkan) and expose health via `/state/runtimes`. Preview bundle catalogs now live in `configs/runtime/bundles.*.json`; inspect them locally with `arw-cli runtime bundles list` or remotely with `arw-cli runtime bundles list --remote` / `GET /state/runtime/bundles` (add `--json` for scripting). The remote snapshot now reports both catalogs and any bundles staged under `<state_dir>/runtime/bundles`, and the Launcher runtime panel exposes start/stop/restart controls for those managed bundles. Until the supervisor ships with installers, the env variables below continue to work for manual setup.
 
-Updated: 2025-10-11
+Updated: 2025-10-12
 Type: How‑to
 
 ## Synthetic (Default)
@@ -45,9 +45,13 @@ helper also enforces a wall-clock limit (`RUNTIME_SMOKE_TIMEOUT_SECS`, defaultin
 `SMOKE_TIMEOUT_SECS` or 600) so stalled runs terminate instead of hang. Set the timeout knobs
 to `0` if you want an unbounded session during manual investigation.
 
-GPU mode — `just runtime-smoke-gpu` (hard-requires real accelerators via
-`LLAMA_GPU_REQUIRE_REAL=1`) or `MODE=gpu scripts/runtime_llama_smoke.sh` — appends a small
-`--gpu-layers` hint (override via `LLAMA_GPU_LAYERS`) when you don’t provide your own
+Need a `llama-server` binary? The smoke suite now auto-builds one into
+`cache/llama.cpp/build` the first time it is missing (set `RUNTIME_SMOKE_AUTO_BUILD_LLAMA=0`
+to opt out or run `just runtime-llama-build` manually when you prefer an explicit compile step).
+
+GPU mode - `just runtime-smoke-gpu` (hard-requires real accelerators via
+`LLAMA_GPU_REQUIRE_REAL=1`) or `MODE=gpu scripts/runtime_llama_smoke.sh` - appends a small
+`--gpu-layers` hint (override via `LLAMA_GPU_LAYERS`) when you don't provide your own
 `LLAMA_SERVER_ARGS`. Set `LLAMA_GPU_LOG_PATTERN` to the regex that proves GPU execution
 (defaults to a broad CUDA/Metal/Vulkan/DirectML/HIP catch-all) and flip `LLAMA_GPU_ENFORCE=1`
 to make the smoke test fail if the pattern is missing. When you want to exercise the GPU lane

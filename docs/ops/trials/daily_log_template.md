@@ -1,6 +1,6 @@
 # Trial Daily Log — {{DATE}}
 
-Updated: 2025-10-05
+Updated: 2025-10-09
 Type: How‑to
 
 ## Snapshot

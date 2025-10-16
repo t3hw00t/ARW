@@ -36,7 +36,7 @@ Microsummary: Operational playbook for keeping managed runtime bundles signed, u
      --issuer bundle-ci@arw \
      --key-id preview-bundle-signing
    ```
-   Keep the public half of every active signing key in [`configs/runtime/bundle_signers.json`](../../configs/runtime/bundle_signers.json). The server and CLI load this registry automatically: `runtime bundles list` and `runtime bundles audit` now surface `trusted`/`untrusted` labels alongside signature health, and manifests signed by unknown keys are reported as failures when `--require-signed` (or `ARW_REQUIRE_SIGNED_BUNDLES=1`) is in effect.
+  Keep the public half of every active signing key in `configs/runtime/bundle_signers.json`. The server and CLI load this registry automatically: `runtime bundles list` and `runtime bundles audit` now surface `trusted`/`untrusted` labels alongside signature health, and manifests signed by unknown keys are reported as failures when `--require-signed` (or `ARW_REQUIRE_SIGNED_BUNDLES=1`) is in effect.
 5. Publish artifacts + signed manifest to the bundle registry and update the matching `configs/runtime/bundles.*.json` catalog entry (URL + `sha256`).
 6. Notify operators (Launcher banner + `ops/runtime_bundle_runbook.md` change log) and document the new revision in the release notes.
 

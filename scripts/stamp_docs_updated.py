@@ -39,7 +39,7 @@ def find_h1(lines):
     return -1
 
 SKIP_UPDATED = {
-    os.path.join('docs', 'reference', 'gating_config.md'),
+    os.path.join('docs', 'reference', 'gating_config.md').replace("\\", "/"),
 }
 
 

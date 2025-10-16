@@ -4,7 +4,7 @@ title: Configuration
 
 # Configuration
 { .topic-trio style="--exp:.7; --complex:.5; --complicated:.3" data-exp=".7" data-complex=".5" data-complicated=".3" }
-Updated: 2025-10-11
+Updated: 2025-10-13
 Type: Reference
 
 See also: [Glossary](GLOSSARY.md), [Admin Endpoints](guide/admin_endpoints.md), [Quickstart](guide/quickstart.md)

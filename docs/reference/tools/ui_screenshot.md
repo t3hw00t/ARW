@@ -3,7 +3,7 @@ title: UI Screenshot Tools
 ---
 
 # UI Screenshot Tools
-Updated: 2025-10-02
+Updated: 2025-10-09
 Status: Enabled (`ui.screenshot.capture`, `ui.screenshot.annotate_burn`); Optional OCR (`ui.screenshot.ocr`)
 Type: Reference
 

@@ -1,5 +1,5 @@
 # Agent Onboarding
-Updated: 2025-10-11
+Updated: 2025-10-16
 Type: Reference
 
 Microsummary: Fast orientation for assistants working in the ARW repo—where to look, what to run, and how to respond safely.

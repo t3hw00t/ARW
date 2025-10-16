@@ -17,17 +17,49 @@ set -euo pipefail
 #   RUNTIME_SMOKE_LLAMA_SERVER_ARGS  → extra args for llama-server
 #   RUNTIME_SMOKE_LLAMA_SERVER_PORT  → fixed port for llama-server
 #   RUNTIME_SMOKE_STUB_MODE          → stub backend mode (defaults to "stub")
+#   RUNTIME_SMOKE_AUTO_BUILD_LLAMA   → set to 0 to skip automatic llama-server builds
+#   RUNTIME_SMOKE_LLAMA_BUILD_CONFIG → build configuration to search (default Release)
 #   LLAMA_GPU_LOG_PATTERN            → override GPU log detection regex
 
 SCRIPT_DIR="$(cd -- "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
 SMOKE_SCRIPT="${PROJECT_ROOT}/scripts/runtime_llama_smoke.sh"
-DEFAULT_LLAMA_SERVER="${PROJECT_ROOT}/cache/llama.cpp/build/bin/llama-server"
+DEFAULT_LLAMA_BUILD_DIR="${PROJECT_ROOT}/cache/llama.cpp/build"
+DEFAULT_LLAMA_SERVER="${DEFAULT_LLAMA_BUILD_DIR}/bin/llama-server"
 DEFAULT_MODEL_FILES=(
   "tinyllama-1.1b-chat-q4_k_m.gguf"
   "TinyLlama-1.1B-Chat-q4_k_m.gguf"
 )
 LLAMA_DEFAULT_WEIGHTS_READY=""
+
+find_default_llama_server_binary() {
+  local config="${RUNTIME_SMOKE_LLAMA_BUILD_CONFIG:-Release}"
+  local config_lower="${config,,}"
+  local config_upper="${config^^}"
+  local config_capitalised="${config_lower^}"
+  local candidates=(
+    "${DEFAULT_LLAMA_SERVER}"
+    "${DEFAULT_LLAMA_SERVER}.exe"
+    "${DEFAULT_LLAMA_BUILD_DIR}/bin/${config}/llama-server"
+    "${DEFAULT_LLAMA_BUILD_DIR}/bin/${config}/llama-server.exe"
+    "${DEFAULT_LLAMA_BUILD_DIR}/bin/${config_lower}/llama-server"
+    "${DEFAULT_LLAMA_BUILD_DIR}/bin/${config_lower}/llama-server.exe"
+    "${DEFAULT_LLAMA_BUILD_DIR}/bin/${config_upper}/llama-server.exe"
+    "${DEFAULT_LLAMA_BUILD_DIR}/bin/${config_capitalised}/llama-server.exe"
+    "${DEFAULT_LLAMA_BUILD_DIR}/${config}/llama-server"
+    "${DEFAULT_LLAMA_BUILD_DIR}/${config}/llama-server.exe"
+    "${DEFAULT_LLAMA_BUILD_DIR}/${config_upper}/llama-server.exe"
+    "${DEFAULT_LLAMA_BUILD_DIR}/${config_capitalised}/llama-server.exe"
+  )
+  local candidate
+  for candidate in "${candidates[@]}"; do
+    if [[ -n "$candidate" && -x "$candidate" ]]; then
+      printf '%s\n' "$candidate"
+      return 0
+    fi
+  done
+  return 1
+}
 
 log() {
   printf '[runtime-smoke-suite] %s\n' "$*"
@@ -158,10 +190,29 @@ resolve_llama_server() {
     log "LLAMA_SERVER_BIN is set but not executable: ${candidate}"
   fi
 
-  if [[ -x "$DEFAULT_LLAMA_SERVER" ]]; then
-    export LLAMA_SERVER_BIN="$DEFAULT_LLAMA_SERVER"
-    echo "$DEFAULT_LLAMA_SERVER"
+  if candidate="$(find_default_llama_server_binary)"; then
+    export LLAMA_SERVER_BIN="$candidate"
+    echo "$candidate"
     return 0
+  fi
+
+  if is_truthy "${RUNTIME_SMOKE_AUTO_BUILD_LLAMA:-1}"; then
+    local build_script="${PROJECT_ROOT}/scripts/runtime_llama_build.sh"
+    if [[ -x "$build_script" ]]; then
+      log "llama-server binary not found; attempting automatic build"
+      if bash "$build_script"; then
+        if candidate="$(find_default_llama_server_binary)"; then
+          export LLAMA_SERVER_BIN="$candidate"
+          echo "$candidate"
+          return 0
+        fi
+        log "Automatic llama-server build completed but binary was not detected."
+      else
+        log "Automatic llama-server build failed; see errors above."
+      fi
+    else
+      log "Cannot auto-build llama-server (missing executable script at ${build_script})."
+    fi
   fi
 
   if command -v llama-server >/dev/null 2>&1; then

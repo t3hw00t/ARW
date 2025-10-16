@@ -3,7 +3,7 @@ title: Memory Overlay Service
 ---
 
 # Memory Overlay Service
-Updated: 2025-10-09
+Updated: 2025-10-12
 Status: Planned
 Type: Explanation
 

@@ -4,7 +4,7 @@ title: Managed llama.cpp Runtime
 
 # Managed llama.cpp Runtime
 
-Updated: 2025-10-09
+Updated: 2025-10-12
 Type: Blueprint (Proposed)
 Status: Draft (see [Managed Runtime Supervisor](managed_runtime_supervisor.md) for the cross-runtime plan and `spec/schemas/runtime_manifest.json` for manifest schema ties)
 

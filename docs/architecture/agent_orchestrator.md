@@ -3,7 +3,7 @@ title: Agent Orchestrator
 ---
 
 # Agent Orchestrator
-Updated: 2025-10-09
+Updated: 2025-10-12
 Type: Explanation
 
 Purpose
