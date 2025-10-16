@@ -5,7 +5,7 @@ title: Runtime Matrix
 # Runtime Matrix
 
 > Need the short version? See [Runtime Quickstart (Non-Technical)](runtime_quickstart.md).
-Updated: 2025-10-18
+Updated: 2025-10-16
 Type: Blueprint
 Status: In progress
 
@@ -22,11 +22,12 @@ ARW seeds a runtime matrix read-model from `runtime.health` events. Today it mer
 - CLI shortcuts: `arw-cli runtime status` prints the same snapshot (or `--json` for raw), and `arw-cli runtime restore --id <runtime>` triggers supervised restores while echoing the remaining budget or budget exhaustion.
   - Text mode now reports the active `ttl_seconds` so operators know when the matrix snapshot should be considered stale.
   - JSON mode emits `{ "supervisor": ..., "matrix": ... }` so scripts can consume both views (including `ttl_seconds`) in one call.
-- Smoke check: `just runtime-smoke` launches a stub llama endpoint, points the server at it, and verifies `chat.respond` flows end-to-end without needing model weights. The target now delegates to `scripts/runtime_smoke_suite.sh`, which always runs the stub stage, optionally launches a real CPU backend when `RUNTIME_SMOKE_CPU_POLICY` is `auto`/`require` and `RUNTIME_SMOKE_ALLOW_CPU=1`, and finally executes the GPU stage governed by `RUNTIME_SMOKE_GPU_POLICY`. The helper exits automatically after `RUNTIME_SMOKE_TIMEOUT_SECS` seconds (defaults to the shared `SMOKE_TIMEOUT_SECS`, falling back to 600). Set either knob to `0` to disable the guard during manual debugging.
+- Smoke check: `just runtime-smoke` launches a stub llama endpoint, points the server at it, and verifies `chat.respond` flows end-to-end without needing model weights. The target now delegates to `scripts/runtime_smoke_suite.sh`, which always runs the stub stage, flips the CPU/GPU policies to `auto` automatically whenever `RUNTIME_SMOKE_ALLOW_CPU=1` or `RUNTIME_SMOKE_ALLOW_GPU=1`, and finally executes the GPU stage governed by `RUNTIME_SMOKE_GPU_POLICY`. The helper exits automatically after `RUNTIME_SMOKE_TIMEOUT_SECS` seconds (defaults to the shared `SMOKE_TIMEOUT_SECS`, falling back to 600). Set either knob to `0` to disable the guard during manual debugging.
   - Resource controls: set `RUNTIME_SMOKE_SKIP_BUILD=1` to skip on-the-fly cargo builds (require `ARW_SERVER_BIN`); set `RUNTIME_SMOKE_USE_RELEASE=1` to prefer `target/release/arw-server` when present; set `RUNTIME_SMOKE_NICE=1` to start processes under `nice`/`ionice`. Use `RUNTIME_SMOKE_DRY_RUN=1` to print a preflight plan and exit without launching.
+  - Weight bootstrap: when `HF_TOKEN` or `HUGGINGFACEHUB_API_TOKEN` is present and no explicit `LLAMA_MODEL_PATH` is pinned, the suite now auto-downloads the default TinyLlama GGUF into `cache/models/` (suppress with `RUNTIME_SMOKE_SKIP_AUTO_WEIGHTS=1`). That keeps real CPU/GPU coverage one export away once a compiled `llama-server` binary is available.
   - The smoke now also fetches `/state/runtime_matrix` and asserts every snapshot carries the accessible status strings (`label`, `detail`, `aria_hint`, `severity_label`) plus a fresh `runtime.updated` timestamp and positive `ttl_seconds`, catching regressions in the matrix feed before they escape CI.
-  - Launch a real CPU run with automatic fallback: `RUNTIME_SMOKE_ALLOW_CPU=1 RUNTIME_SMOKE_CPU_POLICY=auto LLAMA_SERVER_BIN=/path/to/llama-server LLAMA_MODEL_PATH=/path/to/model.gguf just runtime-smoke`. The suite skips or downgrades to the stub path when binaries or weights are missing, keeping the guardrails green on constrained hosts.
-  - Launch a real GPU run with automatic fallback: `RUNTIME_SMOKE_ALLOW_GPU=1 RUNTIME_SMOKE_GPU_POLICY=auto LLAMA_SERVER_BIN=/path/to/llama-server LLAMA_MODEL_PATH=/path/to/model.gguf just runtime-smoke`. Optionally pass `RUNTIME_SMOKE_LLAMA_SERVER_ARGS="--your --flags"` or `RUNTIME_SMOKE_LLAMA_SERVER_PORT=XXXX` to match your deployment; without `RUNTIME_SMOKE_ALLOW_GPU=1` the stage stays in simulated mode.
+  - Launch a real CPU run with automatic fallback: `RUNTIME_SMOKE_ALLOW_CPU=1 LLAMA_SERVER_BIN=/path/to/llama-server LLAMA_MODEL_PATH=/path/to/model.gguf just runtime-smoke`. Override `RUNTIME_SMOKE_CPU_POLICY` when you need something other than the default `auto` behaviour.
+  - Launch a real GPU run with automatic fallback: `RUNTIME_SMOKE_ALLOW_GPU=1 LLAMA_SERVER_BIN=/path/to/llama-server LLAMA_MODEL_PATH=/path/to/model.gguf just runtime-smoke`. Optionally pass `RUNTIME_SMOKE_LLAMA_SERVER_ARGS="--your --flags"` or `RUNTIME_SMOKE_LLAMA_SERVER_PORT=XXXX` to match your deployment; without `RUNTIME_SMOKE_ALLOW_GPU=1` the stage stays in simulated mode.
   - Hard-require a hardware-backed GPU run (helpful on CI nodes wired to dedicated accelerators): `RUNTIME_SMOKE_ALLOW_GPU=1 RUNTIME_SMOKE_GPU_POLICY=require LLAMA_SERVER_BIN=/path/to/llama-server LLAMA_MODEL_PATH=/path/to/model.gguf just runtime-smoke`.
   - Conserve memory on 16 GB hosts by pinning a 4-bit TinyLlama build and trimming GPU layers:
 
@@ -45,7 +46,7 @@ ARW seeds a runtime matrix read-model from `runtime.health` events. Today it mer
 
 ### Getting real weights
 
-When you are ready to run the runtime smoke against a real llama.cpp binary (CPU or GPU), download a GGUF checkpoint using a Hugging Face access token. The fastest path is `just runtime-weights`, which pulls the default TinyLlama weights into `cache/models/`. If you prefer the manual route:
+When you are ready to run the runtime smoke against a real llama.cpp binary (CPU or GPU), download a GGUF checkpoint using a Hugging Face access token. Exporting `HF_TOKEN` (or `HUGGINGFACEHUB_API_TOKEN`) now lets the smoke helper auto-download TinyLlama on demand; run `just runtime-weights` yourself if you prefer to fetch everything up front. For the manual route:
 
 1. Sign in to (or create) a Hugging Face account at https://huggingface.co/.
 2. Generate a “Read” access token at https://huggingface.co/settings/tokens.
@@ -69,7 +70,7 @@ When you are ready to run the runtime smoke against a real llama.cpp binary (CPU
 
 If the smoke script detects that a real run is missing weights, it now prints the same checklist so operators know how to proceed.
 
-The helper still enumerates a small roster of public Hugging Face sources (`ggml-org/tinyllama-1.1b-chat`, `TheBloke/TinyLlama-1.1B-Chat-GGUF`, …) so existing downloads in `cache/models/<file>` can be re-used automatically. Set `LLAMA_MODEL_SOURCES="repo::file,repo2::file2"` when you want to exercise different checkpoints. Automatic downloads now require an explicit opt-in (`LLAMA_ALLOW_DOWNLOADS=1`) so CI and constrained sandboxes do not unexpectedly pull gigabytes of weights; otherwise the script prints the checklist shown above and exits or falls back to the stub backend. Configure organization-wide defaults and optional `checksum` values in `configs/runtime/model_sources.json`—the helper prints those mirrors (for example, the zero-auth TinyLlama S3 bucket) and validates downloads automatically whenever a checksum is present.
+The helper still enumerates a small roster of public Hugging Face sources (`ggml-org/tinyllama-1.1b-chat`, `TheBloke/TinyLlama-1.1B-Chat-GGUF`, …) so existing downloads in `cache/models/<file>` can be re-used automatically. Set `LLAMA_MODEL_SOURCES="repo::file,repo2::file2"` when you want to exercise different checkpoints. Automatic downloads kick in whenever an access token is present; set `RUNTIME_SMOKE_SKIP_AUTO_WEIGHTS=1` (or cache the file manually) when you need fully offline runs or want to restrict network access. Configure organization-wide defaults and optional `checksum` values in `configs/runtime/model_sources.json`—the helper prints those mirrors (for example, the zero-auth TinyLlama S3 bucket) and validates downloads automatically whenever a checksum is present.
 
 Running inside locked-down sandboxes sometimes blocks loopback sockets entirely. When the helper detects that scenario it now reports a “skipped” outcome instead of pretending the smoke passed; export `RUNTIME_SMOKE_REQUIRE_LOOPBACK=1` when you would rather fail the run so upstream automation can flag the gap.
 

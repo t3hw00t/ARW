@@ -129,6 +129,11 @@ fi
 mkdir -p "$SMOKE_ROOT"
 prune_old_runs "$SMOKE_ROOT"
 
+IS_WINDOWS=0
+case "$(uname -s 2>/dev/null || echo unknown)" in
+  MINGW*|MSYS*|CYGWIN*) IS_WINDOWS=1 ;;
+esac
+
 MEM_CHECK_OUTPUT=""
 RESOLVED_SERVER_BIN=""
 RESOLVED_SERVER_BUILD=""  # debug|release
@@ -659,16 +664,30 @@ BACKEND_PID=""
 SERVER_PID=""
 PROMPT_CACHE_PATH_DEFAULT="$TMP_DIR/llama.prompt.bin"
 
+terminate_pid() {
+  local pid="$1"
+  if [[ -z "$pid" ]]; then
+    return 0
+  fi
+  if [[ "$IS_WINDOWS" -eq 1 ]]; then
+    taskkill /F /PID "$pid" >/dev/null 2>&1 || true
+  else
+    kill "$pid" 2>/dev/null || true
+  fi
+}
+
 cleanup() {
   local status=$?
   status=$(smoke_timeout::cleanup "$status")
   if [[ -n "$SERVER_PID" ]]; then
-    kill "$SERVER_PID" 2>/dev/null || true
+    terminate_pid "$SERVER_PID"
     wait "$SERVER_PID" 2>/dev/null || true
+    SERVER_PID=""
   fi
   if [[ -n "$BACKEND_PID" ]]; then
-    kill "$BACKEND_PID" 2>/dev/null || true
+    terminate_pid "$BACKEND_PID"
     wait "$BACKEND_PID" 2>/dev/null || true
+    BACKEND_PID=""
   fi
   if [[ $status -ne 0 ]]; then
     echo "[runtime-smoke] server log (tail)" >&2
@@ -691,7 +710,15 @@ cleanup() {
       touch "$TMP_DIR/.keep" 2>/dev/null || true
     fi
   else
-    rm -rf "$TMP_DIR"
+    if [[ "$IS_WINDOWS" -eq 1 ]]; then
+      taskkill /F /IM arw-server.exe >/dev/null 2>&1 || true
+      taskkill /F /IM llama-server.exe >/dev/null 2>&1 || true
+    fi
+    if ! rm -rf "$TMP_DIR" 2>/dev/null; then
+      echo "[runtime-smoke] warning: failed to remove ${TMP_DIR}; retrying once" >&2
+      sleep 0.2
+      rm -rf "$TMP_DIR" 2>/dev/null || true
+    fi
   fi
   return "$status"
 }

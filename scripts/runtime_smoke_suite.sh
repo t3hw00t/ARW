@@ -23,6 +23,11 @@ SCRIPT_DIR="$(cd -- "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
 SMOKE_SCRIPT="${PROJECT_ROOT}/scripts/runtime_llama_smoke.sh"
 DEFAULT_LLAMA_SERVER="${PROJECT_ROOT}/cache/llama.cpp/build/bin/llama-server"
+DEFAULT_MODEL_FILES=(
+  "tinyllama-1.1b-chat-q4_k_m.gguf"
+  "TinyLlama-1.1B-Chat-q4_k_m.gguf"
+)
+LLAMA_DEFAULT_WEIGHTS_READY=""
 
 log() {
   printf '[runtime-smoke-suite] %s\n' "$*"
@@ -39,6 +44,97 @@ is_truthy() {
     1|yes|true|on) return 0 ;;
     *) return 1 ;;
   esac
+}
+
+llama_weights_cached() {
+  local candidate
+  for candidate in "${DEFAULT_MODEL_FILES[@]}"; do
+    if [[ -f "${PROJECT_ROOT}/cache/models/${candidate}" ]]; then
+      return 0
+    fi
+  done
+  return 1
+}
+
+maybe_enable_llama_downloads() {
+  local stage="$1"
+  if is_truthy "${LLAMA_ALLOW_DOWNLOADS:-0}"; then
+    return 0
+  fi
+  local token="${HF_TOKEN:-${HUGGINGFACEHUB_API_TOKEN:-}}"
+  if [[ -n "$token" ]]; then
+    export LLAMA_ALLOW_DOWNLOADS=1
+    log "Enabled LLAMA_ALLOW_DOWNLOADS=1 for ${stage} stage (HF token detected)."
+    return 0
+  fi
+  return 1
+}
+
+ensure_default_llama_weights() {
+  local stage="$1"
+
+  if [[ -n "${RUNTIME_SMOKE_LLAMA_MODEL_PATH:-}" || -n "${LLAMA_MODEL_PATH:-}" ]]; then
+    return 0
+  fi
+
+  if [[ "$LLAMA_DEFAULT_WEIGHTS_READY" == "yes" ]]; then
+    return 0
+  fi
+  if [[ "$LLAMA_DEFAULT_WEIGHTS_READY" == "no" ]]; then
+    return 1
+  fi
+
+  if llama_weights_cached; then
+    LLAMA_DEFAULT_WEIGHTS_READY="yes"
+    return 0
+  fi
+
+  if is_truthy "${RUNTIME_SMOKE_SKIP_AUTO_WEIGHTS:-0}"; then
+    log "Skipping automatic TinyLlama download for ${stage} stage (RUNTIME_SMOKE_SKIP_AUTO_WEIGHTS=1)."
+    LLAMA_DEFAULT_WEIGHTS_READY="no"
+    return 1
+  fi
+
+  local token="${HF_TOKEN:-${HUGGINGFACEHUB_API_TOKEN:-}}"
+  if [[ -z "$token" ]]; then
+    log "TinyLlama weights not found for ${stage} stage; provide LLAMA_MODEL_PATH or set HF_TOKEN to enable automatic download."
+    LLAMA_DEFAULT_WEIGHTS_READY="no"
+    return 1
+  fi
+
+  local python_bin="${RUNTIME_SMOKE_PYTHON:-}"
+  if [[ -z "$python_bin" ]]; then
+    if command -v python3 >/dev/null 2>&1; then
+      python_bin="python3"
+    elif command -v python >/dev/null 2>&1; then
+      python_bin="python"
+    else
+      log "Python interpreter not found; cannot download TinyLlama weights for ${stage} stage."
+      LLAMA_DEFAULT_WEIGHTS_READY="no"
+      return 1
+    fi
+  fi
+
+  local weights_script="${PROJECT_ROOT}/scripts/runtime_weights.py"
+  if [[ ! -f "$weights_script" ]]; then
+    log "runtime_weights.py missing; cannot auto-download TinyLlama weights for ${stage} stage."
+    LLAMA_DEFAULT_WEIGHTS_READY="no"
+    return 1
+  fi
+
+  log "Downloading TinyLlama weights for ${stage} stage (auto-triggered by runtime smoke)."
+  if HF_TOKEN="$token" "$python_bin" "$weights_script" --quiet; then
+    if llama_weights_cached; then
+      LLAMA_DEFAULT_WEIGHTS_READY="yes"
+      return 0
+    fi
+    log "TinyLlama download completed but weights were not detected in cache/models; check runtime weight configuration."
+  else
+    log "Automatic TinyLlama download failed for ${stage} stage."
+  fi
+
+  LLAMA_DEFAULT_WEIGHTS_READY="no"
+  return 1
 }
 
 resolve_llama_server() {
@@ -102,6 +198,15 @@ run_cpu_real() {
     export LLAMA_SERVER_PORT="$RUNTIME_SMOKE_LLAMA_SERVER_PORT"
   fi
 
+  maybe_enable_llama_downloads "CPU" || true
+  if ! ensure_default_llama_weights "CPU"; then
+    if [[ "$strict" == "1" ]]; then
+      return 1
+    fi
+    log "Skipping real CPU stage because TinyLlama weights are unavailable."
+    return 1
+  fi
+
   log "Running real CPU smoke via ${server_bin}"
   if env MODE=cpu bash "$SMOKE_SCRIPT"; then
     return 0
@@ -135,6 +240,15 @@ run_gpu_real() {
     export LLAMA_SERVER_PORT="$RUNTIME_SMOKE_LLAMA_SERVER_PORT"
   fi
 
+  maybe_enable_llama_downloads "GPU" || true
+  if ! ensure_default_llama_weights "GPU"; then
+    if [[ "$strict" == "1" ]]; then
+      return 1
+    fi
+    log "Skipping real GPU stage because TinyLlama weights are unavailable."
+    return 1
+  fi
+
   if [[ -z "${LLAMA_GPU_ENFORCE:-}" ]]; then
     export LLAMA_GPU_ENFORCE=1
   fi
@@ -163,6 +277,16 @@ GPU_POLICY="$(to_lower "$GPU_POLICY")"
 
 CPU_POLICY="${RUNTIME_SMOKE_CPU_POLICY:-skip}"
 CPU_POLICY="$(to_lower "$CPU_POLICY")"
+
+if [[ "$CPU_POLICY" == "skip" ]] && is_truthy "${RUNTIME_SMOKE_ALLOW_CPU:-0}"; then
+  CPU_POLICY="auto"
+  log "CPU policy defaulted to auto because RUNTIME_SMOKE_ALLOW_CPU=1."
+fi
+
+if [[ "$GPU_POLICY" == "skip" ]] && is_truthy "${RUNTIME_SMOKE_ALLOW_GPU:-0}"; then
+  GPU_POLICY="auto"
+  log "GPU policy defaulted to auto because RUNTIME_SMOKE_ALLOW_GPU=1."
+fi
 
 RUN_STUB=1
 if is_truthy "${RUNTIME_SMOKE_SKIP_STUB:-0}"; then

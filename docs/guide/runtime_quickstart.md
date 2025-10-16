@@ -3,7 +3,7 @@ title: Runtime Quickstart (Non-Technical)
 ---
 
 # Runtime Quickstart (Non-Technical)
-Updated: 2025-10-18
+Updated: 2025-10-16
 Type: Tutorial
 
 This walkthrough is aimed at operators who want to validate the managed runtime supervisor without digging into the codebase. It uses the automation we ship (`just` commands and helper scripts) so you can prepare weights and run the smoke test with minimal manual tinkering.
@@ -65,11 +65,9 @@ If the helper used the simulated mode (because no real binary or weights were av
   LLAMA_MODEL_SOURCES="repo::file,repo2::file2" just runtime-weights
   ```
 - Provide a checksum for any source by adding a `"checksum": "sha256:..."` entry in `configs/runtime/model_sources.json`; the helper validates downloads automatically when a checksum is present.
-- Opt-in to automatic Hugging Face downloads from the smoke helper (falls back to simulated GPU markers if the binary/weights are missing; add `RUNTIME_SMOKE_ALLOW_CPU=1` when you want the CPU stage to run automatically):
+- Auto-download TinyLlama via the smoke helper (falls back to simulated GPU markers if the binary/weights are missing; export `RUNTIME_SMOKE_SKIP_AUTO_WEIGHTS=1` to stay offline):
   ```bash
-  LLAMA_ALLOW_DOWNLOADS=1 \
   RUNTIME_SMOKE_ALLOW_CPU=1 \
-  RUNTIME_SMOKE_CPU_POLICY=auto \
   RUNTIME_SMOKE_GPU_POLICY=auto \
     RUNTIME_SMOKE_LLAMA_SERVER_BIN=/path/to/llama-server \
     RUNTIME_SMOKE_LLAMA_MODEL_PATH=/path/to/model.gguf \
