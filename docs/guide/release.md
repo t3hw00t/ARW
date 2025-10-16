@@ -37,7 +37,7 @@ just test
 just runtime-smoke
 ```
 
-`just runtime-smoke` exercises the managed runtime supervisor. On machines without model weights or GPU access it falls back to the stub path; set `ARW_SMOKE_USE_SYNTHETIC=1` if sockets are unavailable. CI parity (`scripts/dev.sh verify --ci`) now runs both the stub and a simulated GPU mode so accelerator log checks stay covered even without real hardware. Add extra smoke runs (`just runtime-smoke-gpu`, `just triad-smoke`) when GPUs and launchers are ready.
+`just runtime-smoke` exercises the managed runtime supervisor. On machines without model weights or GPU access it falls back to the stub path; set `ARW_SMOKE_USE_SYNTHETIC=1` if sockets are unavailable. CI parity (`scripts/dev.sh verify --ci`) now runs both the stub and a simulated GPU mode so accelerator log checks stay covered even without real hardware. Add extra smoke runs (`just runtime-smoke-gpu`, `just runtime-smoke-gpu-real`, `just triad-smoke`) when GPUs and launchers are ready.
 
 For targeted crates you can use the release script’s set:
 

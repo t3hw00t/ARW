@@ -91,6 +91,7 @@ If the helper used the simulated mode (because no real binary or weights were av
     just runtime-smoke
   # Drop the GPU lines when you only need CPU coverage, or switch GPU policy to auto for best-effort accelerators.
   ```
+- On Windows workstations with the CUDA build under `cache/llama.cpp/build-windows/bin/`, use `just runtime-smoke-gpu-real` to skip the stub stage, keep the run artifacts, and enforce the hardware-backed GPU path without retyping the environment variables.
 - Prefer existing builds and lower resource impact:
   ```bash
   export RUNTIME_SMOKE_SKIP_BUILD=1          # never trigger cargo build

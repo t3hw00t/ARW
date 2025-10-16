@@ -63,6 +63,11 @@ that must stay offloaded
 from accelerators, set `LLAMA_FORCE_CPU_LAYERS=1` so the helper adds `--gpu-layers 0` when the
 launch arguments omit it.
 
+Need a turnkey command that skips the stub stage and enforces the CUDA build on Windows? Use
+`just runtime-smoke-gpu-real`; it sets `RUNTIME_SMOKE_KEEP_TMP=1`, pins
+`RUNTIME_SMOKE_LLAMA_SERVER_BIN` to `cache/llama.cpp/build-windows/bin/llama-server.exe`, and
+invokes the suite in `require` mode so failed GPU detection is surfaced immediately.
+
 When running inside a sandbox that blocks loopback sockets entirely, export
 `ARW_SMOKE_USE_SYNTHETIC=1` to skip the runtime exercise (the script exits successfully after
 logging that the smoke was bypassed). Without the override, the helper automatically detects
