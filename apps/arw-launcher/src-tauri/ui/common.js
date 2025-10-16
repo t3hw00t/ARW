@@ -248,6 +248,18 @@ window.ARW = {
           if (field.type === 'textarea') {
             control = document.createElement('textarea');
             control.rows = field.rows || 3;
+          } else if (field.type === 'select') {
+            control = document.createElement('select');
+            const options = Array.isArray(field.options) ? field.options : [];
+            for (const opt of options) {
+              if (!opt) continue;
+              const optionEl = document.createElement('option');
+              optionEl.value = opt.value != null ? String(opt.value) : '';
+              optionEl.textContent = opt.label != null ? String(opt.label) : optionEl.value;
+              if (opt.disabled) optionEl.disabled = true;
+              if (opt.selected) optionEl.selected = true;
+              control.appendChild(optionEl);
+            }
           } else {
             control = document.createElement('input');
             control.type = field.type || 'text';
@@ -255,7 +267,14 @@ window.ARW = {
 
           control.id = fieldId;
           control.name = field.name;
-          if (field.value != null) {
+          if (field.type === 'checkbox') {
+            const checked = field.value != null ? Boolean(field.value) : Boolean(field.defaultValue);
+            control.checked = checked;
+            if (field.value != null) control.value = String(field.value);
+          } else if (field.type === 'select') {
+            const current = field.value != null ? String(field.value) : field.defaultValue != null ? String(field.defaultValue) : null;
+            if (current != null) control.value = current;
+          } else if (field.value != null) {
             control.value = String(field.value);
           } else if (field.defaultValue != null) {
             control.value = String(field.defaultValue);
@@ -296,14 +315,16 @@ window.ARW = {
           describedBy.push(error.id);
           control.setAttribute('aria-describedby', describedBy.join(' '));
 
-          control.addEventListener('input', () => {
+          const clearError = () => {
             wrap.classList.remove('has-error');
             control.removeAttribute('aria-invalid');
             error.textContent = '';
             error.hidden = true;
             generalError.textContent = '';
             generalError.hidden = true;
-          });
+          };
+          control.addEventListener('input', clearError);
+          control.addEventListener('change', clearError);
           if (field.autoSelect) {
             control.addEventListener('focus', () => {
               try {
@@ -417,8 +438,18 @@ window.ARW = {
           event.preventDefault();
           const rawValues = {};
           inputs.forEach((entry, name) => {
-            const raw = entry.control.value != null ? String(entry.control.value) : '';
-            rawValues[name] = entry.field && entry.field.trim === false ? raw : raw.trim();
+            let raw;
+            if (entry.field && entry.field.type === 'checkbox') {
+              raw = entry.control.checked;
+            } else if (entry.field && entry.field.type === 'select') {
+              raw = entry.control.value != null ? String(entry.control.value) : '';
+            } else {
+              raw = entry.control.value != null ? String(entry.control.value) : '';
+            }
+            if (typeof raw === 'string' && (!entry.field || entry.field.trim !== false)) {
+              raw = raw.trim();
+            }
+            rawValues[name] = raw;
           });
           showErrors({});
           let values = { ...rawValues };

@@ -918,6 +918,63 @@ function renderTelemetry(data) {
     capsules.count ? 'No sample available' : 'No policy capsules active'
   );
 
+  const toolInvocations = data && typeof data.tool_invocations === 'object' ? data.tool_invocations : {};
+  const overallTools = toolInvocations && typeof toolInvocations.overall === 'object' ? toolInvocations.overall : {};
+  const toolOverallEl = document.getElementById('toolSuccessOverall');
+  if (toolOverallEl) {
+    const total = Number(overallTools.total ?? 0);
+    if (total > 0) {
+      const success = Number(overallTools.success ?? 0);
+      const failed = Number(overallTools.failed ?? 0);
+      const rate = overallTools.success_rate;
+      const rateLabel = Number.isFinite(rate) ? formatPercent(rate, 0) : '—';
+      toolOverallEl.textContent = `${success}/${total} success (${rateLabel}) · ${failed} failed`;
+    } else {
+      toolOverallEl.textContent = 'No recent tool invocations.';
+    }
+  }
+
+  const toolSummary = Array.isArray(toolInvocations.summary) ? toolInvocations.summary : [];
+  renderList(
+    'toolSuccessList',
+    toolSummary,
+    (entry) => {
+      if (!entry || typeof entry !== 'object') return null;
+      const toolId = entry.tool_id || 'tool';
+      const total = Number(entry.total ?? 0);
+      const success = Number(entry.success ?? 0);
+      const failed = Number(entry.failed ?? 0);
+      const rate = entry.success_rate;
+      const rateLabel = Number.isFinite(rate) ? formatPercent(rate, 0) : '—';
+      let lastNote = '';
+      const lastMs = Number(entry.last_ms ?? 0);
+      if (Number.isFinite(lastMs) && lastMs > 0) {
+        lastNote = ` · last ${formatRelativeTraining(lastMs)}`;
+      }
+      const status = typeof entry.last_status === 'string' && entry.last_status.trim()
+        ? entry.last_status.trim()
+        : '';
+      if (status) {
+        lastNote += lastNote ? ` (${status})` : ` (${status})`;
+      }
+      return `${toolId} · ${success}/${total} success (${rateLabel}) · ${failed} failed${lastNote}`;
+    },
+    'No tool activity recorded'
+  );
+
+  const toolTotals = Array.isArray(data?.tools?.totals_by_tool) ? data.tools.totals_by_tool : [];
+  renderList(
+    'toolUsageTotals',
+    toolTotals,
+    (entry) => {
+      if (!entry || typeof entry !== 'object') return null;
+      const toolId = entry.tool_id || 'tool';
+      const count = Number(entry.count ?? 0);
+      return `${toolId} · ${count}`;
+    },
+    'No usage recorded'
+  );
+
   showTelemetryBody(true);
 }
 

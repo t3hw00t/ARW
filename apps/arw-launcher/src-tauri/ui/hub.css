@@ -272,3 +272,57 @@
     margin-left:0;
   }
 }
+
+.runtime-wizard-body{
+  display:flex;
+  flex-direction:column;
+  gap:1rem;
+  max-width:42rem;
+}
+.runtime-wizard-summary>strong{
+  font-size:1.05rem;
+}
+.runtime-wizard-summary p{
+  margin:0.35rem 0 0;
+}
+.runtime-wizard-tags{
+  display:flex;
+  flex-wrap:wrap;
+  gap:0.5rem;
+}
+.runtime-wizard-tags .badge{
+  background:var(--surface-2, var(--surface-muted));
+}
+.runtime-wizard-meta{
+  display:grid;
+  grid-template-columns:minmax(7rem,auto) 1fr;
+  gap:0.25rem 1rem;
+  margin:0;
+}
+.runtime-wizard-meta dt{
+  font-weight:600;
+  color:var(--color-muted);
+}
+.runtime-wizard-meta dd{
+  margin:0;
+}
+.runtime-wizard-section>h4{
+  margin:0 0 0.25rem;
+  font-size:0.9rem;
+}
+.runtime-wizard-section ul,
+.runtime-wizard-section ol{
+  margin:0;
+  padding-left:1.25rem;
+  display:flex;
+  flex-direction:column;
+  gap:0.35rem;
+}
+.runtime-wizard-step code{
+  display:inline-block;
+  margin-top:0.25rem;
+  font-size:0.85rem;
+}
+.runtime-wizard-step button{
+  margin-left:0.75rem;
+}

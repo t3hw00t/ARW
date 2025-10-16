@@ -1,6 +1,6 @@
 # Trial Onboarding Note (two-person)
 
-Updated: 2025-10-09
+Updated: 2025-10-16
 Type: How‑to
 
 Subject: Trial run reminder — getting set up

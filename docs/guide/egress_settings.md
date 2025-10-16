@@ -3,7 +3,7 @@ title: Egress Settings
 ---
 
 # Egress Settings
-Updated: 2025-10-15
+Updated: 2025-10-16
 Type: How‑to
 
 Control the egress proxy, DNS guard, IP‑literal blocking, allowlist, and structured network scopes (domains/IPs/ports/protocols with optional TTL) at runtime, and persist these settings via the unified config snapshot.

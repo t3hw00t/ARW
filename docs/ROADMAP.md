@@ -4,7 +4,7 @@ title: Roadmap
 
 # Roadmap
 
-Updated: 2025-10-09
+Updated: 2025-10-16
 Type: Reference
 
 See also: [Backlog](BACKLOG.md), [Interface Roadmap](INTERFACE_ROADMAP.md), and the [Expert Alignment Plan](architecture/expert_alignment_plan.md) for phased delivery details and success metrics.

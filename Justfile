@@ -198,6 +198,34 @@ runtime-check:
 runtime-check-weights-only:
   bash scripts/runtime_check.sh --weights-only
 
+runtime-bundles-publish catalog bundle_root:
+  set -euo pipefail
+  base_url="${ARW_RUNTIME_BUNDLE_BASE_URL:-}"
+  sign_key_b64="${ARW_RUNTIME_BUNDLE_SIGN_KEY_B64:-}"
+  sign_key_file="${ARW_RUNTIME_BUNDLE_SIGN_KEY_FILE:-}"
+  sign_key_id="${ARW_RUNTIME_BUNDLE_SIGN_KEY_ID:-}"
+  sign_issuer="${ARW_RUNTIME_BUNDLE_SIGN_ISSUER:-}"
+  sign_cli="${ARW_RUNTIME_BUNDLE_SIGN_CLI:-arw-cli}"
+  declare -a args=("python3" "scripts/runtime_bundle_publish.py" "--bundle-root" "{{bundle_root}}" "--catalog" "{{catalog}}")
+  if [[ -n "${base_url}" ]]; then
+    args+=("--base-url" "${base_url}")
+  fi
+  if [[ -n "${sign_key_b64}" ]]; then
+    args+=("--sign" "--sign-key-b64" "${sign_key_b64}")
+  elif [[ -n "${sign_key_file}" ]]; then
+    args+=("--sign" "--sign-key-file" "${sign_key_file}")
+  fi
+  if [[ -n "${sign_key_id}" ]]; then
+    args+=("--sign-key-id" "${sign_key_id}")
+  fi
+  if [[ -n "${sign_issuer}" ]]; then
+    args+=("--sign-issuer" "${sign_issuer}")
+  fi
+  if [[ "${sign_cli}" != "arw-cli" ]]; then
+    args+=("--sign-cli" "${sign_cli}")
+  fi
+  "${args[@]}"
+
 runtime-mirrors *args:
   python3 scripts/runtime_config.py {{args}}
 

@@ -103,6 +103,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   const elRuntimeRefreshBtn = document.getElementById('runtimeRefresh');
   const elRuntimeCopyBtn = document.getElementById('runtimeCopyAll');
   const elRuntimeFocusBtn = document.getElementById('runtimeFocusTable');
+  const elRuntimeWizardBtn = document.getElementById('runtimeWizardBtn');
   const elRuntimeAuto = document.getElementById('runtimeAuto');
   const elRuntimeStat = document.getElementById('runtimeStat');
   const elRuntimeRunbook = document.getElementById('runtimeRunbook');
@@ -125,6 +126,14 @@ document.addEventListener('DOMContentLoaded', async () => {
           elRuntimeTable.scrollIntoView();
         }
       }
+    });
+  }
+  if (elRuntimeWizardBtn) {
+    elRuntimeWizardBtn.addEventListener('click', () => {
+      openRuntimeWizard().catch((err) => {
+        console.warn('runtime wizard failed', err);
+        ARW.toast('Unable to open runtime wizard');
+      });
     });
   }
   const runtimePending = new Set();
@@ -956,6 +965,392 @@ document.addEventListener('DOMContentLoaded', async () => {
       })
       .filter(Boolean)
       .join(', ');
+  }
+
+  function inferCatalogChannel(path) {
+    if (!path) return '';
+    const name = String(path).split(/[\\/]/).pop() || '';
+    if (name.toLowerCase().includes('preview')) return 'preview';
+    if (name.toLowerCase().includes('stable')) return 'stable';
+    if (name.toLowerCase().includes('vision')) return 'vision';
+    if (name.toLowerCase().includes('audio')) return 'audio';
+    if (name.toLowerCase().includes('llama')) return 'llama';
+    return '';
+  }
+
+  function collectRuntimeCatalogBundles() {
+    const catalogs = Array.isArray(runtimeBundlesModel?.catalogs) ? runtimeBundlesModel.catalogs : [];
+    const seen = new Map();
+    for (const catalog of catalogs) {
+      const channel = (catalog && catalog.channel) || '';
+      const catalogNotes = catalog && catalog.notes ? catalog.notes : '';
+      const catalogPath = catalog && catalog.path ? catalog.path : '';
+      const bundles = Array.isArray(catalog?.bundles) ? catalog.bundles : [];
+      for (const bundle of bundles) {
+        if (!bundle || !bundle.id) continue;
+        const id = bundle.id;
+        if (seen.has(id)) continue;
+        seen.set(id, {
+          id,
+          name: bundle.name || id,
+          description: bundle.description || '',
+          accelerator: bundle.accelerator || '',
+          modalities: Array.isArray(bundle.modalities) ? bundle.modalities : [],
+          profiles: Array.isArray(bundle.profiles) ? bundle.profiles : [],
+          support: bundle.support || {},
+          metadata: bundle.metadata || {},
+          notes: Array.isArray(bundle.notes) ? bundle.notes : [],
+          channel: channel || inferCatalogChannel(catalogPath),
+          catalogNotes,
+          catalogPath,
+        });
+      }
+    }
+    return Array.from(seen.values()).sort((a, b) => (a.name || a.id).localeCompare(b.name || b.id));
+  }
+
+  function runtimeWizardBundleTags(bundle) {
+    const tags = [];
+    if (bundle.channel) tags.push(`Channel: ${bundle.channel}`);
+    const profiles = Array.isArray(bundle.profiles) ? bundle.profiles.filter(Boolean) : [];
+    if (profiles.length) tags.push(`Profiles: ${profiles.join(', ')}`);
+    return tags;
+  }
+
+  function runtimeWizardConsentInfo(bundle) {
+    const consent = bundle?.metadata?.consent || {};
+    const required = consent.required === true;
+    const lines = [];
+    const modalitiesLabel = runtimeModalitiesLabel(consent.modalities) || joinList(consent.modalities || []);
+    if (required) {
+      lines.push('Requires presenting the consent overlay before enabling this runtime.');
+    } else {
+      lines.push('Text-only runtime; no additional consent overlay required.');
+    }
+    if (modalitiesLabel) {
+      lines.push(`Modalities: ${modalitiesLabel}.`);
+    }
+    if (typeof consent.note === 'string' && consent.note.trim()) {
+      lines.push(consent.note.trim());
+    }
+    return { required, lines };
+  }
+
+  function runtimeWizardHardwareInfo(bundle) {
+    const lines = [];
+    const acceleratorLabel = runtimeAcceleratorLabel(bundle?.accelerator || '');
+    if (acceleratorLabel) {
+      lines.push(`${acceleratorLabel} acceleration targeted.`);
+    }
+    const support = bundle?.support || {};
+    if (support.min_glibc) {
+      lines.push(`glibc >= ${support.min_glibc}.`);
+    }
+    if (support.min_macos) {
+      lines.push(`macOS >= ${support.min_macos}.`);
+    }
+    if (support.min_windows) {
+      lines.push(`Windows >= ${support.min_windows}.`);
+    }
+    if (support.driver_notes) {
+      lines.push(support.driver_notes);
+    }
+    if (support.additional && typeof support.additional === 'object') {
+      for (const [key, value] of Object.entries(support.additional)) {
+        if (value != null && value !== '') {
+          lines.push(`${key}: ${value}`);
+        }
+      }
+    }
+    if (!lines.length) {
+      lines.push('No additional hardware requirements detected for this bundle.');
+    }
+    const required = lines.some((line) => !line.toLowerCase().includes('no additional'));
+    return { required, lines };
+  }
+
+  async function openRuntimeWizard() {
+    if (!runtimeBundlesModel) {
+      try {
+        await refreshRuntimeBundles();
+      } catch (err) {
+        console.warn('runtime wizard: bundle refresh failed', err);
+      }
+    }
+    const bundles = collectRuntimeCatalogBundles();
+    if (!bundles.length) {
+      ARW.toast('Bundle catalog not loaded yet. Refresh bundles after publishing.');
+      return;
+    }
+    const byId = new Map(bundles.map((entry) => [entry.id, entry]));
+    let current = bundles[0];
+
+    const detailRoot = document.createElement('div');
+    detailRoot.className = 'runtime-wizard-body';
+
+    const summary = document.createElement('div');
+    summary.className = 'runtime-wizard-summary';
+    detailRoot.appendChild(summary);
+
+    const tagsWrap = document.createElement('div');
+    tagsWrap.className = 'runtime-wizard-tags';
+    detailRoot.appendChild(tagsWrap);
+
+    const meta = document.createElement('dl');
+    meta.className = 'runtime-wizard-meta';
+    detailRoot.appendChild(meta);
+
+    const consentSection = document.createElement('section');
+    consentSection.className = 'runtime-wizard-section';
+    const consentHeading = document.createElement('h4');
+    consentHeading.textContent = 'Consent checklist';
+    consentSection.appendChild(consentHeading);
+    const consentList = document.createElement('ul');
+    consentSection.appendChild(consentList);
+    detailRoot.appendChild(consentSection);
+
+    const hardwareSection = document.createElement('section');
+    hardwareSection.className = 'runtime-wizard-section';
+    const hardwareHeading = document.createElement('h4');
+    hardwareHeading.textContent = 'Hardware readiness';
+    hardwareSection.appendChild(hardwareHeading);
+    const hardwareList = document.createElement('ul');
+    hardwareSection.appendChild(hardwareList);
+    detailRoot.appendChild(hardwareSection);
+
+    const stepsSection = document.createElement('section');
+    stepsSection.className = 'runtime-wizard-section';
+    const stepsHeading = document.createElement('h4');
+    stepsHeading.textContent = 'Next actions';
+    stepsSection.appendChild(stepsHeading);
+    const stepsList = document.createElement('ol');
+    stepsList.className = 'runtime-wizard-steps';
+    stepsSection.appendChild(stepsList);
+    detailRoot.appendChild(stepsSection);
+
+    const runtimeWizardStep = (label, command) => {
+      const li = document.createElement('li');
+      li.className = 'runtime-wizard-step';
+      const text = document.createElement('span');
+      text.textContent = label;
+      li.appendChild(text);
+      if (command) {
+        const code = document.createElement('code');
+        code.textContent = command;
+        li.appendChild(code);
+        const copyBtn = document.createElement('button');
+        copyBtn.type = 'button';
+        copyBtn.className = 'ghost mini';
+        copyBtn.textContent = 'Copy';
+        copyBtn.addEventListener('click', async () => {
+          try {
+            if (navigator?.clipboard?.writeText) {
+              await navigator.clipboard.writeText(command);
+              ARW.toast('Command copied');
+            } else {
+              throw new Error('clipboard unavailable');
+            }
+          } catch (err) {
+            console.warn('clipboard write failed', err);
+            ARW.toast('Unable to copy command');
+          }
+        });
+        li.appendChild(copyBtn);
+      }
+      return li;
+    };
+
+    const updateAcknowledgementLabels = (consentInfo, hardwareInfo) => {
+      const overlay = document.querySelector('[data-arw-modal="overlay"]');
+      if (!overlay) return;
+      const consentInput = overlay.querySelector('input[name="ackConsent"]');
+      const hardwareInput = overlay.querySelector('input[name="ackHardware"]');
+      if (consentInput) {
+        const label = overlay.querySelector(`label[for="${consentInput.id}"]`);
+        if (label) {
+          label.textContent = consentInfo.required
+            ? 'I will present the consent overlay before enabling this runtime.'
+            : 'I have reviewed the consent guidance.';
+        }
+        consentInput.checked = false;
+        consentInput.dispatchEvent(new Event('change'));
+      }
+      if (hardwareInput) {
+        const label = overlay.querySelector(`label[for="${hardwareInput.id}"]`);
+        if (label) {
+          label.textContent = hardwareInfo.required
+            ? 'Hardware meets the bundle recommendations.'
+            : 'No additional hardware steps required.';
+        }
+        hardwareInput.disabled = !hardwareInfo.required;
+        if (hardwareInfo.required) {
+          hardwareInput.checked = false;
+        } else {
+          hardwareInput.checked = true;
+        }
+        hardwareInput.dispatchEvent(new Event('change'));
+      }
+    };
+
+    const renderBundleDetail = (bundle) => {
+      current = bundle;
+      summary.innerHTML = '';
+      const name = document.createElement('strong');
+      name.textContent = bundle.name || bundle.id;
+      summary.appendChild(name);
+      if (bundle.description) {
+        const desc = document.createElement('p');
+        desc.className = 'dim';
+        desc.textContent = bundle.description;
+        summary.appendChild(desc);
+      }
+
+      tagsWrap.innerHTML = '';
+      for (const tag of runtimeWizardBundleTags(bundle)) {
+        const badge = document.createElement('span');
+        badge.className = 'badge mono';
+        badge.textContent = tag;
+        tagsWrap.appendChild(badge);
+      }
+
+      meta.innerHTML = '';
+      const modalitiesLabel = runtimeModalitiesLabel(bundle.modalities) || joinList(bundle.modalities || []);
+      const acceleratorLabel = runtimeAcceleratorLabel(bundle.accelerator || '');
+      if (modalitiesLabel) {
+        const dt = document.createElement('dt');
+        dt.textContent = 'Modalities';
+        meta.appendChild(dt);
+        const dd = document.createElement('dd');
+        dd.textContent = modalitiesLabel;
+        meta.appendChild(dd);
+      }
+      if (acceleratorLabel) {
+        const dt = document.createElement('dt');
+        dt.textContent = 'Accelerator';
+        meta.appendChild(dt);
+        const dd = document.createElement('dd');
+        dd.textContent = acceleratorLabel;
+        meta.appendChild(dd);
+      }
+      if (bundle.catalogPath) {
+        const dt = document.createElement('dt');
+        dt.textContent = 'Catalog';
+        meta.appendChild(dt);
+        const dd = document.createElement('dd');
+        dd.textContent = bundle.catalogPath;
+        dd.className = 'mono';
+        meta.appendChild(dd);
+      }
+      if (bundle.catalogNotes) {
+        const dt = document.createElement('dt');
+        dt.textContent = 'Notes';
+        meta.appendChild(dt);
+        const dd = document.createElement('dd');
+        dd.textContent = bundle.catalogNotes;
+        meta.appendChild(dd);
+      }
+
+      consentList.innerHTML = '';
+      const consentInfo = runtimeWizardConsentInfo(bundle);
+      for (const line of consentInfo.lines) {
+        const li = document.createElement('li');
+        li.textContent = line;
+        consentList.appendChild(li);
+      }
+
+      hardwareList.innerHTML = '';
+      const hardwareInfo = runtimeWizardHardwareInfo(bundle);
+      for (const line of hardwareInfo.lines) {
+        const li = document.createElement('li');
+        li.textContent = line;
+        hardwareList.appendChild(li);
+      }
+
+      stepsList.innerHTML = '';
+      stepsList.appendChild(runtimeWizardStep('Download bundle artifacts locally.', `arw-cli runtime bundles install ${bundle.id}`));
+      stepsList.appendChild(runtimeWizardStep('Reload bundle catalog once downloads finish.', 'arw-cli runtime bundles reload'));
+      stepsList.appendChild(runtimeWizardStep('Start the runtime from the launcher or CLI.', `arw-cli runtime restore ${bundle.id}`));
+      stepsList.appendChild(runtimeWizardStep('Run health smoke to confirm the managed runtime.', 'just runtime-smoke-safe'));
+
+      updateAcknowledgementLabels(consentInfo, hardwareInfo);
+    };
+
+    renderBundleDetail(current);
+
+    const wizardPromise = ARW.modal.form({
+      title: 'Managed runtime wizard',
+      description: 'Follow the checklist to stage managed runtimes with consent and hardware guardrails.',
+      body: detailRoot,
+      submitLabel: 'Checklist complete',
+      cancelLabel: 'Close',
+      focusField: 'bundle',
+      fields: [
+        {
+          name: 'bundle',
+          type: 'select',
+          label: 'Bundle',
+          options: bundles.map((entry) => ({
+            value: entry.id,
+            label: `${entry.name || entry.id}${entry.channel ? ` (${entry.channel})` : ''}`,
+          })),
+          defaultValue: current.id,
+        },
+        {
+          name: 'ackConsent',
+          type: 'checkbox',
+          label: 'Consent acknowledged',
+          hint: 'Confirm the consent overlay status before continuing.',
+        },
+        {
+          name: 'ackHardware',
+          type: 'checkbox',
+          label: 'Hardware confirmed',
+          hint: 'Verify the host matches recommendations.',
+        },
+      ],
+      validate(values) {
+        const errors = {};
+        const bundle = byId.get(values.bundle);
+        if (!bundle) {
+          errors.bundle = 'Select a bundle to continue.';
+        }
+        if (!values.ackConsent) {
+          errors.ackConsent = 'Consent acknowledgement required.';
+        }
+        const hardwareInfo = runtimeWizardHardwareInfo(bundle || current);
+        if (hardwareInfo.required && !values.ackHardware) {
+          errors.ackHardware = 'Confirm hardware readiness.';
+        }
+        return {
+          values: {
+            bundleId: values.bundle,
+            ackConsent: Boolean(values.ackConsent),
+            ackHardware: Boolean(values.ackHardware),
+          },
+          errors,
+        };
+      },
+    });
+
+    queueMicrotask(() => {
+      const overlay = document.querySelector('[data-arw-modal="overlay"]');
+      if (!overlay) return;
+      const select = overlay.querySelector('select[name="bundle"]');
+      if (select) {
+        select.addEventListener('change', () => {
+          const next = byId.get(select.value) || current;
+          renderBundleDetail(next);
+        });
+      }
+    });
+
+    const result = await wizardPromise;
+    if (!result) return;
+    const bundle = byId.get(result.bundleId);
+    if (bundle) {
+      setRuntimeStat(`${bundle.name || bundle.id}: checklist recorded`, true);
+    }
+    ARW.toast('Checklist complete. Install the bundle, reload runtimes, then run just runtime-smoke-safe.');
   }
 
   function renderRuntimeTable(runtimes) {

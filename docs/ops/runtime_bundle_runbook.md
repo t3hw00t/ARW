@@ -3,7 +3,7 @@ title: Runtime Bundle Runbook
 ---
 
 # Runtime Bundle Runbook
-Updated: 2025-10-12
+Updated: 2025-10-16
 Type: Runbook
 
 Microsummary: Operational playbook for keeping managed runtime bundles signed, up to date, and recoverable.
@@ -37,7 +37,19 @@ Microsummary: Operational playbook for keeping managed runtime bundles signed, u
      --key-id preview-bundle-signing
    ```
   Keep the public half of every active signing key in `configs/runtime/bundle_signers.json`. The server and CLI load this registry automatically: `runtime bundles list` and `runtime bundles audit` now surface `trusted`/`untrusted` labels alongside signature health, and manifests signed by unknown keys are reported as failures when `--require-signed` (or `ARW_REQUIRE_SIGNED_BUNDLES=1`) is in effect.
-5. Publish artifacts + signed manifest to the bundle registry and update the matching `configs/runtime/bundles.*.json` catalog entry (URL + `sha256`).
+5. Publish artifacts + signed manifest to the bundle registry with the helper script, then check in the refreshed catalog metadata:
+   ```bash
+   python3 scripts/runtime_bundle_publish.py \
+     --bundle-root dist/bundles/preview \
+     --catalog configs/runtime/bundles.llama.json \
+     --base-url https://ghcr.io/t3hw00t/arw-bundles/preview \
+     --sign \
+     --sign-key-file ops/keys/runtime_bundle_ed25519.sk \
+     --sign-issuer bundle-ci@arw \
+     --sign-key-id preview-bundle-signing
+   ```
+   Adjust `--bundle-root` / `--catalog` for each channel (preview, stable, vision, audio). The helper computes `sha256`/`size_bytes`, rewrites artifact URLs, and signs manifests in place when keys are supplied. Prefer `--dry-run` while iterating locally.
+   Set `ARW_RUNTIME_BUNDLE_BASE_URL`, `ARW_RUNTIME_BUNDLE_SIGN_KEY_FILE` (or `*_SIGN_KEY_B64`), `ARW_RUNTIME_BUNDLE_SIGN_KEY_ID`, and `ARW_RUNTIME_BUNDLE_SIGN_ISSUER` to drive the matching `just runtime-bundles-publish <catalog> <bundle-root>` wrapper.
 6. Notify operators (Launcher banner + `ops/runtime_bundle_runbook.md` change log) and document the new revision in the release notes.
 
 Preview and stable channels share the same signing keys, but each channel increments its own revision history. Rotate the ed25519 pair quarterly (see `docs/ops/cluster_runbook.md` for key rotation flow) and keep the public key checked into `configs/runtime/bundle_signers.json` for automated verification.

@@ -3,7 +3,7 @@ title: CLI Guide
 ---
 
 # CLI Guide
-Updated: 2025-10-13
+Updated: 2025-10-16
 Type: How‑to
 
 Goal-oriented tasks using the `arw-cli` binary. This guide shows common commands with copy‑pasteable examples and flags you’re likely to want.
@@ -43,7 +43,9 @@ Basics
   - Roll back to a previous snapshot: `arw-cli runtime bundles rollback --bundle llama.cpp-preview/linux-x86_64-cpu --list`
   - Verify manifest signatures: `arw-cli runtime bundles manifest verify ~/.cache/arw/runtime/bundles/llama.cpp-preview/linux-x86_64-cpu/bundle.json`
   - Add `--require-trusted` to the verify command when you need a hard failure unless at least one signature matches the configured signer registry; without the flag the CLI emits a note and exits zero so you can inspect warnings interactively.
-  - Sign manifests before publishing: `arw-cli runtime bundles manifest sign dist/bundles/llama.cpp-preview/linux-x86_64-cpu/bundle.json --key-file ops/keys/runtime_bundle_ed25519.sk --issuer bundle-ci`
+- Sign manifests before publishing: `arw-cli runtime bundles manifest sign dist/bundles/llama.cpp-preview/linux-x86_64-cpu/bundle.json --key-file ops/keys/runtime_bundle_ed25519.sk --issuer bundle-ci`
+- Batch refresh catalog metadata (URLs, hashes, optional signing): `python3 scripts/runtime_bundle_publish.py --bundle-root dist/bundles/preview --catalog configs/runtime/bundles.llama.json --base-url https://ghcr.io/t3hw00t/arw-bundles/preview --sign --sign-key-file ops/keys/runtime_bundle_ed25519.sk`
+- Wrapper with env defaults: `just runtime-bundles-publish configs/runtime/bundles.llama.json dist/bundles/preview` (populate `ARW_RUNTIME_BUNDLE_BASE_URL`, `ARW_RUNTIME_BUNDLE_SIGN_KEY_*` before running)
   - Add `--json`/`--pretty` to the rollback command for machine-readable history listings or outcome summaries
   - `runtime bundles list --pretty` includes signature verification results for each installed bundle, including aggregated `trusted`/`rejected` counts and per-key `[trusted]`/`[untrusted]` hints
   - Offline audit: `arw-cli runtime bundles audit --require-signed` fails fast when any installed bundle lacks a trusted manifest; add `--dest` to point at alternate roots

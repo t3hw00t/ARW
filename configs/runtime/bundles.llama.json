@@ -16,7 +16,7 @@
           "os": "linux",
           "arch": "x86_64",
           "min_version": "kernel 5.15",
-          "notes": "Requires glibc ≥ 2.35."
+          "notes": "Requires glibc >= 2.35."
         }
       ],
       "artifacts": [

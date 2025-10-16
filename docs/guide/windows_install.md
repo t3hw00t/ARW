@@ -3,7 +3,7 @@ title: Windows Install & Launcher
 ---
 
 # Windows Install & Launcher
-Updated: 2025-10-12
+Updated: 2025-10-16
 Type: How‑to
 
 This guide covers running ARW on Windows with the desktop launcher and the headless service. It also notes the current installer status and the path to a signed MSI.

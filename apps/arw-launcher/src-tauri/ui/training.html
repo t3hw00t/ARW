@@ -107,6 +107,18 @@
             <p id="contextTelemetryStatus" class="dim mono" role="status" aria-live="polite">Loading…</p>
             <div id="contextTelemetryBody" hidden data-mode="expert-only">
               <div class="metric-block" aria-live="polite">
+                <h4>Tool success</h4>
+                <p class="metric-inline" id="toolSuccessOverall">No recent tool invocations.</p>
+                <div>
+                  <strong>Recent invocations</strong>
+                  <ul id="toolSuccessList" class="metric-list"></ul>
+                </div>
+                <div>
+                  <strong>Usage totals</strong>
+                  <ul id="toolUsageTotals" class="metric-list"></ul>
+                </div>
+              </div>
+              <div class="metric-block" aria-live="polite">
                 <h4>Coverage</h4>
                 <span id="coverageNeedsMore" class="metric-pill">—</span>
                 <p class="metric-inline"><span class="metric-label" id="coverageRatioLabel">Needs more ratio:</span><span id="coverageRatio">—</span></p>

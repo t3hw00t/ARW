@@ -1,5 +1,6 @@
 use chrono::SecondsFormat;
 use serde_json::{json, Value};
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use tokio::fs as afs;
 use tokio::sync::Mutex;
@@ -11,6 +12,7 @@ use crate::{
 use arw_topics as topics;
 
 const LOGIC_HISTORY_LIMIT: usize = 10;
+const TOOL_INVOCATION_SUMMARY_LIMIT: usize = 12;
 
 pub async fn telemetry_snapshot(state: &AppState) -> serde_json::Value {
     let metrics = state.metrics().snapshot();
@@ -65,6 +67,21 @@ pub async fn telemetry_snapshot(state: &AppState) -> serde_json::Value {
         None
     };
 
+    let mut modular_tool_totals: Vec<(String, u64)> = metrics
+        .modular
+        .tool_totals
+        .iter()
+        .map(|(tool, count)| (tool.clone(), *count))
+        .collect();
+    modular_tool_totals.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| a.0.cmp(&b.0)));
+    if modular_tool_totals.len() > TOOL_INVOCATION_SUMMARY_LIMIT {
+        modular_tool_totals.truncate(TOOL_INVOCATION_SUMMARY_LIMIT);
+    }
+    let modular_tool_totals: Vec<Value> = modular_tool_totals
+        .into_iter()
+        .map(|(tool, count)| json!({ "tool_id": tool, "count": count }))
+        .collect();
+
     let tasks = serde_json::to_value(&metrics.tasks).unwrap_or_else(|_| json!({}));
     let compatibility = serde_json::to_value(&metrics.compatibility)
         .unwrap_or_else(|_| json!({"legacy_capsule_headers": 0}));
@@ -87,24 +104,26 @@ pub async fn telemetry_snapshot(state: &AppState) -> serde_json::Value {
     let feedback_summary = summarize_feedback(feedback_state);
 
     let logic_history = state.logic_history().recent(LOGIC_HISTORY_LIMIT).await;
-    let memory_overview = if state.kernel_enabled() {
-        match state.kernel().list_recent_memory_async(None, 120).await {
+    let (memory_overview, tool_invocations) = if state.kernel_enabled() {
+        match state.kernel().list_recent_memory_async(None, 200).await {
             Ok(items) if !items.is_empty() => {
                 let summary = read_models::summarize_memory_recent_items(&items);
-                build_memory_overview(&summary)
+                let overview = build_memory_overview(&summary);
+                let tool_summary = summarize_tool_invocations(&items);
+                (overview, tool_summary)
             }
-            Ok(_) => Value::Null,
+            Ok(_) => (Value::Null, Value::Null),
             Err(err) => {
                 warn!(
                     target: "training",
                     error = %err,
                     "failed to summarize memory coverage"
                 );
-                Value::Null
+                (Value::Null, Value::Null)
             }
         }
     } else {
-        Value::Null
+        (Value::Null, Value::Null)
     };
 
     json!({
@@ -128,6 +147,7 @@ pub async fn telemetry_snapshot(state: &AppState) -> serde_json::Value {
             "failed": failed,
             "total_runs": total_runs,
             "success_rate": success_rate,
+            "totals_by_tool": modular_tool_totals,
         },
         "tasks": tasks,
         "cache": cache_snapshot,
@@ -141,6 +161,7 @@ pub async fn telemetry_snapshot(state: &AppState) -> serde_json::Value {
         "compatibility": compatibility,
         "context": context,
         "memory": memory_overview,
+        "tool_invocations": tool_invocations,
         "logic_history": logic_history,
     })
 }
@@ -349,6 +370,147 @@ fn compact_options(value: Value) -> Value {
         }
         other => other,
     }
+}
+
+#[derive(Default)]
+struct ToolInvocationStat {
+    total: u64,
+    success: u64,
+    failed: u64,
+    last_ms: Option<u64>,
+    last_status: Option<String>,
+    last_summary: Option<String>,
+    last_invocation_id: Option<String>,
+}
+
+fn summarize_tool_invocations(items: &[Value]) -> Value {
+    let mut stats: HashMap<String, ToolInvocationStat> = HashMap::new();
+    let mut overall_total: u64 = 0;
+    let mut overall_success: u64 = 0;
+
+    for item in items {
+        let Some(value_obj) = item.get("value").and_then(Value::as_object) else {
+            continue;
+        };
+        let Some(kind) = value_obj.get("payload_kind").and_then(Value::as_str) else {
+            continue;
+        };
+        if kind != "tool_invocation" {
+            continue;
+        }
+        let tool_id = value_obj
+            .get("tool_id")
+            .and_then(Value::as_str)
+            .unwrap_or("unknown");
+        let status = value_obj
+            .get("result_status")
+            .and_then(Value::as_str)
+            .unwrap_or("unknown");
+        let created_ms = value_obj
+            .get("created_ms")
+            .and_then(Value::as_u64)
+            .or_else(|| item.get("created_ms").and_then(Value::as_u64));
+        let summary = value_obj
+            .get("payload_summary")
+            .and_then(Value::as_str)
+            .map(|s| s.to_string())
+            .or_else(|| {
+                item.get("extra")
+                    .and_then(|v| v.get("summary_excerpt"))
+                    .and_then(Value::as_str)
+                    .map(|s| s.to_string())
+            });
+        let invocation_id = value_obj
+            .get("invocation_id")
+            .and_then(Value::as_str)
+            .map(|s| s.to_string());
+
+        let entry = stats.entry(tool_id.to_string()).or_default();
+        entry.total = entry.total.saturating_add(1);
+        overall_total = overall_total.saturating_add(1);
+        if is_success_status(status) {
+            entry.success = entry.success.saturating_add(1);
+            overall_success = overall_success.saturating_add(1);
+        } else {
+            entry.failed = entry.failed.saturating_add(1);
+        }
+        if created_ms.is_some() && (entry.last_ms.is_none() || created_ms > entry.last_ms) {
+            entry.last_ms = created_ms;
+            entry.last_status = Some(status.to_string());
+            entry.last_summary = summary.clone();
+            entry.last_invocation_id = invocation_id.clone();
+        }
+    }
+
+    if stats.is_empty() {
+        return Value::Null;
+    }
+
+    let mut summary: Vec<Value> = stats
+        .into_iter()
+        .map(|(tool_id, stat)| {
+            let rate = if stat.total > 0 {
+                Some((stat.success as f64) / (stat.total as f64))
+            } else {
+                None
+            };
+            json!({
+                "tool_id": tool_id,
+                "total": stat.total,
+                "success": stat.success,
+                "failed": stat.failed,
+                "success_rate": rate,
+                "last_ms": stat.last_ms,
+                "last_status": stat.last_status,
+                "last_summary": stat.last_summary,
+                "last_invocation_id": stat.last_invocation_id,
+            })
+        })
+        .collect();
+
+    summary.sort_by(|a, b| {
+        let total_a = a.get("total").and_then(Value::as_u64).unwrap_or(0);
+        let total_b = b.get("total").and_then(Value::as_u64).unwrap_or(0);
+        total_b
+            .cmp(&total_a)
+            .then_with(|| {
+                let ms_a = a.get("last_ms").and_then(Value::as_u64).unwrap_or(0);
+                let ms_b = b.get("last_ms").and_then(Value::as_u64).unwrap_or(0);
+                ms_b.cmp(&ms_a)
+            })
+            .then_with(|| {
+                let id_a = a.get("tool_id").and_then(Value::as_str).unwrap_or_default();
+                let id_b = b.get("tool_id").and_then(Value::as_str).unwrap_or_default();
+                id_a.cmp(id_b)
+            })
+    });
+    if summary.len() > TOOL_INVOCATION_SUMMARY_LIMIT {
+        summary.truncate(TOOL_INVOCATION_SUMMARY_LIMIT);
+    }
+
+    let failed_total = overall_total.saturating_sub(overall_success);
+    let overall_rate = if overall_total > 0 {
+        Some((overall_success as f64) / (overall_total as f64))
+    } else {
+        None
+    };
+
+    json!({
+        "summary": summary,
+        "overall": {
+            "total": overall_total,
+            "success": overall_success,
+            "failed": failed_total,
+            "success_rate": overall_rate,
+        }
+    })
+}
+
+fn is_success_status(status: &str) -> bool {
+    matches!(
+        status.to_ascii_lowercase().as_str(),
+        "ok" | "success" | "succeeded" | "completed"
+    )
 }
 
 fn summarize_capsules(snapshot: Value) -> Value {
