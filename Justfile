@@ -177,6 +177,17 @@ runtime-smoke-gpu:
 runtime-smoke-gpu-sim:
   RUNTIME_SMOKE_GPU_POLICY=simulate bash scripts/runtime_smoke_suite.sh
 
+runtime-smoke-gpu-real:
+  # Real GPU helper: skips stub stage, keeps artifacts, and enforces the CUDA-capable llama-server.
+  RUNTIME_SMOKE_KEEP_TMP=1 \
+  RUNTIME_SMOKE_GPU_POLICY=require \
+  RUNTIME_SMOKE_ALLOW_GPU=1 \
+  RUNTIME_SMOKE_SKIP_STUB="${RUNTIME_SMOKE_SKIP_STUB:-1}" \
+  RUNTIME_SMOKE_ALLOW_HIGH_MEM="${RUNTIME_SMOKE_ALLOW_HIGH_MEM:-1}" \
+  RUNTIME_SMOKE_LLAMA_SERVER_BIN="${RUNTIME_SMOKE_LLAMA_SERVER_BIN:-$(pwd)/cache/llama.cpp/build-windows/bin/llama-server.exe}" \
+  ARW_SERVER_BIN="${ARW_SERVER_BIN:-$(pwd)/target/release/arw-server.exe}" \
+  bash scripts/runtime_smoke_suite.sh
+
 runtime-smoke-dry-run:
   RUNTIME_SMOKE_DRY_RUN=1 RUNTIME_SMOKE_GPU_POLICY="${RUNTIME_SMOKE_GPU_POLICY:-auto}" bash scripts/runtime_smoke_suite.sh
 
