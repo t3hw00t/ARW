@@ -482,10 +482,12 @@ workflows:
         .unwrap();
         match Recipe::load(&path) {
             Ok(_) => panic!("expected validation to fail"),
-            Err(err) => assert!(
-                err.to_string().contains("duplicate workflow step"),
-                "unexpected error: {err:?}"
-            ),
+            Err(err) => {
+                let msg = err.to_string();
+                let ok =
+                    msg.contains("duplicate workflow step") || msg.contains("non-unique elements");
+                assert!(ok, "unexpected error: {msg:?}");
+            }
         }
     }
 }

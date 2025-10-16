@@ -148,7 +148,7 @@ fn list(args: ResearchWatcherListArgs) -> Result<()> {
                 serde_json::to_string_pretty(&snapshot).unwrap_or_else(|_| "{}".into())
             );
         } else {
-            println!("{}", snapshot.to_string());
+            println!("{}", snapshot);
         }
         return Ok(());
     }
@@ -268,7 +268,7 @@ fn decide(args: ResearchWatcherDecideArgs, decision: Decision) -> Result<()> {
                 serde_json::to_string_pretty(&payload).unwrap_or_else(|_| "{}".into())
             );
         } else {
-            println!("{}", payload.to_string());
+            println!("{}", payload);
         }
     } else {
         for (id, value) in &results {
@@ -342,7 +342,7 @@ fn extract_items(snapshot: &Value) -> Vec<Value> {
     snapshot
         .get("items")
         .and_then(|v| v.as_array())
-        .map(|arr| arr.iter().cloned().collect())
+        .map(|arr| arr.to_vec())
         .unwrap_or_default()
 }
 
@@ -402,8 +402,8 @@ fn contains_text(item: &Value, needle: &str) -> bool {
 
 fn print_table(items: &[Value]) {
     println!(
-        "{:<12} {:<9} {:<12} {:<20} {}",
-        "ID", "Status", "Source", "Updated", "Title"
+        "{:<12} {:<9} {:<12} {:<20} Title",
+        "ID", "Status", "Source", "Updated"
     );
     for item in items {
         let id = item

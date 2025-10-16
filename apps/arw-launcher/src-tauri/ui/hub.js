@@ -646,6 +646,36 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 
   let runtimeBundlesModel = null;
+
+  function bundleHasTrustShortfall(inst) {
+    if (!inst || !inst.signature) return false;
+    const sig = inst.signature;
+    if (!sig.trust_enforced) return false;
+    if (Number(sig.trusted_signatures ?? 0) !== 0) return false;
+    const reports = Array.isArray(sig.signatures) ? sig.signatures : [];
+    if (!reports.length) return false;
+    return reports.every((report) => report && report.signature_valid && report.hash_matches);
+  }
+
+  function bundleTrustShortfallWarnings(inst) {
+    if (!bundleHasTrustShortfall(inst)) return [];
+    const sig = inst.signature || {};
+    const warnings = Array.isArray(sig.warnings) ? [...sig.warnings] : [];
+    if (Array.isArray(sig.signatures)) {
+      for (const report of sig.signatures) {
+        if (report?.error) {
+          const label = report.key_id || report.public_key_b64 || '<unknown key>';
+          warnings.push(`${label}: ${report.error}`);
+        }
+      }
+    }
+    if (!warnings.length) {
+      if (inst?.channel) warnings.push(`No trusted signer registry entry for channel ${inst.channel}`);
+      else warnings.push('No trusted signer registry entry for this bundle');
+    }
+    return warnings;
+  }
+
   function renderRuntimeBundles(model) {
     runtimeBundlesModel = model || runtimeBundlesModel;
     if (!elRuntimeBundles) return;
@@ -669,6 +699,25 @@ document.addEventListener('DOMContentLoaded', async () => {
       summary.textContent = 'No bundles installed yet.';
     }
     frag.appendChild(summary);
+
+    const sigSummary = runtimeBundlesModel?.signature_summary;
+    const trustShortfallCount = Number(sigSummary?.trust_shortfall ?? 0);
+    if (trustShortfallCount > 0) {
+      const warn = document.createElement('div');
+      warn.className = 'runtime-bundle-warning';
+      const dot = document.createElement('span');
+      dot.className = 'dot warn';
+      warn.appendChild(dot);
+      const text = document.createElement('span');
+      const plural = trustShortfallCount === 1 ? '' : 's';
+      text.textContent = `${trustShortfallCount} manifest${plural} verified but missing trusted signer registry entry.`;
+      warn.appendChild(text);
+      const hint = document.createElement('span');
+      hint.className = 'dim';
+      hint.textContent = 'Add entries in configs/runtime/bundle_signers.json or set ARW_RUNTIME_BUNDLE_SIGNERS.';
+      warn.appendChild(hint);
+      frag.appendChild(warn);
+    }
 
     const columns = ['Bundle', 'Adapter', 'Accelerator', 'Profiles', 'Modalities', 'Channel', 'Location', 'Installed'];
 
@@ -701,7 +750,13 @@ document.addEventListener('DOMContentLoaded', async () => {
         const installedIso = inst?.installed_at || inst?.imported_at || '';
         const installedHuman = formatRelativeIso(installedIso) || installedIso || '—';
 
+        const trustShortfall = bundleHasTrustShortfall(inst);
+        const warnLines = trustShortfall ? bundleTrustShortfallWarnings(inst) : [];
+
         const row = document.createElement('tr');
+        if (trustShortfall) {
+          row.classList.add('trust-shortfall');
+        }
 
         const cellName = document.createElement('td');
         const strongName = document.createElement('strong');
@@ -712,6 +767,26 @@ document.addEventListener('DOMContentLoaded', async () => {
           idLine.className = 'mono dim';
           idLine.textContent = runtimeId;
           cellName.appendChild(idLine);
+        }
+        if (trustShortfall) {
+          const badge = document.createElement('span');
+          badge.className = 'badge warn';
+          badge.textContent = 'trust shortfall';
+          badge.title = 'Signature verified but missing trusted signer registry entry';
+          cellName.appendChild(badge);
+          if (warnLines.length) {
+            const warnInline = document.createElement('div');
+            warnInline.className = 'runtime-bundle-warning-inline';
+            warnInline.textContent = warnLines[0];
+            cellName.appendChild(warnInline);
+            if (warnLines.length > 1) {
+              const warnMore = document.createElement('div');
+              warnMore.className = 'runtime-bundle-warning-inline';
+              const remaining = warnLines.length - 1;
+              warnMore.textContent = `… ${remaining} additional warning${remaining === 1 ? '' : 's'} (see CLI for details)`;
+              cellName.appendChild(warnMore);
+            }
+          }
         }
         row.appendChild(cellName);
 

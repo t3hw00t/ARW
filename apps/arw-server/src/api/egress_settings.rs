@@ -227,10 +227,10 @@ async fn compose_egress_payload(state: &AppState) -> serde_json::Value {
                             .as_object()
                             .and_then(|obj| obj.get("capability"))
                             .and_then(|v| v.as_str())
-                        .map(|cap| cap.starts_with("net"))
-                        .unwrap_or(false)
-                })
-                .count();
+                            .map(|cap| cap.starts_with("net"))
+                            .unwrap_or(false)
+                    })
+                    .count();
                 json!({
                     "total": total,
                     "net": net,

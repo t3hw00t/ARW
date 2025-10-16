@@ -164,6 +164,21 @@
 .runtime-bundle-summary{
   font-weight:600;
 }
+.runtime-bundle-warning{
+  display:flex;
+  align-items:center;
+  gap:var(--sp1);
+  padding:6px 8px;
+  border-left:3px solid var(--status-warn);
+  background:rgba(217,119,6,0.12);
+  border-radius:var(--radius-md);
+  font-size:0.9rem;
+}
+.runtime-bundle-warning .dot{
+  width:8px;
+  height:8px;
+  background:var(--status-warn);
+}
 .runtime-bundle-table{
   width:100%;
   border-collapse:collapse;
@@ -199,6 +214,18 @@
 }
 .runtime-bundle-table td:nth-child(8){
   white-space:nowrap;
+}
+.runtime-bundle-table tr.trust-shortfall{
+  background:rgba(217,119,6,0.08);
+}
+.runtime-bundle-table tr.trust-shortfall td{
+  border-bottom-color:rgba(217,119,6,0.2);
+}
+.runtime-bundle-warning-inline{
+  margin-top:4px;
+  font-size:0.8rem;
+  color:var(--status-warn);
+  display:block;
 }
 .runtime-bundle-meta td{
   padding-top:4px;

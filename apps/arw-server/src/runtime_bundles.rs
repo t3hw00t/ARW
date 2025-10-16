@@ -294,10 +294,20 @@ fn summarize_signatures(installations: &[RuntimeBundleInstallation]) -> Signatur
                 summary.with_manifest += 1;
                 summary.trusted += sig.trusted_signatures;
                 summary.rejected += sig.rejected_signatures;
-                if sig.ok {
+                let trust_shortfall_only = sig.trust_enforced
+                    && sig.trusted_signatures == 0
+                    && !sig.signatures.is_empty()
+                    && sig
+                        .signatures
+                        .iter()
+                        .all(|r| r.signature_valid && r.hash_matches);
+                if sig.ok || trust_shortfall_only {
                     summary.verified += 1;
-                    if !sig.warnings.is_empty() {
+                    if !sig.warnings.is_empty() || trust_shortfall_only {
                         summary.warnings += 1;
+                    }
+                    if trust_shortfall_only {
+                        summary.trust_shortfall += 1;
                     }
                 } else {
                     summary.failed += 1;
@@ -327,6 +337,7 @@ struct SignatureSummary {
     missing_signatures: usize,
     trusted: usize,
     rejected: usize,
+    trust_shortfall: usize,
     ok: bool,
     enforced: bool,
 }
@@ -704,6 +715,8 @@ mod tests {
     async fn reload_fails_when_enforcement_enabled_and_unsigned() -> Result<()> {
         let tmp = tempdir().expect("tempdir");
         let mut env_guard = crate::test_support::env::guard();
+        // Ensure state_dir() picks up this temp path even if cached from previous tests.
+        let _state_guard = crate::util::scoped_state_dir_for_tests(tmp.path(), &mut env_guard);
         env_guard.set(super::ENV_REQUIRE_SIGNED_BUNDLES, "1");
         env_guard.set("ARW_STATE_DIR", tmp.path().display().to_string());
         env_guard.remove("ARW_RUNTIME_BUNDLE_DIR");
@@ -744,6 +757,7 @@ mod tests {
 
         let tmp = tempdir().expect("tempdir");
         let mut env_guard = crate::test_support::env::guard();
+        let _state_guard = crate::util::scoped_state_dir_for_tests(tmp.path(), &mut env_guard);
         env_guard.set(super::ENV_REQUIRE_SIGNED_BUNDLES, "1");
         env_guard.set("ARW_STATE_DIR", tmp.path().display().to_string());
         env_guard.remove("ARW_RUNTIME_BUNDLE_DIR");

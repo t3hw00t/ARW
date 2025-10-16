@@ -4,7 +4,7 @@ title: Cluster Runbook
 
 # Cluster Runbook
 
-Updated: 2025-10-11
+Updated: 2025-10-16
 Type: Runbook
 
 This runbook walks through bringing remote workers into an Agent Hub (ARW) installation and operating the preview federation stack. It assumes you already run the unified server (`arw-server`) locally and want to offload work or invite peers under policy control.
@@ -150,6 +150,7 @@ The Home advertises itself every five minutes and whenever runtime/models/govern
 ## Observability & Telemetry
 - **Cluster snapshot** – `/state/cluster` returns `{nodes[], generated, generated_ms}`. Each `ClusterNode` includes id, role, optional health, and advertised capabilities.
 - **CLI shortcut** – `arw-cli state cluster --base http://127.0.0.1:8091` renders a table of nodes with last-seen timestamps and stale markers; add `--json --pretty` for raw output.
+- **Runtime bundles** – `/state/runtime_matrix` now includes `signature_summary.trust_shortfall`: manifests with valid signatures but no matching signer registry entry per channel. Install or update `configs/runtime/bundle_signers.json` (or set `ARW_RUNTIME_BUNDLE_SIGNERS`) so preview bundles graduate to fully trusted status.
 - **Events** – subscribe to `/events?prefix=cluster.` or `/events?prefix=hierarchy.` for live updates.
 - **Logs** – enable structured logs with `ARW_LOG=info` (default) and tail worker logs for connectivity issues.
 - **Contribution metrics (preview)** – ledger endpoints under `/state/egress` and `/state/runtime_matrix` will surface per-node contribution once Phase 2 lands.

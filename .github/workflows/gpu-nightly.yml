@@ -1,0 +1,51 @@
+name: GPU Nightly Runtime Smoke
+
+on:
+  schedule:
+    - cron: '0 3 * * *'
+  workflow_dispatch: {}
+
+jobs:
+  gpu-smoke:
+    # Requires a self-hosted runner with GPU and labels [self-hosted, linux, gpu]
+    if: contains(runner.labels, 'self-hosted') && contains(runner.labels, 'gpu')
+    runs-on: [self-hosted, linux, gpu]
+    timeout-minutes: 60
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.90.0
+
+      - name: Install just
+        run: |
+          if ! command -v just >/dev/null 2>&1; then
+            cargo install just --locked
+          fi
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: gpu-${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: GPU runtime check (require real GPU)
+        env:
+          RUNTIME_SMOKE_GPU_POLICY: require
+          RUNTIME_SMOKE_ALLOW_GPU: '1'
+          # Optionally set on runner: LLAMA_SERVER_BIN, LLAMA_MODEL_PATH for faster start
+        run: |
+          set -euxo pipefail
+          # Apply safe defaults (low-impact) but allow GPU usage
+          . scripts/smoke_safe.sh || true
+          export RUNTIME_SMOKE_GPU_POLICY=require
+          export RUNTIME_SMOKE_ALLOW_GPU=1
+          # If runner provides explicit binary/model, use them; otherwise rely on local cache/discovery
+          just runtime-check
+

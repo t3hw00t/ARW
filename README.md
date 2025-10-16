@@ -48,6 +48,7 @@ Assistant quickstart → [Agent Onboarding](docs/ai/AGENT_ONBOARDING.md)
 - Format: `cargo fmt --all`
 - Lint: `cargo clippy --workspace --all-targets -- -D warnings`
 - Tests: `cargo nextest run` or `scripts/test.{sh,ps1}`
+- Runtime smoke: `just smoke-safe` (apply low‑impact defaults) then `just runtime-smoke` for stub + optional GPU checks. To exercise a real GPU backend, set `LLAMA_SERVER_BIN` and `LLAMA_MODEL_PATH` and run `just runtime-smoke-gpu` (falls back to a simulated marker unless enforced).
 - Docs: `mkdocs build --strict`, `scripts/dev.{sh,ps1} docs`, or `just docs-build` (requires Bash). Windows without Bash: `pwsh -ExecutionPolicy Bypass -File scripts\docgen.ps1` followed by `mkdocs build --strict`. Prefer task wrappers? Use `mise run docs:check` or `mise run docs:check:fast`.
 - Consent validation: run `python3 scripts/validate_runtime_consent.py` whenever you edit `configs/runtime/bundles*.json` so audio/vision bundles keep their `metadata.consent` annotations (CI blocks merges otherwise).
 - Docs metadata: `python scripts/update_doc_metadata.py docs/<path>.md` refreshes the `Updated:` stamp after edits (add `--dry-run` to preview changes).

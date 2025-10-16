@@ -6,7 +6,7 @@ title: System Components
 
 # System Components
 
-Updated: 2025-10-12
+Updated: 2025-10-07
 Status: Stable
 Type: Reference
 
@@ -192,7 +192,7 @@ Alpha capsule lifecycle that refreshes reversible denies at runtime boundaries a
 - Notes:
   - Extends gating capsules with leases so protections renew without restarts.
   - Instruments admin middleware, tool execution, and egress to refresh capsules proactively.
-- Admin tooling surfaces capsule presets, live status, and audit trails via the web models console and CLI (`arw-cli capsule preset|audit|trust`).
+  - Outstanding backlog: proxy refresh + UX/CLI tooling tracked under Security & Admin → Asimov Capsule Guard.
 
 ### Cache Policy & Action Cache
 

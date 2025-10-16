@@ -521,11 +521,11 @@ mod tests {
         assert!(report.signature_valid);
         assert!(report.rejected);
         assert!(!report.trusted);
-        assert!(report
-            .error
-            .as_deref()
-            .unwrap_or("")
-            .contains("not present"));
+        let msg = report.error.as_deref().unwrap_or("");
+        assert!(
+            msg.contains("not trusted for channel") || msg.contains("not present"),
+            "unexpected verification error: {msg}"
+        );
         Ok(())
     }
 

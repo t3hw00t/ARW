@@ -351,11 +351,9 @@ pub(crate) fn slugify_topic(label: &str) -> Option<String> {
         if ch.is_ascii_alphanumeric() {
             slug.push(ch.to_ascii_lowercase());
             prev_dash = false;
-        } else {
-            if !slug.is_empty() && !prev_dash {
-                slug.push('-');
-                prev_dash = true;
-            }
+        } else if !slug.is_empty() && !prev_dash {
+            slug.push('-');
+            prev_dash = true;
         }
     }
     let slug = slug.trim_matches('-').to_string();

@@ -1713,6 +1713,8 @@ enum RuntimeBundlesCmd {
     },
     /// Audit installed bundles for signature coverage and health
     Audit(RuntimeBundlesAuditArgs),
+    /// List bundles whose signatures verified but are missing trusted signer entries
+    TrustShortfall(RuntimeBundlesTrustShortfallArgs),
 }
 
 fn runtime_bundles_list_remote(args: &RuntimeBundlesListArgs) -> Result<()> {
@@ -1776,17 +1778,25 @@ fn print_bundle_summary(
     }
     if let Some(summary) = signature_summary {
         println!(
-            "Signatures: total {} | with manifest {} | verified {} | trusted {} | rejected {} | failed {} | warnings {} | missing {} | enforced {}",
+            "Signatures: total {} | with manifest {} | verified {} | trusted {} | trust shortfall {} | rejected {} | failed {} | warnings {} | missing {} | enforced {}",
             summary.total,
             summary.with_manifest,
             summary.verified,
             summary.trusted,
+            summary.trust_shortfall,
             summary.rejected,
             summary.failed,
             summary.warnings,
             summary.missing_signatures,
             if summary.enforced { "yes" } else { "no" }
         );
+        if summary.trust_shortfall > 0 {
+            println!(
+                "  note: {} manifest{} verified but lack a trusted signer registry entry for their channel; install matching entries in configs/runtime/bundle_signers.json to promote them",
+                summary.trust_shortfall,
+                if summary.trust_shortfall == 1 { "" } else { "s" }
+            );
+        }
     }
     println!(
         "Found {} bundle catalog{}.",
@@ -2131,6 +2141,27 @@ struct RuntimeBundlesListArgs {
 }
 
 #[derive(Args)]
+struct RuntimeBundlesTrustShortfallArgs {
+    #[command(flatten)]
+    base: RuntimeBaseArgs,
+    /// Directory containing bundle catalogs (defaults to configs/runtime/)
+    #[arg(long, value_name = "DIR")]
+    dir: Option<PathBuf>,
+    /// Directory containing installed bundles (defaults to <state_dir>/runtime/bundles)
+    #[arg(long = "install-dir", value_name = "DIR")]
+    install_dir: Option<PathBuf>,
+    /// Fetch bundle catalogs from a running server instead of local files
+    #[arg(long)]
+    remote: bool,
+    /// Emit JSON instead of human-readable output
+    #[arg(long)]
+    json: bool,
+    /// Pretty-print JSON output (requires --json)
+    #[arg(long, requires = "json")]
+    pretty: bool,
+}
+
+#[derive(Args)]
 struct RuntimeBundlesReloadArgs {
     #[command(flatten)]
     base: RuntimeBaseArgs,
@@ -2370,9 +2401,30 @@ struct CliSignatureSummary {
     #[serde(default)]
     rejected: usize,
     #[serde(default)]
+    trust_shortfall: usize,
+    #[serde(default)]
     ok: bool,
     #[serde(default)]
     enforced: bool,
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct BundleTrustShortfallEntry {
+    id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    channel: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    root: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    metadata_path: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    installed_at: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    imported_at: Option<String>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    warnings: Vec<String>,
 }
 
 impl From<SignatureSummary> for CliSignatureSummary {
@@ -2386,6 +2438,7 @@ impl From<SignatureSummary> for CliSignatureSummary {
             missing_signatures: src.missing_signatures,
             trusted: src.trusted,
             rejected: src.rejected,
+            trust_shortfall: src.trust_shortfall,
             ok: src.ok,
             enforced: src.enforced,
         }
@@ -3665,6 +3718,12 @@ fn main() {
                 },
                 RuntimeBundlesCmd::Audit(args) => {
                     if let Err(e) = cmd_runtime_bundles_audit(&args) {
+                        eprintln!("{}", e);
+                        std::process::exit(1);
+                    }
+                }
+                RuntimeBundlesCmd::TrustShortfall(args) => {
+                    if let Err(e) = cmd_runtime_bundles_trust_shortfall(&args) {
                         eprintln!("{}", e);
                         std::process::exit(1);
                     }
@@ -7497,12 +7556,8 @@ fn cmd_runtime_bundles_manifest_verify(args: &RuntimeBundlesManifestVerifyArgs) 
         .and_then(|value| value.as_str());
     let verification =
         verify_manifest_signatures_with_registry(&manifest, signer_registry.as_ref(), channel_hint);
-    let trust_shortfall = verification.trust_enforced && verification.trusted_signatures == 0;
-    let only_trust_failure = trust_shortfall
-        && verification
-            .signatures
-            .iter()
-            .all(|report| report.signature_valid && report.hash_matches);
+    let trust_shortfall = manifest_trust_shortfall(&verification);
+    let only_trust_failure = trust_shortfall;
     let overall_ok = if only_trust_failure {
         true
     } else {
@@ -7576,25 +7631,24 @@ fn cmd_runtime_bundles_manifest_verify(args: &RuntimeBundlesManifestVerifyArgs) 
         }
     }
 
-    if verification.ok {
-        Ok(())
-    } else if only_trust_failure && !args.require_trusted {
+    if args.require_trusted && trust_shortfall {
+        anyhow::bail!(
+            "bundle manifest verification failed: no trusted signatures matched the signer registry"
+        )
+    }
+    if overall_ok {
+        return Ok(());
+    }
+    if only_trust_failure && !args.require_trusted {
         if !args.json {
             println!(
                 "Note: signatures verified but none matched the trusted signer registry. \
 pass --require-trusted to fail in this scenario."
             );
         }
-        Ok(())
-    } else if args.require_trusted && trust_shortfall {
-        anyhow::bail!(
-            "bundle manifest verification failed: no trusted signatures matched the signer registry"
-        )
-    } else if only_trust_failure {
-        anyhow::bail!("bundle manifest verification failed")
-    } else {
-        anyhow::bail!("bundle manifest verification failed")
+        return Ok(());
     }
+    anyhow::bail!("bundle manifest verification failed")
 }
 
 #[derive(Default, Serialize, Clone)]
@@ -7607,6 +7661,7 @@ struct SignatureSummary {
     missing_signatures: usize,
     trusted: usize,
     rejected: usize,
+    trust_shortfall: usize,
     ok: bool,
     enforced: bool,
 }
@@ -7622,10 +7677,58 @@ impl From<&CliSignatureSummary> for SignatureSummary {
             missing_signatures: src.missing_signatures,
             trusted: src.trusted,
             rejected: src.rejected,
+            trust_shortfall: src.trust_shortfall,
             ok: src.ok,
             enforced: src.enforced,
         }
     }
+}
+
+fn manifest_trust_shortfall(sig: &ManifestVerification) -> bool {
+    sig.trust_enforced
+        && sig.trusted_signatures == 0
+        && !sig.signatures.is_empty()
+        && sig
+            .signatures
+            .iter()
+            .all(|report| report.signature_valid && report.hash_matches)
+}
+
+fn installation_trust_shortfall(inst: &CliRuntimeBundleInstallation) -> bool {
+    inst.signature
+        .as_ref()
+        .map(manifest_trust_shortfall)
+        .unwrap_or(false)
+}
+
+fn installation_trust_shortfall_warnings(inst: &CliRuntimeBundleInstallation) -> Vec<String> {
+    let mut reasons = Vec::new();
+    let Some(sig) = inst.signature.as_ref() else {
+        return reasons;
+    };
+
+    reasons.extend(sig.warnings.clone());
+    for report in &sig.signatures {
+        if let Some(err) = report.error.as_deref() {
+            let key = report
+                .key_id
+                .as_deref()
+                .or(report.public_key_b64.as_deref())
+                .unwrap_or("<unknown key>");
+            reasons.push(format!("{}: {}", key, err));
+        }
+    }
+    if reasons.is_empty() {
+        if let Some(channel) = inst.channel.as_deref() {
+            reasons.push(format!(
+                "No trusted signer registry entry for channel {}",
+                channel
+            ));
+        } else {
+            reasons.push("No trusted signer registry entry for this bundle".to_string());
+        }
+    }
+    reasons
 }
 
 fn summarize_installations(
@@ -7644,10 +7747,14 @@ fn summarize_installations(
                 summary.with_manifest += 1;
                 summary.trusted += sig.trusted_signatures;
                 summary.rejected += sig.rejected_signatures;
-                if sig.ok {
+                let trust_shortfall_only = manifest_trust_shortfall(sig);
+                if sig.ok || trust_shortfall_only {
                     summary.verified += 1;
-                    if !sig.warnings.is_empty() {
+                    if !sig.warnings.is_empty() || trust_shortfall_only {
                         summary.warnings += 1;
+                    }
+                    if trust_shortfall_only {
+                        summary.trust_shortfall += 1;
                     }
                 } else {
                     summary.failed += 1;
@@ -7812,6 +7919,118 @@ fn cmd_runtime_bundles_audit(args: &RuntimeBundlesAuditArgs) -> Result<()> {
 
     Ok(())
 }
+
+fn cmd_runtime_bundles_trust_shortfall(args: &RuntimeBundlesTrustShortfallArgs) -> Result<()> {
+    if args.remote && args.dir.is_some() {
+        eprintln!("note: --dir is ignored when --remote is set");
+    }
+
+    let snapshot = if args.remote {
+        fetch_runtime_bundle_snapshot_remote(&args.base)?
+    } else {
+        let mut snapshot = load_runtime_bundle_snapshot_local(args.dir.clone())?;
+        let install_root = default_runtime_bundle_root(&args.install_dir)?;
+        let installations = load_local_runtime_bundle_installations(&install_root)?;
+        let root_str = install_root.display().to_string();
+        if !snapshot.roots.iter().any(|entry| entry == &root_str) {
+            snapshot.roots.push(root_str);
+        }
+        snapshot.installations = installations;
+        let (computed_summary, _) = summarize_installations(&snapshot.installations, false);
+        snapshot.signature_summary = Some(CliSignatureSummary::from(computed_summary));
+        snapshot
+    };
+
+    let summary = snapshot.signature_summary.clone().or_else(|| {
+        let (computed, _) = summarize_installations(&snapshot.installations, false);
+        Some(CliSignatureSummary::from(computed))
+    });
+
+    let entries: Vec<BundleTrustShortfallEntry> = snapshot
+        .installations
+        .iter()
+        .filter(|inst| installation_trust_shortfall(inst))
+        .map(|inst| BundleTrustShortfallEntry {
+            id: inst.id.clone(),
+            name: inst.name.clone(),
+            channel: inst.channel.clone(),
+            root: inst.root.clone(),
+            metadata_path: inst.metadata_path.clone(),
+            installed_at: inst.installed_at.clone(),
+            imported_at: inst.imported_at.clone(),
+            warnings: installation_trust_shortfall_warnings(inst),
+        })
+        .collect();
+
+    if args.json {
+        let payload = json!({
+            "count": entries.len(),
+            "bundles": entries,
+            "summary": summary,
+            "roots": snapshot.roots,
+        });
+        if args.pretty {
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&payload).unwrap_or_else(|_| payload.to_string())
+            );
+        } else {
+            println!("{}", payload);
+        }
+        return Ok(());
+    }
+
+    if entries.is_empty() {
+        println!("No bundle trust shortfalls detected.");
+    } else {
+        println!("Bundles with trust shortfall ({}):", entries.len());
+        for entry in &entries {
+            let name = entry.name.as_deref().unwrap_or(&entry.id);
+            let id_suffix = if entry
+                .name
+                .as_deref()
+                .map(|value| value != entry.id)
+                .unwrap_or(false)
+            {
+                format!(" [{}]", entry.id)
+            } else {
+                String::new()
+            };
+            let channel = entry.channel.as_deref().unwrap_or("—");
+            let location = entry
+                .root
+                .as_deref()
+                .or(entry.metadata_path.as_deref())
+                .unwrap_or("—");
+            println!(
+                "- {}{} (channel: {}, location: {})",
+                name, id_suffix, channel, location
+            );
+            for warn in &entry.warnings {
+                println!("    • {}", warn);
+            }
+        }
+    }
+
+    if let Some(sum) = summary.as_ref() {
+        println!(
+            "\nSummary: total {} | with manifest {} | trust shortfall {} | trusted {} | rejected {} | missing {} | enforced {}",
+            sum.total,
+            sum.with_manifest,
+            sum.trust_shortfall,
+            sum.trusted,
+            sum.rejected,
+            sum.missing_signatures,
+            if sum.enforced { "yes" } else { "no" }
+        );
+    }
+    println!(
+        "Install signer entries in configs/runtime/bundle_signers.json (or set ARW_RUNTIME_BUNDLE_SIGNERS) to resolve trust shortfalls."
+    );
+
+    Ok(())
+}
+
 fn modality_slug(modality: &RuntimeModality) -> &'static str {
     match modality {
         RuntimeModality::Text => "text",
@@ -9270,7 +9489,7 @@ fn summarize_scope_leases(entries: &[ScopeLeaseInfo], now: DateTime<Utc>) -> Str
                     Some(trimmed)
                 }
             })
-            .unwrap_or_else(|| info.capability.as_str());
+            .unwrap_or(info.capability.as_str());
 
         if let Some(ttl_str) = info.ttl_until.as_deref() {
             match parse_ttl_until(ttl_str) {

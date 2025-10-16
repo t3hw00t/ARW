@@ -663,7 +663,7 @@ fn truncate_text(text: &str, max_len: usize) -> String {
     if let Some(idx) = truncated.rfind(' ') {
         truncated.truncate(idx);
     }
-    truncated.push_str("…");
+    truncated.push('…');
     truncated
 }
 

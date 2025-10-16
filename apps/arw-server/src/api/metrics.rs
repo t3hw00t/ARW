@@ -167,20 +167,20 @@ fn render_prometheus(
         write_metric_line(
             &mut out,
             "arw_egress_scope_lease_minted_total",
-            &[scope_label.clone()],
+            std::slice::from_ref(&scope_label),
             data.minted,
         );
         write_metric_line(
             &mut out,
             "arw_egress_scope_lease_refreshed_total",
-            &[scope_label.clone()],
+            std::slice::from_ref(&scope_label),
             data.refreshed,
         );
         if let Some(epoch) = data.last_minted_epoch {
             write_metric_line(
                 &mut out,
                 "arw_egress_scope_lease_last_mint_timestamp_seconds",
-                &[scope_label.clone()],
+                std::slice::from_ref(&scope_label),
                 epoch,
             );
         }
