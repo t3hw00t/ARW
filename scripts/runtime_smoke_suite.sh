@@ -166,6 +166,10 @@ case "$GPU_POLICY" in
     exit 0
     ;;
   auto|detect|maybe)
+    if ! is_truthy "${RUNTIME_SMOKE_ALLOW_GPU:-0}"; then
+      log "GPU policy '${GPU_POLICY}' requested but RUNTIME_SMOKE_ALLOW_GPU is not set; aborting before touching accelerators."
+      exit 1
+    fi
     if server_path="$(resolve_llama_server)"; then
       if run_gpu_real "$server_path" 0; then
         exit 0
@@ -178,6 +182,10 @@ case "$GPU_POLICY" in
     exit 0
     ;;
   require|must|force)
+    if ! is_truthy "${RUNTIME_SMOKE_ALLOW_GPU:-0}"; then
+      log "GPU policy '${GPU_POLICY}' requested but RUNTIME_SMOKE_ALLOW_GPU is not set; aborting before touching accelerators."
+      exit 1
+    fi
     if server_path="$(resolve_llama_server)"; then
       if run_gpu_real "$server_path" 1; then
         exit 0

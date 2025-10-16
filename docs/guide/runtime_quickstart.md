@@ -79,6 +79,7 @@ If the helper used the simulated mode (because no real binary or weights were av
   ```
 - Skip the guided flow and run the smoke directly (requires all env vars to be set):
   ```bash
+  RUNTIME_SMOKE_ALLOW_GPU=1 \
   RUNTIME_SMOKE_GPU_POLICY=require \
     RUNTIME_SMOKE_LLAMA_SERVER_BIN=/path/to/llama-server \
     RUNTIME_SMOKE_LLAMA_MODEL_PATH=/path/to/model.gguf \
@@ -89,11 +90,11 @@ If the helper used the simulated mode (because no real binary or weights were av
   export RUNTIME_SMOKE_SKIP_BUILD=1          # never trigger cargo build
   export RUNTIME_SMOKE_USE_RELEASE=1         # prefer target/release/arw-server when present
   export RUNTIME_SMOKE_NICE=1                # run arw-server / llama-server under nice/ionice
-  export ARW_WORKERS=4 ARW_WORKERS_MAX=4    # shrink worker pool to keep RAM flat
+  export ARW_WORKERS=1 ARW_WORKERS_MAX=1    # shrink worker pool to keep RAM flat
   just runtime-smoke
   ```
   Combine with `ARW_SERVER_BIN=/path/to/arw-server` when you already have a build artifact you want to reuse even across clean worktrees.
-- Prefer a single command? `just runtime-smoke-safe` sources those defaults and runs the suite in one go.
+- Prefer a single command? `just runtime-smoke-safe` sources those defaults (GPU policy `skip`) and runs the suite in one go.
 
 ### Memory guardrails
 

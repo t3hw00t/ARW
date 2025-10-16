@@ -16,12 +16,12 @@ export RUNTIME_SMOKE_NICE="${RUNTIME_SMOKE_NICE:-1}"
 export LLAMA_PROMPT_CACHE_PATH="${LLAMA_PROMPT_CACHE_PATH:-}"  # empty → skip auto flag
 
 # Keep the worker pool tiny so stub runs do not spawn dozens of threads.
-export ARW_WORKERS="${ARW_WORKERS:-4}"
-export ARW_WORKERS_MAX="${ARW_WORKERS_MAX:-4}"
+export ARW_WORKERS="${ARW_WORKERS:-1}"
+export ARW_WORKERS_MAX="${ARW_WORKERS_MAX:-1}"
 
-# Default to lightweight GPU options; callers can override as needed.
+# Default to stub-only runs unless explicitly overridden.
 export LLAMA_GPU_LAYERS="${LLAMA_GPU_LAYERS:-4}"
-export RUNTIME_SMOKE_GPU_POLICY="${RUNTIME_SMOKE_GPU_POLICY:-simulate}"
+export RUNTIME_SMOKE_GPU_POLICY="${RUNTIME_SMOKE_GPU_POLICY:-skip}"
 
 # Flag that safe defaults are in effect (suppresses reminders in the smoke suite).
 export RUNTIME_SMOKE_SAFE_DEFAULTS=1
