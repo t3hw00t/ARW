@@ -2650,27 +2650,6 @@ components:
           type: string
         version:
           type: string
-    AnyEnvelope:
-      type: object
-      required:
-      - ok
-      - data
-      properties:
-        code:
-          type:
-          - string
-          - 'null'
-        corr_id:
-          type:
-          - string
-          - 'null'
-        data: {}
-        message:
-          type:
-          - string
-          - 'null'
-        ok:
-          type: boolean
     CasGcRequest:
       type: object
       properties:
