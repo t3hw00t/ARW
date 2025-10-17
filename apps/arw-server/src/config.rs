@@ -342,6 +342,18 @@ pub fn kernel_enabled_from_env() -> bool {
         .unwrap_or(true)
 }
 
+pub fn persona_enabled_from_env() -> bool {
+    std::env::var("ARW_PERSONA_ENABLE")
+        .map(|v| {
+            let trimmed = v.trim();
+            !(trimmed.is_empty()
+                || trimmed.eq_ignore_ascii_case("0")
+                || trimmed.eq_ignore_ascii_case("false")
+                || trimmed.eq_ignore_ascii_case("off"))
+        })
+        .unwrap_or(false)
+}
+
 /// Whether to wrap successful JSON responses in `ApiEnvelope<T>`.
 ///
 /// Controlled by `ARW_API_ENVELOPE` (default: false). Any value other than
@@ -361,7 +373,7 @@ pub fn api_envelope_enabled() -> bool {
 mod tests {
     use super::{
         apply_effective_paths, init_cache_policy_from_manifest, kernel_enabled_from_env,
-        load_initial_config_state, reset_effective_paths_for_tests,
+        load_initial_config_state, persona_enabled_from_env, reset_effective_paths_for_tests,
     };
     use crate::test_support::env as test_env;
     use std::{env, fs};
@@ -372,6 +384,13 @@ mod tests {
         let mut guard = test_env::guard();
         guard.remove("ARW_KERNEL_ENABLE");
         assert!(kernel_enabled_from_env());
+    }
+
+    #[test]
+    fn persona_default_false() {
+        let mut guard = test_env::guard();
+        guard.remove("ARW_PERSONA_ENABLE");
+        assert!(!persona_enabled_from_env());
     }
 
     #[test]
@@ -389,6 +408,24 @@ mod tests {
         for value in ["1", "true", "YES"] {
             guard.set("ARW_KERNEL_ENABLE", value);
             assert!(kernel_enabled_from_env(), "value {value:?}");
+        }
+    }
+
+    #[test]
+    fn persona_enabled_values() {
+        let mut guard = test_env::guard();
+        for value in ["1", "true", "yes", "on"] {
+            guard.set("ARW_PERSONA_ENABLE", value);
+            assert!(persona_enabled_from_env(), "value {value:?}");
+        }
+    }
+
+    #[test]
+    fn persona_disabled_values() {
+        let mut guard = test_env::guard();
+        for value in ["0", "false", "", "off"] {
+            guard.set("ARW_PERSONA_ENABLE", value);
+            assert!(!persona_enabled_from_env(), "value {value:?}");
         }
     }
 

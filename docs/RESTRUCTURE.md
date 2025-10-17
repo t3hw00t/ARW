@@ -45,6 +45,8 @@ All restructure workstreams are now closed. Maintain this table as a historical 
 - Free, local‑first, privacy‑first agents that anyone can run on a laptop (CPU‑friendly), producing research‑grade output (provenance, coverage, verification, replayability).
 - Agents learn and grow: adaptive memory + skills; safe autonomy via plans, simulation, and leases; explicit policies and mandatory egress firewall.
 - Federation (opt‑in): connect peers/servers to co‑run/co‑train under policy; contributions tracked with fair value assignment; portable split contracts.
+- Empathetic, persona-aware interfaces: agents reflect user worldview and tone with transparent self-models, consented empathy signals, and inclusive defaults.
+- Open autonomous economy: revenue workflows stay local-first, auditable, and fair so anyone can earn with collaborative agents.
 
 ## Snappy UX (Performance Contracts)
 Fast feedback is a product value. We design for immediacy:

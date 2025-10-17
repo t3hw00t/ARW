@@ -163,6 +163,10 @@ pub(crate) mod paths {
     pub const ADMIN_RUNTIME_BUNDLES_RELOAD: &str = "/admin/runtime/bundles/reload";
     pub const STATE_CONTEXT_CASCADE: &str = "/state/context/cascade";
     pub const STATE_TASKS: &str = "/state/tasks";
+    pub const STATE_PERSONA: &str = "/state/persona";
+    pub const STATE_PERSONA_ID: &str = "/state/persona/{id}";
+    pub const STATE_PERSONA_HISTORY: &str = "/state/persona/{id}/history";
+    pub const PERSONA_FEEDBACK: &str = "/persona/{id}/feedback";
     pub const STATE_SELF: &str = "/state/self";
     pub const STATE_SELF_AGENT: &str = "/state/self/{agent}";
     pub const STATE_EXPERIMENTS: &str = "/state/experiments";
@@ -260,6 +264,9 @@ pub(crate) mod paths {
     pub const ADMIN_HIERARCHY_ACCEPT: &str = "/admin/hierarchy/accept";
     pub const ADMIN_SELF_MODEL_PROPOSE: &str = "/admin/self_model/propose";
     pub const ADMIN_SELF_MODEL_APPLY: &str = "/admin/self_model/apply";
+    pub const ADMIN_PERSONA_PROPOSALS: &str = "/admin/persona/{id}/proposals";
+    pub const ADMIN_PERSONA_PROPOSAL_APPROVE: &str = "/admin/persona/proposals/{id}/approve";
+    pub const ADMIN_PERSONA_PROPOSAL_REJECT: &str = "/admin/persona/proposals/{id}/reject";
     pub const ADMIN_UI_CONTROL_ROOT: &str = "/admin/ui/control";
     pub const ADMIN_UI_CONTROL_INDEX: &str = "/admin/ui/control/";
     pub const ADMIN_UI_CONTROL_ASSET: &str = "/admin/ui/control/{*path}";
@@ -439,6 +446,26 @@ pub(crate) fn build_router() -> (Router<AppState>, Vec<String>, Vec<Value>) {
         paths::STATE_TASKS,
         api::state::state_tasks,
         Some(Stability::Beta),
+    );
+    builder.route_get(
+        paths::STATE_PERSONA,
+        api::state::state_persona_list,
+        Some(Stability::Experimental),
+    );
+    builder.route_get(
+        paths::STATE_PERSONA_ID,
+        api::state::state_persona_get,
+        Some(Stability::Experimental),
+    );
+    builder.route_get(
+        paths::STATE_PERSONA_HISTORY,
+        api::state::state_persona_history,
+        Some(Stability::Experimental),
+    );
+    builder.route_post(
+        paths::PERSONA_FEEDBACK,
+        api::persona::persona_feedback_submit,
+        Some(Stability::Experimental),
     );
     builder.route_get(
         paths::STATE_OBSERVATIONS,
@@ -734,6 +761,7 @@ pub(crate) fn build_router() -> (Router<AppState>, Vec<String>, Vec<Value>) {
         Some(Stability::Beta),
     );
     register_admin_self_model_routes(&mut builder);
+    register_admin_persona_routes(&mut builder);
     builder.route_post("/context/assemble", api::context::context_assemble, None);
     builder.route_post("/context/rehydrate", api::context::context_rehydrate, None);
     builder.route_get(
@@ -1280,6 +1308,24 @@ fn register_admin_self_model_routes(builder: &mut RouterBuilder) {
         paths::ADMIN_SELF_MODEL_APPLY,
         api::self_model::self_model_apply,
         Some(Stability::Beta),
+    );
+}
+
+fn register_admin_persona_routes(builder: &mut RouterBuilder) {
+    builder.route_post(
+        paths::ADMIN_PERSONA_PROPOSALS,
+        api::persona::persona_proposal_create,
+        Some(Stability::Experimental),
+    );
+    builder.route_post(
+        paths::ADMIN_PERSONA_PROPOSAL_APPROVE,
+        api::persona::persona_proposal_approve,
+        Some(Stability::Experimental),
+    );
+    builder.route_post(
+        paths::ADMIN_PERSONA_PROPOSAL_REJECT,
+        api::persona::persona_proposal_reject,
+        Some(Stability::Experimental),
     );
 }
 

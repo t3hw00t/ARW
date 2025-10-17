@@ -57,6 +57,7 @@ pub(crate) async fn build() -> BootstrapOutput {
     let bus = Bus::new_with_replay(256, 256);
     let kernel = Kernel::open(&crate::util::state_dir()).expect("init kernel");
     let kernel_enabled = config::kernel_enabled_from_env();
+    let persona_enabled = kernel_enabled && config::persona_enabled_from_env();
     let metrics = Arc::new(metrics::Metrics::default());
     let queue_signals = Arc::new(queue::QueueSignals::default());
     let sse_id_map = Arc::new(Mutex::new(SseIdCache::with_capacity(2048)));
@@ -114,6 +115,7 @@ pub(crate) async fn build() -> BootstrapOutput {
     let config_history = Arc::new(Mutex::new(initial_history));
 
     let state = AppState::builder(bus, kernel, policy_handle, host, kernel_enabled)
+        .with_persona_enabled(persona_enabled)
         .with_config_state(config_state)
         .with_config_history(config_history)
         .with_metrics(metrics.clone())

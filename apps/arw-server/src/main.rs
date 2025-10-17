@@ -40,6 +40,7 @@ mod modular;
 mod openapi;
 mod orchestrator_jobs;
 mod patch_guard;
+mod persona;
 mod policy;
 mod project_snapshots;
 mod queue;

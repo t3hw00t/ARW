@@ -190,6 +190,9 @@ pub const TOPIC_DISTILL_COMPLETED: &str = "distill.completed";
 // RPU (trust store)
 pub const TOPIC_RPU_TRUST_CHANGED: &str = "rpu.trust.changed";
 
+// Personas
+pub const TOPIC_PERSONA_FEEDBACK: &str = "persona.feedback";
+
 // Runtimes / supervisor (alphabetized)
 pub const TOPIC_RUNTIME_CLAIM_ACQUIRED: &str = "runtime.claim.acquired";
 pub const TOPIC_RUNTIME_HEALTH: &str = "runtime.health";

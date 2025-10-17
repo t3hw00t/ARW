@@ -3,6 +3,7 @@ use arw_memory_core::{MemoryInsertArgs, MemoryInsertOwned, MemoryStore};
 use chrono::{DateTime, Utc};
 use rusqlite::{params, params_from_iter, types::Value, Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
+use serde_json::{json, Value as JsonValue};
 use std::collections::{HashMap, VecDeque};
 use std::ops::{Deref, DerefMut};
 use std::path::{Path, PathBuf};
@@ -11,6 +12,7 @@ use std::sync::{Arc, Condvar, Mutex, Weak};
 use std::thread;
 use std::time::{Duration, Instant};
 use tokio::sync::oneshot;
+use uuid::Uuid;
 
 pub use arw_memory_core::{MemoryGcCandidate, MemoryGcReason};
 
@@ -71,6 +73,126 @@ struct CheckpointCtl {
 struct AutotuneCtl {
     stop: Arc<AtomicBool>,
     handle: Mutex<Option<thread::JoinHandle<()>>>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PersonaEntry {
+    pub id: String,
+    pub owner_kind: String,
+    pub owner_ref: String,
+    #[serde(default)]
+    pub name: Option<String>,
+    #[serde(default)]
+    pub archetype: Option<String>,
+    #[serde(default)]
+    pub traits: JsonValue,
+    #[serde(default)]
+    pub preferences: JsonValue,
+    #[serde(default)]
+    pub worldview: JsonValue,
+    #[serde(default)]
+    pub vibe_profile: JsonValue,
+    #[serde(default)]
+    pub calibration: JsonValue,
+    pub updated: String,
+    pub version: i64,
+}
+
+#[derive(Debug, Clone)]
+pub struct PersonaEntryUpsert {
+    pub id: String,
+    pub owner_kind: String,
+    pub owner_ref: String,
+    pub name: Option<String>,
+    pub archetype: Option<String>,
+    pub traits: JsonValue,
+    pub preferences: JsonValue,
+    pub worldview: JsonValue,
+    pub vibe_profile: JsonValue,
+    pub calibration: JsonValue,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PersonaProposal {
+    pub proposal_id: String,
+    pub persona_id: String,
+    pub submitted_by: String,
+    pub diff: JsonValue,
+    #[serde(default)]
+    pub rationale: Option<String>,
+    #[serde(default)]
+    pub telemetry_scope: JsonValue,
+    #[serde(default)]
+    pub leases_required: JsonValue,
+    pub status: String,
+    pub created: String,
+    pub updated: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct PersonaProposalCreate {
+    pub persona_id: String,
+    pub submitted_by: String,
+    pub diff: JsonValue,
+    pub rationale: Option<String>,
+    pub telemetry_scope: JsonValue,
+    pub leases_required: JsonValue,
+}
+
+#[derive(Debug, Clone)]
+pub struct PersonaProposalStatusUpdate {
+    pub status: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PersonaHistoryEntry {
+    pub id: i64,
+    pub persona_id: String,
+    #[serde(default)]
+    pub proposal_id: Option<String>,
+    pub diff: JsonValue,
+    #[serde(default)]
+    pub applied_by: Option<String>,
+    pub applied_at: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct PersonaHistoryAppend {
+    pub persona_id: String,
+    pub proposal_id: Option<String>,
+    pub diff: JsonValue,
+    pub applied_by: Option<String>,
+}
+
+fn parse_json_or_default(raw: Option<String>, default_value: JsonValue) -> JsonValue {
+    match raw {
+        Some(raw) => serde_json::from_str::<JsonValue>(&raw).unwrap_or(default_value),
+        None => default_value,
+    }
+}
+
+fn merge_json(base: &mut JsonValue, patch: &JsonValue) {
+    use serde_json::Value;
+    match (base, patch) {
+        (Value::Object(base_map), Value::Object(patch_map)) => {
+            for (key, value) in patch_map {
+                match (base_map.get_mut(key), value) {
+                    (Some(base_child), Value::Object(_)) => {
+                        merge_json(base_child, value);
+                    }
+                    (_, Value::Null) => {
+                        base_map.insert(key.clone(), Value::Null);
+                    }
+                    _ => {
+                        base_map.insert(key.clone(), value.clone());
+                    }
+                }
+            }
+        }
+        (base_slot, patch_value) => {
+            *base_slot = patch_value.clone();
+        }
+    }
 }
 
 impl PoolShared {
@@ -811,6 +933,47 @@ impl Kernel {
               created TEXT NOT NULL,
               updated TEXT NOT NULL
             );
+
+            -- Personas: worldview, traits, and empathy telemetry (feature-gated consumers)
+            CREATE TABLE IF NOT EXISTS persona_entries (
+              id TEXT PRIMARY KEY,
+              owner_kind TEXT NOT NULL,      -- workspace | project | agent
+              owner_ref TEXT NOT NULL,       -- identifier for scope (workspace id, project id, etc.)
+              name TEXT,
+              archetype TEXT,
+              traits TEXT,
+              preferences TEXT,
+              worldview TEXT,
+              vibe_profile TEXT,
+              calibration TEXT,
+              updated TEXT NOT NULL,
+              version INTEGER NOT NULL DEFAULT 0
+            );
+            CREATE INDEX IF NOT EXISTS idx_persona_owner ON persona_entries(owner_kind, owner_ref);
+
+            CREATE TABLE IF NOT EXISTS persona_proposals (
+              proposal_id TEXT PRIMARY KEY,
+              persona_id TEXT NOT NULL,
+              submitted_by TEXT NOT NULL,
+              diff TEXT NOT NULL,
+              rationale TEXT,
+              telemetry_scope TEXT,
+              leases_required TEXT,
+              status TEXT NOT NULL,
+              created TEXT NOT NULL,
+              updated TEXT NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_persona_proposals_status ON persona_proposals(status);
+
+            CREATE TABLE IF NOT EXISTS persona_history (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              persona_id TEXT NOT NULL,
+              proposal_id TEXT,
+              diff TEXT NOT NULL,
+              applied_by TEXT,
+              applied_at TEXT NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_persona_history_persona ON persona_history(persona_id);
             "#,
         )?;
         // Backfill optional columns for older installations (ignore errors if already present)
@@ -2187,6 +2350,448 @@ impl Kernel {
             other if other.starts_with("complete") => ("completed", "Completed"),
             _ => ("unknown", "Unknown"),
         }
+    }
+
+    // ---------- Personas ----------
+
+    pub fn upsert_persona_entry(&self, upsert: PersonaEntryUpsert) -> Result<PersonaEntry> {
+        let conn = self.conn()?;
+        let now = Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+        let existing_version: Option<i64> = conn
+            .query_row(
+                "SELECT version FROM persona_entries WHERE id=? LIMIT 1",
+                [&upsert.id],
+                |row| row.get(0),
+            )
+            .optional()?;
+        let version = existing_version.unwrap_or(0).saturating_add(1);
+
+        let traits_s = serde_json::to_string(&upsert.traits).unwrap_or_else(|_| "{}".into());
+        let preferences_s =
+            serde_json::to_string(&upsert.preferences).unwrap_or_else(|_| "{}".into());
+        let worldview_s = serde_json::to_string(&upsert.worldview).unwrap_or_else(|_| "{}".into());
+        let vibe_profile_s =
+            serde_json::to_string(&upsert.vibe_profile).unwrap_or_else(|_| "{}".into());
+        let calibration_s =
+            serde_json::to_string(&upsert.calibration).unwrap_or_else(|_| "{}".into());
+
+        conn.execute(
+            "INSERT INTO persona_entries \
+                (id, owner_kind, owner_ref, name, archetype, traits, preferences, worldview, vibe_profile, calibration, updated, version) \
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) \
+             ON CONFLICT(id) DO UPDATE SET \
+                owner_kind=excluded.owner_kind, \
+                owner_ref=excluded.owner_ref, \
+                name=excluded.name, \
+                archetype=excluded.archetype, \
+                traits=excluded.traits, \
+                preferences=excluded.preferences, \
+                worldview=excluded.worldview, \
+                vibe_profile=excluded.vibe_profile, \
+                calibration=excluded.calibration, \
+                updated=excluded.updated, \
+                version=excluded.version",
+            params![
+                upsert.id,
+                upsert.owner_kind,
+                upsert.owner_ref,
+                upsert.name,
+                upsert.archetype,
+                traits_s,
+                preferences_s,
+                worldview_s,
+                vibe_profile_s,
+                calibration_s,
+                now,
+                version
+            ],
+        )?;
+
+        self.get_persona_entry(&upsert.id)?
+            .ok_or_else(|| anyhow!("persona entry not found after upsert"))
+    }
+
+    pub fn get_persona_entry(&self, id: &str) -> Result<Option<PersonaEntry>> {
+        let conn = self.conn()?;
+        let mut stmt = conn.prepare(
+            "SELECT id, owner_kind, owner_ref, name, archetype, traits, preferences, worldview, vibe_profile, calibration, updated, version \
+             FROM persona_entries WHERE id=? LIMIT 1",
+        )?;
+        let mut rows = stmt.query([id])?;
+        if let Some(row) = rows.next()? {
+            Ok(Some(Self::map_persona_entry_row(row)?))
+        } else {
+            Ok(None)
+        }
+    }
+
+    pub fn list_persona_entries(
+        &self,
+        owner_filter: Option<(&str, &str)>,
+        limit: i64,
+    ) -> Result<Vec<PersonaEntry>> {
+        let conn = self.conn()?;
+        let limit = limit.clamp(1, 500);
+        let mut entries = Vec::new();
+        match owner_filter {
+            Some((owner_kind, owner_ref)) => {
+                let mut stmt = conn.prepare(
+                    "SELECT id, owner_kind, owner_ref, name, archetype, traits, preferences, worldview, vibe_profile, calibration, updated, version \
+                     FROM persona_entries \
+                     WHERE owner_kind=? AND owner_ref=? \
+                     ORDER BY updated DESC LIMIT ?",
+                )?;
+                let mut rows = stmt.query(params![owner_kind, owner_ref, limit])?;
+                while let Some(row) = rows.next()? {
+                    entries.push(Self::map_persona_entry_row(row)?);
+                }
+            }
+            None => {
+                let mut stmt = conn.prepare(
+                    "SELECT id, owner_kind, owner_ref, name, archetype, traits, preferences, worldview, vibe_profile, calibration, updated, version \
+                     FROM persona_entries \
+                     ORDER BY updated DESC LIMIT ?",
+                )?;
+                let mut rows = stmt.query([limit])?;
+                while let Some(row) = rows.next()? {
+                    entries.push(Self::map_persona_entry_row(row)?);
+                }
+            }
+        };
+        Ok(entries)
+    }
+
+    pub fn insert_persona_proposal(&self, create: PersonaProposalCreate) -> Result<String> {
+        let conn = self.conn()?;
+        let proposal_id = Uuid::new_v4().to_string();
+        let now = Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+        let diff_s = serde_json::to_string(&create.diff).unwrap_or_else(|_| "[]".into());
+        let telemetry_scope_s =
+            serde_json::to_string(&create.telemetry_scope).unwrap_or_else(|_| "{}".into());
+        let leases_required_s =
+            serde_json::to_string(&create.leases_required).unwrap_or_else(|_| "[]".into());
+
+        conn.execute(
+            "INSERT INTO persona_proposals \
+                (proposal_id, persona_id, submitted_by, diff, rationale, telemetry_scope, leases_required, status, created, updated) \
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            params![
+                proposal_id,
+                create.persona_id,
+                create.submitted_by,
+                diff_s,
+                create.rationale,
+                telemetry_scope_s,
+                leases_required_s,
+                "pending",
+                &now,
+                &now
+            ],
+        )?;
+        Ok(proposal_id)
+    }
+
+    pub fn get_persona_proposal(&self, proposal_id: &str) -> Result<Option<PersonaProposal>> {
+        let conn = self.conn()?;
+        let mut stmt = conn.prepare(
+            "SELECT proposal_id, persona_id, submitted_by, diff, rationale, telemetry_scope, leases_required, status, created, updated \
+             FROM persona_proposals WHERE proposal_id=? LIMIT 1",
+        )?;
+        let mut rows = stmt.query([proposal_id])?;
+        if let Some(row) = rows.next()? {
+            Ok(Some(Self::map_persona_proposal_row(row)?))
+        } else {
+            Ok(None)
+        }
+    }
+
+    pub fn update_persona_proposal_status(
+        &self,
+        proposal_id: &str,
+        update: PersonaProposalStatusUpdate,
+    ) -> Result<bool> {
+        let conn = self.conn()?;
+        let now = Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+        let affected = conn.execute(
+            "UPDATE persona_proposals SET status=?, updated=? WHERE proposal_id=?",
+            params![update.status, now, proposal_id],
+        )?;
+        Ok(affected > 0)
+    }
+
+    pub fn list_persona_proposals(
+        &self,
+        persona_id: Option<&str>,
+        status: Option<&str>,
+        limit: i64,
+    ) -> Result<Vec<PersonaProposal>> {
+        let conn = self.conn()?;
+        let limit = limit.clamp(1, 500);
+        let mut proposals = Vec::new();
+        let mut query = String::from(
+            "SELECT proposal_id, persona_id, submitted_by, diff, rationale, telemetry_scope, leases_required, status, created, updated \
+             FROM persona_proposals",
+        );
+        let mut conditions: Vec<&str> = Vec::new();
+        if persona_id.is_some() {
+            conditions.push("persona_id=?");
+        }
+        if status.is_some() {
+            conditions.push("status=?");
+        }
+        if !conditions.is_empty() {
+            query.push_str(" WHERE ");
+            query.push_str(&conditions.join(" AND "));
+        }
+        query.push_str(" ORDER BY updated DESC LIMIT ?");
+
+        let mut params_vec: Vec<rusqlite::types::Value> = Vec::new();
+        if let Some(pid) = persona_id {
+            params_vec.push(Value::from(pid.to_string()));
+        }
+        if let Some(status_val) = status {
+            params_vec.push(Value::from(status_val.to_string()));
+        }
+        params_vec.push(limit.into());
+
+        let mut stmt = conn.prepare(&query)?;
+        let mut rows = stmt.query(params_from_iter(params_vec))?;
+        while let Some(row) = rows.next()? {
+            proposals.push(Self::map_persona_proposal_row(row)?);
+        }
+        Ok(proposals)
+    }
+
+    pub fn append_persona_history(&self, append: PersonaHistoryAppend) -> Result<i64> {
+        let conn = self.conn()?;
+        let now = Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+        let diff_s = serde_json::to_string(&append.diff).unwrap_or_else(|_| "[]".into());
+        conn.execute(
+            "INSERT INTO persona_history (persona_id, proposal_id, diff, applied_by, applied_at) VALUES (?, ?, ?, ?, ?)",
+            params![
+                append.persona_id,
+                append.proposal_id,
+                diff_s,
+                append.applied_by,
+                now
+            ],
+        )?;
+        Ok(conn.last_insert_rowid())
+    }
+
+    pub fn list_persona_history(
+        &self,
+        persona_id: &str,
+        limit: i64,
+    ) -> Result<Vec<PersonaHistoryEntry>> {
+        let conn = self.conn()?;
+        let limit = limit.clamp(1, 500);
+        let mut stmt = conn.prepare(
+            "SELECT id, persona_id, proposal_id, diff, applied_by, applied_at \
+             FROM persona_history WHERE persona_id=? ORDER BY applied_at DESC LIMIT ?",
+        )?;
+        let mut rows = stmt.query(params![persona_id, limit])?;
+        let mut out = Vec::new();
+        while let Some(row) = rows.next()? {
+            out.push(Self::map_persona_history_row(row)?);
+        }
+        Ok(out)
+    }
+
+    pub async fn upsert_persona_entry_async(
+        &self,
+        upsert: PersonaEntryUpsert,
+    ) -> Result<PersonaEntry> {
+        self.run_blocking(move |kernel| kernel.upsert_persona_entry(upsert))
+            .await
+    }
+
+    pub async fn get_persona_entry_async(&self, id: String) -> Result<Option<PersonaEntry>> {
+        self.run_blocking(move |kernel| kernel.get_persona_entry(&id))
+            .await
+    }
+
+    pub async fn list_persona_entries_async(
+        &self,
+        owner_kind: Option<String>,
+        owner_ref: Option<String>,
+        limit: i64,
+    ) -> Result<Vec<PersonaEntry>> {
+        self.run_blocking(move |kernel| {
+            let owner_filter = match (owner_kind.as_deref(), owner_ref.as_deref()) {
+                (Some(kind), Some(r)) => Some((kind, r)),
+                _ => None,
+            };
+            kernel.list_persona_entries(owner_filter, limit)
+        })
+        .await
+    }
+
+    pub async fn insert_persona_proposal_async(
+        &self,
+        create: PersonaProposalCreate,
+    ) -> Result<String> {
+        self.run_blocking(move |kernel| kernel.insert_persona_proposal(create))
+            .await
+    }
+
+    pub async fn get_persona_proposal_async(
+        &self,
+        proposal_id: String,
+    ) -> Result<Option<PersonaProposal>> {
+        self.run_blocking(move |kernel| kernel.get_persona_proposal(&proposal_id))
+            .await
+    }
+
+    pub async fn update_persona_proposal_status_async(
+        &self,
+        proposal_id: String,
+        status: PersonaProposalStatusUpdate,
+    ) -> Result<bool> {
+        self.run_blocking(move |kernel| kernel.update_persona_proposal_status(&proposal_id, status))
+            .await
+    }
+
+    pub async fn list_persona_proposals_async(
+        &self,
+        persona_id: Option<String>,
+        status: Option<String>,
+        limit: i64,
+    ) -> Result<Vec<PersonaProposal>> {
+        self.run_blocking(move |kernel| {
+            kernel.list_persona_proposals(persona_id.as_deref(), status.as_deref(), limit)
+        })
+        .await
+    }
+
+    pub async fn append_persona_history_async(&self, entry: PersonaHistoryAppend) -> Result<i64> {
+        self.run_blocking(move |kernel| kernel.append_persona_history(entry))
+            .await
+    }
+
+    pub async fn list_persona_history_async(
+        &self,
+        persona_id: String,
+        limit: i64,
+    ) -> Result<Vec<PersonaHistoryEntry>> {
+        self.run_blocking(move |kernel| kernel.list_persona_history(&persona_id, limit))
+            .await
+    }
+
+    pub async fn apply_persona_diff_async(
+        &self,
+        persona_id: String,
+        diff: JsonValue,
+    ) -> Result<PersonaEntry> {
+        self.run_blocking(move |kernel| kernel.apply_persona_diff(&persona_id, &diff))
+            .await
+    }
+
+    fn map_persona_entry_row(row: &rusqlite::Row<'_>) -> Result<PersonaEntry> {
+        let traits_raw: Option<String> = row.get(5)?;
+        let preferences_raw: Option<String> = row.get(6)?;
+        let worldview_raw: Option<String> = row.get(7)?;
+        let vibe_raw: Option<String> = row.get(8)?;
+        let calibration_raw: Option<String> = row.get(9)?;
+        Ok(PersonaEntry {
+            id: row.get(0)?,
+            owner_kind: row.get(1)?,
+            owner_ref: row.get(2)?,
+            name: row.get(3)?,
+            archetype: row.get(4)?,
+            traits: parse_json_or_default(traits_raw, json!({})),
+            preferences: parse_json_or_default(preferences_raw, json!({})),
+            worldview: parse_json_or_default(worldview_raw, json!({})),
+            vibe_profile: parse_json_or_default(vibe_raw, json!({})),
+            calibration: parse_json_or_default(calibration_raw, json!({})),
+            updated: row.get(10)?,
+            version: row.get(11)?,
+        })
+    }
+
+    fn map_persona_proposal_row(row: &rusqlite::Row<'_>) -> Result<PersonaProposal> {
+        let diff_raw: Option<String> = row.get(3)?;
+        let telemetry_raw: Option<String> = row.get(5)?;
+        let leases_raw: Option<String> = row.get(6)?;
+        Ok(PersonaProposal {
+            proposal_id: row.get(0)?,
+            persona_id: row.get(1)?,
+            submitted_by: row.get(2)?,
+            diff: parse_json_or_default(diff_raw, json!([])),
+            rationale: row.get(4)?,
+            telemetry_scope: parse_json_or_default(telemetry_raw, json!({})),
+            leases_required: parse_json_or_default(leases_raw, json!([])),
+            status: row.get(7)?,
+            created: row.get(8)?,
+            updated: row.get(9)?,
+        })
+    }
+
+    fn map_persona_history_row(row: &rusqlite::Row<'_>) -> Result<PersonaHistoryEntry> {
+        let diff_raw: Option<String> = row.get(3)?;
+        Ok(PersonaHistoryEntry {
+            id: row.get(0)?,
+            persona_id: row.get(1)?,
+            proposal_id: row.get(2)?,
+            diff: parse_json_or_default(diff_raw, json!([])),
+            applied_by: row.get(4)?,
+            applied_at: row.get(5)?,
+        })
+    }
+
+    pub fn apply_persona_diff(&self, persona_id: &str, diff: &JsonValue) -> Result<PersonaEntry> {
+        let entry = self
+            .get_persona_entry(persona_id)?
+            .ok_or_else(|| anyhow!("persona id not found"))?;
+        let mut entry_value = serde_json::to_value(&entry)?;
+
+        if diff.is_array() {
+            let patch: json_patch::Patch = serde_json::from_value(diff.clone())?;
+            json_patch::patch(&mut entry_value, &patch)?;
+        } else if diff.is_object() {
+            merge_json(&mut entry_value, diff);
+        } else {
+            return Err(anyhow!("persona diff must be a JSON object or array"));
+        }
+
+        let mut updated: PersonaEntry = serde_json::from_value(entry_value)?;
+
+        // preserve immutable fields
+        updated.id = entry.id.clone();
+        updated.owner_kind = entry.owner_kind.clone();
+        updated.owner_ref = entry.owner_ref.clone();
+
+        // ensure required JSON fields remain objects
+        if !updated.traits.is_object() && !updated.traits.is_array() {
+            updated.traits = entry.traits.clone();
+        }
+        if !updated.preferences.is_object() && !updated.preferences.is_array() {
+            updated.preferences = entry.preferences.clone();
+        }
+        if !updated.worldview.is_object() && !updated.worldview.is_array() {
+            updated.worldview = entry.worldview.clone();
+        }
+        if !updated.vibe_profile.is_object() && !updated.vibe_profile.is_array() {
+            updated.vibe_profile = entry.vibe_profile.clone();
+        }
+        if !updated.calibration.is_object() && !updated.calibration.is_array() {
+            updated.calibration = entry.calibration.clone();
+        }
+
+        let upsert = PersonaEntryUpsert {
+            id: updated.id.clone(),
+            owner_kind: updated.owner_kind.clone(),
+            owner_ref: updated.owner_ref.clone(),
+            name: updated.name.clone(),
+            archetype: updated.archetype.clone(),
+            traits: updated.traits.clone(),
+            preferences: updated.preferences.clone(),
+            worldview: updated.worldview.clone(),
+            vibe_profile: updated.vibe_profile.clone(),
+            calibration: updated.calibration.clone(),
+        };
+
+        self.upsert_persona_entry(upsert)
     }
 
     // ---------- Logic Units ----------

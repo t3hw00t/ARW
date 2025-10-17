@@ -31,6 +31,26 @@ Establish the multi-agent cognitive scaffold that keeps user-facing chat, memory
 - **Phase 3: Tooling & Planner** — [Kernel][Pack: Research] broker tool execution with sandbox requirements, retries, and audit trails; introduce an optional planner that can fan out to specialists while respecting lease scopes. Integrate telemetry with the Evaluation Harness for AB testing.
 - **Documentation & Telemetry** — Publish operator guides, UI affordances, and dashboard widgets for memory hit rate, validation catch rate, and compression health. Keep [Backlog](BACKLOG.md) and [Developer Tasks](developer/tasks.md) aligned as phases land.
 
+## Priority Three – Empathy & Persona Experience
+
+Translate the project vision of empathetic, personally managed agents into tangible system capabilities and interfaces.
+
+- **Phase 0: Persona Core** — [Pack: Persona][Kernel] finalize the persona/self-model schema, `/state/persona/*` read-models, and diff/lease workflows for persona proposals.
+- **Phase 1: Worldview & Memory Bridge** — [Pack: Persona][Pack: Research] connect persona traits to the memory overlay so episodic, semantic, and preference memories inform worldview growth with guardrails.
+- **Phase 2: Empathy Signals & Feedback** — [Pack: Persona][Pack: Collaboration] instrument tone/pacing sentiment loops (opt-in), expose vibe dashboards in Launcher/Chat, and add adaptive response controls with accessibility parity.
+- **Phase 3: Narrative UX** — [Pack: Persona] ship journaling, reflection prompts, and “why I chose this” explainers grounded in the self-model; add configuration for multiple personas per workspace.
+- **Documentation & Studies** — Publish empathy design language, inclusive research findings, and developer APIs for custom persona plugins.
+
+## Priority Four – Autonomous Economy & Federation
+
+Combine federation, automation, and fair value mechanisms so individuals can deploy revenue-generating agents safely.
+
+- **Phase 0: Revenue Recipes** — [Pack: Collaboration] curate automation templates (research gigs, monitoring, summarization) with compliance guardrails and monetization metadata.
+- **Phase 1: Contribution Ledger** — [Kernel][Pack: Federation] extend cluster metrics with per-task payouts, add `/state/cluster/ledger` endpoints, and export CSV/JSON statements.
+- **Phase 2: Payout & Settlement Hooks** — [Pack: Federation] integrate optional payout connectors (manual invoicing, Stripe test mode) with policy-gated leases and audit trails.
+- **Phase 3: Cooperative Scaling** — [Pack: Federation][Pack: Research] formalize multi-node revenue pools, fairness policies, and remote supervision dashboards.
+- **Operator Playbook** — Document unattended-agent safety, alerting defaults, legal considerations, and community best practices for earnings scenarios.
+
 ## Scope Badges
 
 The roadmap and its planning mirrors use badges to flag which slice of the stack an initiative touches and how that work supports the Complexity Collapse program of record:
@@ -39,13 +59,14 @@ The roadmap and its planning mirrors use badges to flag which slice of the stack
 - `[Pack: Collaboration]` — Optional collaboration, UI, and workflow packs that give calm surfaces and governance without bloating the kernel.
 - `[Pack: Research]` — Optional research, experimentation, and memory packs that extend retrieval, clustering, and replay while staying pluggable.
 - `[Pack: Federation]` — Optional federation packs that let multiple installs cooperate under shared policy, budgets, and accountability.
+- `[Pack: Persona]` — Empathetic interfaces, persona cultivation, and self-model scaffolds that help agents reflect a user’s worldview safely.
 - `[Future]` — Bets incubating beyond the active quarter; they stay visible but outside the current Complexity Collapse execution window.
 
 Badges can be combined (for example, `[Pack: Collaboration][Future]`) to show both the optional pack and that the work sits beyond the active delivery window.
 
 ## Execution Streams (Alignment)
 
-To keep the larger intent visible while we iterate, we track four active execution streams. Each stream carries a short list of near-term moves, explicit checks, and documentation hooks so we stay synchronized as work lands.
+To keep the larger intent visible while we iterate, we track six active execution streams. Each stream carries a short list of near-term moves, explicit checks, and documentation hooks so we stay synchronized as work lands.
 
 ### Collapse the Kernel
 - Immediate moves: Snappy Governor verification and Event Spine patch replay (JSON Patch SSE test) both landed; the restructure board is closed, so shift focus to backlog items that extend instrumentation and UI patch consumers.
@@ -68,6 +89,16 @@ To keep the larger intent visible while we iterate, we track four active executi
 - Immediate moves: stage the egress firewall scope manifest, wire capsule telemetry, expose the event journal reader and metrics registry endpoints, and land the GTK/GLib ≥0.20 supply-chain upgrade so we can drop the RUSTSEC ignore.
 - Checks & optimizations: exercise DNS guard and proxy posture in CI; audit new endpoints with Spectral rules and Prometheus scrapes.
 - Documentation: fold the guardrail posture presets into the security hardening guide, close the loop on supply-chain rollback notes, and keep Backlog observability rows in sync as we ship readers.
+
+### Empathy & Persona Experience
+- Immediate moves: finalize persona/self-model schema, prototype vibe feedback UI controls, and add opt-in telemetry hooks with accessibility coverage.
+- Checks & optimizations: validate approval workflows for persona diffs, ensure emotional telemetry respects consent scopes, and monitor drift alerts.
+- Documentation: publish persona builder guide, empathy design language, and assistive copywriting standards.
+
+### Autonomous Economy & Federation
+- Immediate moves: draft revenue recipe gallery, design contribution ledger schema, and spike payout connector contracts.
+- Checks & optimizations: simulate cooperative runs across mixed hardware, verify ledger math against federation metrics, and gate payouts behind policy leases.
+- Documentation: extend deployment and ops guides with unattended-agent safety, legal considerations, and revenue reporting templates.
 
 ## User Outcomes & Storytelling
 
@@ -158,6 +189,24 @@ The stack scales by refusing to recompute or resend the same work twice and by b
 - **Semantic and negative caches (planned)** keep per-project Q→A matches plus "no hit" markers with verifier gates, reducing redundant inference while privacy scopes and eviction policies pin their memory footprint.
 - **Tiered storage & compression** layers in-memory caches with RocksDB and optional flash tiers, pairing Zstd dictionaries for small JSON blobs so hot data stays fast without unbounded disk churn.
 - **Instrumentation & policy manifests** publish hit ratios, latency savings, and suppression counters in `/state/*` and `/metrics`, then feed declarative cache policy files that enforce privacy scopes and fallbacks before limits are exceeded.
+
+### Empathy & Persona Interface (Execution Stream)
+
+Deliver empathetic, persona-aware experiences that help individuals cultivate long-lived agents grounded in their worldview.
+
+- **Persona graph & worldview scaffolding** (`[Pack: Persona]`) — surface self-model traits via `/state/persona/*`; design editable personas with guardrails and approvals.
+- **Empathy signal loop** (`[Pack: Persona][Pack: Collaboration]`) — capture tone, pacing, and sentiment cues with explicit consent; adapt responses via vibe feedback while preserving accessibility baselines.
+- **Narrative & reflection tooling** (`[Pack: Persona]`) — ship journaling, growth checkpoints, and “why I acted this way” explainers tied to the self-model and memory overlay.
+- **Safety & calibration gates** (`[Kernel][Pack: Persona]`) — extend policy leases to emotional telemetry, add calibration checks, and emit drift alerts when persona changes exceed thresholds.
+
+### Autonomous Economy & Federation (Execution Stream)
+
+Connect federation primitives with fair value exchange so local-first agents can earn safely.
+
+- **Task recipe marketplace** (`[Pack: Collaboration][Pack: Federation]`) — curate revenue-ready automation templates with compliance guardrails, share metadata via `/state/recipes/market`.
+- **Contribution & payout ledger** (`[Kernel][Pack: Federation]`) — extend cluster metrics with per-task payments, offer exportable ledgers, and seed payout integrations.
+- **Operations playbook** (`[Docs][Pack: Federation]`) — publish unattended-agent safety checklists, alerting defaults, and regulatory considerations for gig scenarios.
+- **Scaling kits** (`[Pack: Research][Pack: Federation]`) — bundle multi-node deployment scripts and evaluation harness presets for revenue agents.
 
 ### Recently Shipped (Sep 2025)
 - [Kernel] Stability baseline (v0.1.0-beta): consolidation freeze, clippy-clean core, docs freeze checklist, CHANGELOG + release script.

@@ -102,6 +102,26 @@ Experience Outcomes
 - [Pack: Collaboration] Consent UX validation sprint: moderated sessions with partner teams validating audio/vision consent dialogs and accessibility cues; publish findings brief — todo
 - [Kernel] Complexity Collapse mission brief cadence: monthly stakeholder digest (wins, risks, upcoming user moments) archived into `docs/release_notes.md` — recurring (kick off with Runtime Supervisor beta)
 
+Persona & Empathy (High Priority)
+- [Pack: Persona][Kernel] Persona core schema: add `/state/persona/{id}` read-models, diff-based proposals, and policy leases for approvals — in_progress (kernel schema + read/approve endpoints shipped behind `ARW_PERSONA_ENABLE`; lease gating pending)
+- [Pack: Persona][Pack: Research] Worldview bridge: map episodic/semantic memories into persona traits with guardrails against unreviewed sentiment drift — todo
+- [Pack: Persona][Pack: Collaboration] Empathy signal loop: instrument tone/pacing/sentiment telemetry (opt-in), expose vibe feedback controls in Chat/Launcher, ensure accessibility parity — todo
+- [Pack: Persona] Narrative toolkit: journaling + reflection prompts tied to self-model changes; ship configurable growth checkpoints — todo
+- [Pack: Persona] Inclusive research sprint: run moderated studies across personas, publish empathy design language and heuristics — plan
+
+Autonomous Economy & Federation
+- [Pack: Collaboration] Revenue recipe gallery: curate signed automation templates (research gigs, monitoring) with compliance guardrails and earning metadata — todo
+- [Kernel][Pack: Federation] Contribution ledger MVP: extend `/state/cluster` with per-task payouts, exports, and audit trails — todo
+- [Pack: Federation] Payout connector pilot: optional Stripe test-mode + manual invoice flows with policy leases and ledger reconciliation — plan
+- [Pack: Federation][Pack: Research] Cooperative scaling kit: deployment scripts + evaluation harness presets for revenue agents operating across nodes — plan
+- [Docs] Automation ops handbook: unattended-agent safety checklist, alerting defaults, legal considerations for solo operators — todo
+
+Universal Access & Sustainability
+- [Kernel] Eco runtime preset: optimize for CPU-only laptops, shrink default caches, document low-spec verification path — todo
+- [Pack: Persona][Docs] Community persona bundles: publish sharable persona/worldview seeds with consent guidelines and remix policy — plan
+- [Ops] Community distribution: mirror bundle artifacts + docs for offline installs; publish sustainability plan for free releases — plan
+- [Docs] Skills & monetization ladder: guided learning path from first agent to revenue deployment, integrate with onboarding guides — plan
+
 Kernel & Triad (NOW)
 - [Kernel] [t-250915090001-kern01] Add `arw-kernel` crate with SQLite/WAL schema (events, artifacts, actions) and CAS helpers — done
 - [Kernel] [t-250915090010-kern02] Dual-write bus events to kernel and expose `/triad/events?replay=N` — done
@@ -349,5 +369,5 @@ Modular Cognitive Stack (Follow-up)
 - [Kernel][Pack: Research] Multimodal recall/compression expansion (voice transcripts + visual embeddings) once runtime supervisor phases unlock modalities.
 
 ## Notes
-- [Kernel] For live status of all tracked tasks, see Developer → Tasks, which renders from `.arw/tasks.json`.
+- [Kernel] For live status of all tracked tasks, see Developer → Tasks (when enabled), which renders from `.arw/tasks.json` or the active tracker.
 - [Kernel] Recently shipped work is summarized under About → Roadmap → Recently Shipped.

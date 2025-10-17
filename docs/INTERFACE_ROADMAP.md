@@ -19,6 +19,7 @@ Interface milestones reuse the shared scope badges so interface contributors can
 - `[Pack: Collaboration]` — Optional collaboration, UI, and workflow packs that give calm surfaces and governance without bloating the kernel.
 - `[Pack: Research]` — Optional research, experimentation, and memory packs that extend retrieval, clustering, and replay while staying pluggable.
 - `[Pack: Federation]` — Optional federation packs that let multiple installs cooperate under shared policy, budgets, and accountability.
+- `[Pack: Persona]` — Empathetic interfaces and persona cultivation surfaces that adapt to user signals with explicit consent and safety.
 - `[Future]` — Bets incubating beyond the active quarter; they stay visible but outside the current Complexity Collapse execution window.
 
 Badges can be combined (for example, `[Pack: Collaboration][Future]`) to show both the optional pack and that the work sits beyond the active delivery window.
@@ -29,6 +30,8 @@ Badges can be combined (for example, `[Pack: Collaboration][Future]`) to show bo
 - [Pack: Collaboration] Contextual launcher tray actions with recent commands
 - [Pack: Collaboration] Inline doc hints and contextual tooltips
 - [Pack: Collaboration] Command palette/quick-action menu in the launcher
+- [Pack: Persona][Pack: Collaboration] Vibe feedback controls in Chat/Launcher (sentiment dial, confirmation style toggle) with opt-in telemetry
+- [Pack: Persona] Persona card surface showing worldview traits, empathy tone, recent growth checkpoints
 - [Pack: Collaboration] Chat/Hub provenance panes showing validation outcomes, memory evidence, and tool audit trails (Modular Cognitive Stack phase 2)
  - [Pack: Collaboration] Canonical admin routes: `/admin/debug`, `/admin/ui/*` (legacy `/debug` alias removed)
  - [Pack: Collaboration] SSE robustness: status badges + auto-reconnect with backoff and Last-Event-ID resume
@@ -44,6 +47,8 @@ Badges can be combined (for example, `[Pack: Collaboration][Future]`) to show bo
 - [Pack: Collaboration] Integrated monitoring/analytics modules
 - [Pack: Collaboration] Voice/terminal parity for key commands
 - [Pack: Collaboration][Future] Planner orchestration dashboards with agent lineage timelines (Modular Cognitive Stack phase 3)
+- [Pack: Persona] Empathy signal visualizer (timeline of tone/pacing), with coaching prompts for agents and users
+- [Pack: Persona][Pack: Collaboration] Persona switching workflow with diff preview and sandboxed rehearsal mode
 
 ## Long‑Term (6+ Months)
 - [Pack: Collaboration][Future] Timeline-based activity stream with timeline scrubber
@@ -54,3 +59,5 @@ Badges can be combined (for example, `[Pack: Collaboration][Future]`) to show bo
 - [Pack: Collaboration][Future] Inline node graph visualization of agent events
 - [Pack: Collaboration] Comprehensive debug session export/import
 - [Pack: Collaboration] Dynamic "what-if" runs branching from historical states
+- [Pack: Persona][Future] Immersive empathic interface layer (audio/visual cues) with biosignal opt-ins and transparent data usage
+- [Pack: Persona][Pack: Federation][Future] Shared persona collaboration sessions with consented empathy signal exchange

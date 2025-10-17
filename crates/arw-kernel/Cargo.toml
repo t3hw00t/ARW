@@ -17,6 +17,7 @@ arw-events = { path = "../arw-events", version = "0.2.0-dev" }
 arw-memory-core = { path = "../arw-memory-core", version = "0.2.0-dev" }
 uuid = { version = "1", features = ["v4"] }
 metrics = { version = "0.24", optional = true }
+json-patch = "3"
 
 [dev-dependencies]
 tempfile = "3"

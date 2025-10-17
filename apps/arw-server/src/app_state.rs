@@ -8,7 +8,8 @@ use tokio::sync::Mutex;
 
 use crate::{
     autonomy, capsule_guard, chat, cluster, experiments, feedback, governor, identity, metrics,
-    models, policy, queue, runtime, runtime_bundles, runtime_supervisor, tool_cache, training,
+    models, persona, policy, queue, runtime, runtime_bundles, runtime_supervisor, tool_cache,
+    training,
 };
 
 type SharedConfigState = Arc<Mutex<serde_json::Value>>;
@@ -28,6 +29,8 @@ pub(crate) struct AppState {
     metrics: Arc<metrics::Metrics>,
     queue_signals: Arc<queue::QueueSignals>,
     kernel_enabled: bool,
+    persona_enabled: bool,
+    persona_service: Option<Arc<persona::PersonaService>>,
     models: Arc<models::ModelStore>,
     tool_cache: Arc<tool_cache::ToolCache>,
     governor: Arc<governor::GovernorState>,
@@ -59,6 +62,8 @@ impl AppState {
         metrics: Arc<metrics::Metrics>,
         queue_signals: Arc<queue::QueueSignals>,
         kernel_enabled: bool,
+        persona_enabled: bool,
+        persona_service: Option<Arc<persona::PersonaService>>,
         models: Arc<models::ModelStore>,
         tool_cache: Arc<tool_cache::ToolCache>,
         governor: Arc<governor::GovernorState>,
@@ -87,6 +92,8 @@ impl AppState {
             metrics,
             queue_signals,
             kernel_enabled,
+            persona_enabled,
+            persona_service,
             models,
             tool_cache,
             governor,
@@ -106,6 +113,14 @@ impl AppState {
 
     pub fn kernel_enabled(&self) -> bool {
         self.kernel_enabled
+    }
+
+    pub fn persona_enabled(&self) -> bool {
+        self.persona_enabled
+    }
+
+    pub fn persona(&self) -> Option<Arc<persona::PersonaService>> {
+        self.persona_service.clone()
     }
 
     pub fn kernel(&self) -> &Kernel {
@@ -232,6 +247,7 @@ pub(crate) struct AppStateBuilder {
     policy: Arc<policy::PolicyHandle>,
     host: Arc<dyn ToolHost>,
     kernel_enabled: bool,
+    persona_enabled: bool,
     config_state: Option<SharedConfigState>,
     config_history: Option<SharedConfigHistory>,
     sse_id_map: Option<Arc<Mutex<crate::sse_cache::SseIdCache>>>,
@@ -254,6 +270,7 @@ pub(crate) struct AppStateBuilder {
     runtime_bundles: Option<Arc<runtime_bundles::RuntimeBundleStore>>,
     logic_history: Option<Arc<training::LogicUnitHistoryStore>>,
     identity: Option<Arc<identity::IdentityRegistry>>,
+    persona: Option<Arc<persona::PersonaService>>,
 }
 
 impl AppState {
@@ -270,6 +287,7 @@ impl AppState {
             policy,
             host,
             kernel_enabled,
+            persona_enabled: false,
             config_state: None,
             config_history: None,
             sse_id_map: None,
@@ -292,6 +310,7 @@ impl AppState {
             runtime_bundles: None,
             logic_history: None,
             identity: None,
+            persona: None,
         }
     }
 }
@@ -300,6 +319,16 @@ impl AppState {
 impl AppStateBuilder {
     pub(crate) fn with_config_state(mut self, config_state: SharedConfigState) -> Self {
         self.config_state = Some(config_state);
+        self
+    }
+
+    pub(crate) fn with_persona_enabled(mut self, enabled: bool) -> Self {
+        self.persona_enabled = enabled;
+        self
+    }
+
+    pub(crate) fn with_persona_service(mut self, service: Arc<persona::PersonaService>) -> Self {
+        self.persona = Some(service);
         self
     }
 
@@ -531,6 +560,15 @@ impl AppStateBuilder {
             None => identity::IdentityRegistry::new(self.bus.clone()).await,
         };
 
+        let persona_service = if self.persona_enabled {
+            match self.persona {
+                Some(service) => Some(service),
+                None => Some(persona::PersonaService::new(self.kernel.clone())),
+            }
+        } else {
+            None
+        };
+
         AppState::new(
             self.bus,
             self.kernel,
@@ -544,6 +582,8 @@ impl AppStateBuilder {
             metrics.clone(),
             queue_signals.clone(),
             self.kernel_enabled,
+            self.persona_enabled,
+            persona_service,
             models_store,
             tool_cache,
             governor_state,

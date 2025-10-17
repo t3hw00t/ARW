@@ -616,6 +616,11 @@ enum AdminCmd {
         #[command(subcommand)]
         cmd: AdminAutonomyCmd,
     },
+    /// Persona helpers
+    Persona {
+        #[command(subcommand)]
+        cmd: AdminPersonaCmd,
+    },
 }
 
 #[derive(Subcommand)]
@@ -634,6 +639,40 @@ enum AdminAutonomyCmd {
     Flush(AdminAutonomyFlushArgs),
     /// Update or clear lane budgets
     Budgets(AdminAutonomyBudgetsArgs),
+}
+
+#[derive(Subcommand)]
+enum AdminPersonaCmd {
+    /// Grant a persona:manage lease
+    Grant(AdminPersonaGrantArgs),
+}
+
+#[derive(Args, Clone)]
+struct AdminPersonaGrantArgs {
+    /// Base URL (e.g. http://127.0.0.1:8091)
+    #[arg(long, default_value = "http://127.0.0.1:8091")]
+    base: String,
+    /// Admin token; falls back to ARW_ADMIN_TOKEN
+    #[arg(long)]
+    admin_token: Option<String>,
+    /// Timeout seconds when calling the API
+    #[arg(long, default_value_t = 5)]
+    timeout: u64,
+    /// Lease scope (optional)
+    #[arg(long)]
+    scope: Option<String>,
+    /// Lease budget (optional)
+    #[arg(long)]
+    budget: Option<f64>,
+    /// Lease lifetime in seconds (default: 1h)
+    #[arg(long, default_value_t = 3600)]
+    ttl_secs: u64,
+    /// Emit raw JSON
+    #[arg(long)]
+    json: bool,
+    /// Pretty-print JSON output (requires --json)
+    #[arg(long, requires = "json")]
+    pretty: bool,
 }
 
 #[derive(Subcommand)]
@@ -3334,6 +3373,14 @@ fn main() {
                     }
                 }
             },
+            AdminCmd::Persona { cmd } => match cmd {
+                AdminPersonaCmd::Grant(args) => {
+                    if let Err(e) = cmd_admin_persona_grant(&args) {
+                        eprintln!("{}", e);
+                        std::process::exit(1);
+                    }
+                }
+            },
             AdminCmd::Review { cmd } => match cmd {
                 AdminReviewCmd::Quarantine { cmd } => match cmd {
                     AdminReviewQuarantineCmd::List(args) => {
@@ -4822,6 +4869,80 @@ fn cmd_admin_autonomy_budgets(args: &AdminAutonomyBudgetsArgs) -> Result<()> {
     } else {
         println!("(No lane snapshot returned by the server.)");
     }
+    Ok(())
+}
+
+fn cmd_admin_persona_grant(args: &AdminPersonaGrantArgs) -> Result<()> {
+    let token = resolve_admin_token(&args.admin_token);
+    let client = Client::builder()
+        .timeout(Duration::from_secs(args.timeout))
+        .build()
+        .context("building HTTP client")?;
+    let base = args.base.trim_end_matches('/');
+    let url = format!("{}/leases", base);
+
+    let mut payload = JsonMap::new();
+    payload.insert(
+        "capability".into(),
+        JsonValue::String("persona:manage".into()),
+    );
+    payload.insert(
+        "ttl_secs".into(),
+        JsonValue::from(args.ttl_secs.clamp(1, 86_400)),
+    );
+    if let Some(scope) = sanitize_option_string(&args.scope) {
+        payload.insert("scope".into(), JsonValue::String(scope));
+    }
+    if let Some(budget) = args.budget {
+        payload.insert("budget".into(), JsonValue::from(budget));
+    }
+
+    let response = with_admin_headers(client.post(&url).json(&payload), token.as_deref())
+        .send()
+        .with_context(|| format!("POST {}", url))?;
+
+    let status = response.status();
+    let body = response.text().unwrap_or_default();
+    if status == StatusCode::UNAUTHORIZED {
+        bail!("unauthorized: provide --admin-token or set ARW_ADMIN_TOKEN");
+    }
+    if !status.is_success() {
+        bail!("{} returned {}: {}", url, status, body);
+    }
+
+    let value: JsonValue =
+        serde_json::from_str(&body).with_context(|| format!("parsing response from {}", url))?;
+    if args.json {
+        if args.pretty {
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&value).unwrap_or_else(|_| value.to_string())
+            );
+        } else {
+            println!("{}", value);
+        }
+    } else {
+        let id = value
+            .get("id")
+            .and_then(|v| v.as_str())
+            .unwrap_or("(unknown)");
+        let ttl_until = value
+            .get("ttl_until")
+            .and_then(|v| v.as_str())
+            .unwrap_or("(unknown)");
+        if let Some(scope) = value.get("scope").and_then(|v| v.as_str()) {
+            println!(
+                "Granted persona:manage lease {} (scope: {}) valid until {}",
+                id, scope, ttl_until
+            );
+        } else {
+            println!(
+                "Granted persona:manage lease {} valid until {}",
+                id, ttl_until
+            );
+        }
+    }
+
     Ok(())
 }
 

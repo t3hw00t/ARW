@@ -20,6 +20,7 @@ pub mod beliefs;
 pub mod intents;
 pub mod misc;
 pub mod observations;
+pub mod persona;
 pub mod snapshots;
 pub mod tasks;
 
@@ -36,6 +37,11 @@ pub use misc::{
 };
 #[allow(unused_imports)]
 pub use observations::{__path_state_observations, state_observations};
+#[allow(unused_imports)]
+pub use persona::{
+    __path_state_persona_get, __path_state_persona_history, __path_state_persona_list,
+    state_persona_get, state_persona_history, state_persona_list,
+};
 #[allow(unused_imports)]
 pub use snapshots::{
     __path_state_crashlog, __path_state_screenshots, __path_state_service_health,

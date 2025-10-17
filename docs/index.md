@@ -29,6 +29,7 @@ Assistant quickstart: [Agent Onboarding](ai/AGENT_ONBOARDING.md)
 - It grows with you: start on one laptop; federation preview lets invited machines help or co-drive under your supervision.
 - Configurable, not brittle: “[Logic Units](architecture/logic_units.md)” are safe strategy packs you can A/B test, apply, and roll back.
 - Modular by design: a cognitive stack of specialist agents keeps dialogue, memory, validation, and tooling aligned with full provenance.
+- Persona-first interactions: opt into an empathetic persona builder, review self-model updates, and tune vibe feedback so the agent grows with you transparently.
 
 ## What You Can Do
 - Turn messy folders, PDFs, and links into clean briefs, reports, or knowledge bases.
@@ -38,6 +39,7 @@ Assistant quickstart: [Agent Onboarding](ai/AGENT_ONBOARDING.md)
 - Chat to explore data and export both answers and evidence.
 - Point ARW at external llama.cpp hosts today; managed downloads and adapters for ONNX Runtime and vLLM remain on the roadmap.
 - Prepare for voice, vision, and pointer tooling: consent-first audio/video capture, local narration, and high-trust automation are under active development. Follow the [Multi-Modal Runtime Plan](architecture/multimodal_runtime_plan.md) for status.
+- Cultivate revenue-ready automations: combine federation previews, contribution ledgers, and recipe packs to earn with autonomous agents under your control.
 
 ## Scaling & Sharing (Opt‑In)
 - Stay local-first by default; remote workers and co-drive remain off until you flip them on.

@@ -21,6 +21,7 @@ pub mod meta;
 pub mod metrics;
 pub mod models;
 pub mod orchestrator;
+pub mod persona;
 pub mod policy;
 pub mod probe;
 pub mod projects;
