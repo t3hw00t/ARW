@@ -284,6 +284,12 @@ Related docs:
 |-------|----------|
 | `rpu.trust.changed` | `TOPIC_RPU_TRUST_CHANGED` |
 
+## Personas
+
+| Topic | Constant |
+|-------|----------|
+| `persona.feedback` | `TOPIC_PERSONA_FEEDBACK` |
+
 ## Runtimes / supervisor (alphabetized)
 
 | Topic | Constant |

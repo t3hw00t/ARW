@@ -16,7 +16,7 @@ Microsummary:
 - Embeds a stable spec hash so CI can detect drift without timestamp churn.
 - Refresh with `just docs-deprecations` (python3 scripts/generate_deprecations.py) after spec changes.
 
-_Generated from spec/openapi.yaml (sha256:0b82063be205). Do not edit._
+_Generated from spec/openapi.yaml (sha256:4ac6e7a4ad49). Do not edit._
 
 When an operation is marked deprecated, the runtime emits standard headers (Deprecation, optionally Sunset and Link rel="deprecation").
 

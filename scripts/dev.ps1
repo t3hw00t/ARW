@@ -13,24 +13,6 @@ $ErrorActionPreference = 'Stop'
 $ScriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 $RepoRoot = (Resolve-Path (Join-Path $ScriptRoot '..')).Path
 
-# Preflight: summarize environment mode for users and agents
-try {
-  $bash = Resolve-Tool @((Join-Path ${env:ProgramFiles} 'Git\bin\bash.exe'), 'bash')
-  if ($bash) {
-    & $bash.Source (Join-Path $RepoRoot 'scripts\env\status.sh')
-  } else {
-    $arwEnvPath = Join-Path $RepoRoot '.arw-env'
-    $mode = 'unknown'
-    if (Test-Path $arwEnvPath) {
-      $line = (Get-Content $arwEnvPath | Where-Object { $_ -like 'MODE=*' } | Select-Object -First 1)
-      if ($line) { $mode = $line.Split('=')[1] }
-    }
-    Write-Host "[env] mode=$mode (bash unavailable; install Git Bash for full checks)"
-  }
-} catch {
-  Write-Warning "[env] status unavailable: $($_.Exception.Message)"
-}
-
 function Show-Help {
   Write-Host @'
 ARW Dev Utility (scripts/dev.ps1)
@@ -71,6 +53,24 @@ function Resolve-Tool {
     if ($cmd) { return $cmd }
   }
   return $null
+}
+
+# Preflight: summarize environment mode for users and agents
+try {
+  $bash = Resolve-Tool @((Join-Path ${env:ProgramFiles} 'Git\bin\bash.exe'), 'bash')
+  if ($bash) {
+    & $bash.Source (Join-Path $RepoRoot 'scripts\env\status.sh')
+  } else {
+    $arwEnvPath = Join-Path $RepoRoot '.arw-env'
+    $mode = 'unknown'
+    if (Test-Path $arwEnvPath) {
+      $line = (Get-Content $arwEnvPath | Where-Object { $_ -like 'MODE=*' } | Select-Object -First 1)
+      if ($line) { $mode = $line.Split('=')[1] }
+    }
+    Write-Host ('[env] mode={0} (bash unavailable; install Git Bash for full checks)' -f $mode)
+  }
+} catch {
+  Write-Warning ('[env] status unavailable: {0}' -f $_.Exception.Message)
 }
 
 function Contains-Switch {
@@ -261,7 +261,7 @@ function Invoke-Verify {
     }
   } elseif (-not $pythonHasYaml) {
     if ($requireDocs) {
-      $message = "PyYAML missing for $($python.Name); install with `python3 -m pip install --user --break-system-packages pyyaml`"
+      $message = ('PyYAML missing for {0}; install with `python3 -m pip install --user --break-system-packages pyyaml`' -f $python.Name)
       $results += [pscustomobject]@{ Name = $docStepName1; Status = 'failed'; Message = $message }
       $results += [pscustomobject]@{ Name = $docStepName2; Status = 'failed'; Message = $message }
     } else {
@@ -330,7 +330,7 @@ function Invoke-Verify {
   } -Required:$true -ShouldRun { -not $SkipDocs } -SkipReason $docsSkipReason
 
   if ($Ci.IsPresent) {
-    Write-Host "[verify] CI mode enabled (running extended guardrails)."
+    Write-Host '[verify] CI mode enabled (running extended guardrails).'
     if ($null -eq $python) {
       $results += [pscustomobject]@{
         Name    = 'python check_feature_integrity.py'
@@ -353,7 +353,7 @@ function Invoke-Verify {
           'scripts\gen_feature_catalog.py',
           'scripts\gen_system_components.py'
         )) {
-        $results += Invoke-Step -Name ("python $regen --check") -Action {
+        $results += Invoke-Step -Name ('python {0} --check' -f $regen) -Action {
           $scriptPath = Join-Path $RepoRoot $regen
           Invoke-Program -Executable $python -Arguments @($scriptPath,'--check')
         }
@@ -373,7 +373,7 @@ function Invoke-Verify {
           $env:ENFORCE_ENV_GUARD = '1'
           & $bash.Source (Join-Path $RepoRoot 'scripts\check_env_guard.sh')
           if ($LASTEXITCODE -ne 0) {
-            throw "check_env_guard.sh exited with $LASTEXITCODE"
+            throw ('check_env_guard.sh exited with {0}' -f $LASTEXITCODE)
           }
         } finally {
           if ($null -eq $previous) {
@@ -391,7 +391,7 @@ function Invoke-Verify {
         }
         & $python.Source (Join-Path $RepoRoot 'scripts\ci_snappy_bench.py')
         if ($LASTEXITCODE -ne 0) {
-          throw "ci_snappy_bench.py exited with $LASTEXITCODE"
+          throw ('ci_snappy_bench.py exited with {0}' -f $LASTEXITCODE)
         }
       }
 
@@ -400,7 +400,7 @@ function Invoke-Verify {
           & (Join-Path $RepoRoot 'scripts\smoke_triad.ps1')
         } else {
           & $bash.Source (Join-Path $RepoRoot 'scripts\triad_smoke.sh')
-          if ($LASTEXITCODE -ne 0) { throw "triad_smoke.sh exited with $LASTEXITCODE" }
+          if ($LASTEXITCODE -ne 0) { throw ('triad_smoke.sh exited with {0}' -f $LASTEXITCODE) }
         }
       }
 
@@ -408,7 +408,7 @@ function Invoke-Verify {
         $python = Resolve-Tool @('python3', 'python')
         if ($python) {
           & $python.Source (Join-Path $RepoRoot 'scripts\context_ci.py')
-          if ($LASTEXITCODE -ne 0) { throw "context_ci.py exited with $LASTEXITCODE" }
+          if ($LASTEXITCODE -ne 0) { throw ('context_ci.py exited with {0}' -f $LASTEXITCODE) }
         } elseif ($env:OS -eq 'Windows_NT' -and (Test-Path (Join-Path $RepoRoot 'scripts\smoke_context.ps1'))) {
           & (Join-Path $RepoRoot 'scripts\smoke_context.ps1')
         } else {
@@ -422,7 +422,7 @@ function Invoke-Verify {
           $env:MODE = 'stub'
           & $bash.Source (Join-Path $RepoRoot 'scripts\runtime_llama_smoke.sh')
           if ($LASTEXITCODE -ne 0) {
-            throw "runtime_llama_smoke.sh exited with $LASTEXITCODE"
+            throw ('runtime_llama_smoke.sh exited with {0}' -f $LASTEXITCODE)
           }
         } finally {
           if ($null -eq $previousMode) {
@@ -439,7 +439,7 @@ function Invoke-Verify {
           $env:ARW_LEGACY_CHECK_WAIT_SECS = '30'
           & $bash.Source (Join-Path $RepoRoot 'scripts\check_legacy_surface.sh')
           if ($LASTEXITCODE -ne 0) {
-            throw "check_legacy_surface.sh exited with $LASTEXITCODE"
+            throw ('check_legacy_surface.sh exited with {0}' -f $LASTEXITCODE)
           }
         } finally {
           if ($null -eq $previousWait) {
@@ -456,29 +456,29 @@ function Invoke-Verify {
   foreach ($result in $results) {
     if ($null -eq $result) { continue }
     if (-not ($result | Get-Member -Name Status -ErrorAction SilentlyContinue)) {
-      Write-Host "[warn] Unexpected step result type: $($result.GetType().FullName)" -ForegroundColor Yellow
+      Write-Host ('[warn] Unexpected step result type: {0}' -f $result.GetType().FullName) -ForegroundColor Yellow
       Write-Host ($result | Out-String)
       continue
     }
     switch ($result.Status) {
       'ok' {
-        Write-Host "[ok] $($result.Name)" -ForegroundColor Green
+        Write-Host ('[ok] {0}' -f $result.Name) -ForegroundColor Green
       }
       'skipped' {
-        Write-Host "[skip] $($result.Name) — $($result.Message)" -ForegroundColor Yellow
+        Write-Host ('[skip] {0} - {1}' -f $result.Name, $result.Message) -ForegroundColor Yellow
       }
       'warn' {
-        Write-Host "[warn] $($result.Name) — $($result.Message)" -ForegroundColor Yellow
+        Write-Host ('[warn] {0} - {1}' -f $result.Name, $result.Message) -ForegroundColor Yellow
       }
       'failed' {
-        Write-Host "[fail] $($result.Name) — $($result.Message)" -ForegroundColor Red
+        Write-Host ('[fail] {0} - {1}' -f $result.Name, $result.Message) -ForegroundColor Red
         $hasFailure = $true
       }
     }
   }
 
   if ($hasFailure) {
-    throw "Verification failed. Review the [fail] entries above."
+    throw 'Verification failed. Review the [fail] entries above.'
   }
 }
 
@@ -636,7 +636,7 @@ switch ($commandKey) {
       }
     }
     if ($unknown.Count -gt 0) {
-      throw "Unknown verify option(s): $($unknown -join ', ')"
+      throw ('Unknown verify option(s): {0}' -f ($unknown -join ', '))
     }
     Invoke-Verify -Fast:$fast -SkipDocs:$skipDocs -SkipUI:$skipUI -SkipDocPython:$skipDocPython -WithLauncher:$withLauncher -Ci:$ci
   }
@@ -647,7 +647,7 @@ switch ($commandKey) {
     & (Join-Path $ScriptRoot 'docgen.ps1') @Args
   }
   default {
-    Write-Error "Unknown command '$Command'. Run 'pwsh -File scripts/dev.ps1 help' for usage."
+    Write-Error ('Unknown command ''{0}''. Run ''pwsh -File scripts/dev.ps1 help'' for usage.' -f $Command)
     exit 1
   }
 }
