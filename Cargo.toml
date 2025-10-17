@@ -19,6 +19,9 @@ members = [
   "crates/arw-tauri",
   "apps/arw-launcher/src-tauri"
 ]
+exclude = [
+  ".cargo-codex"
+]
 default-members = [
   "crates/arw-protocol",
   "crates/arw-events",
