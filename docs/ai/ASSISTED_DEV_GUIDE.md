@@ -1,5 +1,5 @@
 # Assisted, Iterative Coding – Working Agreement
-Updated: 2025-10-11
+Updated: 2025-10-17
 Type: Reference
 
 Microsummary: Small, safe changes with a written PLAN → minimal DIFF → tests → docs. Default‑deny risky edits. Stable.

@@ -4,7 +4,7 @@ title: Release Guide
 
 # Release Guide
 
-Updated: 2025-10-16
+Updated: 2025-10-17
 Type: Runbook
 
 This runbook captures the end-to-end process for cutting an Agent Hub (ARW) release. It focuses on the unified `arw-server` surface, the CLI, docs, and portable bundles. Windows installers and other follow-on packaging inherit from these steps.

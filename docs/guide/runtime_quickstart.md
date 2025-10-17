@@ -3,7 +3,7 @@ title: Runtime Quickstart (Non-Technical)
 ---
 
 # Runtime Quickstart (Non-Technical)
-Updated: 2025-10-16
+Updated: 2025-10-17
 Type: Tutorial
 
 This walkthrough is aimed at operators who want to validate the managed runtime supervisor without digging into the codebase. It uses the automation we ship (`just` commands and helper scripts) so you can prepare weights and run the smoke test with minimal manual tinkering.
