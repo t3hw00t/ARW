@@ -48,7 +48,7 @@ http-body-util = "0.1"
 bytes = "1"
 hyper-util = { version = "0.1", features = ["server","tokio"] }
 once_cell = { workspace = true }
-json-patch = "3"
+json-patch = "4"
 httpdate = "1.0"
 moka = { version = "0.12", features = ["future"] }
 sysinfo = { workspace = true }
