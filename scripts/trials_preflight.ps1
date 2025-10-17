@@ -146,11 +146,16 @@ function Run-ContextPreflight {
   if (Invoke-ArwCli -Args @('smoke','context','--wait-timeout-secs','45') -Label 'context telemetry checks' -Root $Root) {
     return
   }
-  $contextSh = Join-Path $Root 'scripts' 'context_ci.sh'
-  if (Invoke-BashScript -Script $contextSh -Label 'context telemetry checks') {
-    return
-  }
-  throw 'Context telemetry helpers unavailable (install `just`, build arw-cli, or provide bash)'
+    $python = Get-Command python3 -ErrorAction SilentlyContinue
+    if (-not $python) {
+      $python = Get-Command python -ErrorAction SilentlyContinue
+    }
+    if ($python) {
+      Log 'context telemetry checks (python)'
+      & $python.Source (Join-Path $Root 'scripts' 'context_ci.py')
+      if ($LASTEXITCODE -eq 0) { return }
+    }
+    throw 'Context telemetry helpers unavailable (install `just`, build arw-cli, or provide Python 3)'
 }
 
 $root = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path

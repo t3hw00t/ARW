@@ -247,6 +247,7 @@ const ENV_OVERRIDE_KEYS: &[&str] = &[
     "ARW_CONTEXT_COVERAGE_MAX_ITERS",
     "ARW_REHYDRATE_FILE_HEAD_KB",
     "ARW_CONTEXT_SLOT_BUDGETS",
+    "ARW_RUNTIME_WATCHER_COOLDOWN_MS",
 ];
 
 pub fn apply_env_overrides_from(value: &Value) -> Vec<(String, String)> {

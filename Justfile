@@ -10,6 +10,9 @@ verify-fast:
 verify-ci:
   bash scripts/dev.sh verify --ci
 
+env:
+  bash scripts/env/status.sh
+
 # Cleanup
 clean *args:
   bash scripts/clean_workspace.sh {{args}}
@@ -139,10 +142,10 @@ docs-build: docgen
 
 # Docs lint (headings/links/build)
 docs-check:
-  bash scripts/docs_check.sh
+  python3 scripts/docs_check.py || python scripts/docs_check.py
 
 docs-check-fast:
-  DOCS_CHECK_FAST=1 bash scripts/docs_check.sh
+  DOCS_CHECK_FAST=1 python3 scripts/docs_check.py || DOCS_CHECK_FAST=1 python scripts/docs_check.py
 
 bootstrap-docs *args:
   bash scripts/bootstrap_docs.sh {{args}}
@@ -219,21 +222,21 @@ runtime-bundles-publish catalog bundle_root:
   sign_cli="${ARW_RUNTIME_BUNDLE_SIGN_CLI:-arw-cli}"
   declare -a args=("python3" "scripts/runtime_bundle_publish.py" "--bundle-root" "{{bundle_root}}" "--catalog" "{{catalog}}")
   if [[ -n "${base_url}" ]]; then
-    args+=("--base-url" "${base_url}")
+  args+=("--base-url" "${base_url}")
   fi
   if [[ -n "${sign_key_b64}" ]]; then
-    args+=("--sign" "--sign-key-b64" "${sign_key_b64}")
+  args+=("--sign" "--sign-key-b64" "${sign_key_b64}")
   elif [[ -n "${sign_key_file}" ]]; then
-    args+=("--sign" "--sign-key-file" "${sign_key_file}")
+  args+=("--sign" "--sign-key-file" "${sign_key_file}")
   fi
   if [[ -n "${sign_key_id}" ]]; then
-    args+=("--sign-key-id" "${sign_key_id}")
+  args+=("--sign-key-id" "${sign_key_id}")
   fi
   if [[ -n "${sign_issuer}" ]]; then
-    args+=("--sign-issuer" "${sign_issuer}")
+  args+=("--sign-issuer" "${sign_issuer}")
   fi
   if [[ "${sign_cli}" != "arw-cli" ]]; then
-    args+=("--sign-cli" "${sign_cli}")
+  args+=("--sign-cli" "${sign_cli}")
   fi
   "${args[@]}"
 
@@ -315,7 +318,7 @@ research-watcher-archive base='http://127.0.0.1:8091' token='' ids='' from_statu
 	' _ {{base}} {{token}} {{ids}} {{from_status}} {{filter_source}} {{filter_contains}} {{limit}} {{note}} {{dry_run}} {{json}} {{pretty}}
 
 context-ci:
-  bash scripts/context_ci.sh
+  python3 scripts/context_ci.py || python scripts/context_ci.py
 
 trials-preflight:
   bash scripts/trials_preflight.sh
@@ -572,7 +575,7 @@ verify-manual:
   python3 scripts/check_operation_docs_sync.py
   python3 scripts/gen_topics_doc.py --check
   python3 scripts/lint_event_names.py
-  bash scripts/docs_check.sh
+  python3 scripts/docs_check.py || python scripts/docs_check.py
 
 # Endpoint scaffolding
 endpoint-new method path tag="":

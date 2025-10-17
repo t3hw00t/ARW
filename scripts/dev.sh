@@ -4,6 +4,21 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
+# Ensure cargo is on PATH; when invoked under bare bash shells (e.g., CI or Windows),
+# sourcing the Rust env file avoids "cargo: command not found" failures during verify.
+if [[ -f "$HOME/.cargo/env" ]]; then
+  # shellcheck disable=SC1090
+  source "$HOME/.cargo/env"
+elif [[ -n "${USERPROFILE:-}" && -f "$USERPROFILE/.cargo/env" ]]; then
+  # shellcheck disable=SC1090
+  source "$USERPROFILE/.cargo/env"
+fi
+
+source "$REPO_ROOT/scripts/lib/env_mode.sh"
+arw_env_init
+# Preflight: emit environment mode summary for users and agents
+echo "[env] mode=${ARW_ENV_MODE} source=${ARW_ENV_SOURCE:-unknown} exe=${ARW_EXE_SUFFIX:-}"
+
 command="${1:-help}"
 if [[ $# -gt 0 ]]; then
   shift
@@ -31,7 +46,7 @@ Commands:
   test             Run workspace tests (prefers cargo-nextest).
   test-fast        Alias for cargo nextest run --workspace.
   docs             Regenerate docs (docgen + mkdocs build --strict when available).
-  docs-check       Run docs checks (docgen + docs_check.sh if bash available).
+  docs-check       Run docs checks (docgen + docs_check.py).
   docs-cache       Build offline docs wheel cache (writes dist/docs-wheels.tar.gz).
   verify           Run fmt → clippy → tests → docs guardrail sequence.
                    Flags: --fast (skip docs/UI), --with-launcher (include Tauri crate), --ci (CI parity: registries, docgens --check, env-guard, smokes)
@@ -244,14 +259,28 @@ PY
   if [[ $skip_docs -eq 1 ]]; then
     echo "[verify] skipping docs lint (requested)"
   else
-    if [[ -x "$REPO_ROOT/scripts/docs_check.sh" ]]; then
-      echo "[verify] bash scripts/docs_check.sh"
-      if ! bash "$REPO_ROOT/scripts/docs_check.sh"; then ok=1; fi
+    if [[ -f "$REPO_ROOT/scripts/docs_check.py" ]]; then
+      local py_bin=""
+      if command -v python3 >/dev/null 2>&1; then
+        py_bin="python3"
+      elif command -v python >/dev/null 2>&1; then
+        py_bin="python"
+      fi
+      if [[ -n "$py_bin" ]]; then
+        echo "[verify] $py_bin scripts/docs_check.py"
+        if ! "$py_bin" "$REPO_ROOT/scripts/docs_check.py"; then ok=1; fi
+      elif command -v mkdocs >/dev/null 2>&1; then
+        echo "[verify] python missing; running mkdocs build --strict"
+        if ! mkdocs build --strict -f "$REPO_ROOT/mkdocs.yml"; then ok=1; fi
+      else
+        echo "[verify] docs lint blocked (missing Python and mkdocs; install the docs toolchain or pass --skip-docs/--fast)"
+        ok=1
+      fi
     elif command -v mkdocs >/dev/null 2>&1; then
-      echo "[verify] docs_check.sh unavailable; running mkdocs build --strict"
+      echo "[verify] docs_check.py unavailable; running mkdocs build --strict"
       if ! mkdocs build --strict -f "$REPO_ROOT/mkdocs.yml"; then ok=1; fi
     else
-      echo "[verify] docs lint blocked (missing scripts/docs_check.sh and mkdocs; install the docs toolchain or pass --skip-docs/--fast)"
+      echo "[verify] docs lint blocked (missing scripts/docs_check.py and mkdocs; install the docs toolchain or pass --skip-docs/--fast)"
       ok=1
     fi
   fi
@@ -283,14 +312,39 @@ PY
     echo "[verify] ENFORCE_ENV_GUARD=1 bash scripts/check_env_guard.sh"
     if ! ENFORCE_ENV_GUARD=1 bash "$REPO_ROOT/scripts/check_env_guard.sh"; then ok=1; fi
 
-    echo "[verify] bash scripts/ci_snappy_bench.sh"
-    if ! bash "$REPO_ROOT/scripts/ci_snappy_bench.sh"; then ok=1; fi
+    local py_bin=""
+    if command -v python3 >/dev/null 2>&1; then
+      py_bin="python3"
+    elif command -v python >/dev/null 2>&1; then
+      py_bin="python"
+    fi
+    if [[ -z "$py_bin" ]]; then
+      echo "[verify] python is required to run ci_snappy_bench" >&2
+      ok=1
+    else
+      echo "[verify] $py_bin scripts/ci_snappy_bench.py"
+      if ! "$py_bin" "$REPO_ROOT/scripts/ci_snappy_bench.py"; then ok=1; fi
+    fi
 
     echo "[verify] bash scripts/triad_smoke.sh"
+    if [[ "${ARW_ENV_MODE:-}" == "windows-host" || "${ARW_ENV_MODE:-}" == "windows-wsl" ]]; then
+      export RUNTIME_SMOKE_USE_RELEASE="${RUNTIME_SMOKE_USE_RELEASE:-1}"
+    fi
     if ! bash "$REPO_ROOT/scripts/triad_smoke.sh"; then ok=1; fi
 
-    echo "[verify] bash scripts/context_ci.sh"
-    if ! bash "$REPO_ROOT/scripts/context_ci.sh"; then ok=1; fi
+    local ctx_py=""
+    if command -v python3 >/dev/null 2>&1; then
+      ctx_py="python3"
+    elif command -v python >/dev/null 2>&1; then
+      ctx_py="python"
+    fi
+    if [[ -z "$ctx_py" ]]; then
+      echo "[verify] python is required to run context_ci" >&2
+      ok=1
+    else
+      echo "[verify] $ctx_py scripts/context_ci.py"
+      if ! "$ctx_py" "$REPO_ROOT/scripts/context_ci.py"; then ok=1; fi
+    fi
 
     echo "[verify] RUNTIME_SMOKE_GPU_POLICY=${RUNTIME_SMOKE_GPU_POLICY:-simulate} bash scripts/runtime_smoke_suite.sh"
     if ! RUNTIME_SMOKE_GPU_POLICY="${RUNTIME_SMOKE_GPU_POLICY:-simulate}" bash "$REPO_ROOT/scripts/runtime_smoke_suite.sh"; then ok=1; fi
@@ -388,13 +442,22 @@ case "$command" in
     ;;
   docs-check)
     bash "$SCRIPT_DIR/docgen.sh" "$@"
-    if [[ -x "$REPO_ROOT/scripts/docs_check.sh" ]]; then
-      bash "$REPO_ROOT/scripts/docs_check.sh"
+    if [[ -f "$REPO_ROOT/scripts/docs_check.py" ]]; then
+      if command -v python3 >/dev/null 2>&1; then
+        python3 "$REPO_ROOT/scripts/docs_check.py" "$@"
+      elif command -v python >/dev/null 2>&1; then
+        python "$REPO_ROOT/scripts/docs_check.py" "$@"
+      elif command -v mkdocs >/dev/null 2>&1; then
+        echo "[dev] Python unavailable; running mkdocs build --strict instead"
+        mkdocs build --strict -f "$REPO_ROOT/mkdocs.yml"
+      else
+        echo "[dev] skipping docs checks (missing docs_check.py & mkdocs)"
+      fi
     elif command -v mkdocs >/dev/null 2>&1; then
-      echo "[dev] docs_check.sh unavailable; running mkdocs build --strict instead"
+      echo "[dev] docs_check.py unavailable; running mkdocs build --strict instead"
       mkdocs build --strict -f "$REPO_ROOT/mkdocs.yml"
     else
-      echo "[dev] skipping docs checks (missing docs_check.sh & mkdocs)"
+      echo "[dev] skipping docs checks (missing docs_check.py & mkdocs)"
     fi
     ;;
   docs-cache)

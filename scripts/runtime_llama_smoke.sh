@@ -3,6 +3,10 @@ set -euo pipefail
 
 SCRIPT_DIR=$(cd -- "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 PROJECT_ROOT=$(cd -- "$SCRIPT_DIR/.." && pwd)
+REPO_ROOT="$PROJECT_ROOT"
+source "$REPO_ROOT/scripts/lib/env_mode.sh"
+arw_env_init
+SERVER_EXE_SUFFIX="${ARW_EXE_SUFFIX:-}"
 source "$SCRIPT_DIR/lib/smoke_timeout.sh"
 
 # Runtime smoke test for the managed runtime pipeline.
@@ -154,8 +158,8 @@ resolve_server_candidate() {
     return
   fi
 
-  local release_path="$PROJECT_ROOT/target/release/arw-server"
-  local debug_path="$PROJECT_ROOT/target/debug/arw-server"
+  local release_path="$PROJECT_ROOT/target/release/arw-server${SERVER_EXE_SUFFIX}"
+  local debug_path="$PROJECT_ROOT/target/debug/arw-server${SERVER_EXE_SUFFIX}"
 
   local prefer_release=0
   if is_truthy "${RUNTIME_SMOKE_USE_RELEASE:-0}"; then
@@ -967,7 +971,7 @@ start_server() {
   fi
 
   if [[ -z "$server_bin" ]]; then
-    server_bin="$PROJECT_ROOT/target/debug/arw-server"
+    server_bin="$PROJECT_ROOT/target/debug/arw-server${SERVER_EXE_SUFFIX}"
   fi
 
   if [[ "$needs_build" = "1" ]]; then
@@ -990,9 +994,9 @@ start_server() {
     rm -f "$build_log"
     if [[ -z "${ARW_SERVER_BIN:-}" ]]; then
       if [[ "$build_profile" = "release" ]]; then
-        server_bin="$PROJECT_ROOT/target/release/arw-server"
+        server_bin="$PROJECT_ROOT/target/release/arw-server${SERVER_EXE_SUFFIX}"
       else
-        server_bin="$PROJECT_ROOT/target/debug/arw-server"
+        server_bin="$PROJECT_ROOT/target/debug/arw-server${SERVER_EXE_SUFFIX}"
       fi
     fi
   fi

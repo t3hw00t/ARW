@@ -26,9 +26,14 @@ jobs:
       REPRO_NOW: 1970-01-01T00:00:00Z
       NEXTEST_VERSION: 0.9.67
       PIP_VERSION: 24.2
+      ARW_ENV_MODE_FORCE: linux
+      ARW_ENV_CACHE_KEY: linux
     steps:
       - name: Checkout
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5
+
+      - name: Select environment mode
+        run: bash scripts/env/switch.sh linux
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@5d458579430fc14a04a08a1e7d3694f545e91ce6 # stable
@@ -40,6 +45,7 @@ jobs:
         with:
           workspaces: |
             . -> target
+          shared-key: ${{ env.ARW_ENV_CACHE_KEY }}
 
       - name: Install nextest
         uses: taiki-e/install-action@7ec692fc37da04f8da31c22ba9f3b71ef267e650 # v2
@@ -115,7 +121,7 @@ jobs:
         run: cargo nextest run --locked --profile ci --workspace
 
       - name: Snappy bench (sanity)
-        run: bash scripts/ci_snappy_bench.sh
+        run: python3 scripts/ci_snappy_bench.py
 
       - name: Upload snappy bench summary
         if: always()
@@ -145,9 +151,15 @@ jobs:
     timeout-minutes: 25
     permissions:
       contents: read
+    env:
+      ARW_ENV_MODE_FORCE: linux
+      ARW_ENV_CACHE_KEY: linux
     steps:
       - name: Checkout
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5
+
+      - name: Select environment mode
+        run: bash scripts/env/switch.sh linux
 
       - name: Restore mise cache
         uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4

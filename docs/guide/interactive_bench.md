@@ -93,7 +93,7 @@ budgets intentionally alongside documentation updates.
 ## CI integration
 
 A lightweight sanity run executes as part of the default GitHub Actions CI
-(`scripts/ci_snappy_bench.sh`). It builds release binaries if needed, starts
+(`scripts/ci_snappy_bench.py`). It builds release binaries if needed, starts
 `arw-server`, issues 60 echo actions
 with concurrency 6, and fails if p95 totals exceed the configured budgets (queue
 budget defaults to 500 ms for CI) or if any request fails. Each run also emits a

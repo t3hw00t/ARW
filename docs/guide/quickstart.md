@@ -25,6 +25,14 @@ Need a single command that brings in Rust, Python, Node.js, jq, and ripgrep? Ins
 !!! note
     The first launch compiles `arw-server` (and the optional launcher). Expect a multi-minute build on initial setup; subsequent runs reuse the cached binaries.
 
+## Select Your Environment
+
+- Run `bash scripts/env/switch.sh <mode>` from inside the platform you are working on (`linux`, `windows-host`, `windows-wsl`, `mac`).  
+  Example: `bash scripts/env/switch.sh windows-host`
+- The helper updates `.arw-env`, flips `target/` and `.venv/` to the right copies for that platform, and refuses to run if you launch it from the wrong environment.
+- When you move between Windows host and WSL, run the switch command on each side before rebuilding or running tests to prevent cross-platform binaries from colliding.
+- For a deeper walkthrough (including toolchain notes per mode) see [Developer › Environment Modes](../developer/environment_modes.md).
+
 ## Launch Paths
 
 ### Automation — Headless Agents
@@ -101,7 +109,7 @@ The helpers fall back to `cargo test --workspace --locked` when `cargo-nextest` 
 Need a lightweight docs lint while iterating? Run:
 
 ```bash
-DOCS_CHECK_FAST=1 bash scripts/docs_check.sh
+DOCS_CHECK_FAST=1 python3 scripts/docs_check.py
 ```
 
 Drop the environment variable (or omit `--fast`) to restore the full validation, including mkdocs build and deep legacy sweeps, before publishing.
@@ -132,6 +140,38 @@ powershell -ExecutionPolicy Bypass -File scripts/start.ps1 -ServiceOnly -WaitHea
 # Headless server (8091 by default)
 bash scripts/start.sh --service-only --wait-health
 ```
+
+### Live Reload (manifests & bundles)
+- Managed runtime manifests auto-reload: edits to `configs/runtime/runtimes.toml` (or a custom path via `ARW_RUNTIME_MANIFEST`) are applied within a few seconds; the supervisor reloads definitions and updates `/state/runtime_supervisor`.
+- Bundle catalogs auto-reload: changes under `configs/runtime/*.json` or `<state>/runtime/bundles/` are detected and `/state/runtime/bundles` refreshes accordingly.
+  - Override bundle roots with `ARW_RUNTIME_BUNDLE_DIR` (semicolon-separated).
+
+### Observe Reloads (SSE)
+- Quick tail (Bash):
+  ```bash
+  just sse-tail prefixes='service.health,state.read.model.patch' replay='10'
+  ```
+- Raw curl stream:
+  ```bash
+  curl -N -H "Authorization: Bearer $ARW_ADMIN_TOKEN" \
+    "http://127.0.0.1:8091/events?prefix=service.health,state.read.model.patch&replay=10"
+  ```
+- Watcher summary snapshot:
+  ```bash
+  curl -s -H "Authorization: Bearer $ARW_ADMIN_TOKEN" \
+    http://127.0.0.1:8091/state/runtime/watchers | jq
+  # Fields include per-area status (ok/degraded), last_ok_ms/last_ok_age_ms,
+  # last_error_ms/last_error_age_ms, and overall status.
+  ```
+
+### Configure Cooldown
+- Default cooldown is 3 minutes; within this window, a more recent error keeps status `degraded`.
+- Override via env: `ARW_RUNTIME_WATCHER_COOLDOWN_MS=600000` (10 minutes)
+- Or in `configs/default.toml` under the `env` section:
+  ```toml
+  [env]
+  ARW_RUNTIME_WATCHER_COOLDOWN_MS = 600000
+  ```
 
 **Home view + launcher** — start the service and the desktop UI together.
 

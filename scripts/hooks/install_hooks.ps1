@@ -105,7 +105,15 @@ if git diff --cached --name-only | grep -E '^(docs/|mkdocs.yml)' >/dev/null 2>&1
     python3 scripts/stamp_docs_type.py || true
     git add docs/**/*.md 2>/dev/null || true
   fi
-  bash scripts/docs_check.sh
+  if command -v python3 >/dev/null 2>&1; then
+    python3 scripts/docs_check.py
+  elif command -v python >/dev/null 2>&1; then
+    python scripts/docs_check.py
+  elif command -v mkdocs >/dev/null 2>&1; then
+    mkdocs build --strict -f mkdocs.yml
+  else
+    echo "[pre-commit] docs_check.py skipped (missing Python/mkdocs)"
+  fi
   fi
 else
   echo "[pre-commit] Doc stamp skipped (ARW_SKIP_DOC_STAMP set)"

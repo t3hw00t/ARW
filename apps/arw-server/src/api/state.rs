@@ -1969,6 +1969,46 @@ pub async fn state_runtime_bundles(
     Json(state.runtime_bundles().snapshot().await).into_response()
 }
 
+/// Runtime manifest paths currently in effect.
+#[utoipa::path(
+    get,
+    path = "/state/runtime/manifests",
+    tag = "State",
+    responses(
+        (status = 200, description = "Runtime manifest paths", body = serde_json::Value),
+        (status = 401, description = "Unauthorized", body = serde_json::Value)
+    )
+)]
+pub async fn state_runtime_manifests(headers: HeaderMap) -> impl IntoResponse {
+    if !crate::admin_ok(&headers).await {
+        return (
+            axum::http::StatusCode::UNAUTHORIZED,
+            Json(json!({"type":"about:blank","title":"Unauthorized","status":401})),
+        )
+            .into_response();
+    }
+    let mut paths: Vec<String> = Vec::new();
+    if let Ok(raw) = std::env::var("ARW_RUNTIME_MANIFEST") {
+        for part in raw.split(';') {
+            let trimmed = part.trim();
+            if !trimmed.is_empty() {
+                paths.push(trimmed.to_string());
+            }
+        }
+    }
+    if paths.is_empty() {
+        if let Some(path) = arw_core::resolve_config_path("configs/runtime/runtimes.toml") {
+            paths.push(path.display().to_string());
+        }
+    }
+    let resolved = !paths.is_empty();
+    Json(json!({
+        "paths": paths,
+        "resolved": resolved,
+    }))
+    .into_response()
+}
+
 /// Runtime supervisor snapshot.
 #[utoipa::path(
     get,
@@ -1992,6 +2032,27 @@ pub async fn state_runtime_supervisor(
     }
     let snapshot: arw_runtime::RegistrySnapshot = state.runtime().snapshot().await;
     Json(serde_json::to_value(snapshot).unwrap_or_else(|_| json!({"runtimes": []}))).into_response()
+}
+
+/// Runtime config watchers summary (paths, roots, poll interval).
+#[utoipa::path(
+    get,
+    path = "/state/runtime/watchers",
+    tag = "State",
+    responses(
+        (status = 200, description = "Runtime watcher summary", body = serde_json::Value),
+        (status = 401, description = "Unauthorized", body = serde_json::Value)
+    )
+)]
+pub async fn state_runtime_watchers(headers: HeaderMap) -> impl IntoResponse {
+    if !crate::admin_ok(&headers).await {
+        return (
+            axum::http::StatusCode::UNAUTHORIZED,
+            Json(json!({"type":"about:blank","title":"Unauthorized","status":401})),
+        )
+            .into_response();
+    }
+    Json(crate::config_watcher::watcher_snapshot()).into_response()
 }
 
 /// Self model index.

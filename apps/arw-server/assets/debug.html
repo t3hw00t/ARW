@@ -103,6 +103,7 @@
     <span id="toolsBadge" class="badge warn" title="Tools activity"><span class="dot"></span> Tools: idle</span>
     <span id="eventsBadge" class="badge warn" title="Events activity"><span class="dot"></span> Events: 0</span>
     <span id="modelsBadge" class="badge warn" title="Models activity"><span class="dot"></span> Models: idle</span>
+    <span id="watchBadge" class="badge warn" title="Runtime watchers"><span class="dot"></span> Watchers: …</span>
     <a id="metricsLink" class="help u-inline-block" href="#" title="Open /metrics">M</a>
     <button id="copyMetrics" class="iconbtn" title="Copy /metrics to clipboard">Copy metrics</button>
     <a id="catalogLink" class="help u-inline-block" href="#" title="Open Interface Catalog (/catalog/index)">C</a>
@@ -199,6 +200,16 @@
         <summary class="key">Recent decisions</summary>
         <div id="rwRecent" class="u-text-small u-text-muted u-mt-6"></div>
       </details>
+    </div>
+    <div class="card" data-collapsed="1">
+      <h3>Runtime Watchers <a href="#" class="help" data-doc="runtime_supervisor" data-tip="Supervisor status, manifest reloads, and bundle catalogs." title="Runtime watchers">?</a></h3>
+      <div class="row" role="toolbar" aria-label="Runtime watcher actions">
+        <button onclick="watchersFetch()">Refresh</button>
+        <label class="key"><input type="checkbox" id="watchersLive" checked> live</label>
+        <span class="key">Cooldown</span>
+        <span id="watchCooldown" class="value">–</span>
+      </div>
+      <div id="watchersSummary" class="u-text-small u-text-muted u-mt-6"></div>
     </div>
     <div class="card" data-collapsed="1">
       <h3>Context Metrics <a href="#" class="help" data-doc="training_park" data-tip="Coverage verdicts, recall risk, and slot gap analytics from the context window." title="Context metrics">?</a></h3>
@@ -1786,6 +1797,18 @@ const READ_MODEL_HANDLERS = {
     shouldRender: () => document.getElementById('rwLive')?.checked ?? false,
     render: (state) => rwRender(state),
   },
+  runtime_watchers: {
+    init: () => ({}),
+    get: () => window.__runtimeWatchers,
+    assign: (state) => {
+      if (!state || typeof state !== 'object') {
+        state = {};
+      }
+      window.__runtimeWatchers = state;
+      return window.__runtimeWatchers;
+    },
+    render: (state) => watchersRender(state),
+  },
   policy_leases: {
     init: () => ({ items: [], count: 0 }),
     get: () => window.__policyLeases,
@@ -2741,6 +2764,114 @@ async function rwFetch(){ try{
   const j = await r.json();
   setReadModelState('research_watcher', j?.data || j || {}, { render: true, clone: false, forceRender: true });
 }catch(e){ console.error(e); showToast('research watcher fetch failed'); }}
+function durationHuman(ms){
+  if(!(typeof ms === 'number' && Number.isFinite(ms))) return '–';
+  let seconds = Math.max(0, Math.round(ms / 1000));
+  const units = [[86400,'d'],[3600,'h'],[60,'m'],[1,'s']];
+  const parts = [];
+  for(const [size,label] of units){
+    if(seconds >= size || (label === 's' && parts.length === 0)){
+      const value = Math.floor(seconds / size);
+      parts.push(`${value}${label}`);
+      seconds -= value * size;
+    }
+    if(parts.length >= 3) break;
+  }
+  return parts.join(' ');
+}
+function watcherAge(section, kind){
+  if(!section || typeof section !== 'object') return '–';
+  const humanKey = kind === 'error' ? 'last_error_age_human' : 'last_ok_age_human';
+  const msKey = kind === 'error' ? 'last_error_ms' : 'last_ok_ms';
+  if(section[humanKey]) return escapeHtml(section[humanKey]);
+  const stamp = buildTimestampDisplay(null, section[msKey]);
+  if(stamp){
+    const title = escapeHtml(stamp.abs || stamp.iso || '');
+    const rel = escapeHtml(stamp.rel || stamp.iso || '–');
+    return `<span title="${title}">${rel}</span>`;
+  }
+  return '–';
+}
+function watcherList(section){
+  const list = Array.isArray(section?.paths) ? section.paths : Array.isArray(section?.roots) ? section.roots : [];
+  if(!list || !list.length) return '–';
+  return list.map(item => escapeHtml(item)).join('<br>');
+}
+function watchersSectionHtml(label, section){
+  if(!section || typeof section !== 'object' || Object.keys(section).length === 0){
+    return `<div class="kv"><span>${escapeHtml(label)}</span><span>no data</span></div>`;
+  }
+  const status = String(section.status || 'unknown').toLowerCase();
+  const tone = status === 'ok' ? 'ok' : status === 'degraded' ? 'warn' : 'warn';
+  const reason = section.last_reason || '';
+  const err = section.last_error || '';
+  return [
+    `<div class="kv"><span>${escapeHtml(label)} status</span><span class="badge small ${tone}"><span class="dot"></span> ${escapeHtml(status)}</span></div>`,
+    `<div class="kv"><span>Last ok</span><span>${watcherAge(section,'ok')}</span></div>`,
+    `<div class="kv"><span>Last error</span><span>${watcherAge(section,'error')}</span></div>`,
+    reason ? `<div class="kv"><span>Reason</span><span>${escapeHtml(reason)}</span></div>` : '',
+    err ? `<div class="kv"><span>Error</span><span>${escapeHtml(err)}</span></div>` : '',
+    `<div class="kv"><span>${section.paths ? 'Paths' : 'Roots'}</span><span>${watcherList(section)}</span></div>`
+  ].filter(Boolean).join('');
+}
+let __watchersTimer = null;
+function watchersRender(state){
+  const data = state && typeof state === 'object' ? state : {};
+  window.__runtimeWatchers = data;
+  const overall = String(data.status || 'unknown').toLowerCase();
+  const tone = overall === 'ok' ? 'ok' : overall === 'degraded' ? 'warn' : 'warn';
+  const badge = document.getElementById('watchBadge');
+  if(badge){
+    const manifests = data.manifests || {};
+    const bundles = data.bundles || {};
+    const detail = overall === 'ok'
+      ? (manifests.last_ok_age_human || bundles.last_ok_age_human || '')
+      : (manifests.last_error_age_human || bundles.last_error_age_human || '');
+    const suffix = detail ? ` (${escapeHtml(detail)} ago)` : '';
+    badge.className = 'badge ' + tone;
+    badge.innerHTML = `<span class="dot"></span> Watchers: ${escapeHtml(overall)}${suffix}`;
+  }
+  const cooldown = document.getElementById('watchCooldown');
+  if(cooldown){
+    cooldown.textContent = durationHuman(data.cooldown_ms) || '–';
+  }
+  const summary = document.getElementById('watchersSummary');
+  if(summary){
+    const manifests = data.manifests || {};
+    const bundles = data.bundles || {};
+    if((!Object.keys(manifests).length) && (!Object.keys(bundles).length)){
+      summary.innerHTML = '<div class="hint">No watcher telemetry yet.</div>';
+    } else {
+      const poll = durationHuman(data.poll_interval_ms);
+      summary.innerHTML = `
+        <div class="kv"><span>Status</span><span>${escapeHtml(overall)}</span></div>
+        <div class="kv"><span>Cooldown</span><span>${durationHuman(data.cooldown_ms)}</span></div>
+        <div class="kv"><span>Poll</span><span>${poll}</span></div>
+        <div class="divider u-mt-8 u-mb-8"></div>
+        ${watchersSectionHtml('Manifests', manifests)}
+        <div class="divider u-mt-8 u-mb-8"></div>
+        ${watchersSectionHtml('Bundles', bundles)}
+      `;
+    }
+  }
+}
+function watchersLiveSet(on){
+  if(__watchersTimer){ clearInterval(__watchersTimer); __watchersTimer = null; }
+  if(on){ watchersFetch(); __watchersTimer = setInterval(watchersFetch, 5000); }
+}
+async function watchersFetch(){
+  try{
+    const r = await fetch(base + '/state/runtime/watchers', { headers: adminHeaders(false) });
+    if(r.status === 401){
+      watchersRender({ status: 'unauthorized' });
+      showToast('Set admin token to inspect runtime watchers.');
+      return;
+    }
+    if(!r.ok){ showToast(`watchers fetch failed (${r.status})`); return; }
+    const j = await r.json();
+    setReadModelState('runtime_watchers', j || {}, { clone: false, forceRender: true });
+  }catch(e){ console.error(e); showToast('watchers fetch failed'); }
+}
 async function rwAct(id, action){
   if(!id) return;
   let note = '';
@@ -2830,7 +2961,7 @@ function bindPersist(id, key, isCheckbox){ const el=document.getElementById(id);
   el.addEventListener('change', ()=>{ const v = isCheckbox ? !!el.checked : el.value; savePref(key, v); }); }
 document.addEventListener('DOMContentLoaded', ()=>{
   [['chatModel',false],['memKind',false],['profileSel',false],['hintConc',false],['hintBuf',false],['hintTimeout',false],['hintRetrK',false],['hintDiv',false],['hintLambda',false],['hintCompr',false],['hintVoteK',false],['hintCtxBudget',false],['hintCtxPer',false],['hintCtxFmt',false],['hintProv',true],['hintCtxHeader',false],['hintCtxFooter',false],['hintCtxTpl',false],['hintJoiner',false],['autoApply',true],['fbLive',true],['memBody',false],['toolBody',false],['mId',false],['mProv',false],['mUrl',false],['mSha',false],['goldProj',false],['expId',false],['expVar',false],['policyLeasesFilter',false],['crashlogFilter',false]].forEach(([id,isCb])=> bindPersist(id, id, isCb));
-  [['stagingLive',true],['rwLive',true],['contextLive',true],['policyLeasesLive',true],['serviceHealthLive',true],['crashlogLive',true]].forEach(([id,isCb])=> bindPersist(id, id, isCb));
+  [['stagingLive',true],['rwLive',true],['contextLive',true],['policyLeasesLive',true],['serviceHealthLive',true],['crashlogLive',true],['watchersLive',true]].forEach(([id,isCb])=> bindPersist(id, id, isCb));
   bindPersist('asmOverride', true, true);
   const remember = loadPref('admin.remember', false); const tok = loadPref('admin.token', '');
   const cb=document.getElementById('rememberTok'); const t=document.getElementById('adminToken'); if(cb) cb.checked = !!remember; if(t && remember && tok){ t.value = tok; __adminHeader = tok; setAdmin(true); }
@@ -2849,6 +2980,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
     ['policyLeasesLive', ()=> policyLeasesRender(window.__policyLeases)],
     ['serviceHealthLive', ()=> serviceHealthRender(window.__serviceHealth)],
     ['crashlogLive', ()=> crashlogRender(window.__crashlog)],
+    ['watchersLive', ()=> watchersRender(window.__runtimeWatchers)],
   ];
   wiring.forEach(([id, fn])=>{
     const el = document.getElementById(id);
@@ -2859,6 +2991,15 @@ document.addEventListener('DOMContentLoaded', ()=>{
   if(policyFilter){ policyFilter.addEventListener('input', ()=>{ try{ policyLeasesRender(window.__policyLeases); }catch{} }); }
   const crashFilter = document.getElementById('crashlogFilter');
   if(crashFilter){ crashFilter.addEventListener('input', ()=>{ try{ crashlogRender(window.__crashlog); }catch{} }); }
+});
+document.addEventListener('DOMContentLoaded', ()=>{
+  const cb = document.getElementById('watchersLive');
+  if(cb){
+    cb.addEventListener('change', ()=> watchersLiveSet(cb.checked));
+    watchersLiveSet(cb.checked);
+  } else {
+    watchersFetch();
+  }
 });
 document.addEventListener('DOMContentLoaded', ()=>{
   const sel=document.getElementById('hdrProfile'); if(sel){ sel.addEventListener('change', async ()=>{ try{ await fetch(base+'/governor/profile',{method:'POST',headers:{'Content-Type':'application/json'}, body: JSON.stringify({name: sel.value})}); const b=document.getElementById('govBadge'); if(b){ b.className='badge ok'; b.innerHTML='<span class=\"dot\"></span> Gov: '+sel.value; } showToast('Profile set to '+sel.value); }catch{ showToast('Profile change failed'); } }); }

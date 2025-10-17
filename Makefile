@@ -32,10 +32,10 @@ docs-build: docgen
 	mkdocs build --strict
 
 docs-check:
-	bash scripts/docs_check.sh
+	python3 scripts/docs_check.py || python scripts/docs_check.py
 
 docs-check-fast:
-	DOCS_CHECK_FAST=1 bash scripts/docs_check.sh
+	DOCS_CHECK_FAST=1 python3 scripts/docs_check.py || DOCS_CHECK_FAST=1 python scripts/docs_check.py
 
 docs-bootstrap:
 	bash scripts/bootstrap_docs.sh

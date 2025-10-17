@@ -3,6 +3,9 @@ set -euo pipefail
 
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 ROOT_DIR=$(cd "${SCRIPT_DIR}/.." && pwd)
+REPO_ROOT="$ROOT_DIR"
+source "$REPO_ROOT/scripts/lib/env_mode.sh"
+arw_env_init
 source "$SCRIPT_DIR/lib/smoke_timeout.sh"
 smoke_timeout::init "smoke-triad" 600 "SMOKE_TRIAD_TIMEOUT_SECS"
 
@@ -31,8 +34,7 @@ run_cli() {
     return
   fi
 
-  local exe="arw-cli"
-  [[ "${OS:-}" == "Windows_NT" ]] && exe="arw-cli.exe"
+  local exe="arw-cli${ARW_EXE_SUFFIX}"
   for candidate in \
     "$ROOT_DIR/target/release/$exe" \
     "$ROOT_DIR/target/debug/$exe"; do

@@ -3,6 +3,10 @@ set -euo pipefail
 
 SCRIPT_DIR=$(cd -- "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 PROJECT_ROOT=$(cd -- "$SCRIPT_DIR/.." && pwd)
+REPO_ROOT="$PROJECT_ROOT"
+source "$REPO_ROOT/scripts/lib/env_mode.sh"
+arw_env_init
+SERVER_EXE_SUFFIX="${ARW_EXE_SUFFIX:-}"
 source "$SCRIPT_DIR/lib/smoke_timeout.sh"
 
 mksmoke_root() {
@@ -209,7 +213,7 @@ ensure_server_bin() {
     return 0
   fi
 
-  candidate="${PROJECT_ROOT}/target/debug/arw-server"
+  candidate="${PROJECT_ROOT}/target/debug/arw-server${SERVER_EXE_SUFFIX}"
   if [[ ! -x "$candidate" ]]; then
     if ! command -v cargo >/dev/null 2>&1; then
       echo "[vision-smoke] cargo not found; set ARW_SERVER_BIN to a pre-built arw-server binary." >&2

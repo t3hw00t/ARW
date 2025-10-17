@@ -13,6 +13,24 @@ $ErrorActionPreference = 'Stop'
 $ScriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 $RepoRoot = (Resolve-Path (Join-Path $ScriptRoot '..')).Path
 
+# Preflight: summarize environment mode for users and agents
+try {
+  $bash = Resolve-Tool @((Join-Path ${env:ProgramFiles} 'Git\bin\bash.exe'), 'bash')
+  if ($bash) {
+    & $bash.Source (Join-Path $RepoRoot 'scripts\env\status.sh')
+  } else {
+    $arwEnvPath = Join-Path $RepoRoot '.arw-env'
+    $mode = 'unknown'
+    if (Test-Path $arwEnvPath) {
+      $line = (Get-Content $arwEnvPath | Where-Object { $_ -like 'MODE=*' } | Select-Object -First 1)
+      if ($line) { $mode = $line.Split('=')[1] }
+    }
+    Write-Host "[env] mode=$mode (bash unavailable; install Git Bash for full checks)"
+  }
+} catch {
+  Write-Warning "[env] status unavailable: $($_.Exception.Message)"
+}
+
 function Show-Help {
   Write-Host @'
 ARW Dev Utility (scripts/dev.ps1)
@@ -296,20 +314,19 @@ function Invoke-Verify {
 
   $docsSkipReason = if ($SkipDocs) { 'docs lint disabled (--fast/--skip-docs)' } else { 'Docs toolchain missing; install via `mise run bootstrap:docs` or pass -SkipDocs/-Fast' }
   $results += Invoke-Step -Name 'docs lint' -Action {
-    $docsScript = Join-Path $RepoRoot 'scripts\docs_check.sh'
-    if ((Test-Path $docsScript) -and ($null -ne $bash)) {
-      & $bash.Source ($docsScript.Replace('\','/'))
-      if ($LASTEXITCODE -ne 0) {
-        $message = 'docs_check.sh exited with {0}' -f $LASTEXITCODE
-        throw ([System.Exception]::new($message))
+    $docsScript = Join-Path $RepoRoot 'scripts\docs_check.py'
+    if (Test-Path $docsScript) {
+      $pythonLocal = Resolve-Tool @('python3','python')
+      if ($pythonLocal) {
+        Invoke-Program -Executable $pythonLocal -Arguments @($docsScript)
+        return
       }
-      return
     }
     if ($mkdocs) {
       Invoke-Program -Executable $mkdocs -Arguments @('build','--strict','-f', (Join-Path $RepoRoot 'mkdocs.yml'))
       return
     }
-    throw 'docs_check.sh and mkdocs not available'
+    throw 'docs_check.py and mkdocs not available'
   } -Required:$true -ShouldRun { -not $SkipDocs } -SkipReason $docsSkipReason
 
   if ($Ci.IsPresent) {
@@ -367,24 +384,35 @@ function Invoke-Verify {
         }
       }
 
-      $results += Invoke-Step -Name 'bash ci_snappy_bench.sh' -Action {
-        & $bash.Source (Join-Path $RepoRoot 'scripts\ci_snappy_bench.sh')
+      $results += Invoke-Step -Name 'ci snappy bench' -Action {
+        $python = Resolve-Tool @('python3', 'python')
+        if (-not $python) {
+          throw 'python not found; install Python 3 to run ci_snappy_bench.'
+        }
+        & $python.Source (Join-Path $RepoRoot 'scripts\ci_snappy_bench.py')
         if ($LASTEXITCODE -ne 0) {
-          throw "ci_snappy_bench.sh exited with $LASTEXITCODE"
+          throw "ci_snappy_bench.py exited with $LASTEXITCODE"
         }
       }
 
-      $results += Invoke-Step -Name 'bash triad_smoke.sh' -Action {
-        & $bash.Source (Join-Path $RepoRoot 'scripts\triad_smoke.sh')
-        if ($LASTEXITCODE -ne 0) {
-          throw "triad_smoke.sh exited with $LASTEXITCODE"
+      $results += Invoke-Step -Name 'triad smoke' -Action {
+        if ($env:OS -eq 'Windows_NT' -and (Test-Path (Join-Path $RepoRoot 'scripts\smoke_triad.ps1'))) {
+          & (Join-Path $RepoRoot 'scripts\smoke_triad.ps1')
+        } else {
+          & $bash.Source (Join-Path $RepoRoot 'scripts\triad_smoke.sh')
+          if ($LASTEXITCODE -ne 0) { throw "triad_smoke.sh exited with $LASTEXITCODE" }
         }
       }
 
-      $results += Invoke-Step -Name 'bash context_ci.sh' -Action {
-        & $bash.Source (Join-Path $RepoRoot 'scripts\context_ci.sh')
-        if ($LASTEXITCODE -ne 0) {
-          throw "context_ci.sh exited with $LASTEXITCODE"
+      $results += Invoke-Step -Name 'context telemetry check' -Action {
+        $python = Resolve-Tool @('python3', 'python')
+        if ($python) {
+          & $python.Source (Join-Path $RepoRoot 'scripts\context_ci.py')
+          if ($LASTEXITCODE -ne 0) { throw "context_ci.py exited with $LASTEXITCODE" }
+        } elseif ($env:OS -eq 'Windows_NT' -and (Test-Path (Join-Path $RepoRoot 'scripts\smoke_context.ps1'))) {
+          & (Join-Path $RepoRoot 'scripts\smoke_context.ps1')
+        } else {
+          throw 'python not found; install Python 3 to run context_ci.'
         }
       }
 
@@ -558,18 +586,20 @@ switch ($commandKey) {
   }
   'docs-check' {
     & (Join-Path $ScriptRoot 'docgen.ps1') @Args
-    $bash = Resolve-Tool @('bash')
-    if ($bash -and (Test-Path (Join-Path $RepoRoot 'scripts\docs_check.sh'))) {
-      $scriptPath = (Join-Path $RepoRoot 'scripts/docs_check.sh').Replace('\\','/')
-      & $bash.Source $scriptPath
-    } else {
-      $mkdocs = Resolve-Tool @('mkdocs', (Join-Path $RepoRoot '.venv\Scripts\mkdocs.exe'))
-      if ($mkdocs) {
-        Write-Warning 'bash not available; running mkdocs build --strict as a lightweight docs check.'
-        Invoke-Program -Executable $mkdocs -Arguments @('build','--strict','-f',(Join-Path $RepoRoot 'mkdocs.yml'))
-      } else {
-        Write-Warning 'Docs checks skipped (missing bash/mkdocs). Install Git Bash or MkDocs to enable full validation.'
+    $docsScript = Join-Path $RepoRoot 'scripts\docs_check.py'
+    if (Test-Path $docsScript) {
+      $pythonDocs = Resolve-Tool @('python3','python')
+      if ($pythonDocs) {
+        Invoke-Program -Executable $pythonDocs -Arguments @($docsScript)
+        return
       }
+    }
+    $mkdocs = Resolve-Tool @('mkdocs', (Join-Path $RepoRoot '.venv\Scripts\mkdocs.exe'))
+    if ($mkdocs) {
+      Write-Warning 'Python not available; running mkdocs build --strict as a lightweight docs check.'
+      Invoke-Program -Executable $mkdocs -Arguments @('build','--strict','-f',(Join-Path $RepoRoot 'mkdocs.yml'))
+    } else {
+      Write-Warning 'Docs checks skipped (missing docs_check.py & mkdocs). Install the docs toolchain or run with -SkipDocs.'
     }
   }
   'docs-cache' {

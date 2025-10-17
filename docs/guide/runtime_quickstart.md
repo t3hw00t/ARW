@@ -14,6 +14,9 @@ This walkthrough is aimed at operators who want to validate the managed runtime 
 - A Hugging Face account and a “Read” access token. Create one at <https://huggingface.co/settings/tokens>.
 - llama.cpp binaries compiled locally (see `docs/guide/runtime_matrix.md#building-llamacpp`). If you followed the standard instructions the binary lives at `cache/llama.cpp/build/bin/llama-server`.
 
+!!! note
+    Match the workspace mode to the shell you are using (e.g., `bash scripts/env/switch.sh windows-wsl` inside WSL) before running `just` commands. See [Environment Modes](../developer/environment_modes.md) for the full walkthrough.
+
 ## 1. Open the project shell
 
 ```bash
@@ -49,6 +52,39 @@ At the end of the run you will see:
 If the helper used the simulated mode (because no real binary or weights were available) you can rerun `just runtime-check` (or `just runtime-check-weights-only`) after resolving the prerequisites; cached weights are reused automatically. You can adjust the upstream sources in `configs/runtime/model_sources.json` if your organization mirrors weights internally.
 
 > Tip: the CPU stage runs only when you export `RUNTIME_SMOKE_ALLOW_CPU=1`, and the GPU stage stays in simulated mode until you also set `RUNTIME_SMOKE_ALLOW_GPU=1`.
+
+### Live Reload (manifests & bundles)
+- While you iterate, runtime manifest changes are picked up automatically. Edit `configs/runtime/runtimes.toml` (or set `ARW_RUNTIME_MANIFEST` to point at a custom file) and the supervisor reloads definitions within a few seconds.
+- Runtime bundle catalogs also auto-reload when files under `configs/runtime/*.json` or `<state>/runtime/bundles/` change. Inspect the current view at `/state/runtime/bundles` and the supervisor snapshot at `/state/runtime_supervisor`.
+
+#### Watch changes live (SSE)
+```bash
+just sse-tail prefixes='service.health,state.read.model.patch' replay='10'
+```
+or:
+```bash
+curl -N -H "Authorization: Bearer $ARW_ADMIN_TOKEN" \
+  "http://127.0.0.1:8091/events?prefix=service.health,state.read.model.patch&replay=10"
+```
+
+#### Inspect watcher summary
+```bash
+curl -s -H "Authorization: Bearer $ARW_ADMIN_TOKEN" \
+  http://127.0.0.1:8091/state/runtime/watchers | jq
+# Includes per-area status (ok/degraded), age since last reload/error, and an overall status.
+```
+
+#### Configure cooldown
+- Default cooldown is 3 minutes; override via env or config.
+- Env:
+  ```bash
+  export ARW_RUNTIME_WATCHER_COOLDOWN_MS=600000
+  ```
+- Config (`configs/default.toml`):
+  ```toml
+  [env]
+  ARW_RUNTIME_WATCHER_COOLDOWN_MS = 600000
+  ```
 
 ## Advanced options
 

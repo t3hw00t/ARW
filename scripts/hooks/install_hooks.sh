@@ -79,15 +79,22 @@ if git diff --cached --name-only | grep -E '^(interfaces/|scripts/gen_|scripts/c
 fi
 
 if [[ -z "${ARW_SKIP_DOC_STAMP:-}" ]]; then
-# If docs or mkdocs config changed, stamp metadata and build
-if git diff --cached --name-only | grep -E '^(docs/|mkdocs.yml)' >/dev/null 2>&1; then
-  echo "[pre-commit] Docs changed — stamping metadata and building"
-  if command -v python3 >/dev/null 2>&1; then
-    python3 scripts/stamp_docs_updated.py || true
-    python3 scripts/stamp_docs_type.py || true
-    git add docs/**/*.md 2>/dev/null || true
-  fi
-  bash scripts/docs_check.sh
+  if git diff --cached --name-only | grep -E '^(docs/|mkdocs.yml)' >/dev/null 2>&1; then
+    echo "[pre-commit] Docs changed — stamping metadata and building"
+    if command -v python3 >/dev/null 2>&1; then
+      python3 scripts/stamp_docs_updated.py || true
+      python3 scripts/stamp_docs_type.py || true
+      git add docs/**/*.md 2>/dev/null || true
+    fi
+    if command -v python3 >/dev/null 2>&1; then
+      python3 scripts/docs_check.py
+    elif command -v python >/dev/null 2>&1; then
+      python scripts/docs_check.py
+    elif command -v mkdocs >/dev/null 2>&1; then
+      mkdocs build --strict -f mkdocs.yml
+    else
+      echo "[pre-commit] docs_check.py skipped (missing Python/mkdocs)"
+    fi
   fi
 else
   echo "[pre-commit] Doc stamp skipped (ARW_SKIP_DOC_STAMP set)"

@@ -3,13 +3,34 @@ set -euo pipefail
 
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 ROOT_DIR=$(cd "$SCRIPT_DIR/.." && pwd)
+REPO_ROOT="$ROOT_DIR"
+source "$REPO_ROOT/scripts/lib/env_mode.sh"
+arw_env_init
 source "$SCRIPT_DIR/lib/smoke_timeout.sh"
 smoke_timeout::init "triad-smoke" 600 "TRIAD_SMOKE_TIMEOUT_SECS"
+
+is_truthy() {
+  case "$(echo "${1:-}" | tr '[:upper:]' '[:lower:]')" in
+    1|true|yes|on) return 0 ;;
+    *) return 1 ;;
+  esac
+}
 
 PORT="${ARW_TRIAD_SMOKE_PORT:-18181}"
 STATE_DIR="$(mktemp -d)"
 LOG_FILE="$(mktemp)"
-SERVER_BIN="${ROOT_DIR}/target/debug/arw-server"
+exe_suffix="${ARW_EXE_SUFFIX:-}"
+SERVER_BIN="${ROOT_DIR}/target/debug/arw-server${exe_suffix}"
+BUILD_PROFILE="debug"
+
+release_candidate="${ROOT_DIR}/target/release/arw-server${exe_suffix}"
+if is_truthy "${RUNTIME_SMOKE_USE_RELEASE:-0}"; then
+  SERVER_BIN="$release_candidate"
+  BUILD_PROFILE="release"
+elif [[ ! -x "$SERVER_BIN" && -x "$release_candidate" ]]; then
+  SERVER_BIN="$release_candidate"
+  BUILD_PROFILE="release"
+fi
 ADMIN_TOKEN="${ARW_TRIAD_SMOKE_ADMIN_TOKEN:-triad-smoke-token}"
 
 cleanup() {
@@ -26,8 +47,12 @@ trap cleanup EXIT
 
 if [[ ! -x "$SERVER_BIN" ]]; then
   build_log="$(mktemp -t triad-smoke-build.XXXX.log)"
-  echo "[triad-smoke] building arw-server binary" >&2
-  if ! (cd "$ROOT_DIR" && cargo build -p arw-server &>"$build_log"); then
+  echo "[triad-smoke] building arw-server binary ($BUILD_PROFILE)" >&2
+  build_cmd=(cargo build -p arw-server)
+  if [[ "$BUILD_PROFILE" == "release" ]]; then
+    build_cmd+=(--release)
+  fi
+  if ! (cd "$ROOT_DIR" && "${build_cmd[@]}" &>"$build_log"); then
     echo "[triad-smoke] cargo build failed; log preserved at $build_log" >&2
     tail -n 200 "$build_log" >&2 || true
     exit 1
