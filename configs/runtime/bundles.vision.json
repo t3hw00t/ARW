@@ -38,7 +38,87 @@
       "metadata": {
         "process": {
           "command": "llava.cpp",
-          "health_probe": "/health"
+          "args": [
+            "--server",
+            "--host",
+            "127.0.0.1",
+            "--port",
+            "8090",
+            "--vision-mode",
+            "describe"
+          ],
+          "env": {
+            "LLAVA_ENABLE_STREAMING": "1"
+          },
+          "health": {
+            "url": "http://127.0.0.1:8090/health",
+            "method": "GET",
+            "expect_status": 200,
+            "timeout_ms": 2500
+          }
+        },
+        "consent": {
+          "required": true,
+          "modalities": ["vision"],
+          "note": "Camera capture requires the launcher consent overlay before streaming frames."
+        }
+      }
+    },
+    {
+      "id": "llava.cpp-preview/linux-x86_64-cpu",
+      "name": "llava.cpp Preview (Linux x86_64 CPU Fallback)",
+      "description": "CPU-friendly llava.cpp build for describe-only workflows on hosts without CUDA acceleration.",
+      "adapter": "process",
+      "modalities": ["vision"],
+      "accelerator": "cpu",
+      "profiles": ["describe-lite", "describe-balanced"],
+      "platforms": [
+        {
+          "os": "linux",
+          "arch": "x86_64",
+          "min_version": "kernel 5.15",
+          "notes": "Requires glibc ≥ 2.35. Intended for quick describe runs when a GPU is unavailable."
+        }
+      ],
+      "artifacts": [
+        {
+          "kind": "archive",
+          "format": "tar.zst",
+          "notes": "Publishing pipeline will populate URLs + checksums."
+        }
+      ],
+      "notes": [
+        "Optimised for describe-only inference with reduced batch size and quantized weights.",
+        "Supervisor automatically throttles describe requests to avoid CPU saturation.",
+        "Upgrade to the CUDA bundle for interactive workflows or multimodal planning."
+      ],
+      "license": "AGPL-3.0-or-later",
+      "support": {
+        "min_glibc": "2.35",
+        "driver_notes": "No GPU required; vision describe latency is higher than the CUDA bundle."
+      },
+      "metadata": {
+        "process": {
+          "command": "llava.cpp",
+          "args": [
+            "--server",
+            "--host",
+            "127.0.0.1",
+            "--port",
+            "8091",
+            "--vision-mode",
+            "describe",
+            "--cpu"
+          ],
+          "env": {
+            "LLAVA_CPU_THREADS": "8"
+          },
+          "health": {
+            "url": "http://127.0.0.1:8091/health",
+            "method": "GET",
+            "expect_status": 200,
+            "timeout_ms": 3000
+          }
         },
         "consent": {
           "required": true,

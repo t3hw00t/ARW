@@ -38,7 +38,87 @@
       "metadata": {
         "process": {
           "command": "llama.cpp",
-          "health_probe": "/health"
+          "args": [
+            "--server",
+            "--host",
+            "127.0.0.1",
+            "--port",
+            "8080"
+          ],
+          "env": {
+            "LLAMA_SERVER_AUTOSTART": "1"
+          },
+          "health": {
+            "url": "http://127.0.0.1:8080/health",
+            "method": "GET",
+            "expect_status": 200,
+            "timeout_ms": 2000
+          }
+        },
+        "consent": {
+          "required": false,
+          "modalities": ["text"],
+          "note": "Text-only runtime; no additional consent overlay is required."
+        }
+      }
+    },
+    {
+      "id": "llama.cpp-preview/linux-x86_64-cuda",
+      "name": "llama.cpp Preview (Linux x86_64 CUDA)",
+      "description": "CUDA-enabled llama.cpp build tuned for high-throughput inference with prompt-cache warming.",
+      "adapter": "process",
+      "modalities": ["text"],
+      "accelerator": "gpu_cuda",
+      "profiles": ["turbo", "performance", "balanced"],
+      "platforms": [
+        {
+          "os": "linux",
+          "arch": "x86_64",
+          "min_version": "kernel 5.15",
+          "notes": "Requires glibc ≥ 2.35, CUDA ≥ 12.2, and NVIDIA driver ≥ 535."
+        }
+      ],
+      "artifacts": [
+        {
+          "kind": "archive",
+          "format": "tar.zst",
+          "notes": "Release tooling will inject download URL + checksum during publishing."
+        }
+      ],
+      "notes": [
+        "Ships llama.cpp linked against cuBLAS with tensor core acceleration.",
+        "Supervisor enables prompt cache warm-up and exposes GPU memory telemetry.",
+        "Set LLAMA_CUDA_VISIBLE_DEVICES to control device binding when multiple GPUs are present."
+      ],
+      "license": "MIT",
+      "support": {
+        "min_glibc": "2.35",
+        "driver_notes": "Validated against NVIDIA driver 535+ with CUDA 12.2 runtime."
+      },
+      "metadata": {
+        "process": {
+          "command": "llama.cpp",
+          "args": [
+            "--server",
+            "--host",
+            "127.0.0.1",
+            "--port",
+            "8081",
+            "--tensor-split",
+            "auto",
+            "--gpu-layers",
+            "99"
+          ],
+          "env": {
+            "LLAMA_CUDA_VISIBLE_DEVICES": "0",
+            "LLAMA_CUDA_FORCE_MMAP": "1"
+          },
+          "health": {
+            "url": "http://127.0.0.1:8081/health",
+            "method": "GET",
+            "expect_status": 200,
+            "timeout_ms": 2000
+          }
         },
         "consent": {
           "required": false,

@@ -17,6 +17,9 @@ use tokio::sync::RwLock;
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, info, warn};
 
+#[cfg(test)]
+use arw_runtime::RuntimeAccelerator;
+
 use crate::runtime::{RuntimeRegistry, RuntimeRestoreError};
 
 static DEFAULT_HEALTH_INTERVAL_MS: Lazy<u64> = Lazy::new(|| {
@@ -190,8 +193,47 @@ impl RuntimeSupervisor {
         &self,
         definition: ManagedRuntimeDefinition,
     ) -> Result<(), SupervisorError> {
-        let runtime_id = definition.descriptor.id.clone();
-        let new_definition = definition;
+        let mut new_definition = definition;
+        let runtime_id = new_definition.descriptor.id.clone();
+        let adapter_metadata = {
+            let guard = self.adapters.read().await;
+            guard
+                .get(&new_definition.adapter_id)
+                .map(|adapter| adapter.metadata())
+        };
+        if let Some(metadata) = adapter_metadata {
+            if new_definition.descriptor.modalities.is_empty() && !metadata.modalities.is_empty() {
+                new_definition.descriptor.modalities = metadata.modalities.clone();
+            }
+            if new_definition.descriptor.accelerator.is_none() {
+                new_definition.descriptor.accelerator = metadata.default_accelerator.clone();
+            }
+            if new_definition.descriptor.profile.is_none() {
+                if let Some(default_profile) = metadata.default_profiles.first().cloned() {
+                    new_definition.descriptor.profile = Some(default_profile);
+                }
+            }
+            for (key, value) in metadata.tags.iter() {
+                new_definition
+                    .descriptor
+                    .tags
+                    .entry(key.clone())
+                    .or_insert_with(|| value.clone());
+            }
+            if metadata.default_profiles.len() > 1
+                && !new_definition
+                    .descriptor
+                    .tags
+                    .contains_key("adapter.default_profiles")
+            {
+                if let Ok(serialized) = serde_json::to_string(&metadata.default_profiles) {
+                    new_definition
+                        .descriptor
+                        .tags
+                        .insert("adapter.default_profiles".into(), serialized);
+                }
+            }
+        }
         let auto_start = new_definition.auto_start;
         let preset = new_definition.preset.clone();
         self.registry
@@ -965,6 +1007,22 @@ impl RuntimeAdapter for ProcessRuntimeAdapter {
         "process"
     }
 
+    fn metadata(&self) -> arw_runtime::RuntimeAdapterMetadata {
+        arw_runtime::RuntimeAdapterMetadata {
+            modalities: vec![RuntimeModality::Text],
+            tags: vec![
+                ("adapter.kind".to_string(), "process".to_string()),
+                (
+                    "adapter.description".to_string(),
+                    "Managed process runtime".to_string(),
+                ),
+            ]
+            .into_iter()
+            .collect(),
+            ..Default::default()
+        }
+    }
+
     async fn prepare(
         &self,
         ctx: arw_runtime::PrepareContext<'_>,
@@ -1238,6 +1296,71 @@ mod tests {
         }
     }
 
+    #[derive(Default)]
+    struct MetadataAdapter;
+
+    #[async_trait]
+    impl RuntimeAdapter for MetadataAdapter {
+        fn id(&self) -> &'static str {
+            "metadata"
+        }
+
+        fn metadata(&self) -> arw_runtime::RuntimeAdapterMetadata {
+            arw_runtime::RuntimeAdapterMetadata {
+                modalities: vec![RuntimeModality::Vision],
+                default_accelerator: Some(RuntimeAccelerator::GpuCuda),
+                default_profiles: vec!["default".to_string(), "burst".to_string()],
+                tags: vec![
+                    ("adapter.kind".to_string(), "metadata".to_string()),
+                    (
+                        "adapter.description".to_string(),
+                        "vision runtime metadata defaults".to_string(),
+                    ),
+                ]
+                .into_iter()
+                .collect(),
+            }
+        }
+
+        async fn prepare(
+            &self,
+            ctx: arw_runtime::PrepareContext<'_>,
+        ) -> Result<arw_runtime::PreparedRuntime, AdapterError> {
+            Ok(arw_runtime::PreparedRuntime {
+                command: ctx.descriptor.id.clone(),
+                args: Vec::new(),
+                runtime_id: Some(ctx.descriptor.id.clone()),
+            })
+        }
+
+        async fn launch(
+            &self,
+            prepared: arw_runtime::PreparedRuntime,
+        ) -> Result<arw_runtime::RuntimeHandle, AdapterError> {
+            Ok(arw_runtime::RuntimeHandle {
+                id: prepared
+                    .runtime_id
+                    .unwrap_or_else(|| prepared.command.clone()),
+                pid: Some(6001),
+            })
+        }
+
+        async fn shutdown(&self, _handle: arw_runtime::RuntimeHandle) -> Result<(), AdapterError> {
+            Ok(())
+        }
+
+        async fn health(
+            &self,
+            handle: &arw_runtime::RuntimeHandle,
+        ) -> Result<arw_runtime::RuntimeHealthReport, AdapterError> {
+            let mut status = RuntimeStatus::new(handle.id.clone(), RuntimeState::Ready)
+                .with_summary("Runtime healthy")
+                .touch();
+            status.set_severity(RuntimeSeverity::Info);
+            Ok(arw_runtime::RuntimeHealthReport { status })
+        }
+    }
+
     #[tokio::test]
     async fn supervisor_reports_health() {
         let bus = Bus::new(128);
@@ -1477,5 +1600,63 @@ mod tests {
             .get("fake-runtime")
             .is_none());
         assert!(registry.descriptor("fake-runtime").await.is_none());
+    }
+
+    #[tokio::test]
+    async fn adapter_metadata_fills_missing_descriptor_fields() {
+        let bus = Bus::new(32);
+        let registry = Arc::new(RuntimeRegistry::new(bus.clone()));
+        let supervisor = RuntimeSupervisor::new(registry.clone(), bus.clone()).await;
+        let adapter = Arc::new(MetadataAdapter);
+        supervisor.register_adapter(adapter).await;
+
+        let descriptor = RuntimeDescriptor::new("metadata-runtime", "metadata");
+        supervisor
+            .install_definition(ManagedRuntimeDefinition::new(
+                descriptor,
+                "metadata".into(),
+                false,
+                None,
+                None,
+            ))
+            .await
+            .expect("definition install");
+
+        let snapshot = registry.snapshot().await;
+        let record = snapshot
+            .runtimes
+            .iter()
+            .find(|r| r.descriptor.id == "metadata-runtime")
+            .expect("runtime present");
+        assert_eq!(record.descriptor.modalities, vec![RuntimeModality::Vision]);
+        assert_eq!(
+            record.descriptor.accelerator,
+            Some(RuntimeAccelerator::GpuCuda)
+        );
+        assert_eq!(record.descriptor.profile.as_deref(), Some("default"));
+        assert_eq!(
+            record
+                .descriptor
+                .tags
+                .get("adapter.default_profiles")
+                .map(String::as_str),
+            Some("[\"default\",\"burst\"]")
+        );
+        assert_eq!(
+            record
+                .descriptor
+                .tags
+                .get("adapter.kind")
+                .map(String::as_str),
+            Some("metadata")
+        );
+        assert_eq!(
+            record
+                .descriptor
+                .tags
+                .get("adapter.description")
+                .map(String::as_str),
+            Some("vision runtime metadata defaults")
+        );
     }
 }

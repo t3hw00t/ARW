@@ -38,12 +38,91 @@
       "metadata": {
         "process": {
           "command": "whisper.cpp",
-          "health_probe": "/health"
+          "args": [
+            "--server",
+            "--host",
+            "127.0.0.1",
+            "--port",
+            "8070",
+            "--model",
+            "ggml-base.en.bin"
+          ],
+          "env": {
+            "WHISPER_CPP_ENABLE_VAD": "1"
+          },
+          "health": {
+            "url": "http://127.0.0.1:8070/health",
+            "method": "GET",
+            "expect_status": 200,
+            "timeout_ms": 2000
+          }
         },
         "consent": {
           "required": true,
           "modalities": ["audio"],
           "note": "Microphone capture triggers the launcher consent overlay and lease approval."
+        }
+      }
+    },
+    {
+      "id": "piper-preview/linux-x86_64-cpu",
+      "name": "Piper TTS Preview (Linux x86_64)",
+      "description": "Piper text-to-speech bundle for local voice synthesis with managed runtime controls.",
+      "adapter": "process",
+      "modalities": ["audio"],
+      "accelerator": "cpu",
+      "profiles": ["speech", "narration"],
+      "platforms": [
+        {
+          "os": "linux",
+          "arch": "x86_64",
+          "min_version": "kernel 5.15",
+          "notes": "Runs fully on CPU; optional GPU acceleration will be supplied in a later catalog revision."
+        }
+      ],
+      "artifacts": [
+        {
+          "kind": "archive",
+          "format": "tar.zst",
+          "notes": "Pipeline will inject download coordinates when the signed bundle is published."
+        }
+      ],
+      "notes": [
+        "Includes the Piper runtime with the default en_US voice preset.",
+        "Supervisor exposes synthesis latency telemetry so Launcher can surface responsiveness hints.",
+        "Pair with Whisper.cpp for full duplex audio workflows."
+      ],
+      "license": "MIT",
+      "support": {
+        "min_glibc": "2.35",
+        "driver_notes": "No GPU required; CPU synthesis latency depends on voice preset."
+      },
+      "metadata": {
+        "process": {
+          "command": "piper",
+          "args": [
+            "--server",
+            "--host",
+            "127.0.0.1",
+            "--port",
+            "8071",
+            "--voice",
+            "en_US-libritts-high"
+          ],
+          "env": {
+            "PIPER_CACHE_DIR": "{{STATE_DIR}}/runtime/piper-cache"
+          },
+          "health": {
+            "url": "http://127.0.0.1:8071/health",
+            "method": "GET",
+            "expect_status": 200,
+            "timeout_ms": 2000
+          }
+        },
+        "consent": {
+          "required": false,
+          "modalities": ["audio"],
+          "note": "Generates synthetic audio; no microphone capture is involved."
         }
       }
     }

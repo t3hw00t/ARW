@@ -23,6 +23,8 @@ const CONSENT_REQUIRED_KEY: &str = "consent.required";
 const CONSENT_MODALITIES_KEY: &str = "consent.modalities";
 const CONSENT_MODALITIES_FLAT_KEY: &str = "consent.modalities_flat";
 const CONSENT_NOTE_KEY: &str = "consent.note";
+const ADAPTER_DEFAULT_PROFILES_KEY: &str = "adapter.default_profiles";
+const BUNDLE_PROFILES_KEY: &str = "bundle.profiles";
 
 /// Ensure the runtime supervisor knows about any bundles staged on disk.
 pub async fn reconcile(
@@ -103,6 +105,16 @@ fn definition_from_installation(
     descriptor.profile = bundle.profiles.first().cloned();
     descriptor.modalities = bundle.modalities.clone();
     descriptor.accelerator = bundle.accelerator.clone();
+    if !bundle.profiles.is_empty() {
+        if let Ok(serialized_profiles) = serde_json::to_string(&bundle.profiles) {
+            descriptor
+                .tags
+                .insert(BUNDLE_PROFILES_KEY.into(), serialized_profiles.clone());
+            descriptor
+                .tags
+                .insert(ADAPTER_DEFAULT_PROFILES_KEY.into(), serialized_profiles);
+        }
+    }
 
     descriptor
         .tags
@@ -302,6 +314,8 @@ fn consent_tags_from_metadata(metadata: Option<&Value>) -> Option<BTreeMap<Strin
 #[cfg(test)]
 mod tests {
     use super::*;
+    use arw_core::runtime_bundles::RuntimeBundle;
+    use arw_runtime::{RuntimeAccelerator, RuntimeModality};
     use serde_json::json;
 
     #[test]
@@ -361,5 +375,87 @@ mod tests {
         assert!(consent_tags_from_metadata(Some(&empty_obj)).is_none());
         let invalid = json!({"consent": []});
         assert!(consent_tags_from_metadata(Some(&invalid)).is_none());
+    }
+
+    #[tokio::test]
+    async fn definition_from_bundle_preserves_profile_tags() {
+        let bundle = RuntimeBundle {
+            id: "bundle-test".into(),
+            name: "Test Bundle".into(),
+            description: None,
+            adapter: "process".into(),
+            modalities: vec![RuntimeModality::Text],
+            accelerator: Some(RuntimeAccelerator::Cpu),
+            profiles: vec!["balanced".into(), "performance".into()],
+            platforms: Vec::new(),
+            artifacts: Vec::new(),
+            notes: Vec::new(),
+            license: None,
+            support: None,
+            metadata: Some(json!({
+                "process": {
+                    "command": "/bin/echo"
+                }
+            })),
+        };
+
+        let installation = RuntimeBundleInstallation {
+            id: bundle.id.clone(),
+            name: Some(bundle.name.clone()),
+            adapter: Some(bundle.adapter.clone()),
+            profiles: bundle.profiles.clone(),
+            modalities: bundle.modalities.clone(),
+            accelerator: bundle.accelerator.clone(),
+            channel: Some("preview".into()),
+            installed_at: None,
+            imported_at: None,
+            source: None,
+            metadata_path: None,
+            artifacts: Vec::new(),
+            root: Some("state/runtime/bundles/test".into()),
+            signature: None,
+            bundle: Some(bundle.clone()),
+        };
+
+        let (_, definition) =
+            definition_from_installation(&installation).expect("definition should build");
+
+        let bus = arw_events::Bus::new(8);
+        let registry = Arc::new(crate::runtime::RuntimeRegistry::new(bus.clone()));
+        let supervisor =
+            crate::runtime_supervisor::RuntimeSupervisor::new(registry.clone(), bus).await;
+        supervisor
+            .install_builtin_adapters()
+            .await
+            .expect("process adapter registered");
+
+        supervisor
+            .install_definition(definition)
+            .await
+            .expect("definition install");
+
+        let snapshot = registry.snapshot().await;
+        let record = snapshot
+            .runtimes
+            .iter()
+            .find(|r| r.descriptor.id == bundle.id)
+            .expect("runtime present");
+        assert_eq!(record.descriptor.profile.as_deref(), Some("balanced"));
+        assert_eq!(
+            record
+                .descriptor
+                .tags
+                .get(BUNDLE_PROFILES_KEY)
+                .map(String::as_str),
+            Some("[\"balanced\",\"performance\"]")
+        );
+        assert_eq!(
+            record
+                .descriptor
+                .tags
+                .get(ADAPTER_DEFAULT_PROFILES_KEY)
+                .map(String::as_str),
+            Some("[\"balanced\",\"performance\"]")
+        );
     }
 }

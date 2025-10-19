@@ -1,8 +1,7 @@
-use std::collections::BTreeMap;
-
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::collections::BTreeMap;
 
 pub type RuntimeId = String;
 
@@ -376,12 +375,24 @@ pub struct RuntimeHealthReport {
     pub status: RuntimeStatus,
 }
 
+#[derive(Clone, Debug, Default)]
+pub struct RuntimeAdapterMetadata {
+    /// Modalities supported by default when manifests omit them.
+    pub modalities: Vec<RuntimeModality>,
+    /// Preferred accelerator when descriptors do not specify one.
+    pub default_accelerator: Option<RuntimeAccelerator>,
+    /// Suggested profile slugs (first entry treated as preferred default).
+    pub default_profiles: Vec<String>,
+    /// Additional descriptor tags (only applied when missing).
+    pub tags: BTreeMap<String, String>,
+}
+
 #[async_trait::async_trait]
 pub trait RuntimeAdapter: Send + Sync {
     fn id(&self) -> &'static str;
 
-    fn supports(&self) -> Vec<RuntimeModality> {
-        Vec::new()
+    fn metadata(&self) -> RuntimeAdapterMetadata {
+        RuntimeAdapterMetadata::default()
     }
 
     async fn prepare(&self, ctx: PrepareContext<'_>) -> Result<PreparedRuntime, AdapterError>;
