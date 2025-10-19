@@ -5,7 +5,8 @@
 - When the execution harness explicitly grants a lighter flow or pre-approved permissions, treat that as the governing instruction and state the assumption in your response.
 - On Windows, run commands via PowerShell (`["pwsh","-NoLogo","-NoProfile","-Command", ...]`), prefer repo `.ps1`/`.cmd` helpers for build/test flows, translate `python3` invocations to `py -3`/`python`, and document fallbacks (e.g., `Select-String`) when `rg` is unavailable. Watch for CRLF issues and unblock scripts before execution. Inside WSL, keep the checkout under `/home`, run `bash scripts/env/switch.sh windows-wsl` before builds/tests, and switch back on the host to avoid cross-environment artefacts.
 - Implement the smallest DIFF once the PLAN is approved/self‑reviewed.
-- Run fmt, clippy -D warnings, and tests when source code changes; summarize results. For docs-only or config text tweaks, state the skipped checks and why they are safe.
+- Call out the planned checks before coding; default to `scripts/dev.{sh,ps1} verify --fast` for Rust edits and opt into `--with-launcher` / `--ci` when UI or cross-cutting changes demand it. Targeted crate-level runs are fine when you justify them explicitly.
+- Run fmt, clippy -D warnings, and tests when source code changes; summarize which commands ran, their outcomes, and why anything failed or was skipped. Retry flaky tests once, then document the failure and mitigation instead of silently omitting it.
 - Update rustdoc and docs; add examples where useful.
 - Respect default‑deny for file writes, shell, and network unless in scope.
 - Keep diffs focused (<~300 lines) and avoid opportunistic refactors.

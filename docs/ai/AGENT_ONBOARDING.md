@@ -1,11 +1,11 @@
 # Agent Onboarding
-Updated: 2025-10-17
+Updated: 2025-10-19
 Type: Reference
 
 Microsummary: Fast orientation for assistants working in the ARW repo—where to look, what to run, and how to respond safely.
 
 ## Start Here
-- Read `docs/ai/ASSISTED_DEV_GUIDE.md` for the PLAN → DIFF → tests loop and the lightweight checklist.
+- Read `docs/ai/ASSISTED_DEV_GUIDE.md` for the PLAN → DIFF → tests loop, the lightweight checklist, and the new “Selecting Builds & Tests” matrix that maps task scope to the right commands.
 - Follow `docs/ai/ai_prompts.md` for safety posture, then cite any harness-provided overrides in your responses.
 - Skim `docs/ai/REPO_MAP.md` for the workspace layout before drilling into large surfaces like `README.md`.
 - Treat harness or user instructions as the source of truth when they differ from the defaults in these docs. Note the deviation so the next agent has the same context.
@@ -51,7 +51,8 @@ Microsummary: Fast orientation for assistants working in the ARW repo—where to
 - Link to canonical docs rather than pasting large excerpts; the site is generated from `docs/` via MkDocs.
 
 ## Safety & Reporting
-- State skipped checks and their rationale, especially when harness policy blocks fmt/clippy/tests.
+- State skipped checks and their rationale, especially when harness policy blocks fmt/clippy/tests; align with the “Reporting Results” section in `docs/ai/ASSISTED_DEV_GUIDE.md`.
+- List every command you ran (e.g., `scripts/dev.ps1 verify --fast`, `cargo nextest run -p runtime`) with pass/fail status, plus a short error summary when something breaks.
 - Call out security or privacy impact (usually “none”) and flag any deferred follow-up for maintainers.
 - Keep diffs focused (< ~300 lines) and avoid opportunistic refactors unless the issue demands a broader change.
-- Remember that CI layers on registry sync (`scripts/check_feature_integrity.py`, `scripts/check_system_components_integrity.py`) plus triad/runtime smokes; plan those runs when your changes touch the corresponding surfaces.
+- Remember that CI layers on registry sync (`scripts/check_feature_integrity.py`, `scripts/check_system_components_integrity.py`) plus triad/runtime smokes; plan those runs when your changes touch the corresponding surfaces, and document any explicit skips.

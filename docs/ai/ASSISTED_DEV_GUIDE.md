@@ -1,5 +1,5 @@
 # Assisted, Iterative Coding – Working Agreement
-Updated: 2025-10-17
+Updated: 2025-10-19
 Type: Reference
 
 Microsummary: Small, safe changes with a written PLAN → minimal DIFF → tests → docs. Default‑deny risky edits. Stable.
@@ -25,6 +25,36 @@ Use `scripts/dev.{sh,ps1} verify` to run the standard fmt → clippy → tests �
 Need a lighter docs lint for fast feedback? Run `DOCS_CHECK_FAST=1 python3 scripts/docs_check.py` (use `py -3` on Windows) (or pass `--fast`) to skip the mkdocs build and deep scans; follow up with the full run before merging when time permits. Prefer tasks? `mise run docs:check` and `mise run docs:check:fast` wrap those helpers.
 Missing MkDocs or Python deps? `mise run bootstrap:docs` (or `bash scripts/bootstrap_docs.sh`) installs the pinned stack defined in `requirements/docs.txt`.
 Need offline installs? Run `mise run docs:cache:build` or `scripts/dev.{sh,ps1} docs-cache` ahead of time (or grab the `docs-wheels.tar.gz` asset from releases) and point `bootstrap_docs.sh` at the extracted wheel directory with `--wheel-dir`.
+
+### Selecting Builds & Tests
+Plan the minimum set of checks before editing so you can state them in the PLAN and final status.
+
+| Change scope | Minimum checks | Notes |
+| --- | --- | --- |
+| Docs-only, metadata, or comments | None required | Spell out the skip in your status (`docs-only; skipped fmt/clippy/tests`). Run `scripts/dev.{sh,ps1} verify --fast` if unsure about indirect effects. |
+| Rust code limited to one crate or tool | `scripts/dev.{sh,ps1} verify --fast` **or** targeted `cargo fmt`, `cargo clippy --all-targets --all-features -p <crate>`, `cargo nextest run -p <crate>` | Prefer the wrapper if multiple crates appear in the PLAN; justify any targeted runs in the summary. |
+| Cross-crate Rust changes, new features, or behavioral fixes | `scripts/dev.{sh,ps1} verify` | Adds docs lint + smoke coverage; escalate to `--ci` when touching registry integrity, runtime, or docs generators. |
+| Launcher / UI (Tauri, TypeScript, CSS) | `scripts/dev.{sh,ps1} verify --with-launcher` or `scripts/dev.{sh,ps1} verify --ci` | Ensure Node.js is available; call out launcher skips that stem from missing Node. |
+| Dependency bumps, build scripts, migrations | Fresh build (`scripts/dev.{sh,ps1} build`) then `scripts/dev.{sh,ps1} verify` | Note any manual steps (e.g., `npm install`, `py -3 -m pip install -r requirements/...`) in the PLAN so reviewers can reproduce them. |
+
+If a command writes artefacts you do not intend to commit, clean them before finishing (`cargo clean -p <crate>`, remove generated files) or document why they remain.
+
+### Handling Flaky or Long-Running Checks
+- Retry a failing test once to rule out transient issues (`cargo nextest run --filter "<name>"` or rerun the helper). Capture the command and result so reviewers understand the outcome.
+- When a check is known flaky or exceeds the harness time limit, stop, document the behavior (test name, command, error snippet), and ask the maintainer whether to proceed. Do **not** silently skip.
+- For multi-hour suites, coordinate with the user before running them. Offer a scoped alternative (e.g., package-only nextest run, mocked docs build) and state the trade-offs.
+- If an environment gap (missing Node/MkDocs/Python) prevents a check, attempt the documented bootstrap step once. If it still fails, record the command, failure, and remediation attempt in your status.
+
+### Reporting Results
+- In the final response, list each command you ran (`scripts/dev.ps1 verify --fast`, `cargo nextest run -p <crate>`) and whether it passed, failed, or was skipped.
+- Include a short error summary for failed checks (test name, assertion) and the follow-up you proposed.
+- When you skip a check, state the justification (“config-only change; verify skipped”) and the risk so maintainers can decide whether to rerun it.
+- Attach links or reference paths instead of dumping large logs; keep snippets to the failing assertion or panic line.
+
+### Dependency & Environment Adjustments
+- After modifying `Cargo.toml`, run `cargo check` (or `scripts/dev.{sh,ps1} build`) so lockfiles regenerate under the same command the maintainers expect. For Python/Node manifest edits, run the matching installer (`py -3 -m pip install -r requirements/<file>.txt`, `npm install`, `pnpm install`) and include the command in the PLAN.
+- Document environment variables or feature flags you touched (`ARW_VERIFY_INCLUDE_LAUNCHER=1`, `DOCS_CHECK_FAST=1`) so the next agent can mirror your setup.
+- When scripts such as formatters or generators (`just fmt`, `npm run lint`) auto-run builds or tests, mention that they execute those steps implicitly and whether additional verification is still needed.
 
 ## Windows Execution Notes
 - Harness default: call PowerShell directly—e.g., `["pwsh","-NoLogo","-NoProfile","-Command", ...]` when invoking `shell`. Only pivot to Git Bash/WSL after confirming they exist. Use PowerShell’s `&` to run scripts (`& .\scripts\dev.ps1 verify`).
