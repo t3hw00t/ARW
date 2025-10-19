@@ -3,7 +3,7 @@ title: Persona & Self-Model RFC (Draft)
 ---
 
 # Persona & Self-Model RFC (Draft)
-Updated: 2025-10-18
+Updated: 2025-10-19
 Status: Draft
 Type: Proposal
 
@@ -126,6 +126,9 @@ All persona actions emit bus events:
   - `confirmation_rate` (explicit acknowledgments)
   - `misalignment_flags` (when persona deviates from preferences)
 - Telemetry aggregation runs through the persona service and publishes sanitized metrics; raw samples are ephemeral (in-memory, no disk persistence) unless retention is explicitly requested via policy.
+- `GET /state/persona/{id}/vibe_metrics` exposes the aggregated counters (totals, per-signal counts, averages, last updated) when consent and leases are satisfied; responses return `412` when telemetry is disabled for the persona.
+- `GET /state/persona/{id}/vibe_history` returns the latest feedback samples (default 50) for dashboards.
+- Admins may `POST /admin/persona/{id}/telemetry` when they hold `persona:manage` to flip consent or update scope defaults without crafting proposals.
 
 ## Memory & Self-Model Bridge
 - Memory overlay tags episodic/semantic entries with persona relevancy scores.

@@ -117,6 +117,18 @@ pub struct MemoryEmbedBackfillSummary {
     pub pending_estimate: Option<u64>,
 }
 
+#[derive(Clone, Serialize, Default)]
+pub struct PersonaTelemetrySummary {
+    pub total: u64,
+    pub by_persona: BTreeMap<String, PersonaTelemetryPersonaSummary>,
+}
+
+#[derive(Clone, Serialize, Default)]
+pub struct PersonaTelemetryPersonaSummary {
+    pub total: u64,
+    pub by_signal: BTreeMap<String, u64>,
+}
+
 #[derive(Clone, Serialize)]
 pub struct MetricsSummary {
     pub events: EventsSummary,
@@ -129,6 +141,7 @@ pub struct MetricsSummary {
     pub modular: ModularSummary,
     pub worker: WorkerSummary,
     pub egress: EgressSummary,
+    pub persona: PersonaTelemetrySummary,
 }
 
 #[derive(Clone, Serialize, Default)]
@@ -319,6 +332,49 @@ impl MemoryEmbedBackfillCounters {
             last_at: self.last_at.clone(),
             last_error: self.last_error.clone(),
             pending_estimate: self.pending_estimate,
+        }
+    }
+}
+
+#[derive(Default)]
+struct PersonaTelemetryCounters {
+    total: u64,
+    by_persona: BTreeMap<String, PersonaTelemetryPersonaCounters>,
+}
+
+#[derive(Default)]
+struct PersonaTelemetryPersonaCounters {
+    total: u64,
+    by_signal: BTreeMap<String, u64>,
+}
+
+impl PersonaTelemetryCounters {
+    fn record(&mut self, persona_id: &str, signal: &str) {
+        let entry = self.by_persona.entry(persona_id.to_string()).or_default();
+        entry.total = entry.total.saturating_add(1);
+        let label = if signal.is_empty() {
+            "unspecified".to_string()
+        } else {
+            signal.to_string()
+        };
+        *entry.by_signal.entry(label).or_default() += 1;
+        self.total = self.total.saturating_add(1);
+    }
+
+    fn summary(&self) -> PersonaTelemetrySummary {
+        let mut by_persona = BTreeMap::new();
+        for (persona, counters) in &self.by_persona {
+            by_persona.insert(
+                persona.clone(),
+                PersonaTelemetryPersonaSummary {
+                    total: counters.total,
+                    by_signal: counters.by_signal.clone(),
+                },
+            );
+        }
+        PersonaTelemetrySummary {
+            total: self.total,
+            by_persona,
         }
     }
 }
@@ -519,6 +575,7 @@ pub struct Metrics {
     autonomy_interrupts: Mutex<BTreeMap<String, u64>>,
     modular: Mutex<ModularCounters>,
     egress: Mutex<EgressCounters>,
+    persona_telemetry: Mutex<PersonaTelemetryCounters>,
     worker_configured: AtomicU64,
     worker_busy: AtomicU64,
     worker_started: AtomicU64,
@@ -563,6 +620,7 @@ impl Metrics {
             autonomy_interrupts: Mutex::new(BTreeMap::new()),
             modular: Mutex::new(ModularCounters::default()),
             egress: Mutex::new(EgressCounters::default()),
+            persona_telemetry: Mutex::new(PersonaTelemetryCounters::default()),
             worker_configured: AtomicU64::new(0),
             worker_busy: AtomicU64::new(0),
             worker_started: AtomicU64::new(0),
@@ -607,6 +665,13 @@ impl Metrics {
     ) {
         if let Ok(mut counters) = self.egress.lock() {
             counters.record(scope, capability, ttl_until, refreshed);
+        }
+    }
+
+    pub fn record_persona_feedback(&self, persona_id: &str, signal: Option<&str>) {
+        let label = signal.filter(|s| !s.is_empty()).unwrap_or("unspecified");
+        if let Ok(mut counters) = self.persona_telemetry.lock() {
+            counters.record(persona_id, label);
         }
     }
 
@@ -661,6 +726,11 @@ impl Metrics {
             .lock()
             .map(|counters| counters.summary())
             .unwrap_or_default();
+        let persona = self
+            .persona_telemetry
+            .lock()
+            .map(|counters| counters.summary())
+            .unwrap_or_default();
         MetricsSummary {
             events,
             routes,
@@ -672,6 +742,7 @@ impl Metrics {
             modular,
             worker,
             egress,
+            persona,
         }
     }
 
@@ -837,6 +908,7 @@ pub fn route_stats_snapshot(
         "autonomy": summary.autonomy,
         "modular": summary.modular,
         "worker": summary.worker,
+        "persona": summary.persona,
     })
 }
 

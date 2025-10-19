@@ -3,7 +3,7 @@ title: Workspace Status
 ---
 
 # Workspace Status
-Updated: 2025-10-16
+Updated: 2025-10-19
 Type: Reference
 
 <!-- GENERATED FILE: scripts/docgen_core.py; do not edit by hand -->

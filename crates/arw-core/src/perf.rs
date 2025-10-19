@@ -29,6 +29,10 @@ pub struct PerfTuning {
     pub route_stats_publish_ms: u64,
     pub models_metrics_coalesce_ms: u64,
     pub models_metrics_publish_ms: u64,
+    pub workers_max: Option<usize>,
+    pub tools_cache_ttl_secs: Option<u64>,
+    pub tools_cache_cap: Option<u64>,
+    pub disable_heavy_telemetry: bool,
 }
 
 impl PerfPreset {
@@ -86,6 +90,10 @@ pub fn tuning_for(preset: PerfPreset) -> PerfTuning {
             route_stats_publish_ms: 2500,
             models_metrics_coalesce_ms: 350,
             models_metrics_publish_ms: 2500,
+            workers_max: Some(4),
+            tools_cache_ttl_secs: Some(300),
+            tools_cache_cap: Some(256),
+            disable_heavy_telemetry: true,
         },
         PerfPreset::Balanced => PerfTuning {
             http_max_conc: 1024,
@@ -106,6 +114,10 @@ pub fn tuning_for(preset: PerfPreset) -> PerfTuning {
             route_stats_publish_ms: 2000,
             models_metrics_coalesce_ms: 250,
             models_metrics_publish_ms: 2000,
+            workers_max: None,
+            tools_cache_ttl_secs: None,
+            tools_cache_cap: None,
+            disable_heavy_telemetry: false,
         },
         PerfPreset::Performance => PerfTuning {
             http_max_conc: 4096,
@@ -126,6 +138,10 @@ pub fn tuning_for(preset: PerfPreset) -> PerfTuning {
             route_stats_publish_ms: 1500,
             models_metrics_coalesce_ms: 150,
             models_metrics_publish_ms: 1500,
+            workers_max: None,
+            tools_cache_ttl_secs: None,
+            tools_cache_cap: None,
+            disable_heavy_telemetry: false,
         },
         PerfPreset::Turbo => PerfTuning {
             http_max_conc: 16384,
@@ -146,6 +162,10 @@ pub fn tuning_for(preset: PerfPreset) -> PerfTuning {
             route_stats_publish_ms: 1000,
             models_metrics_coalesce_ms: 100,
             models_metrics_publish_ms: 1000,
+            workers_max: None,
+            tools_cache_ttl_secs: None,
+            tools_cache_cap: None,
+            disable_heavy_telemetry: false,
         },
     }
 }
@@ -222,6 +242,19 @@ pub fn apply_performance_preset() -> PerfPreset {
         "ARW_MODELS_METRICS_PUBLISH_MS",
         t.models_metrics_publish_ms.to_string(),
     );
+    if let Some(max_workers) = t.workers_max {
+        set_if_unset("ARW_WORKERS_MAX", max_workers.to_string());
+    }
+    if let Some(ttl) = t.tools_cache_ttl_secs {
+        set_if_unset("ARW_TOOLS_CACHE_TTL_SECS", ttl.to_string());
+    }
+    if let Some(cap) = t.tools_cache_cap {
+        set_if_unset("ARW_TOOLS_CACHE_CAP", cap.to_string());
+    }
+    if t.disable_heavy_telemetry {
+        set_if_unset("ARW_OTEL", "0");
+        set_if_unset("ARW_OTEL_METRICS", "0");
+    }
 
     // Provide a canonical computed tier for observability
     std::env::set_var(
@@ -250,4 +283,72 @@ pub fn apply_performance_preset() -> PerfPreset {
         "Applied performance preset defaults (env-seeded if unset)"
     );
     preset
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::test_support::env;
+
+    #[test]
+    fn eco_preset_applies_low_power_defaults() {
+        let mut guard = env::guard();
+        guard.set("ARW_PERF_PRESET", "eco");
+        guard.clear_keys(&[
+            "ARW_PERF_PRESET_TIER",
+            "ARW_HTTP_MAX_CONC",
+            "ARW_ACTIONS_QUEUE_MAX",
+            "ARW_CONTEXT_K",
+            "ARW_CONTEXT_EXPAND_PER_SEED",
+            "ARW_CONTEXT_DIVERSITY_LAMBDA",
+            "ARW_CONTEXT_MIN_SCORE",
+            "ARW_CONTEXT_LANES_DEFAULT",
+            "ARW_CONTEXT_LANE_BONUS",
+            "ARW_CONTEXT_EXPAND_QUERY",
+            "ARW_CONTEXT_EXPAND_QUERY_TOP_K",
+            "ARW_CONTEXT_SCORER",
+            "ARW_CONTEXT_STREAM_DEFAULT",
+            "ARW_CONTEXT_COVERAGE_MAX_ITERS",
+            "ARW_REHYDRATE_FILE_HEAD_KB",
+            "ARW_ROUTE_STATS_COALESCE_MS",
+            "ARW_ROUTE_STATS_PUBLISH_MS",
+            "ARW_MODELS_METRICS_COALESCE_MS",
+            "ARW_MODELS_METRICS_PUBLISH_MS",
+            "ARW_WORKERS_MAX",
+            "ARW_TOOLS_CACHE_TTL_SECS",
+            "ARW_TOOLS_CACHE_CAP",
+            "ARW_OTEL",
+            "ARW_OTEL_METRICS",
+        ]);
+
+        let preset = apply_performance_preset();
+        assert_eq!(preset, PerfPreset::Eco);
+        assert_eq!(std::env::var("ARW_WORKERS_MAX").unwrap(), "4");
+        assert_eq!(std::env::var("ARW_TOOLS_CACHE_TTL_SECS").unwrap(), "300");
+        assert_eq!(std::env::var("ARW_TOOLS_CACHE_CAP").unwrap(), "256");
+        assert_eq!(std::env::var("ARW_OTEL").unwrap(), "0");
+        assert_eq!(std::env::var("ARW_OTEL_METRICS").unwrap(), "0");
+    }
+
+    #[test]
+    fn balanced_preset_leaves_optional_overrides_unset() {
+        let mut guard = env::guard();
+        guard.set("ARW_PERF_PRESET", "balanced");
+        guard.clear_keys(&[
+            "ARW_PERF_PRESET_TIER",
+            "ARW_WORKERS_MAX",
+            "ARW_TOOLS_CACHE_TTL_SECS",
+            "ARW_TOOLS_CACHE_CAP",
+            "ARW_OTEL",
+            "ARW_OTEL_METRICS",
+        ]);
+
+        let preset = apply_performance_preset();
+        assert_eq!(preset, PerfPreset::Balanced);
+        assert!(std::env::var("ARW_WORKERS_MAX").is_err());
+        assert!(std::env::var("ARW_TOOLS_CACHE_TTL_SECS").is_err());
+        assert!(std::env::var("ARW_TOOLS_CACHE_CAP").is_err());
+        assert!(std::env::var("ARW_OTEL").is_err());
+        assert!(std::env::var("ARW_OTEL_METRICS").is_err());
+    }
 }

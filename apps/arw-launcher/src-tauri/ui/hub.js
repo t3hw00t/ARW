@@ -78,6 +78,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   let activeMode = (ARW.mode && ARW.mode.current === 'expert') ? 'expert' : 'guided';
   let currentLaneProfile = lanesForMode(activeMode);
   let sidecarSource = 'initial';
+  let personaPanel = null;
   let sc = null;
   const mountSidecar = (lanes, options = {}) => {
     const profile = Array.isArray(lanes) && lanes.length ? Array.from(new Set(lanes)) : lanesForMode(activeMode);
@@ -1875,10 +1876,30 @@ async function refreshRuntimeBundles() {
       refreshContextSnapshot(),
       refreshContextCascade({ quiet: true }),
       refreshContextMetrics(),
+      personaPanel && typeof personaPanel.reload === 'function' ? personaPanel.reload({ preserveSelection: true }) : Promise.resolve(),
     ]);
   };
   ARW.sse.indicator('sseStat', { prefix: 'SSE' });
   ARW.sse.connect(base, { replay: 25 });
+  personaPanel = ARW.personaPanel.attach({
+    root: document.getElementById('personas'),
+    select: document.getElementById('personaSelect'),
+    refresh: document.getElementById('personaRefresh'),
+    status: document.getElementById('personaStatus'),
+    scope: document.getElementById('personaScope'),
+    enable: document.getElementById('personaTelemetryEnable'),
+    save: document.getElementById('personaTelemetrySave'),
+    applyAll: document.getElementById('personaTelemetryApplyAll'),
+    empty: document.getElementById('personaEmpty'),
+    metrics: document.getElementById('personaMetrics'),
+    history: document.getElementById('personaHistory'),
+    historyMeta: document.getElementById('personaHistoryMeta'),
+    historyLimit: 10,
+    getBase: () => base,
+  });
+  if (personaPanel && typeof personaPanel.init === 'function') {
+    await personaPanel.init();
+  }
   await refreshRuntimeSupervisor();
   await refreshRuntimeMatrix();
   await refreshRuntimeBundles();

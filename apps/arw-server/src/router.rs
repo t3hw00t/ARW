@@ -166,6 +166,8 @@ pub(crate) mod paths {
     pub const STATE_PERSONA: &str = "/state/persona";
     pub const STATE_PERSONA_ID: &str = "/state/persona/{id}";
     pub const STATE_PERSONA_HISTORY: &str = "/state/persona/{id}/history";
+    pub const STATE_PERSONA_VIBE_HISTORY: &str = "/state/persona/{id}/vibe_history";
+    pub const STATE_PERSONA_VIBE_METRICS: &str = "/state/persona/{id}/vibe_metrics";
     pub const PERSONA_FEEDBACK: &str = "/persona/{id}/feedback";
     pub const STATE_SELF: &str = "/state/self";
     pub const STATE_SELF_AGENT: &str = "/state/self/{agent}";
@@ -264,6 +266,7 @@ pub(crate) mod paths {
     pub const ADMIN_HIERARCHY_ACCEPT: &str = "/admin/hierarchy/accept";
     pub const ADMIN_SELF_MODEL_PROPOSE: &str = "/admin/self_model/propose";
     pub const ADMIN_SELF_MODEL_APPLY: &str = "/admin/self_model/apply";
+    pub const ADMIN_PERSONA_TELEMETRY: &str = "/admin/persona/{id}/telemetry";
     pub const ADMIN_PERSONA_PROPOSALS: &str = "/admin/persona/{id}/proposals";
     pub const ADMIN_PERSONA_PROPOSAL_APPROVE: &str = "/admin/persona/proposals/{id}/approve";
     pub const ADMIN_PERSONA_PROPOSAL_REJECT: &str = "/admin/persona/proposals/{id}/reject";
@@ -460,6 +463,16 @@ pub(crate) fn build_router() -> (Router<AppState>, Vec<String>, Vec<Value>) {
     builder.route_get(
         paths::STATE_PERSONA_HISTORY,
         api::state::state_persona_history,
+        Some(Stability::Experimental),
+    );
+    builder.route_get(
+        paths::STATE_PERSONA_VIBE_HISTORY,
+        api::state::state_persona_vibe_history,
+        Some(Stability::Experimental),
+    );
+    builder.route_get(
+        paths::STATE_PERSONA_VIBE_METRICS,
+        api::state::state_persona_vibe_metrics,
         Some(Stability::Experimental),
     );
     builder.route_post(
@@ -1312,6 +1325,11 @@ fn register_admin_self_model_routes(builder: &mut RouterBuilder) {
 }
 
 fn register_admin_persona_routes(builder: &mut RouterBuilder) {
+    builder.route_post(
+        paths::ADMIN_PERSONA_TELEMETRY,
+        api::persona::persona_telemetry_update,
+        Some(Stability::Experimental),
+    );
     builder.route_post(
         paths::ADMIN_PERSONA_PROPOSALS,
         api::persona::persona_proposal_create,

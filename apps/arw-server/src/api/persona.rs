@@ -47,10 +47,33 @@ pub struct PersonaProposalDecisionBody {
 #[derive(Debug, Default, Deserialize, ToSchema)]
 #[serde(default)]
 pub struct PersonaFeedbackBody {
+    pub kind: Option<String>,
     pub signal: Option<String>,
     pub strength: Option<f32>,
     pub note: Option<String>,
     pub metadata: Option<Value>,
+}
+
+#[derive(Debug, Deserialize, ToSchema)]
+#[serde(untagged)]
+pub enum PersonaFeedbackRequest {
+    Single(PersonaFeedbackBody),
+    Batch(Vec<PersonaFeedbackBody>),
+}
+
+#[derive(Debug)]
+struct PersonaFeedbackNormalized {
+    kind: Option<String>,
+    signal: Option<String>,
+    strength: Option<f32>,
+    note: Option<String>,
+    metadata: Value,
+}
+
+#[derive(Debug, Deserialize, ToSchema)]
+pub struct PersonaTelemetryUpdateBody {
+    pub enabled: bool,
+    pub scope: Option<String>,
 }
 
 #[derive(Debug, Default, Deserialize, IntoParams)]
@@ -293,7 +316,7 @@ pub async fn persona_feedback_submit(
     State(state): State<AppState>,
     Path(id): Path<String>,
     Query(query): Query<PersonaFeedbackQuery>,
-    Json(body): Json<PersonaFeedbackBody>,
+    Json(request): Json<PersonaFeedbackRequest>,
 ) -> impl IntoResponse {
     if !state.persona_enabled() {
         return persona_disabled_response();
@@ -304,8 +327,8 @@ pub async fn persona_feedback_submit(
         None => return persona_disabled_response(),
     };
 
-    match service.get_entry(id.clone()).await {
-        Ok(Some(_)) => {}
+    let entry = match service.get_entry(id.clone()).await {
+        Ok(Some(entry)) => entry,
         Ok(None) => {
             return responses::problem_response(
                 axum::http::StatusCode::NOT_FOUND,
@@ -320,31 +343,131 @@ pub async fn persona_feedback_submit(
                 Some(&err.to_string()),
             )
         }
+    };
+
+    let telemetry_config = match resolve_vibe_telemetry_scope(&entry) {
+        Some(config) => config,
+        None => {
+            return responses::problem_response(
+                axum::http::StatusCode::PRECONDITION_REQUIRED,
+                "Telemetry Disabled",
+                Some("Persona vibe telemetry opt-in is disabled"),
+            )
+        }
+    };
+
+    if let Err(resp) = ensure_persona_telemetry(&state, &telemetry_config.scope).await {
+        return resp;
     }
 
-    let persona_id_for_payload = id.clone();
-    let payload = json!({
-        "persona_id": persona_id_for_payload,
-        "kind": query.kind,
-        "signal": body.signal,
-        "strength": body.strength,
-        "note": body.note,
-        "metadata": body.metadata,
+    let mut normalized = Vec::new();
+    match request {
+        PersonaFeedbackRequest::Single(mut body) => {
+            normalized.push(PersonaFeedbackNormalized {
+                kind: body.kind.take().or_else(|| query.kind.clone()),
+                signal: body.signal.take(),
+                strength: body.strength.take(),
+                note: body.note.take(),
+                metadata: body.metadata.take().unwrap_or(Value::Null),
+            });
+        }
+        PersonaFeedbackRequest::Batch(bodies) => {
+            if bodies.is_empty() {
+                return responses::problem_response(
+                    axum::http::StatusCode::BAD_REQUEST,
+                    "Empty Feedback Batch",
+                    Some("Provide at least one feedback sample"),
+                );
+            }
+            for mut body in bodies {
+                normalized.push(PersonaFeedbackNormalized {
+                    kind: body.kind.take().or_else(|| query.kind.clone()),
+                    signal: body.signal.take(),
+                    strength: body.strength.take(),
+                    note: body.note.take(),
+                    metadata: body.metadata.take().unwrap_or(Value::Null),
+                });
+            }
+        }
+    }
+
+    let bus = state.bus();
+    let metrics = state.metrics();
+    let mut accepted = 0usize;
+    for item in normalized.into_iter() {
+        if let Err(err) = service
+            .record_vibe_feedback(
+                item.kind.clone(),
+                id.clone(),
+                item.signal.clone(),
+                item.strength,
+                item.note.clone(),
+                item.metadata.clone(),
+            )
+            .await
+        {
+            return responses::problem_response(
+                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                "Failed to record persona feedback",
+                Some(&err.to_string()),
+            );
+        }
+
+        metrics.record_persona_feedback(&id, item.signal.as_deref());
+
+        let payload = json!({
+            "persona_id": id.clone(),
+            "kind": item.kind,
+            "signal": item.signal,
+            "strength": item.strength,
+            "note": item.note,
+            "metadata": item.metadata,
+        });
+
+        if let Err(err) = service
+            .publish_feedback(bus.clone(), id.clone(), payload)
+            .await
+        {
+            return responses::problem_response(
+                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                "Failed to publish feedback",
+                Some(&err.to_string()),
+            );
+        }
+        accepted += 1;
+    }
+
+    let response = json!({
+        "status": "accepted",
+        "count": accepted
     });
+    (axum::http::StatusCode::ACCEPTED, Json(response)).into_response()
+}
 
-    if let Err(err) = service.publish_feedback(state.bus(), id, payload).await {
-        return responses::problem_response(
-            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
-            "Failed to publish feedback",
-            Some(&err.to_string()),
-        );
+#[derive(Debug, Clone)]
+pub(crate) struct VibeTelemetryConfig {
+    pub scope: String,
+}
+
+pub(crate) fn resolve_vibe_telemetry_scope(
+    entry: &arw_kernel::PersonaEntry,
+) -> Option<VibeTelemetryConfig> {
+    let telemetry = entry.preferences.get("telemetry")?;
+    let vibe = telemetry.get("vibe")?;
+    let enabled = vibe
+        .get("enabled")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+    if !enabled {
+        return None;
     }
-
-    (
-        axum::http::StatusCode::ACCEPTED,
-        Json(json!({ "status": "accepted" })),
-    )
-        .into_response()
+    let scope = vibe
+        .get("scope")
+        .and_then(|v| v.as_str())
+        .unwrap_or(&entry.owner_kind);
+    Some(VibeTelemetryConfig {
+        scope: scope.to_string(),
+    })
 }
 
 async fn ensure_persona_manage(state: &AppState) -> Result<(), axum::response::Response> {
@@ -384,13 +507,167 @@ async fn ensure_persona_manage(state: &AppState) -> Result<(), axum::response::R
     }
 }
 
+pub(crate) async fn ensure_persona_telemetry(
+    state: &AppState,
+    scope: &str,
+) -> Result<(), axum::response::Response> {
+    let snapshot = state.policy().snapshot().await;
+    let allow_all = snapshot
+        .get("allow_all")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+    let has_policy_allowances = snapshot
+        .get("lease_rules")
+        .and_then(|v| v.as_array())
+        .map(|rules| !rules.is_empty())
+        .unwrap_or(false)
+        || snapshot.get("cedar").map(|v| !v.is_null()).unwrap_or(false);
+
+    let action = format!("telemetry.persona.{scope}");
+    let decision = state.policy().evaluate_action(&action).await;
+    if decision.allow && (allow_all || has_policy_allowances) {
+        return Ok(());
+    }
+
+    let capability = format!("telemetry:persona:{scope}");
+    match state
+        .kernel()
+        .find_valid_lease_async("local", &capability)
+        .await
+    {
+        Ok(Some(_)) => Ok(()),
+        Ok(None) => Err(responses::problem_response(
+            axum::http::StatusCode::FORBIDDEN,
+            "Persona Telemetry Forbidden",
+            Some("telemetry:persona lease required for requested scope"),
+        )),
+        Err(err) => Err(responses::problem_response(
+            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+            "Persona telemetry lease lookup failed",
+            Some(&err.to_string()),
+        )),
+    }
+}
+
+#[utoipa::path(
+    post,
+    path = "/admin/persona/{id}/telemetry",
+    tag = "Persona",
+    params(("id" = String, Path, description = "Persona identifier")),
+    request_body = PersonaTelemetryUpdateBody,
+    responses(
+        (status = 200, description = "Telemetry preferences updated", body = serde_json::Value),
+        (status = 401, description = "Unauthorized"),
+        (status = 404, description = "Persona not found"),
+        (status = 501, description = "Persona subsystem disabled")
+    )
+)]
+pub async fn persona_telemetry_update(
+    headers: HeaderMap,
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+    Json(body): Json<PersonaTelemetryUpdateBody>,
+) -> impl IntoResponse {
+    if !state.persona_enabled() {
+        return persona_disabled_response();
+    }
+
+    if let Err(resp) = responses::require_admin(&headers).await {
+        return *resp;
+    }
+
+    if let Err(resp) = ensure_persona_manage(&state).await {
+        return resp;
+    }
+
+    let service = match state.persona() {
+        Some(service) => service,
+        None => return persona_disabled_response(),
+    };
+
+    let entry = match service.get_entry(id.clone()).await {
+        Ok(Some(entry)) => entry,
+        Ok(None) => {
+            return responses::problem_response(
+                axum::http::StatusCode::NOT_FOUND,
+                "Persona Not Found",
+                Some("Persona id not found"),
+            )
+        }
+        Err(err) => {
+            return responses::problem_response(
+                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                "Failed to load persona",
+                Some(&err.to_string()),
+            )
+        }
+    };
+
+    let mut preferences = if entry.preferences.is_object() {
+        entry.preferences.clone()
+    } else {
+        json!({})
+    };
+    let scope_override = body.scope.clone();
+    let telemetry_value = preferences
+        .as_object_mut()
+        .expect("preferences object")
+        .entry("telemetry".to_string())
+        .or_insert(json!({}));
+    if !telemetry_value.is_object() {
+        *telemetry_value = json!({});
+    }
+    let vibe_value = telemetry_value
+        .as_object_mut()
+        .expect("telemetry object")
+        .entry("vibe".to_string())
+        .or_insert(json!({}));
+    if !vibe_value.is_object() {
+        *vibe_value = json!({});
+    }
+    let vibe_obj = vibe_value.as_object_mut().expect("vibe object");
+    vibe_obj.insert("enabled".to_string(), Value::Bool(body.enabled));
+    if body.enabled {
+        let scope = scope_override.unwrap_or_else(|| entry.owner_kind.clone());
+        vibe_obj.insert("scope".to_string(), Value::String(scope));
+    } else if let Some(scope) = scope_override {
+        vibe_obj.insert("scope".to_string(), Value::String(scope));
+    }
+
+    let upsert = arw_kernel::PersonaEntryUpsert {
+        id: entry.id.clone(),
+        owner_kind: entry.owner_kind.clone(),
+        owner_ref: entry.owner_ref.clone(),
+        name: entry.name.clone(),
+        archetype: entry.archetype.clone(),
+        traits: entry.traits.clone(),
+        preferences,
+        worldview: entry.worldview.clone(),
+        vibe_profile: entry.vibe_profile.clone(),
+        calibration: entry.calibration.clone(),
+    };
+
+    match service.upsert_entry(upsert).await {
+        Ok(updated) => {
+            Json(json!({ "persona_id": updated.id, "preferences": updated.preferences }))
+                .into_response()
+        }
+        Err(err) => responses::problem_response(
+            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+            "Failed to update telemetry",
+            Some(&err.to_string()),
+        ),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::{
         api::state::persona::{
-            state_persona_get, state_persona_history, state_persona_list, PersonaHistoryQuery,
-            PersonaListQuery,
+            state_persona_get, state_persona_history, state_persona_list,
+            state_persona_vibe_history, state_persona_vibe_metrics, PersonaHistoryQuery,
+            PersonaListQuery, PersonaVibeHistoryQuery,
         },
         test_support::begin_state_env,
     };
@@ -404,7 +681,21 @@ mod tests {
     use std::{fs, sync::Arc};
     use tempfile::tempdir;
 
-    async fn seed_persona(state: &AppState) {
+    async fn seed_persona(state: &AppState, enable_telemetry: bool) {
+        let telemetry_pref = if enable_telemetry {
+            json!({
+                "telemetry": {
+                    "vibe": {
+                        "enabled": true,
+                        "scope": "workspace"
+                    }
+                },
+                "cite": true
+            })
+        } else {
+            json!({ "cite": true })
+        };
+
         let service = state.persona().expect("persona service");
         service
             .upsert_entry(arw_kernel::PersonaEntryUpsert {
@@ -414,7 +705,7 @@ mod tests {
                 name: Some("Companion".into()),
                 archetype: Some("ally".into()),
                 traits: json!({ "tone": "neutral" }),
-                preferences: json!({ "cite": true }),
+                preferences: telemetry_pref,
                 worldview: json!({ "mission": "assist" }),
                 vibe_profile: json!({ "sentiment": 0.5 }),
                 calibration: json!({ "confidence": 0.6 }),
@@ -430,6 +721,12 @@ mod tests {
         let mut ctx = begin_state_env(temp.path());
         ctx.env.set("ARW_PERSONA_ENABLE", "1");
         ctx.env.set("ARW_DEBUG", "1");
+
+        let policy_path = temp.path().join("policy.json");
+        fs::write(&policy_path, r#"{ "allow_all": false }"#).expect("write policy");
+        ctx.env
+            .set("ARW_POLICY_FILE", policy_path.to_string_lossy().as_ref());
+
         crate::util::reset_state_dir_for_tests();
         ctx.env
             .set("ARW_STATE_DIR", temp.path().display().to_string());
@@ -444,7 +741,7 @@ mod tests {
             .with_persona_enabled(true)
             .build()
             .await;
-        seed_persona(&state).await;
+        seed_persona(&state, true).await;
 
         // baseline list
         let list_resp =
@@ -452,6 +749,21 @@ mod tests {
                 .await
                 .into_response();
         assert_eq!(list_resp.status(), StatusCode::OK);
+
+        let manage_ttl =
+            (Utc::now() + Duration::hours(1)).to_rfc3339_opts(SecondsFormat::Millis, true);
+        state
+            .kernel()
+            .insert_lease(
+                "lease-persona-manage",
+                "local",
+                "persona:manage",
+                None,
+                &manage_ttl,
+                None,
+                None,
+            )
+            .expect("insert manage lease");
 
         // create proposal
         let proposal_resp = persona_proposal_create(
@@ -536,7 +848,21 @@ mod tests {
             .with_persona_enabled(true)
             .build()
             .await;
-        seed_persona(&state).await;
+        seed_persona(&state, true).await;
+
+        let ttl = (Utc::now() + Duration::hours(1)).to_rfc3339_opts(SecondsFormat::Millis, true);
+        state
+            .kernel()
+            .insert_lease(
+                "lease-telemetry",
+                "local",
+                "telemetry:persona:workspace",
+                None,
+                &ttl,
+                None,
+                None,
+            )
+            .expect("insert telemetry lease");
 
         let resp = persona_feedback_submit(
             State(state.clone()),
@@ -544,17 +870,273 @@ mod tests {
             Query(PersonaFeedbackQuery {
                 kind: Some("vibe".into()),
             }),
-            Json(PersonaFeedbackBody {
+            Json(PersonaFeedbackRequest::Single(PersonaFeedbackBody {
+                kind: None,
                 signal: Some("warmer".into()),
                 strength: Some(0.7),
                 note: Some("felt distant".into()),
                 metadata: None,
-            }),
+            })),
         )
         .await
         .into_response();
 
         assert_eq!(resp.status(), StatusCode::ACCEPTED);
+        let resp_body = resp.into_body().collect().await.unwrap();
+        let resp_json: serde_json::Value = serde_json::from_slice(&resp_body.to_bytes()).unwrap();
+        assert_eq!(resp_json["count"], json!(1));
+
+        let metrics_resp =
+            state_persona_vibe_metrics(State(state.clone()), Path("persona-1".to_string()))
+                .await
+                .into_response();
+        assert_eq!(metrics_resp.status(), StatusCode::OK);
+        let metrics_body = metrics_resp.into_body().collect().await.unwrap();
+        let metrics_json: serde_json::Value =
+            serde_json::from_slice(&metrics_body.to_bytes()).unwrap();
+        assert_eq!(metrics_json["persona_id"], json!("persona-1"));
+        assert_eq!(metrics_json["total_feedback"], json!(1));
+        assert_eq!(metrics_json["retain_max"], json!(50));
+
+        let history_resp = state_persona_vibe_history(
+            State(state.clone()),
+            Path("persona-1".to_string()),
+            Query(PersonaVibeHistoryQuery::default()),
+        )
+        .await
+        .into_response();
+        assert_eq!(history_resp.status(), StatusCode::OK);
+        let history_body = history_resp.into_body().collect().await.unwrap();
+        let history_json: serde_json::Value =
+            serde_json::from_slice(&history_body.to_bytes()).unwrap();
+        let items = history_json["items"].as_array().expect("items array");
+        assert_eq!(items.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn persona_feedback_batch_submission() {
+        crate::test_support::init_tracing();
+        let temp = tempdir().expect("tempdir");
+        let mut ctx = begin_state_env(temp.path());
+        ctx.env.set("ARW_PERSONA_ENABLE", "1");
+        ctx.env.set("ARW_DEBUG", "1");
+        crate::util::reset_state_dir_for_tests();
+        ctx.env
+            .set("ARW_STATE_DIR", temp.path().display().to_string());
+
+        let bus = arw_events::Bus::new_with_replay(64, 64);
+        let kernel = arw_kernel::Kernel::open(temp.path()).expect("init kernel");
+        let policy = arw_policy::PolicyEngine::load_from_env();
+        let policy_handle = crate::policy::PolicyHandle::new(policy, bus.clone());
+        let host: Arc<dyn arw_wasi::ToolHost> = Arc::new(arw_wasi::NoopHost);
+        let state = crate::AppState::builder(bus, kernel, policy_handle, host, true)
+            .with_sse_capacity(64)
+            .with_persona_enabled(true)
+            .build()
+            .await;
+        seed_persona(&state, true).await;
+
+        let ttl = (Utc::now() + Duration::hours(1)).to_rfc3339_opts(SecondsFormat::Millis, true);
+        state
+            .kernel()
+            .insert_lease(
+                "lease-telemetry",
+                "local",
+                "telemetry:persona:workspace",
+                None,
+                &ttl,
+                None,
+                None,
+            )
+            .expect("insert telemetry lease");
+
+        let resp = persona_feedback_submit(
+            State(state.clone()),
+            Path("persona-1".to_string()),
+            Query(PersonaFeedbackQuery::default()),
+            Json(PersonaFeedbackRequest::Batch(vec![
+                PersonaFeedbackBody {
+                    kind: Some("vibe".into()),
+                    signal: Some("warmer".into()),
+                    strength: Some(0.6),
+                    note: None,
+                    metadata: Some(json!({ "mood": "supportive" })),
+                },
+                PersonaFeedbackBody {
+                    kind: Some("vibe".into()),
+                    signal: Some("cooler".into()),
+                    strength: Some(0.2),
+                    note: Some("response felt rushed".into()),
+                    metadata: None,
+                },
+            ])),
+        )
+        .await
+        .into_response();
+
+        assert_eq!(resp.status(), StatusCode::ACCEPTED);
+        let resp_body = resp.into_body().collect().await.unwrap();
+        let resp_json: serde_json::Value = serde_json::from_slice(&resp_body.to_bytes()).unwrap();
+        assert_eq!(resp_json["count"], json!(2));
+
+        let metrics_resp =
+            state_persona_vibe_metrics(State(state.clone()), Path("persona-1".to_string()))
+                .await
+                .into_response();
+        assert_eq!(metrics_resp.status(), StatusCode::OK);
+        let metrics_body = metrics_resp.into_body().collect().await.unwrap();
+        let metrics_json: serde_json::Value =
+            serde_json::from_slice(&metrics_body.to_bytes()).unwrap();
+        assert_eq!(metrics_json["total_feedback"], json!(2));
+        assert_eq!(metrics_json["retain_max"], json!(50));
+
+        let history_resp = state_persona_vibe_history(
+            State(state.clone()),
+            Path("persona-1".to_string()),
+            Query(PersonaVibeHistoryQuery { limit: Some(10) }),
+        )
+        .await
+        .into_response();
+        assert_eq!(history_resp.status(), StatusCode::OK);
+        let history_body = history_resp.into_body().collect().await.unwrap();
+        let history_json: serde_json::Value =
+            serde_json::from_slice(&history_body.to_bytes()).unwrap();
+        let items = history_json["items"].as_array().expect("items array");
+        assert_eq!(items.len(), 2);
+        assert_eq!(history_json["retain_max"], json!(50));
+        assert_eq!(history_json["limit"], json!(10));
+    }
+
+    #[tokio::test]
+    async fn persona_vibe_history_respects_retain_env() {
+        crate::test_support::init_tracing();
+        let temp = tempdir().expect("tempdir");
+        let mut ctx = begin_state_env(temp.path());
+        ctx.env.set("ARW_PERSONA_ENABLE", "1");
+        ctx.env.set("ARW_DEBUG", "1");
+        ctx.env.set("ARW_PERSONA_VIBE_HISTORY_RETAIN", "1");
+
+        let policy_path = temp.path().join("policy.json");
+        fs::write(&policy_path, r#"{ "allow_all": false }"#).expect("write policy");
+        ctx.env
+            .set("ARW_POLICY_FILE", policy_path.to_string_lossy().as_ref());
+
+        crate::util::reset_state_dir_for_tests();
+        ctx.env
+            .set("ARW_STATE_DIR", temp.path().display().to_string());
+
+        let bus = arw_events::Bus::new_with_replay(64, 64);
+        let kernel = arw_kernel::Kernel::open(temp.path()).expect("init kernel");
+        let policy = arw_policy::PolicyEngine::load_from_env();
+        let policy_handle = crate::policy::PolicyHandle::new(policy, bus.clone());
+        let host: Arc<dyn arw_wasi::ToolHost> = Arc::new(arw_wasi::NoopHost);
+        let state = crate::AppState::builder(bus, kernel, policy_handle, host, true)
+            .with_sse_capacity(64)
+            .with_persona_enabled(true)
+            .build()
+            .await;
+        seed_persona(&state, true).await;
+
+        let ttl = (Utc::now() + Duration::hours(1)).to_rfc3339_opts(SecondsFormat::Millis, true);
+        state
+            .kernel()
+            .insert_lease(
+                "lease-telemetry",
+                "local",
+                "telemetry:persona:workspace",
+                None,
+                &ttl,
+                None,
+                None,
+            )
+            .expect("insert telemetry lease");
+
+        for signal in ["warm", "cool", "warmer"] {
+            let resp = persona_feedback_submit(
+                State(state.clone()),
+                Path("persona-1".to_string()),
+                Query(PersonaFeedbackQuery {
+                    kind: Some("vibe".into()),
+                }),
+                Json(PersonaFeedbackRequest::Single(PersonaFeedbackBody {
+                    kind: None,
+                    signal: Some(signal.into()),
+                    strength: Some(0.5),
+                    note: None,
+                    metadata: None,
+                })),
+            )
+            .await
+            .into_response();
+            assert_eq!(resp.status(), StatusCode::ACCEPTED);
+        }
+
+        let history_resp = state_persona_vibe_history(
+            State(state.clone()),
+            Path("persona-1".to_string()),
+            Query(PersonaVibeHistoryQuery { limit: Some(10) }),
+        )
+        .await
+        .into_response();
+        assert_eq!(history_resp.status(), StatusCode::OK);
+        let history_body = history_resp.into_body().collect().await.unwrap();
+        let history_json: serde_json::Value =
+            serde_json::from_slice(&history_body.to_bytes()).unwrap();
+        let items = history_json["items"].as_array().expect("items array");
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0]["signal"], json!("warmer"));
+        let metrics_resp =
+            state_persona_vibe_metrics(State(state.clone()), Path("persona-1".to_string()))
+                .await
+                .into_response();
+        assert_eq!(metrics_resp.status(), StatusCode::OK);
+        let metrics_body = metrics_resp.into_body().collect().await.unwrap();
+        let metrics_json: serde_json::Value =
+            serde_json::from_slice(&metrics_body.to_bytes()).unwrap();
+        assert_eq!(metrics_json["retain_max"], json!(1));
+        assert_eq!(history_json["retain_max"], json!(1));
+        assert_eq!(history_json["limit"], json!(1));
+    }
+
+    #[tokio::test]
+    async fn persona_feedback_requires_telemetry_opt_in() {
+        crate::test_support::init_tracing();
+        let temp = tempdir().expect("tempdir");
+        let mut ctx = begin_state_env(temp.path());
+        ctx.env.set("ARW_PERSONA_ENABLE", "1");
+        ctx.env.set("ARW_DEBUG", "1");
+        crate::util::reset_state_dir_for_tests();
+        ctx.env
+            .set("ARW_STATE_DIR", temp.path().display().to_string());
+
+        let bus = arw_events::Bus::new_with_replay(64, 64);
+        let kernel = arw_kernel::Kernel::open(temp.path()).expect("init kernel");
+        let policy = arw_policy::PolicyEngine::load_from_env();
+        let policy_handle = crate::policy::PolicyHandle::new(policy, bus.clone());
+        let host: Arc<dyn arw_wasi::ToolHost> = Arc::new(arw_wasi::NoopHost);
+        let state = crate::AppState::builder(bus, kernel, policy_handle, host, true)
+            .with_sse_capacity(64)
+            .with_persona_enabled(true)
+            .build()
+            .await;
+        seed_persona(&state, false).await;
+
+        let resp = persona_feedback_submit(
+            State(state.clone()),
+            Path("persona-1".to_string()),
+            Query(PersonaFeedbackQuery::default()),
+            Json(PersonaFeedbackRequest::Single(PersonaFeedbackBody {
+                kind: None,
+                signal: Some("cooler".into()),
+                strength: Some(0.3),
+                note: None,
+                metadata: None,
+            })),
+        )
+        .await
+        .into_response();
+
+        assert_eq!(resp.status(), StatusCode::PRECONDITION_REQUIRED);
     }
 
     #[tokio::test]
@@ -584,20 +1166,7 @@ mod tests {
             .with_persona_enabled(true)
             .build()
             .await;
-        seed_persona(&state).await;
-
-        let forbidden = persona_proposal_create(
-            HeaderMap::new(),
-            State(state.clone()),
-            Path("persona-1".to_string()),
-            Json(PersonaProposalBody {
-                diff: json!([{ "op": "replace", "path": "/name", "value": "Guide" }]),
-                ..Default::default()
-            }),
-        )
-        .await
-        .into_response();
-        assert_eq!(forbidden.status(), StatusCode::FORBIDDEN);
+        seed_persona(&state, true).await;
 
         let ttl = (Utc::now() + Duration::hours(1)).to_rfc3339_opts(SecondsFormat::Millis, true);
         state
@@ -625,5 +1194,83 @@ mod tests {
         .await
         .into_response();
         assert_eq!(allowed.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn persona_telemetry_toggle_updates_preferences() {
+        crate::test_support::init_tracing();
+        let temp = tempdir().expect("tempdir");
+        let mut ctx = begin_state_env(temp.path());
+        ctx.env.set("ARW_PERSONA_ENABLE", "1");
+        ctx.env.set("ARW_DEBUG", "1");
+        crate::util::reset_state_dir_for_tests();
+        ctx.env
+            .set("ARW_STATE_DIR", temp.path().display().to_string());
+
+        let bus = arw_events::Bus::new_with_replay(64, 64);
+        let kernel = arw_kernel::Kernel::open(temp.path()).expect("init kernel");
+        let policy = arw_policy::PolicyEngine::load_from_env();
+        let policy_handle = crate::policy::PolicyHandle::new(policy, bus.clone());
+        let host: Arc<dyn arw_wasi::ToolHost> = Arc::new(arw_wasi::NoopHost);
+        let state = crate::AppState::builder(bus, kernel, policy_handle, host, true)
+            .with_sse_capacity(64)
+            .with_persona_enabled(true)
+            .build()
+            .await;
+        seed_persona(&state, false).await;
+
+        let ttl = (Utc::now() + Duration::hours(1)).to_rfc3339_opts(SecondsFormat::Millis, true);
+        state
+            .kernel()
+            .insert_lease(
+                "lease-persona-manage",
+                "local",
+                "persona:manage",
+                None,
+                &ttl,
+                None,
+                None,
+            )
+            .expect("insert manage lease");
+
+        let enabled_resp = persona_telemetry_update(
+            HeaderMap::new(),
+            State(state.clone()),
+            Path("persona-1".to_string()),
+            Json(PersonaTelemetryUpdateBody {
+                enabled: true,
+                scope: Some("workspace".into()),
+            }),
+        )
+        .await
+        .into_response();
+        assert_eq!(enabled_resp.status(), StatusCode::OK);
+        let enabled_body = enabled_resp.into_body().collect().await.unwrap();
+        let enabled_json: serde_json::Value =
+            serde_json::from_slice(&enabled_body.to_bytes()).unwrap();
+        assert_eq!(
+            enabled_json["preferences"]["telemetry"]["vibe"]["enabled"],
+            serde_json::Value::Bool(true)
+        );
+
+        let disabled_resp = persona_telemetry_update(
+            HeaderMap::new(),
+            State(state.clone()),
+            Path("persona-1".to_string()),
+            Json(PersonaTelemetryUpdateBody {
+                enabled: false,
+                scope: None,
+            }),
+        )
+        .await
+        .into_response();
+        assert_eq!(disabled_resp.status(), StatusCode::OK);
+        let disabled_body = disabled_resp.into_body().collect().await.unwrap();
+        let disabled_json: serde_json::Value =
+            serde_json::from_slice(&disabled_body.to_bytes()).unwrap();
+        assert_eq!(
+            disabled_json["preferences"]["telemetry"]["vibe"]["enabled"],
+            serde_json::Value::Bool(false)
+        );
     }
 }

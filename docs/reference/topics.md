@@ -3,7 +3,7 @@ title: Event Topics (Canonical)
 ---
 
 # Event Topics (Canonical)
-Updated: 2025-10-16
+Updated: 2025-10-19
 Type: Reference
 
 Source of truth for event kinds published by the service. Generated from

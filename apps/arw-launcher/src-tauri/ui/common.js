@@ -2953,3 +2953,595 @@ window.addEventListener('keydown', (e)=>{
   if (e.ctrlKey || e.metaKey || e.altKey) return;
   if (e.key==='?' || (e.shiftKey && e.key==='/')){ e.preventDefault(); ARW.shortcuts.toggle(); }
 });
+
+
+ARW.personaPanel = (() => {
+  const panels = new Set();
+  let sseHooked = false;
+
+  const escapeHtml = (value) => String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+
+  const parseDate = (value) => {
+    if (!value) return null;
+    try {
+      const date = new Date(value);
+      if (Number.isNaN(date.getTime())) return null;
+      return date;
+    } catch {
+      return null;
+    }
+  };
+
+  const formatRelative = (value) => {
+    const date = parseDate(value);
+    if (!date) return '';
+    const diff = Date.now() - date.getTime();
+    if (diff < 0) return 'just now';
+    if (diff < 5000) return 'just now';
+    if (diff < 60000) return `${Math.round(diff / 1000)}s ago`;
+    if (diff < 3600000) return `${Math.round(diff / 60000)}m ago`;
+    if (diff < 86400000) return `${Math.round(diff / 3600000)}h ago`;
+    const days = Math.round(diff / 86400000);
+    if (days <= 7) return `${days}d ago`;
+    return date.toLocaleString();
+  };
+
+  const summarizeMetadata = (value) => {
+    if (value == null) return '';
+    if (typeof value === 'string') {
+      return value.trim();
+    }
+    if (Array.isArray(value) && value.length === 0) return '';
+    if (typeof value === 'object') {
+      const keys = Object.keys(value);
+      if (!keys.length) return '';
+      try {
+        const json = JSON.stringify(value);
+        if (json.length > 180) return `${json.slice(0, 177)}…`;
+        return json;
+      } catch {
+        return '';
+      }
+    }
+    return String(value);
+  };
+
+  function ensureSse() {
+    if (sseHooked) return;
+    if (!(ARW && ARW.sse && typeof ARW.sse.subscribe === 'function')) return;
+    sseHooked = true;
+    ARW.sse.subscribe(
+      (kind) => kind === 'persona.feedback',
+      (event) => {
+        try {
+          const payload = (event && event.env && event.env.payload) || (event && event.payload) || {};
+          const personaId = payload && typeof payload.persona_id === 'string' ? payload.persona_id : null;
+          if (!personaId) return;
+          panels.forEach((panel) => {
+            try { panel.onFeedback(personaId); } catch (err) { console.warn('persona panel refresh failed', err); }
+          });
+        } catch (err) {
+          console.warn('persona feedback event handling failed', err);
+        }
+      },
+    );
+  }
+
+  class PersonaPanel {
+    constructor(options = {}) {
+      this.root = options.root || (options.rootId ? document.getElementById(options.rootId) : null);
+      this.select = options.select || (options.selectId ? document.getElementById(options.selectId) : null);
+      this.refreshBtn = options.refresh || (options.refreshId ? document.getElementById(options.refreshId) : null);
+      this.status = options.status || (options.statusId ? document.getElementById(options.statusId) : null);
+      this.scope = options.scope || (options.scopeId ? document.getElementById(options.scopeId) : null);
+      this.enable = options.enable || (options.enableId ? document.getElementById(options.enableId) : null);
+      this.saveBtn = options.save || (options.saveId ? document.getElementById(options.saveId) : null);
+      this.empty = options.empty || (options.emptyId ? document.getElementById(options.emptyId) : null);
+      this.metrics = options.metrics || (options.metricsId ? document.getElementById(options.metricsId) : null);
+      this.history = options.history || (options.historyId ? document.getElementById(options.historyId) : null);
+      this.historyMeta = options.historyMeta || (options.historyMetaId ? document.getElementById(options.historyMetaId) : null);
+      this.applyAll = options.applyAll || (options.applyAllId ? document.getElementById(options.applyAllId) : null);
+      this.retentionNoteDefault = 'Retention defaults to 50 samples (ARW_PERSONA_VIBE_HISTORY_RETAIN).';
+      this.retentionNote = this.retentionNoteDefault;
+      this.retainMax = null;
+      this._historyMetaPrefix = '';
+      this.getBase = typeof options.getBase === 'function' ? options.getBase : () => options.base || '';
+      const limitRaw = Number(options.historyLimit);
+      this.historyLimit = Number.isFinite(limitRaw) ? Math.max(1, Math.min(100, limitRaw)) : 10;
+      this.items = [];
+      this.selectedId = null;
+      this.refreshTimer = null;
+      this.statusTimer = null;
+      this.loadingDetails = null;
+      this.initialized = false;
+      this._disposed = false;
+      this.disabled = !this.root || !this.metrics || !this.history;
+      this._handleSelectChange = this.handleSelectChange.bind(this);
+      this._handleRefresh = this.handleRefreshClick.bind(this);
+      this._handleSave = this.handleSaveClick.bind(this);
+      this._handleApplyAll = this.handleApplyAllClick.bind(this);
+    }
+
+    init() {
+      if (this.initialized || this.disabled) {
+        return Promise.resolve();
+      }
+      this.initialized = true;
+      if (this.select) this.select.addEventListener('change', this._handleSelectChange);
+      if (this.refreshBtn) this.refreshBtn.addEventListener('click', this._handleRefresh);
+      if (this.saveBtn) this.saveBtn.addEventListener('click', this._handleSave);
+      if (this.applyAll) this.applyAll.addEventListener('click', this._handleApplyAll);
+      this.clearDetails();
+      return this.loadList({ preserveSelection: false });
+    }
+
+    dispose() {
+      if (this._disposed) return;
+      this._disposed = true;
+      panels.delete(this);
+      if (this.select) this.select.removeEventListener('change', this._handleSelectChange);
+      if (this.refreshBtn) this.refreshBtn.removeEventListener('click', this._handleRefresh);
+      if (this.saveBtn) this.saveBtn.removeEventListener('click', this._handleSave);
+      if (this.applyAll) this.applyAll.removeEventListener('click', this._handleApplyAll);
+    }
+
+    setBusy(flag) {
+      const disable = !!flag;
+      if (this.select) this.select.disabled = disable || !this.items.length;
+      if (this.refreshBtn) this.refreshBtn.disabled = disable;
+      const controlsDisabled = disable || !this.selectedId;
+      if (this.scope) this.scope.disabled = controlsDisabled;
+      if (this.enable) this.enable.disabled = controlsDisabled;
+      if (this.saveBtn) this.saveBtn.disabled = controlsDisabled;
+      if (this.applyAll) this.applyAll.disabled = disable || !this.selectedId || !this.items.length;
+    }
+
+    setStatus(text, options = {}) {
+      if (!this.status) return;
+      if (this.statusTimer) {
+        clearTimeout(this.statusTimer);
+        this.statusTimer = null;
+      }
+      this.status.textContent = text || '';
+      const ttl = options.clearAfter;
+      if (text && Number.isFinite(ttl) && ttl > 0) {
+        this.statusTimer = setTimeout(() => {
+          if (this.status && this.status.textContent === text) {
+            this.status.textContent = '';
+          }
+        }, ttl);
+      }
+    }
+
+    showEmpty(message) {
+      if (!this.empty) return;
+      if (message) {
+        this.empty.hidden = false;
+        this.empty.textContent = message;
+      } else {
+        this.empty.hidden = true;
+      }
+    }
+
+    updateHistoryMeta(prefix) {
+      if (!this.historyMeta) return;
+      if (prefix !== undefined) {
+        this._historyMetaPrefix = typeof prefix === 'string' ? prefix.trim() : '';
+      }
+      const parts = [];
+      if (this._historyMetaPrefix) parts.push(this._historyMetaPrefix);
+      if (this.retentionNote) parts.push(this.retentionNote);
+      this.historyMeta.textContent = parts.join(' · ');
+    }
+
+    setRetentionInfo(retainMax) {
+      const parsed = Number(retainMax);
+      if (Number.isFinite(parsed) && parsed > 0) {
+        this.retainMax = parsed;
+        this.retentionNote = `Retention capped at ${parsed} samples (ARW_PERSONA_VIBE_HISTORY_RETAIN).`;
+      } else {
+        this.retainMax = null;
+        this.retentionNote = this.retentionNoteDefault;
+      }
+      this.updateHistoryMeta();
+    }
+
+    clearDetails() {
+      if (this.metrics) this.metrics.innerHTML = '<p class="dim">Select a persona to view telemetry.</p>';
+      if (this.history) this.history.innerHTML = '<li class="dim">No feedback yet.</li>';
+      this._historyMetaPrefix = '';
+      this.setRetentionInfo(null);
+    }
+
+    async reload(options = {}) {
+      if (this.disabled) return Promise.resolve();
+      return this.loadList(options);
+    }
+
+    async loadList(options = {}) {
+      if (this.disabled) return Promise.resolve();
+      const preserveSelection = options && options.preserveSelection !== undefined ? !!options.preserveSelection : true;
+      const previousId = preserveSelection ? this.selectedId : null;
+      this.setStatus('Loading…');
+      this.setBusy(true);
+      try {
+        const response = await this.fetchJson('/state/persona');
+        const items = Array.isArray(response && response.items) ? response.items : [];
+        this.items = items;
+        if (this.select) {
+          const optionsHtml = items
+            .map((item) => `<option value="${escapeHtml(item.id)}">${escapeHtml(item.name || item.id)}</option>`)
+            .join('');
+          this.select.innerHTML = optionsHtml;
+          this.select.disabled = !items.length;
+        }
+        if (!items.length) {
+          this.selectedId = null;
+          this.showEmpty('No personas found. Enable ARW_PERSONA_ENABLE=1 and seed a persona to begin telemetry.');
+          this.clearDetails();
+          this.setBusy(true);
+          this.setStatus('');
+          return;
+        }
+        this.showEmpty('');
+        const next = previousId && items.some((item) => item.id === previousId) ? previousId : items[0].id;
+        if (this.select) this.select.value = next;
+        const entry = items.find((item) => item.id === next) || null;
+        this.applyPersonaEntry(entry);
+        await this.loadDetails(next);
+      } catch (err) {
+        const message = String(err && err.message ? err.message : '');
+        if (message.includes('HTTP 501')) {
+          this.items = [];
+          this.selectedId = null;
+          if (this.select) {
+            this.select.innerHTML = '';
+            this.select.disabled = true;
+          }
+          this.clearDetails();
+          this.showEmpty('Persona subsystem disabled. Enable ARW_PERSONA_ENABLE=1.');
+          this.setStatus('');
+        } else {
+          console.warn('persona list fetch failed', err);
+          this.setStatus('Failed to load personas', { clearAfter: 4000 });
+        }
+      } finally {
+        this.setBusy(false);
+      }
+    }
+
+    applyPersonaEntry(entry) {
+      this.selectedId = entry ? entry.id : null;
+      const telemetry = entry && entry.preferences && entry.preferences.telemetry && entry.preferences.telemetry.vibe;
+      const scopeValue = telemetry && typeof telemetry.scope === 'string' && telemetry.scope.trim().length
+        ? telemetry.scope.trim()
+        : (entry && entry.owner_kind) || '';
+      if (this.scope) this.scope.value = scopeValue;
+      if (this.enable) this.enable.checked = !!(telemetry && telemetry.enabled === true);
+      const controlsDisabled = !this.selectedId;
+      if (this.scope) this.scope.disabled = controlsDisabled;
+      if (this.enable) this.enable.disabled = controlsDisabled;
+      if (this.saveBtn) this.saveBtn.disabled = controlsDisabled;
+      if (this.applyAll) this.applyAll.disabled = controlsDisabled || !this.items.length;
+    }
+
+    async loadDetails(id, options = {}) {
+      if (!id) return;
+      const skipLoading = options && options.skipLoading;
+      this.loadingDetails = id;
+      if (!skipLoading) {
+        if (this.metrics) this.metrics.innerHTML = '<p class="dim">Loading telemetry…</p>';
+        if (this.history) this.history.innerHTML = '<li class="dim">Loading…</li>';
+      }
+      try {
+        const limit = this.historyLimit || 10;
+        const [metrics, history] = await Promise.all([
+          this.fetchJson(`/state/persona/${encodeURIComponent(id)}/vibe_metrics`),
+          this.fetchJson(`/state/persona/${encodeURIComponent(id)}/vibe_history?limit=${limit}`),
+        ]);
+        if (this.loadingDetails !== id) return;
+        this.setStatus('');
+        this.renderMetrics(metrics);
+        this.renderHistory(history);
+      } catch (err) {
+        if (this.loadingDetails !== id) return;
+        const message = String(err && err.message ? err.message : '');
+        if (message.includes('HTTP 412')) {
+          this.renderMetrics(null, 'Telemetry disabled for this persona.');
+          this.renderHistory(null, 'Enable telemetry to collect new feedback.');
+          this.setStatus('Telemetry disabled for this persona', { clearAfter: 4000 });
+        } else {
+          console.warn('persona telemetry fetch failed', err);
+          this.renderMetrics(null, 'Telemetry unavailable.');
+          this.renderHistory(null, 'Feedback history unavailable.');
+          this.setStatus('Failed to load telemetry', { clearAfter: 4000 });
+        }
+      } finally {
+        if (this.loadingDetails === id) {
+          this.loadingDetails = null;
+        }
+      }
+    }
+
+    renderMetrics(metrics, message) {
+      if (!this.metrics) return;
+      if (message) {
+        this.metrics.innerHTML = `<p class="dim">${escapeHtml(message)}</p>`;
+        this.updateHistoryMeta();
+        return;
+      }
+      if (!metrics || typeof metrics !== 'object') {
+        this.metrics.innerHTML = '<p class="dim">Telemetry unavailable.</p>';
+        this.updateHistoryMeta();
+        return;
+      }
+      this.setRetentionInfo(metrics.retain_max ?? metrics.retainMax ?? null);
+      const total = Number.isFinite(metrics.total_feedback) ? metrics.total_feedback : 0;
+      const avg = Number.isFinite(metrics.average_strength) ? metrics.average_strength.toFixed(2) : '—';
+      const lastSignal = metrics.last_signal || 'unspecified';
+      const lastStrength = Number.isFinite(metrics.last_strength) ? metrics.last_strength.toFixed(2) : null;
+      const lastUpdatedRel = formatRelative(metrics.last_updated);
+      const cards = [];
+      cards.push(`<div class="metric-card"><span class="metric-label">Total feedback</span><strong>${escapeHtml(total)}</strong></div>`);
+      cards.push(`<div class="metric-card"><span class="metric-label">Average strength</span><strong>${escapeHtml(avg)}</strong></div>`);
+      const metaBits = [];
+      if (lastStrength) metaBits.push(`strength ${escapeHtml(lastStrength)}`);
+      if (lastUpdatedRel) metaBits.push(lastUpdatedRel);
+      cards.push(`<div class="metric-card"><span class="metric-label">Last signal</span><strong>${escapeHtml(lastSignal)}</strong>${metaBits.length ? `<span class="dim">${escapeHtml(metaBits.join(' · '))}</span>` : ''}</div>`);
+      const counts = metrics.signal_counts || {};
+      const entries = Object.keys(counts || {})
+        .map((key) => ({ label: key && key.trim().length ? key : 'unspecified', value: counts[key] }))
+        .filter((entry) => Number.isFinite(entry.value))
+        .sort((a, b) => (b.value || 0) - (a.value || 0));
+      if (entries.length) {
+        const list = entries
+          .map((entry) => `<li><span>${escapeHtml(entry.label)}</span><strong>${escapeHtml(entry.value)}</strong></li>`)
+          .join('');
+        cards.push(`<div class="metric-card"><span class="metric-label">Signals</span><ul class="metric-list">${list}</ul></div>`);
+      }
+      this.metrics.innerHTML = cards.join('');
+      const relMeta = formatRelative(metrics.last_updated);
+      this.updateHistoryMeta(relMeta ? `Updated ${relMeta}` : '');
+    }
+
+    renderHistory(historyData, message) {
+      if (!this.history) return;
+      if (message) {
+        this.history.innerHTML = `<li class="dim">${escapeHtml(message)}</li>`;
+        this.setRetentionInfo(null);
+        this.updateHistoryMeta('');
+        return;
+      }
+      let retainCandidate = null;
+      let items = [];
+      if (historyData && typeof historyData === 'object' && !Array.isArray(historyData)) {
+        if (historyData.retain_max != null) retainCandidate = historyData.retain_max;
+        else if (historyData.retainMax != null) retainCandidate = historyData.retainMax;
+        if (Array.isArray(historyData.items)) {
+          items = historyData.items;
+        }
+      } else if (Array.isArray(historyData)) {
+        items = historyData;
+      }
+      this.setRetentionInfo(retainCandidate);
+      if (!items.length) {
+        this.history.innerHTML = '<li class="dim">No feedback yet.</li>';
+        this.updateHistoryMeta('');
+        return;
+      }
+      const limited = items.slice(0, this.historyLimit);
+      const html = limited
+        .map((item) => {
+          const signal = item && typeof item.signal === 'string' && item.signal.trim().length ? item.signal.trim() : 'unspecified';
+          const strength = Number.isFinite(item && item.strength) ? item.strength.toFixed(2) : null;
+          const recorded = item && (item.recorded_at || item.recordedAt);
+          const recordedDate = parseDate(recorded);
+          const rel = formatRelative(recorded);
+          const timeTitle = recordedDate ? recordedDate.toLocaleString() : (recorded || '');
+          const note = item && item.note && String(item.note).trim().length ? String(item.note).trim() : '';
+          const meta = summarizeMetadata(item && item.metadata);
+          return `<li>
+            <div class="meta">
+              <strong>${escapeHtml(signal)}</strong>
+              ${strength ? `<span class="dim">${escapeHtml(strength)}</span>` : ''}
+              ${rel ? `<time datetime="${escapeHtml(recordedDate ? recordedDate.toISOString() : recorded || '')}" title="${escapeHtml(timeTitle)}">${escapeHtml(rel)}</time>` : ''}
+            </div>
+            ${note ? `<p class="note">${escapeHtml(note)}</p>` : ''}
+            ${meta ? `<div class="meta-json">${escapeHtml(meta)}</div>` : ''}
+          </li>`;
+        })
+        .join('');
+      this.history.innerHTML = html;
+      const latest = limited[0] && (limited[0].recorded_at || limited[0].recordedAt);
+      const rel = formatRelative(latest);
+      this.updateHistoryMeta(rel ? `Updated ${rel}` : '');
+    }
+
+    async saveTelemetry() {
+      if (!this.selectedId) return;
+      const enabled = this.enable ? !!this.enable.checked : false;
+      const scope = this.scope ? this.scope.value.trim() : '';
+      const body = { enabled };
+      if (scope) body.scope = scope;
+      this.setStatus('Saving…');
+      try {
+        await this.fetchJson(`/admin/persona/${encodeURIComponent(this.selectedId)}/telemetry`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+        this.setStatus('Saved', { clearAfter: 2000 });
+        await this.reload({ preserveSelection: true });
+      } catch (err) {
+        console.error('persona telemetry update failed', err);
+        this.setStatus('Update failed', { clearAfter: 4000 });
+      }
+    }
+
+    handleApplyAllClick(event) {
+      if (event && typeof event.preventDefault === 'function') event.preventDefault();
+      this.applyTelemetryToAll().catch((err) => console.warn('persona telemetry apply-all failed', err));
+    }
+
+    async applyTelemetryToAll() {
+      if (!this.selectedId || !this.items.length) return;
+      if (!this.enable) return;
+      const enabled = !!this.enable.checked;
+      const scope = this.scope ? this.scope.value.trim() : '';
+      const normalize = (value) => (typeof value === 'string' ? value.trim() : '');
+      const scopedInput = normalize(scope);
+      const hasExplicitScope = scopedInput.length > 0;
+      const items = Array.isArray(this.items) ? [...this.items] : [];
+      let skipped = 0;
+      const targets = [];
+      for (const item of items) {
+        if (!item || !item.id) continue;
+        const telemetry = item.preferences?.telemetry?.vibe || {};
+        const currentEnabled = telemetry.enabled === true;
+        const currentScope = normalize(
+          typeof telemetry.scope === 'string' && telemetry.scope.trim().length
+            ? telemetry.scope
+            : ''
+        );
+        const ownerScope = normalize(item.owner_kind);
+        let expectedScope = '';
+        if (hasExplicitScope) {
+          expectedScope = scopedInput;
+        } else if (enabled) {
+          expectedScope = ownerScope;
+        } else {
+          expectedScope = currentScope;
+        }
+        if (currentEnabled === enabled && currentScope === expectedScope) {
+          skipped += 1;
+          continue;
+        }
+        targets.push(item);
+      }
+      if (!targets.length) {
+        const message = skipped
+          ? `All ${skipped} persona(s) already match`
+          : 'No personas require updates';
+        this.setStatus(message, { clearAfter: 4000 });
+        return;
+      }
+      const confirmDescriptionParts = [
+        `Propagate the current scope and consent to ${targets.length} persona(s). Existing telemetry preferences will be overwritten for those personas.`,
+      ];
+      if (skipped) {
+        confirmDescriptionParts.push(`${skipped} persona(s) already match and will be skipped.`);
+      }
+      const confirmed = await ARW.modal.confirm({
+        title: 'Apply to all personas?',
+        description: confirmDescriptionParts.join(' '),
+        submitLabel: 'Apply to all',
+        cancelLabel: 'Cancel',
+      });
+      if (!confirmed) return;
+      this.setStatus('Applying…');
+      this.setBusy(true);
+      const body = { enabled };
+      if (scope) body.scope = scope;
+      const payload = JSON.stringify(body);
+      let failures = 0;
+      let updated = 0;
+      const failureNotices = [];
+      try {
+        for (const item of targets) {
+          try {
+            await this.fetchJson(`/admin/persona/${encodeURIComponent(item.id)}/telemetry`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: payload,
+            });
+            updated += 1;
+          } catch (err) {
+            failures += 1;
+            const label =
+              (item && typeof item.name === 'string' && item.name.trim()) ? item.name.trim() : item.id;
+            if (failureNotices.length < 3) {
+              failureNotices.push(label);
+            }
+            console.warn('persona telemetry bulk update failed', err);
+          }
+        }
+        if (failureNotices.length) {
+          failureNotices.forEach((label) => {
+            ARW.toast(`Failed to update persona ${label}. Check service logs for details.`);
+          });
+          if (failures > failureNotices.length) {
+            ARW.toast(`${failures - failureNotices.length} additional persona update failure(s).`);
+          }
+        }
+        const summaryParts = [`Applied to ${updated}/${targets.length} persona(s)`];
+        if (skipped) summaryParts.push(`skipped ${skipped}`);
+        if (failures) summaryParts.push(`${failures} failed`);
+        const clearAfter = failures ? 6000 : 4000;
+        this.setStatus(summaryParts.join(' · '), { clearAfter });
+        await this.reload({ preserveSelection: true });
+      } finally {
+        this.setBusy(false);
+      }
+    }
+
+    handleSelectChange() {
+      if (!this.select) return;
+      const id = this.select.value || '';
+      const entry = this.items.find((item) => item.id === id) || null;
+      this.applyPersonaEntry(entry);
+      if (entry) {
+        this.loadDetails(entry.id).catch((err) => console.warn('persona telemetry refresh failed', err));
+      } else {
+        this.clearDetails();
+      }
+    }
+
+    handleRefreshClick(event) {
+      if (event && typeof event.preventDefault === 'function') event.preventDefault();
+      this.reload({ preserveSelection: true }).catch((err) => console.warn('persona panel refresh failed', err));
+    }
+
+    handleSaveClick(event) {
+      if (event && typeof event.preventDefault === 'function') event.preventDefault();
+      this.saveTelemetry().catch((err) => console.warn('persona telemetry save failed', err));
+    }
+
+    scheduleRefresh() {
+      if (this.refreshTimer) return;
+      this.refreshTimer = setTimeout(() => {
+        this.refreshTimer = null;
+        if (this.selectedId) {
+          this.loadDetails(this.selectedId, { skipLoading: true }).catch((err) => console.warn('persona telemetry refresh failed', err));
+        }
+      }, 400);
+    }
+
+    onFeedback(personaId) {
+      if (!this.initialized || this.disabled) return;
+      if (!personaId || personaId !== this.selectedId) return;
+      this.scheduleRefresh();
+    }
+
+    fetchJson(path, init) {
+      const base = this.getBase();
+      if (!base) throw new Error('Base URL unavailable');
+      return ARW.http.json(base, path, init);
+    }
+  }
+
+  return {
+    attach(options = {}) {
+      const panel = new PersonaPanel(options);
+      if (!panel.disabled) {
+        panels.add(panel);
+        ensureSse();
+      }
+      return panel;
+    },
+  };
+})();

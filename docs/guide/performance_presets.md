@@ -3,7 +3,7 @@ title: Performance Presets
 ---
 
 # Performance Presets
-Updated: 2025-10-11
+Updated: 2025-10-19
 Type: How‑to
 
 ARW ships with built‑in performance presets to adapt resource usage to your machine without hand‑tuning dozens of knobs.
@@ -28,10 +28,17 @@ curl -s http://127.0.0.1:8091/about | jq '.perf_preset? // {}'
 echo $ARW_PERF_PRESET_TIER
 ```
 
+### Eco Preset Details
+- Caps local workers at four via `ARW_WORKERS_MAX=4` to keep queue throughput predictable on dual-core CPUs.
+- Shrinks the action/tool cache (`ARW_TOOLS_CACHE_TTL_SECS=300`, `ARW_TOOLS_CACHE_CAP=256`) so low-memory hosts avoid reclaim churn.
+- Leaves OpenTelemetry exporters disabled (`ARW_OTEL=0`, `ARW_OTEL_METRICS=0`) unless you opt back in explicitly.
+- Honors `ARW_PERSONA_VIBE_HISTORY_RETAIN` so persona telemetry history stays lean on eco hosts.
+- Override any value manually when a workload needs more headroom; explicit env vars always win over preset defaults.
+
 ## What Presets Tune
 - HTTP Concurrency: `ARW_HTTP_MAX_CONC`
 - Actions Queue Capacity: `ARW_ACTIONS_QUEUE_MAX`
-- Action Worker Pool: `ARW_WORKERS` (auto-detected ≈2× cores, capped at 32 unless overridden by `ARW_WORKERS_MAX`)
+- Action Worker Pool: `ARW_WORKERS` (auto-detected x2 cores, capped at 32 unless overridden by `ARW_WORKERS_MAX`)
 - Context Working Set: `ARW_CONTEXT_K`, `ARW_CONTEXT_EXPAND_PER_SEED`, `ARW_CONTEXT_DIVERSITY_LAMBDA`, `ARW_CONTEXT_MIN_SCORE`, `ARW_CONTEXT_LANES_DEFAULT`, `ARW_CONTEXT_LANE_BONUS`, `ARW_CONTEXT_EXPAND_QUERY`, `ARW_CONTEXT_EXPAND_QUERY_TOP_K`, `ARW_CONTEXT_SCORER`, `ARW_CONTEXT_STREAM_DEFAULT`, `ARW_CONTEXT_COVERAGE_MAX_ITERS`
 - File Rehydrate Head Bytes: `ARW_REHYDRATE_FILE_HEAD_KB`
 - Read‑model Cadences: `ARW_ROUTE_STATS_*`, `ARW_MODELS_METRICS_*`

@@ -102,6 +102,7 @@ nav:
       - Monitoring & Alerts: ops/monitoring.md
       - Runtime Bundle Runbook: ops/runtime_bundle_runbook.md
       - Cluster Runbook: ops/cluster_runbook.md
+      - Automation Ops Handbook: ops/automation_ops.md
       - Alerting (Prometheus): ALERTING.md
       - Trial Planning: ops/trial_readiness.md
       - Trial Runbook: ops/trial_runbook.md
@@ -122,6 +123,7 @@ nav:
       - Flows (Logic Units): guide/flows.md
       - Feedback Engine: guide/feedback_engine.md
       - Logic Units Library: guide/logic_units_library.md
+      - Persona Telemetry: guide/persona_telemetry.md
       - Evaluation Harness: guide/eval_harness.md
       - Experiments (A/B): guide/experiments_ab.md
       - Performance & Reasoning Playbook: guide/performance_reasoning_playbook.md

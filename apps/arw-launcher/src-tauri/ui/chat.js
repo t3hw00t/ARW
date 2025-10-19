@@ -6,6 +6,7 @@ const dedupe = (lanes = []) => Array.from(new Set(lanes));
 const lanesForMode = (mode) => (mode === 'expert' ? dedupe(LANES_EXPERT) : dedupe(LANES_GUIDED));
 let activeMode = (window.ARW?.mode?.current === 'expert') ? 'expert' : 'guided';
 let sidecar = null;
+let personaPanel = null;
 
 function mountSidecar({ base, lanes, force = false } = {}) {
   const profile = dedupe(Array.isArray(lanes) && lanes.length ? lanes : lanesForMode(activeMode));
@@ -93,6 +94,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     } catch {}
     mountSidecar({ base, lanes: lanesForMode(activeMode), force: true });
     ARW.sse.connect(base, { replay: 10 });
+    if (personaPanel && typeof personaPanel.reload === 'function') {
+      await personaPanel.reload({ preserveSelection: true });
+    }
   };
   // Load auto OCR pref
   try{ const prefs = await ARW.getPrefs('launcher'); const v = !!(prefs && prefs.autoOcr); const el=document.getElementById('autoOcr'); if (el) el.checked = v; }catch{}
@@ -101,6 +105,25 @@ document.addEventListener('DOMContentLoaded', async () => {
   });
   ARW.sse.indicator('sseStat', { prefix: 'SSE' });
   ARW.sse.connect(base, { replay: 10 });
+  personaPanel = ARW.personaPanel.attach({
+    root: document.getElementById('personas'),
+    select: document.getElementById('personaSelect'),
+    refresh: document.getElementById('personaRefresh'),
+    status: document.getElementById('personaStatus'),
+    scope: document.getElementById('personaScope'),
+    enable: document.getElementById('personaTelemetryEnable'),
+    save: document.getElementById('personaTelemetrySave'),
+    applyAll: document.getElementById('personaTelemetryApplyAll'),
+    empty: document.getElementById('personaEmpty'),
+    metrics: document.getElementById('personaMetrics'),
+    history: document.getElementById('personaHistory'),
+    historyMeta: document.getElementById('personaHistoryMeta'),
+    historyLimit: 8,
+    getBase: () => base,
+  });
+  if (personaPanel && typeof personaPanel.init === 'function') {
+    await personaPanel.init();
+  }
 
   const captureMenu = document.getElementById('captureMenu');
   const captureToggle = document.getElementById('captureToggle');

@@ -4,7 +4,7 @@ title: Backlog
 
 # Backlog
 
-Updated: 2025-10-18
+Updated: 2025-10-19
 Type: Reference
 
 This backlog captures concrete work items and near-term priorities. The Roadmap focuses on higher‑level themes and time horizons; see About → Roadmap for strategic context.
@@ -114,10 +114,10 @@ Autonomous Economy & Federation
 - [Kernel][Pack: Federation] Contribution ledger MVP: extend `/state/cluster` with per-task payouts, exports, and audit trails — todo
 - [Pack: Federation] Payout connector pilot: optional Stripe test-mode + manual invoice flows with policy leases and ledger reconciliation — plan
 - [Pack: Federation][Pack: Research] Cooperative scaling kit: deployment scripts + evaluation harness presets for revenue agents operating across nodes — plan
-- [Docs] Automation ops handbook: unattended-agent safety checklist, alerting defaults, legal considerations for solo operators — todo
+- [Docs] Automation ops handbook: unattended-agent safety checklist, alerting defaults, legal considerations for solo operators - done
 
 Universal Access & Sustainability
-- [Kernel] Eco runtime preset: optimize for CPU-only laptops, shrink default caches, document low-spec verification path — todo
+- [Kernel] Eco runtime preset: optimize for CPU-only laptops, shrink default caches, document low-spec verification path - in_progress
 - [Pack: Persona][Docs] Community persona bundles: publish sharable persona/worldview seeds with consent guidelines and remix policy — plan
 - [Ops] Community distribution: mirror bundle artifacts + docs for offline installs; publish sustainability plan for free releases — plan
 - [Docs] Skills & monetization ladder: guided learning path from first agent to revenue deployment, integrate with onboarding guides — plan

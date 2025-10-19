@@ -40,7 +40,9 @@ pub use observations::{__path_state_observations, state_observations};
 #[allow(unused_imports)]
 pub use persona::{
     __path_state_persona_get, __path_state_persona_history, __path_state_persona_list,
-    state_persona_get, state_persona_history, state_persona_list,
+    __path_state_persona_vibe_history, __path_state_persona_vibe_metrics, state_persona_get,
+    state_persona_history, state_persona_list, state_persona_vibe_history,
+    state_persona_vibe_metrics,
 };
 #[allow(unused_imports)]
 pub use snapshots::{

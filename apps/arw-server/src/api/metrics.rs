@@ -154,6 +154,38 @@ fn render_prometheus(
     }
 
     out.push_str(
+        "# HELP arw_persona_feedback_total Persona feedback samples accepted per persona\n# TYPE arw_persona_feedback_total counter\n",
+    );
+    out.push_str(
+        "# HELP arw_persona_feedback_signal_total Persona feedback samples accepted per persona and signal\n# TYPE arw_persona_feedback_signal_total counter\n",
+    );
+    for (persona, stats) in summary.persona.by_persona.iter() {
+        write_metric_line(
+            &mut out,
+            "arw_persona_feedback_total",
+            &[("persona", persona.clone())],
+            stats.total,
+        );
+        for (signal, count) in stats.by_signal.iter() {
+            write_metric_line(
+                &mut out,
+                "arw_persona_feedback_signal_total",
+                &[("persona", persona.clone()), ("signal", signal.clone())],
+                count,
+            );
+        }
+    }
+    out.push_str(
+        "# HELP arw_persona_feedback_global_total Total persona feedback samples accepted\n# TYPE arw_persona_feedback_global_total counter\n",
+    );
+    write_metric_line(
+        &mut out,
+        "arw_persona_feedback_global_total",
+        &[],
+        summary.persona.total,
+    );
+
+    out.push_str(
         "# HELP arw_egress_scope_lease_minted_total Scope lease mints per scope\n# TYPE arw_egress_scope_lease_minted_total counter\n",
     );
     out.push_str(
@@ -531,5 +563,32 @@ mod tests {
         assert!(rendered.contains("arw_route_latency_seconds_bucket{path=\"/demo\",le=\"+Inf\"} 3"));
         assert!(rendered.contains("arw_route_latency_seconds_sum{path=\"/demo\"} 1.25"));
         assert!(rendered.contains("arw_route_latency_seconds_count{path=\"/demo\"} 3"));
+    }
+
+    #[test]
+    fn prometheus_export_includes_persona_metrics() {
+        let metrics = crate::metrics::Metrics::new();
+        metrics.record_persona_feedback("persona-1", Some("warmer"));
+        metrics.record_persona_feedback("persona-1", Some("warmer"));
+        metrics.record_persona_feedback("persona-1", Some("cooler"));
+
+        let summary = metrics.snapshot();
+        let bus = arw_events::BusStats {
+            published: 0,
+            delivered: 0,
+            lagged: 0,
+            no_receivers: 0,
+            receivers: 0,
+        };
+        let cache = empty_cache_stats();
+        let rendered = render_prometheus(&summary, &bus, &cache);
+        assert!(rendered.contains("arw_persona_feedback_total{persona=\"persona-1\"} 3"));
+        assert!(rendered.contains(
+            "arw_persona_feedback_signal_total{persona=\"persona-1\",signal=\"warmer\"} 2"
+        ));
+        assert!(rendered.contains(
+            "arw_persona_feedback_signal_total{persona=\"persona-1\",signal=\"cooler\"} 1"
+        ));
+        assert!(rendered.contains("arw_persona_feedback_global_total 3"));
     }
 }

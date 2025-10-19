@@ -8,7 +8,7 @@ Your private AI control room that can scale and share when you choose.
 
 In plain terms: Agent Hub (ARW) lets you run your own team of AI “helpers” on your computer to research, plan, write, and build—while laying the groundwork for upcoming voice and vision helpers—and stay in charge. It is local‑first and privacy‑first by default, with the option to securely pool computing power with trusted peers when a project needs more muscle.
 
-Updated: 2025-10-18
+Updated: 2025-10-19
 Type: Explanation
 
 Assistant quickstart: [Agent Onboarding](ai/AGENT_ONBOARDING.md)
@@ -87,3 +87,5 @@ Related:
 - [Debug UI Overview](guide/debug_ui.md)
 - [CLI Guide](guide/cli.md)
 - [Spec Endpoints](reference/specs.md)
+- [Automation Ops Handbook](ops/automation_ops.md)
+- [Persona Telemetry](guide/persona_telemetry.md)

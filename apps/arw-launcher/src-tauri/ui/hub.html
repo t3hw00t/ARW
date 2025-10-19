@@ -327,6 +327,33 @@
               <div id="csvOut" class="cmp-code" style="padding:0"></div>
             </div>
           </section>
+          <section class="card" id="personas" role="region" aria-labelledby="personasTitle">
+            <h3 id="personasTitle">Personas</h3>
+            <p class="section-lead">Opt into telemetry and keep an eye on vibe feedback without leaving the launcher. Retention defaults to 50 samples via <code>ARW_PERSONA_VIBE_HISTORY_RETAIN</code>.</p>
+            <div class="row persona-controls">
+              <label class="key" for="personaSelect">Persona</label>
+              <select id="personaSelect" aria-label="Select persona" style="min-width:180px"></select>
+              <button id="personaRefresh" class="ghost" type="button">Refresh</button>
+              <span id="personaStatus" class="dim" role="status" aria-live="polite"></span>
+            </div>
+            <div class="row persona-toggle">
+              <label class="key" for="personaScope">Scope</label>
+              <input id="personaScope" aria-label="Telemetry scope" placeholder="workspace" style="min-width:160px" />
+              <label class="key"><input type="checkbox" id="personaTelemetryEnable" /> enable telemetry</label>
+              <button id="personaTelemetrySave" class="ghost" type="button">Save</button>
+              <button id="personaTelemetryApplyAll" class="ghost" type="button">Apply to all</button>
+            </div>
+            <p id="personaEmpty" class="dim" role="status" aria-live="polite" hidden>Persona subsystem disabled or no personas found.</p>
+            <p class="dim persona-hint">Saved changes update the persona record. Use “Apply to all” to broadcast the current scope and consent.</p>
+            <div id="personaMetrics" class="persona-metrics" aria-live="polite"></div>
+            <div class="persona-history-block">
+              <div class="row">
+                <h4 id="personaHistoryTitle">Recent feedback</h4>
+                <span id="personaHistoryMeta" class="dim" role="status" aria-live="polite"></span>
+              </div>
+              <ol id="personaHistory" class="persona-history" aria-labelledby="personaHistoryTitle"></ol>
+            </div>
+          </section>
         </main>
         <aside id="sidecar"></aside>
       </div>

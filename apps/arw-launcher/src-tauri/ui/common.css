@@ -748,3 +748,72 @@ button.btn-small.ghost{ border-color:#d5dbe4 }
 .ann-rect{ position:absolute; border:2px solid var(--color-accent-teal); background: rgba(27,179,163,0.12) }
 .annot-panel footer{ padding:10px 12px; border-top:1px solid var(--color-line); display:flex; gap:8px; align-items:center; justify-content:flex-end }
 .annot-toolbar{ margin-left:auto }
+
+
+.persona-controls,
+.persona-toggle {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+.persona-toggle input {
+  min-width: 160px;
+}
+.persona-metrics {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 0.75rem;
+  margin-top: 0.75rem;
+}
+.persona-metrics .metric-card {
+  background: var(--surface-muted);
+  border: 1px solid var(--color-line);
+  border-radius: 8px;
+  padding: 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+.persona-metrics .metric-card strong {
+  font-size: 1.4rem;
+}
+.persona-history-block {
+  margin-top: 1rem;
+}
+.persona-hint {
+  margin-top: 0.5rem;
+  font-size: 0.85rem;
+}
+.persona-history {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+.persona-history li {
+  border: 1px solid var(--color-line);
+  border-radius: 8px;
+  padding: 0.75rem;
+  background: var(--surface-muted);
+}
+.persona-history li .meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: baseline;
+  font-size: 0.85rem;
+  color: var(--color-muted);
+}
+.persona-history li .note {
+  margin-top: 0.4rem;
+}
+.persona-history li .meta-json {
+  margin-top: 0.4rem;
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  white-space: pre-wrap;
+  word-break: break-word;
+}

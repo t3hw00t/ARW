@@ -145,6 +145,34 @@ pub struct PersonaProposalStatusUpdate {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PersonaVibeSample {
+    pub id: i64,
+    pub persona_id: String,
+    #[serde(default)]
+    pub kind: Option<String>,
+    #[serde(default)]
+    pub signal: Option<String>,
+    #[serde(default)]
+    pub strength: Option<f32>,
+    #[serde(default)]
+    pub note: Option<String>,
+    #[serde(default)]
+    pub metadata: JsonValue,
+    pub recorded_at: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct PersonaVibeSampleCreate {
+    pub persona_id: String,
+    pub kind: Option<String>,
+    pub signal: Option<String>,
+    pub strength: Option<f32>,
+    pub note: Option<String>,
+    pub metadata: JsonValue,
+    pub recorded_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PersonaHistoryEntry {
     pub id: i64,
     pub persona_id: String,
@@ -192,6 +220,14 @@ fn merge_json(base: &mut JsonValue, patch: &JsonValue) {
         (base_slot, patch_value) => {
             *base_slot = patch_value.clone();
         }
+    }
+}
+
+fn serialize_optional_json(value: &JsonValue) -> Option<String> {
+    if value.is_null() {
+        None
+    } else {
+        serde_json::to_string(value).ok()
     }
 }
 
@@ -974,6 +1010,18 @@ impl Kernel {
               applied_at TEXT NOT NULL
             );
             CREATE INDEX IF NOT EXISTS idx_persona_history_persona ON persona_history(persona_id);
+
+            CREATE TABLE IF NOT EXISTS persona_vibe_samples (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              persona_id TEXT NOT NULL,
+              kind TEXT,
+              signal TEXT,
+              strength REAL,
+              note TEXT,
+              metadata TEXT,
+              recorded_at TEXT NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_persona_vibe_samples_persona ON persona_vibe_samples(persona_id, recorded_at DESC);
             "#,
         )?;
         // Backfill optional columns for older installations (ignore errors if already present)
@@ -2598,6 +2646,72 @@ impl Kernel {
         Ok(out)
     }
 
+    pub fn insert_persona_vibe_sample(
+        &self,
+        create: PersonaVibeSampleCreate,
+        retain: i64,
+    ) -> Result<PersonaVibeSample> {
+        let PersonaVibeSampleCreate {
+            persona_id,
+            kind,
+            signal,
+            strength,
+            note,
+            metadata,
+            recorded_at,
+        } = create;
+        let retain = retain.clamp(1, 500);
+        let conn = self.conn()?;
+        conn.execute(
+            "INSERT INTO persona_vibe_samples (persona_id, kind, signal, strength, note, metadata, recorded_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            params![
+                persona_id,
+                kind,
+                signal,
+                strength,
+                note,
+                serialize_optional_json(&metadata),
+                recorded_at
+            ],
+        )?;
+        let last_id = conn.last_insert_rowid();
+        conn.execute(
+            "DELETE FROM persona_vibe_samples WHERE persona_id=? AND id NOT IN (
+                SELECT id FROM persona_vibe_samples WHERE persona_id=? ORDER BY recorded_at DESC, id DESC LIMIT ?
+            )",
+            params![persona_id, persona_id, retain],
+        )?;
+        let mut stmt = conn.prepare(
+            "SELECT id, persona_id, kind, signal, strength, note, metadata, recorded_at FROM persona_vibe_samples WHERE id=? LIMIT 1",
+        )?;
+        let mut rows = stmt.query([last_id])?;
+        if let Some(row) = rows.next()? {
+            Ok(Self::map_persona_vibe_sample_row(row)?)
+        } else {
+            Err(anyhow!("persona vibe sample not found after insert"))
+        }
+    }
+
+    pub fn list_persona_vibe_samples(
+        &self,
+        persona_id: &str,
+        limit: i64,
+    ) -> Result<Vec<PersonaVibeSample>> {
+        let conn = self.conn()?;
+        let limit = limit.clamp(1, 500);
+        let mut stmt = conn.prepare(
+            "SELECT id, persona_id, kind, signal, strength, note, metadata, recorded_at \
+             FROM persona_vibe_samples WHERE persona_id=? \
+             ORDER BY recorded_at DESC, id DESC LIMIT ?",
+        )?;
+        let mut rows = stmt.query(params![persona_id, limit])?;
+        let mut out = Vec::new();
+        while let Some(row) = rows.next()? {
+            out.push(Self::map_persona_vibe_sample_row(row)?);
+        }
+        Ok(out)
+    }
+
     pub async fn upsert_persona_entry_async(
         &self,
         upsert: PersonaEntryUpsert,
@@ -2678,6 +2792,24 @@ impl Kernel {
             .await
     }
 
+    pub async fn insert_persona_vibe_sample_async(
+        &self,
+        create: PersonaVibeSampleCreate,
+        retain: i64,
+    ) -> Result<PersonaVibeSample> {
+        self.run_blocking(move |kernel| kernel.insert_persona_vibe_sample(create, retain))
+            .await
+    }
+
+    pub async fn list_persona_vibe_samples_async(
+        &self,
+        persona_id: String,
+        limit: i64,
+    ) -> Result<Vec<PersonaVibeSample>> {
+        self.run_blocking(move |kernel| kernel.list_persona_vibe_samples(&persona_id, limit))
+            .await
+    }
+
     pub async fn apply_persona_diff_async(
         &self,
         persona_id: String,
@@ -2736,6 +2868,24 @@ impl Kernel {
             diff: parse_json_or_default(diff_raw, json!([])),
             applied_by: row.get(4)?,
             applied_at: row.get(5)?,
+        })
+    }
+
+    fn map_persona_vibe_sample_row(row: &rusqlite::Row<'_>) -> Result<PersonaVibeSample> {
+        let metadata_raw: Option<String> = row.get(6)?;
+        let metadata = match metadata_raw {
+            Some(raw) => serde_json::from_str(&raw).unwrap_or(JsonValue::Null),
+            None => JsonValue::Null,
+        };
+        Ok(PersonaVibeSample {
+            id: row.get(0)?,
+            persona_id: row.get(1)?,
+            kind: row.get(2)?,
+            signal: row.get(3)?,
+            strength: row.get(4)?,
+            note: row.get(5)?,
+            metadata,
+            recorded_at: row.get(7)?,
         })
     }
 

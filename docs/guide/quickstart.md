@@ -4,7 +4,7 @@ title: Quickstart
 
 # Quickstart
 
-Updated: 2025-10-17
+Updated: 2025-10-19
 Type: Tutorial
 
 Run the unified ARW server locally in minutes. The architecture centres on the `/actions` → `/events` → `/state/*` triad; enable `ARW_DEBUG=1` to serve the browser debug panels.
@@ -24,6 +24,14 @@ Run the unified ARW server locally in minutes. The architecture centres on the `
 Need a single command that brings in Rust, Python, Node.js, jq, and ripgrep? Install [mise](https://mise.jdx.dev) and run `mise install`; once the toolchain is hydrated you can call `mise run verify`, `mise run verify:fast`, or `mise run bootstrap:docs` as shorthand for the guardrail helpers below.
 !!! note
     The first launch compiles `arw-server` (and the optional launcher). Expect a multi-minute build on initial setup; subsequent runs reuse the cached binaries.
+
+## Low-Spec Laptops
+
+- Export `ARW_PERF_PRESET=eco` before running `scripts/start.{sh,ps1}` when you only have a CPU and limited RAM.
+- Eco caps background workers (`ARW_WORKERS_MAX=4`), trims the action/tool cache (5 minute TTL, ~256 entries), and turns off OpenTelemetry exporters unless you opt back in with `ARW_OTEL=1`.
+- Use `ARW_PERSONA_VIBE_HISTORY_RETAIN=<limit>` to clamp persona feedback history (default 50 samples) when disk space or memory is tight.
+- You can still raise individual knobs later (for example `ARW_HTTP_MAX_CONC`, `ARW_TOOLS_CACHE_CAP`) if a workload needs more throughput.
+- Clear the preset or set `ARW_PERF_PRESET=balanced` once you move to a machine with more cores or a dedicated GPU.
 
 ## Select Your Environment
 
