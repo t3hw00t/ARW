@@ -120,6 +120,8 @@ def normalize_generated_markdown(text: str) -> str:
     for line in lines:
         if line.startswith("Generated: "):
             normalized.append("Generated: <timestamp>")
+        elif line.startswith("Updated: "):
+            normalized.append("Updated: <timestamp>")
         else:
             normalized.append(line)
     return "\n".join(normalized)
