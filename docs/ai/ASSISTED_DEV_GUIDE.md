@@ -1,8 +1,8 @@
 # Assisted, Iterative Coding – Working Agreement
-Updated: 2025-10-19
+Updated: 2025-10-20
 Type: Reference
 
-Microsummary: Small, safe changes with a written PLAN → minimal DIFF → tests → docs. Default‑deny risky edits. Stable.
+Microsummary: Small, safe changes with a written PLAN → minimal DIFF → fast, targeted verification → docs. Default‑deny risky edits. Stable.
 
 Harness precedence
 - Follow the execution harness or user instructions when they conflict with this guide; note the deviation in your response so the next agent has the same context.
@@ -37,17 +37,30 @@ Plan the minimum set of checks before editing so you can state them in the PLAN 
 | Launcher / UI (Tauri, TypeScript, CSS) | `scripts/dev.{sh,ps1} verify --with-launcher` or `scripts/dev.{sh,ps1} verify --ci` | Ensure Node.js is available; call out launcher skips that stem from missing Node. |
 | Dependency bumps, build scripts, migrations | Fresh build (`scripts/dev.{sh,ps1} build`) then `scripts/dev.{sh,ps1} verify` | Note any manual steps (e.g., `npm install`, `py -3 -m pip install -r requirements/...`) in the PLAN so reviewers can reproduce them. |
 
+### Fast Feedback & Incremental Loops
+- Discover the project’s shortest feedback path before editing: scan `Justfile`, `Makefile`, and `package.json`/`pyproject.toml` scripts for crate- or package-scoped commands you can reuse instead of inventing ad-hoc loops.
+- Reach for incremental runners (`cargo check -p <crate>`, `cargo nextest run -p <crate> --run-ignored none`, `cargo watch -x "clippy -p <crate>"`, `npm test -- --watch`, `pytest path/test_file.py`) when the PLAN touches a narrow surface; upgrade to the full helper once changes fan out or before handing work back.
+- Reuse cached artefacts when safe: prefer `cargo check` or a targeted build over `cargo clean`, and call out in your status message when you relied on a previous successful `verify` run (include the command and timestamp/commit).
+- When a helper produces partial results (e.g., `verify --fast` finishes while `verify --ci` is queued), note the coverage you already have and the follow-up you still owe.
+
 If a command writes artefacts you do not intend to commit, clean them before finishing (`cargo clean -p <crate>`, remove generated files) or document why they remain.
 
 ### Handling Flaky or Long-Running Checks
 - Retry a failing test once to rule out transient issues (`cargo nextest run --filter "<name>"` or rerun the helper). Capture the command and result so reviewers understand the outcome.
 - When a check is known flaky or exceeds the harness time limit, stop, document the behavior (test name, command, error snippet), and ask the maintainer whether to proceed. Do **not** silently skip.
 - For multi-hour suites, coordinate with the user before running them. Offer a scoped alternative (e.g., package-only nextest run, mocked docs build) and state the trade-offs.
+- If a run must be aborted, include the partial logs or the failing test names in your notes so the next attempt can pick up quickly.
 - If an environment gap (missing Node/MkDocs/Python) prevents a check, attempt the documented bootstrap step once. If it still fails, record the command, failure, and remediation attempt in your status.
 
 ### Reporting Results
 - In the final response, list each command you ran (`scripts/dev.ps1 verify --fast`, `cargo nextest run -p <crate>`) and whether it passed, failed, or was skipped.
 - Include a short error summary for failed checks (test name, assertion) and the follow-up you proposed.
+- Mention when you relied on cached builds or prior runs (for example, “reused `scripts/dev.ps1 verify --fast` from earlier today; reran `cargo nextest run -p runtime` after changes”).
+
+### Strengthening Test Coverage
+- Leave new or improved tests in place when they harden behavior—temporary scaffolding is the only thing that should be removed before hand-off.
+- When you spot an obvious missing guardrail while fixing a bug, add or update a test within the touched surface and run the narrowest command that exercises it.
+- If time constraints force you to defer a durability improvement, capture the proposed test (filename, outline, expected assertion) in your notes so it can be scheduled deliberately.
 - When you skip a check, state the justification (“config-only change; verify skipped”) and the risk so maintainers can decide whether to rerun it.
 - Attach links or reference paths instead of dumping large logs; keep snippets to the failing assertion or panic line.
 

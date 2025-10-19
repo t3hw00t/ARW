@@ -10,7 +10,7 @@ import sys
 from collections import defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Iterable
+from typing import Callable, Iterable
 
 ROOT = Path(__file__).resolve().parent.parent
 DOCS_DIR = ROOT / "docs"
@@ -112,6 +112,43 @@ class Runner:
                 log_warn(f"{msg}\n{result.stderr.strip()}")
             return None
         return result.stdout if text else result.stdout.decode()
+
+
+def normalize_generated_markdown(text: str) -> str:
+    lines = text.replace("\r\n", "\n").split("\n")
+    normalized: list[str] = []
+    for line in lines:
+        if line.startswith("Generated: "):
+            normalized.append("Generated: <timestamp>")
+        else:
+            normalized.append(line)
+    return "\n".join(normalized)
+
+
+def normalize_generated_json(text: str) -> str:
+    try:
+        payload = json.loads(text)
+    except json.JSONDecodeError:
+        return text.replace("\r\n", "\n")
+    if isinstance(payload, dict) and "generated" in payload:
+        payload = dict(payload)
+        payload["generated"] = "<timestamp>"
+    return json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+
+
+def write_if_changed(
+    dest: Path, content: str, normalizer: Callable[[str], str] | None = None
+) -> None:
+    if dest.exists():
+        existing = dest.read_text(encoding="utf-8")
+        existing_norm = normalizer(existing) if normalizer else existing
+        incoming_norm = normalizer(content) if normalizer else content
+        if existing_norm == incoming_norm:
+            if normalizer:
+                log_info(f"Skipping update for {dest} (timestamp-only changes)")
+            return
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    dest.write_text(content, encoding="utf-8")
 
 
 def guess_repo_blob_base(runner: Runner) -> str:
@@ -384,29 +421,32 @@ def generate_gating_docs(runner: Runner, cli_path: Path) -> None:
             "Rendering gating keys (json)",
             [str(cli_path), "gate", "keys", "--json", "--pretty"],
             docs_dir / "GATING_KEYS.json",
+            normalize_generated_json,
         ),
         (
             "Rendering gating keys (markdown)",
             [str(cli_path), "gate", "keys", "--doc"],
             docs_dir / "GATING_KEYS.md",
+            normalize_generated_markdown,
         ),
         (
             "Rendering gating config schema",
             [str(cli_path), "gate", "config", "schema", "--pretty"],
             docs_dir / "reference" / "gating_config.schema.json",
+            None,
         ),
         (
             "Rendering gating config reference",
             [str(cli_path), "gate", "config", "doc"],
             docs_dir / "reference" / "gating_config.md",
+            normalize_generated_markdown,
         ),
     ]
-    for label, cmd, dest in commands:
+    for label, cmd, dest, normalizer in commands:
         stdout = runner.capture(label, cmd, required=False)
         if stdout is None:
             continue
-        dest.parent.mkdir(parents=True, exist_ok=True)
-        dest.write_text(stdout, encoding="utf-8")
+        write_if_changed(dest, stdout, normalizer)
 
 
 def generate_mcp_tools(runner: Runner, cli_path: Path) -> None:

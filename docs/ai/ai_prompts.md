@@ -1,5 +1,5 @@
 # AI Prompts Policy
-Updated: 2025-10-09
+Updated: 2025-10-20
 Type: Reference
 
 Microsummary: Guardrails for assistants interacting with ARW. Stable baseline.

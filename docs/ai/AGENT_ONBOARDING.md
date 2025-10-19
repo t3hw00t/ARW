@@ -1,11 +1,11 @@
 # Agent Onboarding
-Updated: 2025-10-19
+Updated: 2025-10-20
 Type: Reference
 
 Microsummary: Fast orientation for assistants working in the ARW repo—where to look, what to run, and how to respond safely.
 
 ## Start Here
-- Read `docs/ai/ASSISTED_DEV_GUIDE.md` for the PLAN → DIFF → tests loop, the lightweight checklist, and the new “Selecting Builds & Tests” matrix that maps task scope to the right commands.
+- Read `docs/ai/ASSISTED_DEV_GUIDE.md` for the PLAN → DIFF → tests loop, the “Selecting Builds & Tests” matrix, and the “Fast Feedback & Incremental Loops” / “Strengthening Test Coverage” sections that balance speed with safety.
 - Follow `docs/ai/ai_prompts.md` for safety posture, then cite any harness-provided overrides in your responses.
 - Skim `docs/ai/REPO_MAP.md` for the workspace layout before drilling into large surfaces like `README.md`.
 - Treat harness or user instructions as the source of truth when they differ from the defaults in these docs. Note the deviation so the next agent has the same context.
