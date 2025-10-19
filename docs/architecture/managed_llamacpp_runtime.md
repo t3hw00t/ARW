@@ -79,7 +79,7 @@ We need a first-class, flexible integration that feels native, stays policy-awar
 
 ### 5. Extensibility Layer
 
-- Define a `RuntimeAdapter` trait with capabilities: `prepare(model_manifest, profile)`, `launch()`, `shutdown()`, `health_report()`, `metrics()`, `supports(feature)`, `apply_patch(config_patch)`.
+- Define a `RuntimeAdapter` trait with capabilities: `prepare(model_manifest, profile)`, `launch()`, `shutdown()`, `health_report()`, `metrics()`, metadata discovery (`metadata()` returning supported modalities/profiles/accelerator hints), and `apply_patch(config_patch)`.
 - Provide llama.cpp adapter first; design the trait so adapters can run as separate processes or in-process libraries.
 - Document adapter handshake (`runtime_adapters.md`): registration metadata, binary packaging, sandbox requirements, accelerator capability descriptors.
 - Roadmap: ONNX Runtime adapter using same contract (DirectML/ROCm/CUDA/OneDNN), vLLM adapter with GPU batching + PagedAttention, CoreML/Metal adapter for macOS/iOS-class hardware, Qualcomm/MediaTek NPU hooks via vendor SDKs.
@@ -147,7 +147,9 @@ Implementation phases for text, audio, vision, and pointer automation now live i
 ```rust
 pub trait RuntimeAdapter {
     fn id(&self) -> &'static str;
-    fn capabilities(&self) -> CapabilitySet;
+    fn metadata(&self) -> RuntimeAdapterMetadata {
+        RuntimeAdapterMetadata::default()
+    }
     async fn prepare(&self, ctx: PrepareContext) -> Result<PreparedRuntime, AdapterError>;
     async fn launch(&self, prepared: PreparedRuntime) -> Result<RuntimeHandle, AdapterError>;
     async fn shutdown(&self, handle: RuntimeHandle) -> Result<(), AdapterError>;

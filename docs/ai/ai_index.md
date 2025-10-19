@@ -12,4 +12,6 @@ Microsummary: Map of repo for AI/code models: purpose, key files, how to run, li
   - Docs: `docs/` (MkDocs Material); site config: `mkdocs.yml`.
   - Schemas: `spec/schemas/`; OpenAPI preview: `docs/static/openapi.json`.
 - Limits: default‑deny for write/shell/network; assume no internet; prefer explicit permissions.
-- Shells: most automation expects Bash; on Windows use Git Bash/WSL or the paired `*.ps1` scripts when Bash is unavailable.
+- Shells: harness default is PowerShell—invoke commands with `["pwsh","-NoLogo","-NoProfile","-Command", ...]`, and only pivot to Git Bash/WSL after confirming they exist. Prefer the repo `.ps1`/`.cmd` wrappers for build/test work.
+- Windows search fallback: when ripgrep is absent, pair `Get-ChildItem -Recurse` with `Select-String` and note the substitution in your status.
+- WSL: keep the checkout under `/home/<user>`, use the `.sh` helpers, and run `bash scripts/env/switch.sh windows-wsl` (plus `scripts\env\switch.ps1 windows-host` when returning) so build artefacts don’t cross between environments.

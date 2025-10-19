@@ -3,6 +3,7 @@
 - Harness instructions and user overrides take precedence over this file. Follow the harness, then document any deviation so the next agent understands the context.
 - Always propose a PLAN (files, changes, risks, tests, docs) before code. When the harness treats a change as a trivial ease-of-use edit, call that out in your response and follow the lightweight exception in docs/ai/ASSISTED_DEV_GUIDE.md.
 - When the execution harness explicitly grants a lighter flow or pre-approved permissions, treat that as the governing instruction and state the assumption in your response.
+- On Windows, run commands via PowerShell (`["pwsh","-NoLogo","-NoProfile","-Command", ...]`), prefer repo `.ps1`/`.cmd` helpers for build/test flows, translate `python3` invocations to `py -3`/`python`, and document fallbacks (e.g., `Select-String`) when `rg` is unavailable. Watch for CRLF issues and unblock scripts before execution. Inside WSL, keep the checkout under `/home`, run `bash scripts/env/switch.sh windows-wsl` before builds/tests, and switch back on the host to avoid cross-environment artefacts.
 - Implement the smallest DIFF once the PLAN is approved/self‑reviewed.
 - Run fmt, clippy -D warnings, and tests when source code changes; summarize results. For docs-only or config text tweaks, state the skipped checks and why they are safe.
 - Update rustdoc and docs; add examples where useful.
