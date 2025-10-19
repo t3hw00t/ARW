@@ -1,17 +1,17 @@
 use anyhow::{bail, Context, Result};
-use jsonschema::{Draft, JSONSchema};
+use jsonschema::{self, Draft, Validator};
 use serde_json::Value;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-fn recipe_schema() -> &'static JSONSchema {
-    static SCHEMA: once_cell::sync::Lazy<JSONSchema> = once_cell::sync::Lazy::new(|| {
+fn recipe_schema() -> &'static Validator {
+    static SCHEMA: once_cell::sync::Lazy<Validator> = once_cell::sync::Lazy::new(|| {
         let raw = include_str!("../../../spec/schemas/recipe_manifest.json");
         let json: Value =
             serde_json::from_str(raw).expect("recipe manifest schema to parse as JSON");
-        JSONSchema::options()
+        jsonschema::options()
             .with_draft(Draft::Draft7)
-            .compile(&json)
+            .build(&json)
             .expect("recipe manifest schema to compile")
     });
     &SCHEMA
@@ -54,15 +54,15 @@ fn recipe_examples_validate_against_schema() -> Result<()> {
             serde_yaml::from_str(&raw)
                 .with_context(|| format!("parsing recipe example YAML {}", path.display()))?
         };
-        if let Err(errors) = schema.validate(&manifest) {
-            let collected = errors
-                .map(|err| err.to_string())
-                .collect::<Vec<_>>()
-                .join("; ");
+        let collected: Vec<_> = schema
+            .iter_errors(&manifest)
+            .map(|err| err.to_string())
+            .collect();
+        if !collected.is_empty() {
             bail!(
                 "validating recipe example {} failed: {}",
                 path.display(),
-                collected
+                collected.join("; ")
             );
         };
     }

@@ -1,6 +1,6 @@
 use anyhow::{anyhow, bail, Context, Result};
 use clap::{Args, Subcommand};
-use jsonschema::{Draft, JSONSchema};
+use jsonschema::{self, Draft, Validator};
 use once_cell::sync::Lazy;
 use reqwest::blocking::Client;
 use serde::Serialize;
@@ -11,15 +11,15 @@ use std::time::Duration;
 
 use crate::{resolve_admin_token, with_admin_headers};
 
-static LOGIC_UNIT_SCHEMA: Lazy<JSONSchema> = Lazy::new(|| {
+static LOGIC_UNIT_SCHEMA: Lazy<Validator> = Lazy::new(|| {
     let raw = include_str!(concat!(
         env!("CARGO_MANIFEST_DIR"),
         "/../../spec/schemas/logic_unit_manifest.json"
     ));
     let schema_json: Value = serde_json::from_str(raw).expect("logic unit schema json to parse");
-    JSONSchema::options()
+    jsonschema::options()
         .with_draft(Draft::Draft7)
-        .compile(&schema_json)
+        .build(&schema_json)
         .expect("logic unit schema to compile")
 });
 
@@ -323,12 +323,16 @@ fn load_manifest_from_file(path: &Path) -> Result<Value> {
         serde_yaml::from_str(&data)
             .with_context(|| format!("failed to parse manifest {}", path.display()))?
     };
-    if let Err(errors) = LOGIC_UNIT_SCHEMA.validate(&value) {
-        let joined = errors
-            .map(|err| format!("{}: {}", err.instance_path, err))
-            .collect::<Vec<_>>()
-            .join("; ");
-        bail!("{} does not satisfy schema: {}", path.display(), joined);
+    let joined: Vec<_> = LOGIC_UNIT_SCHEMA
+        .iter_errors(&value)
+        .map(|err| format!("{}: {}", err.instance_path, err))
+        .collect();
+    if !joined.is_empty() {
+        bail!(
+            "{} does not satisfy schema: {}",
+            path.display(),
+            joined.join("; ")
+        );
     }
     Ok(value)
 }

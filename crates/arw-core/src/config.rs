@@ -1,5 +1,5 @@
 use anyhow::Result;
-use jsonschema::JSONSchema;
+use jsonschema::{validator_for, Validator};
 use once_cell::sync::Lazy;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -30,10 +30,10 @@ pub struct Config {
     pub cluster: ClusterConfig,
 }
 
-static CONFIG_SCHEMA: Lazy<JSONSchema> = Lazy::new(|| {
+static CONFIG_SCHEMA: Lazy<Validator> = Lazy::new(|| {
     let schema = schemars::schema_for!(Config);
     let schema_value = serde_json::to_value(&schema).expect("schema value");
-    JSONSchema::compile(&schema_value).expect("valid schema")
+    validator_for(&schema_value).expect("valid schema")
 });
 
 /// Returns the JSON schema describing the configuration structure.
@@ -55,9 +55,12 @@ pub fn load_config(path: &str) -> Result<Config> {
     let content = std::fs::read_to_string(path)?;
     let raw: toml::Value = toml::from_str(&content)?;
     let json_value = serde_json::to_value(&raw)?;
-    if let Err(errors) = CONFIG_SCHEMA.validate(&json_value) {
-        let msg = errors.map(|e| e.to_string()).collect::<Vec<_>>().join(", ");
-        return Err(anyhow::anyhow!(msg));
+    let validation_errors: Vec<_> = CONFIG_SCHEMA
+        .iter_errors(&json_value)
+        .map(|e| e.to_string())
+        .collect();
+    if !validation_errors.is_empty() {
+        return Err(anyhow::anyhow!(validation_errors.join(", ")));
     }
     let cfg: Config = toml::from_str(&content)?;
     Ok(cfg)

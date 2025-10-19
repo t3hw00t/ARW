@@ -8,7 +8,7 @@ use utoipa::ToSchema;
 
 use crate::{egress_policy, egress_proxy, AppState};
 use arw_topics as topics;
-use jsonschema::{Draft, JSONSchema};
+use jsonschema::{self, Draft};
 
 #[derive(Serialize, ToSchema)]
 pub(crate) struct EgressSettings {
@@ -300,7 +300,7 @@ pub async fn egress_settings_update(
         Some(v) => v,
         None => return (axum::http::StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"type":"about:blank","title":"Error","status":500, "detail":"missing egress schema"}))).into_response(),
     };
-    let compiled = match JSONSchema::options().with_draft(Draft::Draft7).compile(&schema_json) {
+    let compiled = match jsonschema::options().with_draft(Draft::Draft7).build(&schema_json) {
         Ok(c) => c,
         Err(e) => return (axum::http::StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"type":"about:blank","title":"Error","status":500, "detail": format!("invalid schema: {}", e)}))).into_response(),
     };
@@ -514,10 +514,11 @@ pub async fn egress_settings_update(
     }
 
     // Validate the sub-tree against the schema
-    if let Err(errors) = compiled.validate(&egress) {
-        let errs: Vec<serde_json::Value> = errors
-            .map(|e| json!({"path": e.instance_path.to_string(), "error": e.to_string()}))
-            .collect();
+    let errs: Vec<serde_json::Value> = compiled
+        .iter_errors(&egress)
+        .map(|e| json!({"path": e.instance_path.to_string(), "error": e.to_string()}))
+        .collect();
+    if !errs.is_empty() {
         return (axum::http::StatusCode::BAD_REQUEST, Json(json!({"type":"about:blank","title":"Bad Request","status":400, "detail":"schema validation failed", "errors": errs}))).into_response();
     }
     // Apply and snapshot

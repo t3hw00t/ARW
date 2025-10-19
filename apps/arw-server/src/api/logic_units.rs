@@ -4,7 +4,7 @@ use axum::{
     extract::{Query, State},
     Json,
 };
-use jsonschema::{Draft, JSONSchema};
+use jsonschema::{self, Draft};
 use serde_json::{json, Value};
 
 use crate::api::config::{
@@ -231,13 +231,18 @@ pub async fn logic_units_apply(
         };
         match tokio::fs::read(schema_path).await {
             Ok(bytes) => match serde_json::from_slice::<Value>(&bytes) {
-                Ok(schema_json) => match JSONSchema::options()
+                Ok(schema_json) => match jsonschema::options()
                     .with_draft(Draft::Draft7)
-                    .compile(&schema_json)
+                    .build(&schema_json)
                 {
                     Ok(compiled) => {
-                        if let Err(errors) = compiled.validate(&to_validate) {
-                            let errs: Vec<Value> = errors.map(|e| json!({"path": e.instance_path.to_string(), "error": e.to_string()})).collect();
+                        let errs: Vec<Value> = compiled
+                            .iter_errors(&to_validate)
+                            .map(|e| {
+                                json!({"path": e.instance_path.to_string(), "error": e.to_string()})
+                            })
+                            .collect();
+                        if !errs.is_empty() {
                             return (
                                 axum::http::StatusCode::BAD_REQUEST,
                                 Json(
@@ -505,9 +510,9 @@ mod tests {
         let schema_src = std::fs::read_to_string(&schema_path).expect("logic unit schema to load");
         let schema_json: serde_json::Value =
             serde_json::from_str(&schema_src).expect("logic unit schema to parse");
-        let schema = JSONSchema::options()
+        let schema = jsonschema::options()
             .with_draft(Draft::Draft7)
-            .compile(&schema_json)
+            .build(&schema_json)
             .expect("logic unit schema to compile");
 
         let examples_dir = repo_root.join("examples/logic-units");
@@ -531,18 +536,15 @@ mod tests {
             } else {
                 serde_yaml::from_str(&raw).expect("logic unit manifest yaml to parse")
             };
-            if let Err(errors) = schema.validate(&manifest) {
-                let mut joined = String::new();
-                for err in errors {
-                    if !joined.is_empty() {
-                        joined.push_str("; ");
-                    }
-                    joined.push_str(&format!("{}: {}", err.instance_path, err));
-                }
+            let joined: Vec<_> = schema
+                .iter_errors(&manifest)
+                .map(|err| format!("{}: {}", err.instance_path, err))
+                .collect();
+            if !joined.is_empty() {
                 panic!(
                     "example {} failed logic unit schema validation: {}",
                     path.display(),
-                    joined
+                    joined.join("; ")
                 );
             }
             checked += 1;

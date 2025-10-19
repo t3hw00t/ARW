@@ -2,7 +2,7 @@ use std::collections::{HashMap, HashSet};
 
 use anyhow::{Context, Result as AnyhowResult};
 use chrono::{DateTime, SecondsFormat, Utc};
-use jsonschema::JSONSchema;
+use jsonschema::{self, Validator};
 use metrics::histogram;
 use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
@@ -20,18 +20,18 @@ const MODULAR_EPISODIC_SOURCE: &str = "modular.agent.episodic";
 const MODULAR_TOOL_SHORT_TERM_SOURCE: &str = "modular.tool.short_term";
 const MODULAR_TOOL_EPISODIC_SOURCE: &str = "modular.tool.episodic";
 
-static MODULAR_AGENT_MESSAGE_SCHEMA: Lazy<JSONSchema> = Lazy::new(|| {
+static MODULAR_AGENT_MESSAGE_SCHEMA: Lazy<Validator> = Lazy::new(|| {
     let raw = include_str!("../../../spec/schemas/modular_agent_message.json");
     let schema: Value =
         serde_json::from_str(raw).expect("spec/schemas/modular_agent_message.json must parse");
-    JSONSchema::compile(&schema).expect("modular_agent_message schema must be valid")
+    jsonschema::validator_for(&schema).expect("modular_agent_message schema must be valid")
 });
 
-static MODULAR_TOOL_INVOCATION_SCHEMA: Lazy<JSONSchema> = Lazy::new(|| {
+static MODULAR_TOOL_INVOCATION_SCHEMA: Lazy<Validator> = Lazy::new(|| {
     let raw = include_str!("../../../spec/schemas/modular_tool_invocation.json");
     let schema: Value =
         serde_json::from_str(raw).expect("spec/schemas/modular_tool_invocation.json must parse");
-    JSONSchema::compile(&schema).expect("modular_tool_invocation schema must be valid")
+    jsonschema::validator_for(&schema).expect("modular_tool_invocation schema must be valid")
 });
 
 #[derive(Debug, Error)]
@@ -1106,11 +1106,14 @@ pub fn tool_invocation_summary(validated: &ValidatedToolInvocation) -> Value {
 }
 
 fn validate_against_schema(
-    schema: &JSONSchema,
+    schema: &Validator,
     value: &Value,
 ) -> Result<(), ModularValidationError> {
-    if let Err(errors) = schema.validate(value) {
-        let issues = errors.map(|e| e.to_string()).collect::<Vec<_>>();
+    let issues = schema
+        .iter_errors(value)
+        .map(|e| e.to_string())
+        .collect::<Vec<_>>();
+    if !issues.is_empty() {
         return Err(ModularValidationError::Schema(issues));
     }
     Ok(())

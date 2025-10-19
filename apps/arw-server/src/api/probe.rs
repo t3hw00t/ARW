@@ -114,7 +114,7 @@ pub async fn probe_hw(headers: HeaderMap, State(state): State<AppState>) -> impl
 
     // CPU
     let cpus_logical = sys.cpus().len() as u64;
-    let cpus_physical = sys.physical_core_count().unwrap_or(0) as u64;
+    let cpus_physical = System::physical_core_count().unwrap_or(0) as u64;
     let cpu_brand = sys
         .cpus()
         .first()
@@ -247,9 +247,9 @@ pub async fn probe_metrics(headers: HeaderMap, State(state): State<AppState>) ->
 async fn collect_metrics_snapshot() -> Value {
     let mut sys = System::new();
     sys.refresh_memory();
-    sys.refresh_cpu();
+    sys.refresh_cpu_all();
     tokio::time::sleep(std::time::Duration::from_millis(180)).await;
-    sys.refresh_cpu();
+    sys.refresh_cpu_all();
     let per_core: Vec<f64> = sys.cpus().iter().map(|c| c.cpu_usage() as f64).collect();
     let avg = if per_core.is_empty() {
         0.0

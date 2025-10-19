@@ -4,7 +4,7 @@ use axum::{
     extract::{Path, Query, State},
     Json,
 };
-use jsonschema::{Draft, JSONSchema};
+use jsonschema::{self, Draft};
 use serde::Deserialize;
 use serde_json::{json, Value};
 use utoipa::ToSchema;
@@ -284,16 +284,18 @@ pub(crate) fn validate_patch_value(v: &Value) -> Result<(), Vec<Value>> {
         "required": ["patches"],
         "additionalProperties": true
     });
-    let compiled = JSONSchema::options()
+    let compiled = jsonschema::options()
         .with_draft(Draft::Draft7)
-        .compile(&schema)
+        .build(&schema)
         .unwrap();
-    let res = compiled.validate(v);
-    match res {
-        Err(errors) => Err(errors
-            .map(|e| json!({"path": e.instance_path.to_string(), "error": e.to_string()}))
-            .collect()),
-        Ok(_) => Ok(()),
+    let errors: Vec<_> = compiled
+        .iter_errors(v)
+        .map(|e| json!({"path": e.instance_path.to_string(), "error": e.to_string()}))
+        .collect();
+    if errors.is_empty() {
+        Ok(())
+    } else {
+        Err(errors)
     }
 }
 
@@ -364,13 +366,18 @@ pub async fn patch_apply(
         };
         match tokio::fs::read(schema_path).await {
             Ok(bytes) => match serde_json::from_slice::<Value>(&bytes) {
-                Ok(schema_json) => match JSONSchema::options()
+                Ok(schema_json) => match jsonschema::options()
                     .with_draft(Draft::Draft7)
-                    .compile(&schema_json)
+                    .build(&schema_json)
                 {
                     Ok(compiled) => {
-                        if let Err(errors) = compiled.validate(&to_validate) {
-                            let errs: Vec<Value> = errors.map(|e| json!({"path": e.instance_path.to_string(), "error": e.to_string()})).collect();
+                        let errs: Vec<Value> = compiled
+                            .iter_errors(&to_validate)
+                            .map(|e| {
+                                json!({"path": e.instance_path.to_string(), "error": e.to_string()})
+                            })
+                            .collect();
+                        if !errs.is_empty() {
                             return (
                                 axum::http::StatusCode::BAD_REQUEST,
                                 Json(
@@ -658,9 +665,9 @@ pub async fn patch_validate(headers: HeaderMap, Json(req): Json<ValidateReq>) ->
         Err(SchemaAccessError::Io(_)) => return schema_error_response("failed to read schema"),
     };
     match serde_json::from_slice::<Value>(&bytes) {
-        Ok(schema_json) => match JSONSchema::options()
+        Ok(schema_json) => match jsonschema::options()
             .with_draft(Draft::Draft7)
-            .compile(&schema_json)
+            .build(&schema_json)
         {
             Ok(compiled) => {
                 let pointer = req.schema_pointer.as_deref();
@@ -671,21 +678,20 @@ pub async fn patch_validate(headers: HeaderMap, Json(req): Json<ValidateReq>) ->
                 } else {
                     to_validate
                 };
-                let res = compiled.validate(&sub);
-                match res {
-                    Ok(_) => (StatusCode::OK, Json(json!({"ok": true}))).into_response(),
-                    Err(errors) => {
-                        let errs: Vec<Value> = errors
-                            .map(|e| {
-                                json!({"path": e.instance_path.to_string(), "error": e.to_string()})
-                            })
-                            .collect();
-                        (
-                            StatusCode::BAD_REQUEST,
-                            Json(json!({"type":"about:blank","title":"Bad Request","status":400, "detail":"schema validation failed", "errors": errs})),
-                        )
-                            .into_response()
-                    }
+                let errs: Vec<Value> = compiled
+                    .iter_errors(&sub)
+                    .map(|e| {
+                        json!({"path": e.instance_path.to_string(), "error": e.to_string()})
+                    })
+                    .collect();
+                if errs.is_empty() {
+                    (StatusCode::OK, Json(json!({"ok": true}))).into_response()
+                } else {
+                    (
+                        StatusCode::BAD_REQUEST,
+                        Json(json!({"type":"about:blank","title":"Bad Request","status":400, "detail":"schema validation failed", "errors": errs})),
+                    )
+                        .into_response()
                 }
             }
             Err(e) => (
@@ -839,7 +845,7 @@ mod tests {
         http::{HeaderMap, HeaderValue},
         response::IntoResponse,
     };
-    use jsonschema::{Draft, JSONSchema};
+    use jsonschema::{self, Draft};
     use once_cell::sync::Lazy;
     use serde_json::json;
     use std::collections::HashMap;
@@ -1183,9 +1189,9 @@ mod tests {
             std::fs::read_to_string(&schema_path).expect("recipe manifest schema to load");
         let schema_json: serde_json::Value =
             serde_json::from_str(&schema_src).expect("recipe manifest schema to be valid JSON");
-        let schema = JSONSchema::options()
+        let schema = jsonschema::options()
             .with_draft(Draft::Draft7)
-            .compile(&schema_json)
+            .build(&schema_json)
             .expect("recipe manifest schema to compile");
 
         let examples_dir = repo_root.join("examples/recipes");
@@ -1208,18 +1214,15 @@ mod tests {
                 std::fs::read_to_string(entry.path()).expect("example recipe manifest to load");
             let candidate: serde_json::Value = serde_yaml::from_str(&doc)
                 .expect("example recipe manifest to parse as JSON-compatible YAML");
-            if let Err(errors) = schema.validate(&candidate) {
-                let mut joined = String::new();
-                for err in errors {
-                    if !joined.is_empty() {
-                        joined.push_str("; ");
-                    }
-                    joined.push_str(&format!("{}: {}", err.instance_path, err));
-                }
+            let joined: Vec<_> = schema
+                .iter_errors(&candidate)
+                .map(|err| format!("{}: {}", err.instance_path, err))
+                .collect();
+            if !joined.is_empty() {
                 panic!(
                     "example {} failed recipe schema validation: {}",
                     entry.path().display(),
-                    joined
+                    joined.join("; ")
                 );
             }
             checked += 1;

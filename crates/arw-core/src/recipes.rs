@@ -1,5 +1,5 @@
 use anyhow::{anyhow, bail, Context, Result};
-use jsonschema::{Draft, JSONSchema};
+use jsonschema::{Draft, Validator};
 use once_cell::sync::Lazy;
 use serde::Serialize;
 use serde_json::Value;
@@ -7,15 +7,15 @@ use std::collections::HashSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-static RECIPE_SCHEMA: Lazy<JSONSchema> = Lazy::new(|| {
+static RECIPE_SCHEMA: Lazy<Validator> = Lazy::new(|| {
     let raw = include_str!(concat!(
         env!("CARGO_MANIFEST_DIR"),
         "/../../spec/schemas/recipe_manifest.json"
     ));
     let schema_json: Value = serde_json::from_str(raw).expect("recipe schema json to parse");
-    JSONSchema::options()
+    jsonschema::options()
         .with_draft(Draft::Draft7)
-        .compile(&schema_json)
+        .build(&schema_json)
         .expect("recipe schema to compile")
 });
 
@@ -274,11 +274,12 @@ fn load_manifest_from_file(path: &Path) -> Result<Value> {
         .with_context(|| format!("failed to read manifest {}", path.display()))?;
     let value: Value = serde_yaml::from_str(&data)
         .with_context(|| format!("failed to parse manifest {}", path.display()))?;
-    if let Err(errors) = RECIPE_SCHEMA.validate(&value) {
-        let joined = errors
-            .map(|err| format!("{}: {}", err.instance_path, err))
-            .collect::<Vec<_>>()
-            .join("; ");
+    let schema_errors: Vec<_> = RECIPE_SCHEMA
+        .iter_errors(&value)
+        .map(|err| format!("{}: {}", err.instance_path, err))
+        .collect();
+    if !schema_errors.is_empty() {
+        let joined = schema_errors.join("; ");
         bail!("{} does not satisfy schema: {}", path.display(), joined);
     }
     Ok(value)

@@ -54,7 +54,8 @@ impl PerfPreset {
 /// Detect a reasonable preset from the host machine.
 /// Very coarse: based on logical cores and memory size.
 pub fn detect_preset() -> PerfPreset {
-    let sys = System::new_with_specifics(RefreshKind::new().with_cpu(CpuRefreshKind::new()));
+    let sys =
+        System::new_with_specifics(RefreshKind::nothing().with_cpu(CpuRefreshKind::everything()));
     let cpus = sys.cpus().len().max(1);
     let mut sys_full = System::new_all();
     sys_full.refresh_memory();
