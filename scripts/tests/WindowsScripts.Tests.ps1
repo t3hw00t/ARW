@@ -113,3 +113,48 @@ Describe 'Windows Setup Script — DryRun extras' {
     $raw -match 'download jq.exe' | Should -BeTrue
   }
 }
+
+Context 'stamp_docs_updated.py' {
+  $python3 = Get-Command python3 -ErrorAction SilentlyContinue
+  if (-not $python3) {
+    $python3 = Get-Command python -ErrorAction Stop
+  }
+
+  It 'git_status_has_changes detects pending changes and cleans up' {
+    $code = @"
+import sys, pathlib, subprocess
+
+root = pathlib.Path.cwd()
+sys.path.insert(0, str(root / "scripts"))
+import stamp_docs_updated as sdu  # type: ignore
+
+tmp_path = root / "docs" / "__stamp_tmp_test.md"
+rel = None
+if tmp_path.exists():
+    tmp_path.unlink()
+
+try:
+    tmp_path.write_text("temporary\n", encoding="utf-8")
+    if not sdu.git_status_has_changes(str(tmp_path)):
+        print("expected detection for untracked file", file=sys.stderr)
+        sys.exit(1)
+    rel = tmp_path.relative_to(root).as_posix()
+    subprocess.run(["git", "add", rel], cwd=root, check=True)
+    if not sdu.git_status_has_changes(str(tmp_path)):
+        print("expected detection for staged file", file=sys.stderr)
+        sys.exit(2)
+finally:
+    if rel is not None:
+        subprocess.run(["git", "reset", "--quiet", "HEAD", rel], cwd=root, check=False)
+    if tmp_path.exists():
+        tmp_path.unlink()
+
+if sdu.git_status_has_changes(str(tmp_path)):
+    print("expected no detection after cleanup", file=sys.stderr)
+    sys.exit(3)
+"@
+
+    & $python3.Path -c $code
+    $LASTEXITCODE | Should -Be 0
+  }
+}

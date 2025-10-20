@@ -127,6 +127,36 @@ def normalize_generated_markdown(text: str) -> str:
     return "\n".join(normalized)
 
 
+def ensure_updated_from_generated(markdown: str) -> str:
+    """Insert or refresh an Updated line based on the Generated timestamp."""
+    if "Generated:" not in markdown:
+        return markdown
+    ends_with_newline = markdown.endswith("\n")
+    lines = markdown.replace("\r\n", "\n").split("\n")
+    try:
+        generated_idx = next(i for i, line in enumerate(lines) if line.startswith("Generated: "))
+    except StopIteration:
+        return markdown
+    generated_value = lines[generated_idx].split("Generated:", 1)[1].strip()
+    generated_date = generated_value.split(" ", 1)[0] if generated_value else ""
+    if not generated_date:
+        return markdown
+    updated_line = f"Updated: {generated_date}"
+    try:
+        updated_idx = next(i for i, line in enumerate(lines) if line.startswith("Updated: "))
+    except StopIteration:
+        updated_idx = None
+    if updated_idx is not None:
+        lines[updated_idx] = updated_line
+    else:
+        # Place directly above the Generated line to match manual stamps.
+        lines.insert(generated_idx, updated_line)
+    normalized = "\n".join(lines)
+    if ends_with_newline and not normalized.endswith("\n"):
+        normalized += "\n"
+    return normalized
+
+
 def normalize_generated_json(text: str) -> str:
     try:
         payload = json.loads(text)
@@ -448,6 +478,8 @@ def generate_gating_docs(runner: Runner, cli_path: Path) -> None:
         stdout = runner.capture(label, cmd, required=False)
         if stdout is None:
             continue
+        if dest.name == "GATING_KEYS.md":
+            stdout = ensure_updated_from_generated(stdout)
         write_if_changed(dest, stdout, normalizer)
 
 
