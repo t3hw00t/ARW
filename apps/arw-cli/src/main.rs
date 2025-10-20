@@ -1,4 +1,5 @@
 use anyhow::{anyhow, bail, ensure, Context, Result};
+mod commands;
 mod logic_units;
 mod recipes;
 mod research_watcher;
@@ -11,16 +12,16 @@ use arw_core::runtime_bundles::{
 };
 use arw_core::{
     capsule_presets, capsule_trust, effective_paths, gating, gating_keys, hello_core,
-    introspect_tools, load_effective_paths, resolve_config_path, runtime_bundles,
+    load_effective_paths, resolve_config_path, runtime_bundles,
 };
 use arw_protocol::GatingCapsule;
 use arw_runtime::{RuntimeAccelerator, RuntimeModality, RuntimeSeverity, RuntimeState};
-use base64::engine::general_purpose::STANDARD as BASE64;
 use base64::Engine;
 use chrono::Duration as ChronoDuration;
 use chrono::{DateTime, Local, SecondsFormat, TimeZone, Utc};
 use clap::CommandFactory;
 use clap::{Args, Parser, Subcommand, ValueEnum};
+use commands::{HttpCmd, PathsArgs, PingArgs, SmokeCmd, SpecCmd, ToolsListArgs, ToolsSubcommand};
 use csv::WriterBuilder;
 use json_patch::{patch as apply_json_patch, Patch as JsonPatch};
 use logic_units::LogicUnitsCmd;
@@ -30,7 +31,7 @@ use reqwest::{blocking::Client, header::ACCEPT, StatusCode};
 use research_watcher::ResearchWatcherCmd;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Map as JsonMap, Number as JsonNumber, Value as JsonValue};
+use serde_json::{json, Map as JsonMap, Value as JsonValue};
 use sha2::{Digest, Sha256};
 use std::cmp::Reverse;
 use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
@@ -39,12 +40,9 @@ use std::fmt::Write as _;
 use std::fs::{create_dir_all, OpenOptions};
 use std::io::{self, BufRead, BufReader, Read as _, Write};
 use std::path::{Path, PathBuf};
-use std::process::{Child, Command, Stdio};
-use std::str::FromStr;
 use std::sync::Arc;
 use std::thread;
 use std::time::{Duration, Instant};
-use tempfile::TempDir;
 use tracing_subscriber::{fmt, EnvFilter};
 use walkdir::WalkDir;
 
@@ -341,165 +339,6 @@ enum Commands {
 }
 
 #[derive(Subcommand)]
-enum SmokeCmd {
-    /// Run action/state/event smoke checks
-    Triad(SmokeTriadArgs),
-    /// Run context telemetry smoke checks
-    Context(SmokeContextArgs),
-}
-
-#[derive(Args, Clone)]
-struct SmokeCommonArgs {
-    /// Port to bind the temporary server on (default: 18181 / 18182)
-    #[arg(long)]
-    port: Option<u16>,
-    /// Path to an existing arw-server binary; auto-detected when omitted
-    #[arg(long)]
-    server_bin: Option<PathBuf>,
-    /// Seconds to wait for /healthz to become ready
-    #[arg(long, default_value_t = 30)]
-    wait_timeout_secs: u64,
-    /// Preserve the temporary state/logs directory instead of deleting it
-    #[arg(long)]
-    keep_temp: bool,
-}
-
-#[derive(Args, Clone)]
-struct SmokeTriadArgs {
-    #[command(flatten)]
-    common: SmokeCommonArgs,
-    /// Admin token to use; defaults to an ephemeral value
-    #[arg(long)]
-    admin_token: Option<String>,
-}
-
-#[derive(Args, Clone)]
-struct SmokeContextArgs {
-    #[command(flatten)]
-    common: SmokeCommonArgs,
-    /// Admin token to use; defaults to an ephemeral value
-    #[arg(long)]
-    admin_token: Option<String>,
-}
-
-#[derive(Subcommand)]
-enum HttpCmd {
-    /// Fetch a URL using the built-in http.fetch tool
-    Fetch(HttpFetchArgs),
-}
-
-#[derive(Copy, Clone, Debug, ValueEnum)]
-enum HttpMethod {
-    Get,
-    Post,
-}
-
-impl HttpMethod {
-    fn action_kind(self) -> &'static str {
-        match self {
-            HttpMethod::Get => "net.http.get",
-            HttpMethod::Post => "net.http.post",
-        }
-    }
-
-    fn as_str(self) -> &'static str {
-        match self {
-            HttpMethod::Get => "GET",
-            HttpMethod::Post => "POST",
-        }
-    }
-}
-
-#[derive(Clone)]
-struct HeaderArg {
-    name: String,
-    value: String,
-}
-
-impl FromStr for HeaderArg {
-    type Err = String;
-
-    fn from_str(input: &str) -> Result<Self, Self::Err> {
-        let parts: Vec<&str> = input.splitn(2, ':').collect();
-        if parts.len() != 2 {
-            return Err("headers must be in key:value format".into());
-        }
-        let name = parts[0].trim();
-        let value = parts[1].trim();
-        if name.is_empty() {
-            return Err("header name cannot be empty".into());
-        }
-        Ok(HeaderArg {
-            name: name.to_string(),
-            value: value.to_string(),
-        })
-    }
-}
-
-#[derive(Args, Clone)]
-struct HttpBaseArgs {
-    /// Base URL of the service handling actions
-    #[arg(long, default_value = "http://127.0.0.1:8091")]
-    base: String,
-    /// Admin token; falls back to ARW_ADMIN_TOKEN env
-    #[arg(long)]
-    admin_token: Option<String>,
-    /// Request timeout when talking to arw-server (seconds)
-    #[arg(long, default_value_t = 10)]
-    timeout: u64,
-}
-
-impl HttpBaseArgs {
-    fn base_url(&self) -> &str {
-        self.base.trim_end_matches('/')
-    }
-}
-
-#[derive(Args, Clone)]
-struct HttpFetchArgs {
-    #[command(flatten)]
-    base: HttpBaseArgs,
-    /// URL to fetch (scheme required)
-    url: String,
-    /// HTTP method to use
-    #[arg(long, value_enum, default_value = "get")]
-    method: HttpMethod,
-    /// Request header (repeatable, format: Key: Value)
-    #[arg(long = "header")]
-    headers: Vec<HeaderArg>,
-    /// Inline request body (POST only)
-    #[arg(long)]
-    data: Option<String>,
-    /// Load request body from file (POST only)
-    #[arg(long)]
-    data_file: Option<PathBuf>,
-    /// Override Content-Type header for POST requests
-    #[arg(long)]
-    content_type: Option<String>,
-    /// Inject connector credentials by id
-    #[arg(long)]
-    connector_id: Option<String>,
-    /// Wait timeout for action completion (seconds)
-    #[arg(long, default_value_t = 60)]
-    wait_timeout_secs: u64,
-    /// Emit raw JSON instead of a formatted summary
-    #[arg(long)]
-    json: bool,
-    /// Pretty-print JSON output (requires --json)
-    #[arg(long, requires = "json")]
-    pretty: bool,
-    /// Write the body preview bytes to a file
-    #[arg(long)]
-    output: Option<PathBuf>,
-    /// Print the body preview as base64 instead of UTF-8 text
-    #[arg(long)]
-    raw_preview: bool,
-    /// Override the preview size captured from the response head (kilobytes, 1-1024)
-    #[arg(long = "preview-kb")]
-    preview_kb: Option<u32>,
-}
-
-#[derive(Subcommand)]
 enum GateCmd {
     /// List known gating keys
     Keys(GateKeysArgs),
@@ -546,47 +385,6 @@ enum CapCmd {
         #[command(subcommand)]
         cmd: CapsuleTrustCmd,
     },
-}
-
-#[derive(Args)]
-struct PathsArgs {
-    /// Pretty-print JSON
-    #[arg(long)]
-    pretty: bool,
-}
-
-#[derive(Args, Default, Clone, Copy)]
-struct ToolsListArgs {
-    /// Pretty-print JSON
-    #[arg(long)]
-    pretty: bool,
-}
-
-#[derive(Subcommand)]
-enum ToolsSubcommand {
-    /// Print tool list (JSON)
-    List(ToolsListArgs),
-    /// Fetch tool cache statistics from the server
-    Cache(ToolsCacheArgs),
-}
-
-#[derive(Args, Clone)]
-struct ToolsCacheArgs {
-    /// Base URL of the service (e.g., http://127.0.0.1:8091)
-    #[arg(long, default_value = "http://127.0.0.1:8091")]
-    base: String,
-    /// Admin token; falls back to ARW_ADMIN_TOKEN env
-    #[arg(long)]
-    admin_token: Option<String>,
-    /// Timeout seconds
-    #[arg(long, default_value_t = 10)]
-    timeout: u64,
-    /// Emit raw JSON instead of a human summary
-    #[arg(long)]
-    json: bool,
-    /// Pretty-print JSON output (only with --json)
-    #[arg(long, requires = "json")]
-    pretty: bool,
 }
 
 #[derive(Subcommand)]
@@ -1477,35 +1275,6 @@ impl AdminReviewDecision {
     }
 }
 
-#[derive(Debug, Deserialize)]
-struct ToolCacheSnapshot {
-    hit: u64,
-    miss: u64,
-    coalesced: u64,
-    errors: u64,
-    bypass: u64,
-    payload_too_large: u64,
-    capacity: u64,
-    ttl_secs: u64,
-    entries: u64,
-    max_payload_bytes: Option<u64>,
-    latency_saved_ms_total: u64,
-    latency_saved_samples: u64,
-    avg_latency_saved_ms: f64,
-    payload_bytes_saved_total: u64,
-    payload_saved_samples: u64,
-    avg_payload_bytes_saved: f64,
-    avg_hit_age_secs: f64,
-    hit_age_samples: u64,
-    last_hit_age_secs: Option<u64>,
-    max_hit_age_secs: Option<u64>,
-    stampede_suppression_rate: f64,
-    last_latency_saved_ms: Option<u64>,
-    last_payload_bytes: Option<u64>,
-    #[serde(flatten)]
-    _extra: serde_json::Map<String, JsonValue>,
-}
-
 #[derive(Args)]
 struct GateKeysArgs {
     /// Show grouped metadata and stability details
@@ -1681,35 +1450,6 @@ struct CompletionsArgs {
     /// Output directory (writes a file). If not set, prints to stdout.
     #[arg(long)]
     out_dir: Option<String>,
-}
-
-#[derive(Args)]
-struct PingArgs {
-    /// Base URL of the service (e.g., http://127.0.0.1:8091)
-    #[arg(long, default_value = "http://127.0.0.1:8091")]
-    base: String,
-    /// Admin token; falls back to ARW_ADMIN_TOKEN env
-    #[arg(long)]
-    admin_token: Option<String>,
-    /// Timeout seconds
-    #[arg(long, default_value_t = 5)]
-    timeout: u64,
-}
-
-#[derive(Subcommand)]
-enum SpecCmd {
-    /// Fetch /spec/health and print JSON
-    Health(SpecHealthArgs),
-}
-
-#[derive(Args)]
-struct SpecHealthArgs {
-    /// Base URL of the service
-    #[arg(long, default_value = "http://127.0.0.1:8091")]
-    base: String,
-    /// Pretty-print JSON
-    #[arg(long)]
-    pretty: bool,
 }
 
 #[derive(Subcommand)]
@@ -3237,21 +2977,6 @@ struct ScanStats {
     skipped_other: usize,
 }
 
-fn print_tools_list(pretty: bool) {
-    let list = introspect_tools();
-    if pretty {
-        println!(
-            "{}",
-            serde_json::to_string_pretty(&list).unwrap_or_else(|_| "[]".to_string())
-        );
-    } else {
-        match serde_json::to_string(&list) {
-            Ok(s) => println!("{}", s),
-            Err(_) => println!("[]"),
-        }
-    }
-}
-
 fn main() {
     let _ = fmt()
         .with_env_filter(EnvFilter::from_default_env())
@@ -3260,26 +2985,17 @@ fn main() {
     let cli = Cli::parse();
     match cli.command {
         Some(Commands::Paths(args)) => {
-            let v = load_effective_paths();
-            if args.pretty {
-                println!(
-                    "{}",
-                    serde_json::to_string_pretty(&v).unwrap_or_else(|_| v.to_string())
-                );
-            } else {
-                println!("{}", v);
+            if let Err(e) = commands::paths::run(args) {
+                eprintln!("{}", e);
+                std::process::exit(1);
             }
         }
-        Some(Commands::Tools { list, cmd }) => match cmd {
-            Some(ToolsSubcommand::Cache(args)) => {
-                if let Err(e) = cmd_tools_cache(&args) {
-                    eprintln!("{}", e);
-                    std::process::exit(1);
-                }
+        Some(Commands::Tools { list, cmd }) => {
+            if let Err(e) = commands::tools::execute(list, cmd) {
+                eprintln!("{}", e);
+                std::process::exit(1);
             }
-            Some(ToolsSubcommand::List(args)) => print_tools_list(args.pretty),
-            None => print_tools_list(list.pretty),
-        },
+        }
         Some(Commands::Admin { cmd }) => match cmd {
             AdminCmd::Token { cmd } => match cmd {
                 AdminTokenCmd::Hash(args) => {
@@ -3503,20 +3219,12 @@ fn main() {
                 }
             },
         },
-        Some(Commands::Smoke { cmd }) => match cmd {
-            SmokeCmd::Triad(args) => {
-                if let Err(e) = cmd_smoke_triad(&args) {
-                    eprintln!("{}", e);
-                    std::process::exit(1);
-                }
+        Some(Commands::Smoke { cmd }) => {
+            if let Err(e) = commands::smoke::execute(cmd) {
+                eprintln!("{}", e);
+                std::process::exit(1);
             }
-            SmokeCmd::Context(args) => {
-                if let Err(e) = cmd_smoke_context(&args) {
-                    eprintln!("{}", e);
-                    std::process::exit(1);
-                }
-            }
-        },
+        }
         Some(Commands::Capsule { cmd }) => match cmd {
             CapCmd::Template(args) => {
                 let duration = std::time::SystemTime::now()
@@ -3652,27 +3360,23 @@ fn main() {
             }
         }
         Some(Commands::Ping(args)) => {
-            if let Err(e) = cmd_ping(&args) {
+            if let Err(e) = commands::status::run_ping(&args) {
                 eprintln!("{}", e);
                 std::process::exit(1);
             }
         }
-        Some(Commands::Spec { cmd: spec }) => match spec {
-            SpecCmd::Health(args) => {
-                if let Err(e) = cmd_spec_health(&args) {
-                    eprintln!("{}", e);
-                    std::process::exit(1);
-                }
+        Some(Commands::Spec { cmd: spec }) => {
+            if let Err(e) = commands::status::execute_spec(spec) {
+                eprintln!("{}", e);
+                std::process::exit(1);
             }
-        },
-        Some(Commands::Http { cmd }) => match cmd {
-            HttpCmd::Fetch(args) => {
-                if let Err(e) = cmd_http_fetch(&args) {
-                    eprintln!("{}", e);
-                    std::process::exit(1);
-                }
+        }
+        Some(Commands::Http { cmd }) => {
+            if let Err(e) = commands::http::execute(cmd) {
+                eprintln!("{}", e);
+                std::process::exit(1);
             }
-        },
+        }
         Some(Commands::Recipes { cmd }) => {
             if let Err(e) = recipes::run(cmd) {
                 eprintln!("{}", e);
@@ -3831,428 +3535,6 @@ fn main() {
             println!("{}", load_effective_paths());
         }
     }
-}
-
-#[derive(Debug, Clone)]
-struct PreviewData {
-    bytes: Vec<u8>,
-    truncated: bool,
-}
-
-fn validate_preview_kb(value: Option<u32>) -> Result<Option<u32>> {
-    if let Some(kb) = value {
-        if kb == 0 {
-            bail!("--preview-kb must be greater than zero");
-        }
-        if kb > 1024 {
-            bail!("--preview-kb maximum is 1024 KB");
-        }
-        Ok(Some(kb))
-    } else {
-        Ok(None)
-    }
-}
-
-fn cmd_http_fetch(args: &HttpFetchArgs) -> Result<()> {
-    if args.data.is_some() && args.data_file.is_some() {
-        bail!("--data and --data-file cannot be used together");
-    }
-
-    if matches!(args.method, HttpMethod::Get) && (args.data.is_some() || args.data_file.is_some()) {
-        eprintln!("warning: GET requests ignore request bodies; use --method POST if needed");
-    }
-
-    let timeout = Duration::from_secs(args.base.timeout.max(1));
-    let client = Client::builder()
-        .timeout(timeout)
-        .build()
-        .context("building HTTP client")?;
-    let token = resolve_admin_token(&args.base.admin_token);
-    let base = args.base.base_url().to_string();
-
-    let mut body = args.data.clone();
-    if let Some(path) = &args.data_file {
-        let bytes = std::fs::read(path)
-            .with_context(|| format!("reading request body from {}", path.display()))?;
-        body = Some(
-            String::from_utf8(bytes)
-                .map_err(|_| anyhow!("request body file is not valid UTF-8"))?,
-        );
-    }
-
-    let mut headers_map: BTreeMap<String, Vec<String>> = BTreeMap::new();
-    for header in &args.headers {
-        headers_map
-            .entry(header.name.clone())
-            .or_default()
-            .push(header.value.clone());
-    }
-    if let Some(ct) = &args.content_type {
-        headers_map
-            .entry("content-type".to_string())
-            .or_default()
-            .push(ct.clone());
-    }
-
-    let mut input = JsonMap::new();
-    input.insert("url".into(), JsonValue::String(args.url.clone()));
-    input.insert(
-        "method".into(),
-        JsonValue::String(args.method.as_str().to_string()),
-    );
-    if !headers_map.is_empty() {
-        let mut headers_obj = JsonMap::new();
-        for (name, values) in headers_map {
-            let value = if values.len() == 1 {
-                JsonValue::String(values[0].clone())
-            } else {
-                JsonValue::Array(values.into_iter().map(JsonValue::String).collect())
-            };
-            headers_obj.insert(name, value);
-        }
-        input.insert("headers".into(), JsonValue::Object(headers_obj));
-    }
-    if let Some(ct) = &args.content_type {
-        input.insert("content_type".into(), JsonValue::String(ct.clone()));
-    }
-    if let Some(body) = body {
-        if matches!(args.method, HttpMethod::Post) {
-            input.insert("body".into(), JsonValue::String(body));
-        }
-    }
-    if let Some(connector_id) = &args.connector_id {
-        input.insert(
-            "connector_id".into(),
-            JsonValue::String(connector_id.clone()),
-        );
-    }
-
-    let preview_kb = validate_preview_kb(args.preview_kb)?;
-    if let Some(kb) = preview_kb {
-        input.insert("head_kb".into(), JsonValue::Number(JsonNumber::from(kb)));
-    }
-
-    let action_id = submit_action_payload(
-        &client,
-        &base,
-        token.as_deref(),
-        args.method.action_kind(),
-        JsonValue::Object(input),
-    )?;
-
-    let action = wait_for_action(
-        &client,
-        &base,
-        token.as_deref(),
-        &action_id,
-        Duration::from_secs(args.wait_timeout_secs.max(1)),
-    )?;
-
-    if args.json {
-        if args.pretty {
-            println!(
-                "{}",
-                serde_json::to_string_pretty(&action).unwrap_or_else(|_| action.to_string())
-            );
-        } else {
-            println!("{}", action);
-        }
-        if let Some(path) = &args.output {
-            if let Some(preview) = extract_preview_data_from_action(&action)? {
-                std::fs::write(path, &preview.bytes)
-                    .with_context(|| format!("writing preview to {}", path.display()))?;
-            }
-        }
-        return Ok(());
-    }
-
-    let output = action
-        .get("output")
-        .and_then(|v| v.as_object())
-        .ok_or_else(|| anyhow!("action output missing"))?;
-
-    let preview = extract_preview_data(output)?;
-    if let Some(path) = &args.output {
-        if let Some(data) = &preview {
-            std::fs::write(path, &data.bytes)
-                .with_context(|| format!("writing preview to {}", path.display()))?;
-        } else {
-            eprintln!(
-                "(no preview bytes available to write to {})",
-                path.display()
-            );
-        }
-    }
-
-    render_http_summary(&action, output, preview.as_ref(), args.raw_preview)?;
-    Ok(())
-}
-
-fn extract_preview_data_from_action(action: &JsonValue) -> Result<Option<PreviewData>> {
-    if let Some(output) = action.get("output").and_then(|v| v.as_object()) {
-        extract_preview_data(output)
-    } else {
-        Ok(None)
-    }
-}
-
-fn extract_preview_data(output: &JsonMap<String, JsonValue>) -> Result<Option<PreviewData>> {
-    if let Some(b64) = output.get("body_base64").and_then(|v| v.as_str()) {
-        let bytes = BASE64
-            .decode(b64)
-            .map_err(|e| anyhow!("failed to decode body_base64: {e}"))?;
-        return Ok(Some(PreviewData {
-            bytes,
-            truncated: false,
-        }));
-    }
-    if let Some(b64) = output.get("body_head_b64").and_then(|v| v.as_str()) {
-        let bytes = BASE64
-            .decode(b64)
-            .map_err(|e| anyhow!("failed to decode body_head_b64: {e}"))?;
-        let truncated = output
-            .get("body_truncated")
-            .and_then(|v| v.as_bool())
-            .unwrap_or(false);
-        return Ok(Some(PreviewData { bytes, truncated }));
-    }
-    Ok(None)
-}
-
-fn preview_base64(output: &JsonMap<String, JsonValue>) -> Option<&str> {
-    output
-        .get("body_base64")
-        .and_then(|v| v.as_str())
-        .or_else(|| output.get("body_head_b64").and_then(|v| v.as_str()))
-}
-
-fn render_http_summary(
-    action: &JsonValue,
-    output: &JsonMap<String, JsonValue>,
-    preview: Option<&PreviewData>,
-    raw_preview: bool,
-) -> Result<()> {
-    let action_id = action
-        .get("id")
-        .and_then(|v| v.as_str())
-        .unwrap_or("<unknown>");
-    let state = action
-        .get("state")
-        .and_then(|v| v.as_str())
-        .unwrap_or("<unknown>");
-    println!("Action: {} ({})", action_id, state);
-
-    if let Some(err) = output.get("error").and_then(|v| v.as_str()) {
-        println!("Error : {}", err);
-        if let Some(missing) = output.get("missing_scopes").and_then(|v| v.as_array()) {
-            if !missing.is_empty() {
-                let scopes = missing
-                    .iter()
-                    .filter_map(|v| v.as_str())
-                    .collect::<Vec<_>>()
-                    .join(", ");
-                println!("Missing scopes: {}", scopes);
-            }
-        }
-        return Ok(());
-    }
-
-    let status = output
-        .get("status")
-        .and_then(|v| v.as_u64())
-        .unwrap_or_default();
-    let status_text = output
-        .get("status_text")
-        .and_then(|v| v.as_str())
-        .unwrap_or("");
-    if status_text.is_empty() {
-        println!("Status: {}", status);
-    } else {
-        println!("Status: {} {}", status, status_text);
-    }
-
-    let url = output.get("url").and_then(|v| v.as_str()).unwrap_or("");
-    println!("URL   : {}", url);
-    if let Some(final_url) = output
-        .get("final_url")
-        .and_then(|v| v.as_str())
-        .filter(|final_url| !final_url.is_empty() && *final_url != url)
-    {
-        println!("Final : {}", final_url);
-    }
-
-    let bytes_in = output.get("bytes_in").and_then(|v| v.as_i64()).unwrap_or(0);
-    let bytes_out = output
-        .get("bytes_out")
-        .and_then(|v| v.as_i64())
-        .unwrap_or(0);
-    let elapsed = output.get("elapsed_ms").and_then(|v| v.as_u64());
-    match elapsed {
-        Some(ms) => println!(
-            "Bytes : in {} out {} (elapsed {} ms)",
-            bytes_in, bytes_out, ms
-        ),
-        None => println!("Bytes : in {} out {}", bytes_in, bytes_out),
-    }
-
-    if let Some(posture) = output.get("posture").and_then(|v| v.as_str()) {
-        println!("Posture: {}", posture);
-    }
-
-    if let Some(content_type) = output
-        .get("content_type")
-        .and_then(|v| v.as_str())
-        .filter(|s| !s.is_empty())
-    {
-        println!("Type  : {}", content_type);
-    }
-
-    if let Some(guard) = output.get("guard").and_then(|v| v.as_object()) {
-        if let Some(allowed) = guard.get("allowed").and_then(|v| v.as_bool()) {
-            println!("Guard : {}", if allowed { "allowed" } else { "blocked" });
-        }
-        if let Some(required_caps) = guard
-            .get("required_capabilities")
-            .and_then(|v| v.as_array())
-        {
-            let caps: Vec<_> = required_caps.iter().filter_map(|v| v.as_str()).collect();
-            if !caps.is_empty() {
-                println!("Required capabilities: {}", caps.join(", "));
-            }
-        }
-        if let Some(lease_id) = guard
-            .get("lease")
-            .and_then(|v| v.as_object())
-            .and_then(|m| m.get("id"))
-            .and_then(|v| v.as_str())
-        {
-            println!("Lease : {}", lease_id);
-        }
-    }
-
-    if let Some(headers) = output.get("headers").and_then(|v| v.as_object()) {
-        if !headers.is_empty() {
-            println!("Headers:");
-            for (name, value) in headers.iter().take(20) {
-                match value {
-                    JsonValue::String(s) => println!("  {}: {}", name, s),
-                    JsonValue::Array(arr) => {
-                        for val in arr.iter().filter_map(|v| v.as_str()) {
-                            println!("  {}: {}", name, val);
-                        }
-                    }
-                    other => println!("  {}: {}", name, other),
-                }
-            }
-            if headers.len() > 20 {
-                println!("  … ({} more)", headers.len() - 20);
-            }
-        }
-    }
-
-    if raw_preview {
-        if let Some(b64) = preview_base64(output) {
-            let truncated_note = if preview.map(|p| p.truncated).unwrap_or_else(|| {
-                output
-                    .get("body_truncated")
-                    .and_then(|v| v.as_bool())
-                    .unwrap_or(false)
-            }) {
-                " (truncated head)"
-            } else {
-                ""
-            };
-            println!("Preview{}:\n{}", truncated_note, b64);
-        } else {
-            println!("Preview: (no base64 preview available)");
-        }
-        return Ok(());
-    }
-
-    let preview_text = output
-        .get("body_preview_utf8")
-        .and_then(|v| v.as_str())
-        .map(|s| s.to_string())
-        .or_else(|| {
-            preview.map(|data| {
-                let text = String::from_utf8_lossy(&data.bytes);
-                text.to_string()
-            })
-        });
-
-    if let Some(text) = preview_text {
-        let truncated = preview.map(|p| p.truncated).unwrap_or_else(|| {
-            output
-                .get("body_truncated")
-                .and_then(|v| v.as_bool())
-                .unwrap_or(false)
-        });
-        let preview_bytes = output
-            .get("body_preview_bytes")
-            .and_then(|v| v.as_i64())
-            .unwrap_or(preview.map(|p| p.bytes.len() as i64).unwrap_or(0));
-        println!(
-            "Preview ({} bytes{}):",
-            preview_bytes,
-            if truncated { ", truncated" } else { "" }
-        );
-        println!("{}", text);
-    } else {
-        println!("Preview: (not available)");
-    }
-
-    Ok(())
-}
-
-fn cmd_tools_cache(args: &ToolsCacheArgs) -> Result<()> {
-    let client = Client::builder()
-        .timeout(Duration::from_secs(args.timeout))
-        .build()
-        .context("building HTTP client")?;
-    let token = resolve_admin_token(&args.admin_token);
-    let base = args.base.trim_end_matches('/');
-    let url = format!("{}/admin/tools/cache_stats", base);
-    let resp = with_admin_headers(client.get(&url), token.as_deref())
-        .send()
-        .with_context(|| format!("requesting {}", url))?;
-    let status = resp.status();
-    let text = resp.text().context("reading cache stats response")?;
-
-    if status == reqwest::StatusCode::UNAUTHORIZED {
-        return Err(anyhow::anyhow!(
-            "unauthorized: provide --admin-token or set ARW_ADMIN_TOKEN"
-        ));
-    }
-    if !status.is_success() {
-        let trimmed = text.trim();
-        if trimmed.is_empty() {
-            return Err(anyhow::anyhow!("cache stats request failed: {}", status));
-        }
-        return Err(anyhow::anyhow!(
-            "cache stats request failed: {} {}",
-            status,
-            trimmed
-        ));
-    }
-
-    let raw: JsonValue = serde_json::from_str(&text).context("parsing cache stats JSON")?;
-    let snapshot: ToolCacheSnapshot =
-        serde_json::from_value(raw.clone()).context("deserializing cache stats snapshot")?;
-
-    if args.json {
-        if args.pretty {
-            println!(
-                "{}",
-                serde_json::to_string_pretty(&raw).unwrap_or_else(|_| raw.to_string())
-            );
-        } else {
-            println!("{}", raw);
-        }
-        return Ok(());
-    }
-
-    println!("{}", render_tool_cache_summary(&snapshot, base));
-    Ok(())
 }
 
 fn cmd_admin_token_hash(args: &AdminTokenHashArgs) -> Result<()> {
@@ -11713,93 +10995,6 @@ fn render_runtime_matrix_summary(matrix: &JsonValue) -> String {
     lines.join("\n")
 }
 
-fn render_tool_cache_summary(stats: &ToolCacheSnapshot, base: &str) -> String {
-    let mut buf = String::new();
-    let _ = writeln!(buf, "Tool cache @ {}", base);
-    let limit_fragment = match stats.max_payload_bytes {
-        Some(limit) => format!("limit {}", format_bytes(limit)),
-        None => "limit off".to_string(),
-    };
-    if stats.capacity == 0 {
-        let _ = writeln!(
-            buf,
-            "- status: disabled | capacity 0 | ttl {}s | entries {} | {}",
-            stats.ttl_secs, stats.entries, limit_fragment
-        );
-    } else {
-        let _ = writeln!(
-            buf,
-            "- status: enabled | capacity {} | ttl {}s | entries {} | {}",
-            stats.capacity, stats.ttl_secs, stats.entries, limit_fragment
-        );
-    }
-
-    let mut outcome_parts = vec![
-        format!("hit {}", stats.hit),
-        format!("miss {}", stats.miss),
-        format!("coalesced {}", stats.coalesced),
-        format!("bypass {}", stats.bypass),
-        format!("errors {}", stats.errors),
-    ];
-    if stats.payload_too_large > 0 {
-        outcome_parts.push(format!("payload>limit {}", stats.payload_too_large));
-    }
-    let mut outcomes = format!("- outcomes: {}", outcome_parts.join(" | "));
-    let total = stats.hit + stats.miss;
-    if total > 0 {
-        let hit_rate = stats.hit as f64 / total as f64 * 100.0;
-        let suppression = stats.stampede_suppression_rate * 100.0;
-        outcomes.push_str(&format!(
-            " (hit {:.1}%, suppression {:.1}%)",
-            hit_rate, suppression
-        ));
-    }
-    let _ = writeln!(buf, "{}", outcomes);
-
-    if stats.latency_saved_samples > 0 {
-        let mut line = format!(
-            "- latency saved: avg {:.1} ms (samples {}, total {})",
-            stats.avg_latency_saved_ms,
-            stats.latency_saved_samples,
-            format_duration_ms(stats.latency_saved_ms_total)
-        );
-        if let Some(last) = stats.last_latency_saved_ms {
-            line.push_str(&format!(", last {} ms", last));
-        }
-        let _ = writeln!(buf, "{}", line);
-    }
-
-    if stats.payload_saved_samples > 0 {
-        let mut line = format!(
-            "- payload saved: avg {} (samples {}, total {})",
-            format_bytes_f64(stats.avg_payload_bytes_saved),
-            stats.payload_saved_samples,
-            format_bytes(stats.payload_bytes_saved_total)
-        );
-        if let Some(last) = stats.last_payload_bytes {
-            line.push_str(&format!(", last {}", format_bytes(last)));
-        }
-        let _ = writeln!(buf, "{}", line);
-    }
-
-    if stats.hit_age_samples > 0 {
-        let mut line = format!(
-            "- hit age: avg {} (samples {})",
-            format_seconds_f64(stats.avg_hit_age_secs),
-            stats.hit_age_samples
-        );
-        if let Some(last) = stats.last_hit_age_secs {
-            line.push_str(&format!(", last {}", format_seconds(last)));
-        }
-        if let Some(max) = stats.max_hit_age_secs {
-            line.push_str(&format!(", max {}", format_seconds(max)));
-        }
-        let _ = writeln!(buf, "{}", line);
-    }
-
-    buf.trim_end().to_string()
-}
-
 fn render_runtime_summary(snapshot: &JsonValue) -> String {
     let mut lines: Vec<String> = Vec::new();
     let updated = snapshot
@@ -13152,293 +12347,6 @@ fn cmd_completions(shell: clap_complete::Shell, out_dir: Option<&str>) -> Result
     Ok(())
 }
 
-fn cmd_ping(args: &PingArgs) -> Result<()> {
-    let base = args.base.trim_end_matches('/');
-    let client = reqwest::blocking::Client::builder()
-        .timeout(std::time::Duration::from_secs(args.timeout))
-        .build()?;
-    let mut headers = reqwest::header::HeaderMap::new();
-    let tok = args
-        .admin_token
-        .clone()
-        .or_else(|| std::env::var("ARW_ADMIN_TOKEN").ok());
-    if let Some(t) = tok.as_deref() {
-        let auth_value = reqwest::header::HeaderValue::from_str(&format!("Bearer {}", t))
-            .context("invalid bearer token for Authorization header")?;
-        headers.insert(reqwest::header::AUTHORIZATION, auth_value);
-    }
-    let h = client
-        .get(format!("{}/healthz", base))
-        .headers(headers.clone())
-        .send()?;
-    let ok_health = h.status().is_success();
-    let a = client
-        .get(format!("{}/about", base))
-        .headers(headers)
-        .send()?;
-    let about_json: serde_json::Value = a.json().unwrap_or_else(|_| serde_json::json!({}));
-    let out = serde_json::json!({
-        "base": base,
-        "healthz": {"status": h.status().as_u16()},
-        "about": about_json,
-        "ok": ok_health,
-    });
-    println!("{}", serde_json::to_string_pretty(&out)?);
-    Ok(())
-}
-
-fn cmd_spec_health(args: &SpecHealthArgs) -> Result<()> {
-    let base = args.base.trim_end_matches('/');
-    let url = format!("{}/spec/health", base);
-    let client = reqwest::blocking::Client::builder()
-        .timeout(std::time::Duration::from_secs(5))
-        .build()?;
-    let resp = client.get(url).send()?;
-    let txt = resp.text()?;
-    if args.pretty {
-        let v: serde_json::Value =
-            serde_json::from_str(&txt).unwrap_or_else(|_| serde_json::json!({}));
-        println!("{}", serde_json::to_string_pretty(&v)?);
-    } else {
-        println!("{}", txt);
-    }
-    Ok(())
-}
-
-fn cmd_smoke_triad(args: &SmokeTriadArgs) -> Result<()> {
-    let port = args.common.port.unwrap_or(18181);
-    let admin_token = args
-        .admin_token
-        .clone()
-        .unwrap_or_else(|| "triad-smoke-token".to_string());
-    let server_bin = ensure_server_binary(args.common.server_bin.as_deref())?;
-    let mut server = spawn_server(&server_bin, port, Some(&admin_token), Vec::new())?;
-    server.set_keep_temp(args.common.keep_temp);
-
-    let base = format!("http://127.0.0.1:{port}");
-    let client = Client::builder()
-        .timeout(Duration::from_secs(10))
-        .build()
-        .context("build HTTP client")?;
-
-    let log_path = server.log_path().to_path_buf();
-    wait_for_health(
-        &client,
-        &base,
-        server.child_mut(),
-        &log_path,
-        Duration::from_secs(args.common.wait_timeout_secs),
-    )?;
-
-    let action_id = submit_echo_action(&client, &base, Some(&admin_token), "triad-smoke")?;
-    let status_doc = wait_for_action(
-        &client,
-        &base,
-        Some(&admin_token),
-        &action_id,
-        Duration::from_secs(20),
-    )?;
-    validate_echo_payload(&status_doc)?;
-    ensure_projects_snapshot(&client, &base, Some(&admin_token))?;
-    ensure_sse_connected(&client, &base, Some(&admin_token), None)?;
-
-    println!("triad smoke OK");
-    if args.common.keep_temp {
-        println!(
-            "Temporary state preserved at {}",
-            server.state_path().display()
-        );
-        println!("Server log: {}", server.log_path().display());
-        server.persist();
-    }
-    Ok(())
-}
-
-fn cmd_smoke_context(args: &SmokeContextArgs) -> Result<()> {
-    let port = args.common.port.unwrap_or(18182);
-    let admin_token = args
-        .admin_token
-        .clone()
-        .unwrap_or_else(|| "context-ci-token".to_string());
-    let token_sha = format!("{:x}", sha2::Sha256::digest(admin_token.as_bytes()));
-    let extra_env = vec![
-        ("ARW_ADMIN_TOKEN_SHA256".to_string(), token_sha),
-        ("ARW_CONTEXT_CI_TOKEN".to_string(), admin_token.clone()),
-    ];
-
-    let server_bin = ensure_server_binary(args.common.server_bin.as_deref())?;
-    let mut server = spawn_server(&server_bin, port, Some(&admin_token), extra_env)?;
-    server.set_keep_temp(args.common.keep_temp);
-
-    let base = format!("http://127.0.0.1:{port}");
-    let client = Client::builder()
-        .timeout(Duration::from_secs(10))
-        .build()
-        .context("build HTTP client")?;
-
-    let log_path = server.log_path().to_path_buf();
-    wait_for_health(
-        &client,
-        &base,
-        server.child_mut(),
-        &log_path,
-        Duration::from_secs(args.common.wait_timeout_secs),
-    )?;
-
-    let mut action_ids = Vec::new();
-    for idx in 0..2 {
-        let msg = format!("context-ci-{idx}");
-        let action_id = submit_echo_action(&client, &base, Some(&admin_token), &msg)?;
-        action_ids.push(action_id);
-    }
-    for action_id in &action_ids {
-        let _ = wait_for_action(
-            &client,
-            &base,
-            Some(&admin_token),
-            action_id,
-            Duration::from_secs(20),
-        )?;
-    }
-
-    ensure_context_telemetry(&client, &base, Some(&admin_token))?;
-    println!("context telemetry smoke OK");
-    if args.common.keep_temp {
-        println!(
-            "Temporary state preserved at {}",
-            server.state_path().display()
-        );
-        println!("Server log: {}", server.log_path().display());
-        server.persist();
-    }
-    Ok(())
-}
-
-struct ServerHandle {
-    child: Child,
-    state_dir: Option<TempDir>,
-    state_path: PathBuf,
-    log_path: PathBuf,
-    keep_temp: bool,
-}
-
-impl ServerHandle {
-    fn child_mut(&mut self) -> &mut Child {
-        &mut self.child
-    }
-
-    fn log_path(&self) -> &Path {
-        &self.log_path
-    }
-
-    fn state_path(&self) -> &Path {
-        &self.state_path
-    }
-
-    fn set_keep_temp(&mut self, keep: bool) {
-        self.keep_temp = keep;
-    }
-
-    fn persist(&mut self) {
-        self.keep_temp = true;
-        if let Some(dir) = self.state_dir.take() {
-            let _ = dir.keep();
-        }
-    }
-}
-
-impl Drop for ServerHandle {
-    fn drop(&mut self) {
-        if let Ok(Some(_)) = self.child.try_wait() {
-            // child already exited
-        } else {
-            let _ = self.child.kill();
-            let _ = self.child.wait();
-        }
-
-        if !self.keep_temp {
-            // TempDir drop removes the directory when still present
-        }
-    }
-}
-
-fn spawn_server(
-    server_bin: &Path,
-    port: u16,
-    admin_token: Option<&str>,
-    extra_env: Vec<(String, String)>,
-) -> Result<ServerHandle> {
-    let state_dir = TempDir::new().context("create temporary state directory")?;
-    let state_path = state_dir.path().to_path_buf();
-    let log_path = state_path.join("arw-server.log");
-    let log_file = OpenOptions::new()
-        .create(true)
-        .write(true)
-        .truncate(true)
-        .open(&log_path)
-        .context("create server log file")?;
-    let stdout = log_file
-        .try_clone()
-        .context("clone log handle for stdout")?;
-    let stderr = log_file
-        .try_clone()
-        .context("clone log handle for stderr")?;
-
-    let mut cmd = Command::new(server_bin);
-    cmd.env("ARW_PORT", port.to_string());
-    cmd.env("ARW_STATE_DIR", &state_path);
-    cmd.env("ARW_DEBUG", "0");
-    if let Some(token) = admin_token {
-        cmd.env("ARW_ADMIN_TOKEN", token);
-    }
-    for (key, value) in extra_env {
-        cmd.env(key, value);
-    }
-    cmd.stdin(Stdio::null());
-    cmd.stdout(Stdio::from(stdout));
-    cmd.stderr(Stdio::from(stderr));
-
-    let child = cmd
-        .spawn()
-        .with_context(|| format!("failed to launch {}", server_bin.display()))?;
-
-    Ok(ServerHandle {
-        child,
-        state_dir: Some(state_dir),
-        state_path,
-        log_path,
-        keep_temp: false,
-    })
-}
-
-fn wait_for_health(
-    client: &Client,
-    base: &str,
-    child: &mut Child,
-    log_path: &Path,
-    timeout: Duration,
-) -> Result<()> {
-    let deadline = Instant::now() + timeout;
-    let url = format!("{}/healthz", base);
-    while Instant::now() < deadline {
-        if let Ok(resp) = client.get(&url).send() {
-            if resp.status().is_success() {
-                return Ok(());
-            }
-        }
-
-        if let Some(status) = child.try_wait().context("check server health status")? {
-            let log = read_log_tail(log_path, 8192);
-            bail!("arw-server exited before health check (status {status:?})\n{log}");
-        }
-
-        std::thread::sleep(Duration::from_millis(400));
-    }
-
-    let log = read_log_tail(log_path, 8192);
-    bail!("timed out waiting for {url}\n{log}");
-}
-
 fn submit_action_payload(
     client: &Client,
     base: &str,
@@ -13470,21 +12378,6 @@ fn submit_action_payload(
         }
     }
     bail!("action submission response missing id: {}", body);
-}
-
-fn submit_echo_action(
-    client: &Client,
-    base: &str,
-    admin_token: Option<&str>,
-    message: &str,
-) -> Result<String> {
-    submit_action_payload(
-        client,
-        base,
-        admin_token,
-        "demo.echo",
-        json!({ "msg": message }),
-    )
 }
 
 fn wait_for_action(
@@ -13535,255 +12428,6 @@ fn wait_for_action(
                 std::thread::sleep(Duration::from_millis(400));
             }
         }
-    }
-}
-
-fn validate_echo_payload(doc: &JsonValue) -> Result<()> {
-    let state = doc.get("state").and_then(|v| v.as_str()).unwrap_or("");
-    ensure!(state == "completed", "unexpected action state: {doc}");
-
-    if let Some(created) = doc.get("created").and_then(|v| v.as_str()) {
-        parse_timestamp(created).context("invalid action created timestamp")?;
-    }
-
-    let output = doc
-        .get("output")
-        .and_then(|v| v.as_object())
-        .ok_or_else(|| anyhow!("action output missing: {doc}"))?;
-    ensure!(
-        output.contains_key("echo"),
-        "action output missing echo payload"
-    );
-    Ok(())
-}
-
-fn ensure_projects_snapshot(client: &Client, base: &str, admin_token: Option<&str>) -> Result<()> {
-    let mut request = client.get(format!("{}/state/projects", base));
-    if let Some(token) = admin_token {
-        request = request.bearer_auth(token);
-    }
-    let resp = request
-        .send()
-        .context("fetch /state/projects")?
-        .error_for_status()
-        .context("/state/projects status")?;
-    let doc: JsonValue = resp.json().context("parse /state/projects response")?;
-    let obj = doc
-        .as_object()
-        .ok_or_else(|| anyhow!("unexpected /state/projects payload: {doc}"))?;
-    ensure!(
-        obj.contains_key("generated"),
-        "/state/projects missing generated timestamp"
-    );
-    ensure!(
-        obj.contains_key("items"),
-        "/state/projects missing items array"
-    );
-    Ok(())
-}
-
-fn ensure_sse_connected(
-    client: &Client,
-    base: &str,
-    admin_token: Option<&str>,
-    last_event_id: Option<&str>,
-) -> Result<()> {
-    let mut request = client
-        .get(format!("{}/events?replay=1", base))
-        .header(ACCEPT, "text/event-stream");
-    if let Some(token) = admin_token {
-        request = request.bearer_auth(token);
-    }
-    if let Some(id) = last_event_id {
-        request = request.header("Last-Event-ID", id);
-    }
-    let response = request
-        .timeout(Duration::from_secs(6))
-        .send()
-        .context("open SSE stream")?
-        .error_for_status()
-        .context("SSE handshake status")?;
-
-    let mut reader = BufReader::new(response);
-    let mut buf = String::new();
-    for _ in 0..32 {
-        buf.clear();
-        let bytes = reader.read_line(&mut buf).context("read SSE line")?;
-        if bytes == 0 {
-            break;
-        }
-        if buf.contains("event: service.connected") {
-            return Ok(());
-        }
-    }
-    bail!("did not observe service.connected during SSE handshake");
-}
-
-fn ensure_context_telemetry(client: &Client, base: &str, admin_token: Option<&str>) -> Result<()> {
-    let mut request = client.get(format!("{}/state/training/telemetry", base));
-    if let Some(token) = admin_token {
-        request = request.bearer_auth(token);
-    }
-    let resp = request
-        .send()
-        .context("fetch context telemetry")?
-        .error_for_status()
-        .context("context telemetry status")?;
-    let doc: JsonValue = resp.json().context("parse context telemetry response")?;
-    let obj = doc
-        .as_object()
-        .ok_or_else(|| anyhow!("context telemetry payload is not an object: {doc}"))?;
-
-    let generated = obj
-        .get("generated")
-        .and_then(|v| v.as_str())
-        .ok_or_else(|| anyhow!("context telemetry missing generated timestamp"))?;
-    parse_timestamp(generated).context("invalid telemetry generated timestamp")?;
-
-    let events = obj
-        .get("events")
-        .and_then(|v| v.as_object())
-        .ok_or_else(|| anyhow!("context telemetry missing events section"))?;
-    let total = events.get("total").and_then(|v| v.as_u64()).unwrap_or(0);
-    ensure!(
-        total >= 2,
-        "telemetry events total below expected threshold ({total})"
-    );
-
-    let routes = obj
-        .get("routes")
-        .and_then(|v| v.as_array())
-        .ok_or_else(|| anyhow!("context telemetry missing routes array"))?;
-    ensure!(
-        !routes.is_empty(),
-        "context telemetry routes array is empty"
-    );
-
-    let bus = obj
-        .get("bus")
-        .and_then(|v| v.as_object())
-        .ok_or_else(|| anyhow!("context telemetry missing bus metrics"))?;
-    ensure!(
-        bus.contains_key("published"),
-        "context telemetry bus missing published metric"
-    );
-
-    let tools = obj
-        .get("tools")
-        .and_then(|v| v.as_object())
-        .ok_or_else(|| anyhow!("context telemetry missing tools metrics"))?;
-    let completed = tools.get("completed").and_then(|v| v.as_u64()).unwrap_or(0);
-    ensure!(
-        completed >= 2,
-        "context telemetry tools completions below expected threshold ({completed})"
-    );
-
-    Ok(())
-}
-
-fn read_log_tail(log_path: &Path, max_bytes: usize) -> String {
-    match std::fs::read_to_string(log_path) {
-        Ok(contents) => {
-            let tail = if contents.len() > max_bytes {
-                let start = contents.len() - max_bytes;
-                &contents[start..]
-            } else {
-                &contents
-            };
-            format!(
-                "----- server log tail -----\n{}\n---------------------------",
-                tail
-            )
-        }
-        Err(err) => format!("(unable to read log {}: {})", log_path.display(), err),
-    }
-}
-
-fn ensure_server_binary(explicit: Option<&Path>) -> Result<PathBuf> {
-    if let Some(path) = explicit {
-        if path.exists() {
-            return Ok(path.to_path_buf());
-        }
-        bail!("specified server binary {:?} does not exist", path);
-    }
-
-    let exe_name = if cfg!(windows) {
-        "arw-server.exe"
-    } else {
-        "arw-server"
-    };
-    let root = workspace_root()?;
-    let candidates = [
-        root.join("target").join("release").join(exe_name),
-        root.join("target").join("debug").join(exe_name),
-    ];
-
-    for cand in &candidates {
-        if cand.exists() {
-            return Ok(cand.clone());
-        }
-    }
-
-    build_server_binary(&root)?;
-
-    for cand in &candidates {
-        if cand.exists() {
-            return Ok(cand.clone());
-        }
-    }
-
-    bail!(
-        "unable to locate arw-server binary; use --server-bin or run `cargo build -p arw-server`"
-    );
-}
-
-fn workspace_root() -> Result<PathBuf> {
-    let mut dir = env::current_dir().context("determine current directory")?;
-    loop {
-        if dir.join("Cargo.toml").is_file() {
-            return Ok(dir);
-        }
-        if !dir.pop() {
-            break;
-        }
-    }
-
-    let mut exe = env::current_exe().context("locate current executable")?;
-    while exe.pop() {
-        if exe.join("Cargo.toml").is_file() {
-            return Ok(exe);
-        }
-    }
-
-    bail!("unable to locate workspace root; run from repository root or use --server-bin");
-}
-
-fn build_server_binary(root: &Path) -> Result<()> {
-    let status = Command::new("cargo")
-        .arg("build")
-        .arg("-p")
-        .arg("arw-server")
-        .current_dir(root)
-        .status()
-        .context("invoke cargo build -p arw-server")?;
-    if !status.success() {
-        bail!("cargo build -p arw-server failed with status {status}");
-    }
-    Ok(())
-}
-
-fn parse_timestamp(raw: &str) -> Result<()> {
-    let normalized = normalize_rfc3339(raw);
-    chrono::DateTime::parse_from_rfc3339(&normalized)
-        .map(|_| ())
-        .map_err(|err| anyhow!("invalid timestamp {raw}: {err}"))
-}
-
-fn normalize_rfc3339(raw: &str) -> String {
-    if raw.ends_with('Z') {
-        raw.trim_end_matches('Z').to_string() + "+00:00"
-    } else {
-        raw.to_string()
     }
 }
 
@@ -14197,66 +12841,6 @@ mod tests {
     }
 
     #[test]
-    fn http_preview_prefers_body_base64() {
-        let mut map = JsonMap::new();
-        map.insert(
-            "body_base64".into(),
-            JsonValue::String(BASE64.encode(b"Hello World")),
-        );
-        map.insert(
-            "body_head_b64".into(),
-            JsonValue::String(BASE64.encode(b"He")),
-        );
-        map.insert("body_truncated".into(), JsonValue::Bool(true));
-
-        let preview = extract_preview_data(&map)
-            .expect("preview ok")
-            .expect("preview some");
-        assert_eq!(preview.bytes, b"Hello World");
-        assert!(!preview.truncated);
-        assert_eq!(
-            preview_base64(&map).expect("base64 available"),
-            BASE64.encode(b"Hello World")
-        );
-    }
-
-    #[test]
-    fn http_preview_uses_head_when_full_body_missing() {
-        let mut map = JsonMap::new();
-        map.insert(
-            "body_head_b64".into(),
-            JsonValue::String(BASE64.encode(b"He")),
-        );
-        map.insert("body_truncated".into(), JsonValue::Bool(true));
-
-        let preview = extract_preview_data(&map)
-            .expect("preview ok")
-            .expect("preview some");
-        assert_eq!(preview.bytes, b"He");
-        assert!(preview.truncated);
-        assert_eq!(
-            preview_base64(&map).expect("base64 available"),
-            BASE64.encode(b"He")
-        );
-    }
-
-    #[test]
-    fn validate_preview_kb_allows_valid_range() {
-        assert_eq!(validate_preview_kb(Some(128)).unwrap(), Some(128));
-        assert_eq!(validate_preview_kb(None).unwrap(), None);
-    }
-
-    #[test]
-    fn validate_preview_kb_rejects_zero() {
-        assert!(validate_preview_kb(Some(0)).is_err());
-    }
-
-    #[test]
-    fn validate_preview_kb_rejects_over_limit() {
-        assert!(validate_preview_kb(Some(2048)).is_err());
-    }
-
-    #[test]
     fn persist_admin_token_file_creates_when_missing() {
         let dir = TempDir::new().expect("tempdir");
         let path = dir.path().join("config/.env");
@@ -14287,44 +12871,6 @@ mod tests {
             "ARW_ADMIN_TOKEN_SUFFIX=1",
             "ARW_ADMIN_TOKEN"
         ));
-    }
-
-    #[test]
-    fn tool_cache_summary_includes_key_metrics() {
-        let snapshot = ToolCacheSnapshot {
-            hit: 8,
-            miss: 2,
-            coalesced: 3,
-            errors: 1,
-            bypass: 4,
-            payload_too_large: 2,
-            capacity: 128,
-            ttl_secs: 600,
-            entries: 42,
-            max_payload_bytes: Some(1_048_576),
-            latency_saved_ms_total: 12_500,
-            latency_saved_samples: 5,
-            avg_latency_saved_ms: 250.0,
-            payload_bytes_saved_total: 512_000,
-            payload_saved_samples: 5,
-            avg_payload_bytes_saved: 102_400.0,
-            avg_hit_age_secs: 18.5,
-            hit_age_samples: 3,
-            last_hit_age_secs: Some(12),
-            max_hit_age_secs: Some(45),
-            stampede_suppression_rate: 0.4,
-            last_latency_saved_ms: Some(200),
-            last_payload_bytes: Some(204_800),
-            _extra: serde_json::Map::new(),
-        };
-        let summary = render_tool_cache_summary(&snapshot, "http://127.0.0.1:8091");
-        assert!(summary.contains("Tool cache"));
-        assert!(summary.contains("hit 8 | miss 2"));
-        assert!(summary.contains("avg 250.0 ms"));
-        assert!(summary.contains("avg 100.0 KB"));
-        assert!(summary.contains("max 45 s"));
-        assert!(summary.contains("limit 1.0 MB"));
-        assert!(summary.contains("payload>limit 2"));
     }
 
     #[test]
