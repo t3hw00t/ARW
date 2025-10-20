@@ -21,12 +21,12 @@ function Invoke-JustTarget {
   )
   $just = Get-Command just -ErrorAction SilentlyContinue
   if (-not $just) {
-    Warn "Skipping $Label: 'just' not found."
+    Warn "Skipping ${Label}: 'just' not found."
     return $false
   }
   & $just.Source --show $Target *> $null
   if ($LASTEXITCODE -ne 0) {
-    Warn "Skipping $Label: just target '$Target' not defined."
+    Warn "Skipping ${Label}: just target '$Target' not defined."
     return $false
   }
   Log "Running $Label ($Target)"
@@ -64,7 +64,7 @@ function Invoke-ArwCli {
   if (-not $cliPath) {
     $cargo = Get-Command cargo -ErrorAction SilentlyContinue
     if (-not $cargo) {
-      Warn "Skipping $Label: arw-cli not found and cargo unavailable."
+      Warn "Skipping ${Label}: arw-cli not found and cargo unavailable."
       return $false
     }
     Log "Building arw-cli (missing binary)"
@@ -90,7 +90,7 @@ function Invoke-ArwCli {
     }
   }
   if (-not $cliPath) {
-    Warn "Skipping $Label: arw-cli still unavailable after build."
+    Warn "Skipping ${Label}: arw-cli still unavailable after build."
     return $false
   }
   Log "Running $Label (arw-cli)"
@@ -108,11 +108,11 @@ function Invoke-BashScript {
   )
   $bash = Get-Command bash -ErrorAction SilentlyContinue
   if (-not $bash) {
-    Warn "Skipping $Label: bash not available."
+    Warn "Skipping ${Label}: bash not available."
     return $false
   }
   if (-not (Test-Path $Script)) {
-    Warn "Skipping $Label: script '$Script' not found."
+    Warn "Skipping ${Label}: script '$Script' not found."
     return $false
   }
   Log "Running $Label (bash)"

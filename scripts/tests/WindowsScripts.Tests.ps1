@@ -6,17 +6,22 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
 # Ensure Pester is available when executed ad-hoc
-if (-not (Get-Module -ListAvailable -Name Pester)) {
-  try { Install-Module Pester -Scope CurrentUser -Force -SkipPublisherCheck -ErrorAction Stop } catch { Write-Warning "Pester not installed and install failed: $($_.Exception.Message)" }
+$minimumPesterVersion = [Version]'5.4.0'
+$availablePester = Get-Module -ListAvailable -Name Pester | Where-Object { $_.Version -ge $minimumPesterVersion }
+if (-not $availablePester) {
+  try { Install-Module Pester -Scope CurrentUser -Force -SkipPublisherCheck -MinimumVersion $minimumPesterVersion -ErrorAction Stop } catch { Write-Warning "Pester not installed and install failed: $($_.Exception.Message)" }
+  $availablePester = Get-Module -ListAvailable -Name Pester | Where-Object { $_.Version -ge $minimumPesterVersion }
 }
-Import-Module Pester -ErrorAction SilentlyContinue
-
-$root = (Resolve-Path (Join-Path $PSScriptRoot '..' '..')).Path
-$scriptsDir = Join-Path $root 'scripts'
+Import-Module Pester -MinimumVersion $minimumPesterVersion -ErrorAction SilentlyContinue
 
 Describe 'Windows PowerShell Scripts - Parse and Structure' {
+  BeforeAll {
+    $script:root = (Resolve-Path (Join-Path $PSScriptRoot '..' '..')).Path
+    $script:scriptsDir = Join-Path $script:root 'scripts'
+  }
+
   It 'parses all top-level scripts without diagnostics' {
-    $files = Get-ChildItem -Path $scriptsDir -File -Filter '*.ps1' | Where-Object { $_.FullName -notmatch '\\tests\\' -and $_.Name -ne 'WindowsScripts.Tests.ps1' }
+    $files = Get-ChildItem -Path $script:scriptsDir -File -Filter '*.ps1' | Where-Object { $_.FullName -notmatch '\\tests\\' -and $_.Name -ne 'WindowsScripts.Tests.ps1' }
     $errs = @()
     foreach ($f in $files) {
       $tokens = $null; $ast = $null; $diags = $null
@@ -30,10 +35,12 @@ Describe 'Windows PowerShell Scripts - Parse and Structure' {
   }
 
   Context 'interactive-start-windows.ps1' {
-    $startInteractive = Join-Path $scriptsDir 'interactive-start-windows.ps1'
+    BeforeAll {
+      $script:startInteractive = Join-Path $script:scriptsDir 'interactive-start-windows.ps1'
+    }
     It 'defines all expected menu functions' {
-      $content = Get-Content -Path $startInteractive -Raw
-      $funcs = Select-String -Path $startInteractive -Pattern '^function\s+([A-Za-z0-9\-]+)\b' -AllMatches | ForEach-Object { $_.Matches } | ForEach-Object { $_.Groups[1].Value }
+      $content = Get-Content -Path $script:startInteractive -Raw
+      $funcs = Select-String -Path $script:startInteractive -Pattern '^function\s+([A-Za-z0-9\-]+)\b' -AllMatches | ForEach-Object { $_.Matches } | ForEach-Object { $_.Groups[1].Value }
       $required = @(
         'Configure-Runtime','Pick-Config','Start-ServiceOnly','Start-LauncherPlusService','Start-Connector',
         'Open-ProbeMenu','Build-TestMenu','Cli-ToolsMenu','Main-Menu','Force-Stop','Logs-Menu',
@@ -48,22 +55,22 @@ Describe 'Windows PowerShell Scripts - Parse and Structure' {
     }
 
     It 'uses IwrArgs for web requests' {
-      $lines = Get-Content -Path $startInteractive
+      $lines = Get-Content -Path $script:startInteractive
       ($lines -match 'Invoke-WebRequest\s+@IwrArgs').Count | Should -BeGreaterThan 0
     }
 
     It 'opens wt.exe with new-tab before -p' {
-      (Get-Content -Path $startInteractive -Raw) -match "new-tab','-p'" | Should -BeTrue
+      (Get-Content -Path $script:startInteractive -Raw) -match "new-tab','-p'" | Should -BeTrue
     }
 
     It 'Force-Stop also kills launcher and connector if present' {
-      $raw = Get-Content -Path $startInteractive -Raw
+      $raw = Get-Content -Path $script:startInteractive -Raw
       $raw -match "Stop-Process -Name 'arw-launcher'" | Should -BeTrue
       $raw -match "Stop-Process -Name 'arw-connector'" | Should -BeTrue
     }
 
     It 'has a Start (dry-run) menu item and invokes -DryRun' {
-      $raw = Get-Content -Path $startInteractive -Raw
+      $raw = Get-Content -Path $script:startInteractive -Raw
       $raw -match 'Start \(dry-run preview\)' | Should -BeTrue
       $raw -match '-DryRun' | Should -BeTrue
     }
@@ -75,27 +82,31 @@ Describe 'Windows PowerShell Scripts - Parse and Structure' {
   }
 
   Context 'start.ps1' {
-    $start = Join-Path $scriptsDir 'start.ps1'
+    BeforeAll {
+      $script:startScript = Join-Path $script:scriptsDir 'start.ps1'
+    }
     It 'uses IwrArgs for health check' {
-      (Get-Content -Path $start -Raw) -match 'Invoke-WebRequest\s+@IwrArgs' | Should -BeTrue
+      (Get-Content -Path $script:startScript -Raw) -match 'Invoke-WebRequest\s+@IwrArgs' | Should -BeTrue
     }
 
     It 'exposes a DryRun switch and prints dryrun markers' {
-      $raw = Get-Content -Path $start -Raw
+      $raw = Get-Content -Path $script:startScript -Raw
       $raw -match '\[switch\]\$DryRun' | Should -BeTrue
       $raw -match '\[dryrun\]' | Should -BeTrue
     }
   }
 
   Context 'interactive-setup-windows.ps1' {
-    $setup = Join-Path $scriptsDir 'interactive-setup-windows.ps1'
+    BeforeAll {
+      $script:setupScript = Join-Path $script:scriptsDir 'interactive-setup-windows.ps1'
+    }
     It 'uses IwrArgs for downloads' {
-      $raw = Get-Content -Path $setup -Raw
-      ($raw -match 'Invoke-WebRequest\s+@IwrArgs').Count | Should -BeGreaterThan 0
+      $raw = Get-Content -Path $script:setupScript -Raw
+      ([regex]::Matches($raw, 'Invoke-WebRequest\s+@IwrArgs').Count) | Should -BeGreaterThan 0
     }
 
     It 'advertises Setup dry-run and includes preview messages' {
-      $raw = Get-Content -Path $setup -Raw
+      $raw = Get-Content -Path $script:setupScript -Raw
       $raw -match 'Toggle dry-run mode' | Should -BeTrue
       $raw -match '\[dryrun\] Would run: scripts/docgen.ps1' | Should -BeTrue
       $raw -match '\[dryrun\] Would run: scripts/package.ps1' | Should -BeTrue
@@ -105,19 +116,27 @@ Describe 'Windows PowerShell Scripts - Parse and Structure' {
 
 # Additional checks for setup dry-run
 Describe 'Windows Setup Script — DryRun extras' {
+  BeforeAll {
+    if (-not $script:scriptsDir) {
+      $script:root = (Resolve-Path (Join-Path $PSScriptRoot '..' '..')).Path
+      $script:scriptsDir = Join-Path $script:root 'scripts'
+    }
+  }
   It 'contains cargo build and download dry-run markers' {
-    $setup = Join-Path (Join-Path (Resolve-Path (Join-Path $PSScriptRoot '..' '..')).Path 'scripts') 'interactive-setup-windows.ps1'
+    $setup = Join-Path $script:scriptsDir 'interactive-setup-windows.ps1'
     $raw = Get-Content -Path $setup -Raw
-    $raw -match '\\[dryrun\\] Would run: cargo build --workspace --release' | Should -BeTrue
+    $raw -match '\[dryrun\] Would run: cargo build --workspace --release' | Should -BeTrue
     $raw -match 'download rustup-init.exe' | Should -BeTrue
     $raw -match 'download jq.exe' | Should -BeTrue
   }
 }
 
 Context 'stamp_docs_updated.py' {
-  $python3 = Get-Command python3 -ErrorAction SilentlyContinue
-  if (-not $python3) {
-    $python3 = Get-Command python -ErrorAction Stop
+  BeforeAll {
+    $script:pythonCmd = Get-Command python3 -ErrorAction SilentlyContinue
+    if (-not $script:pythonCmd) {
+      $script:pythonCmd = Get-Command python -ErrorAction Stop
+    }
   }
 
   It 'git_status_has_changes detects pending changes and cleans up' {
@@ -154,7 +173,7 @@ if sdu.git_status_has_changes(str(tmp_path)):
     sys.exit(3)
 "@
 
-    & $python3.Path -c $code
+    & $script:pythonCmd.Path -c $code
     $LASTEXITCODE | Should -Be 0
   }
 }

@@ -365,6 +365,22 @@ def format_task_entry(task: dict) -> str:
 
 def run_docgen(args: argparse.Namespace) -> int:
     runner = Runner(quiet=args.quiet)
+    cargo_cmd = which("cargo")
+
+    if args.gating_only:
+        if not cargo_cmd:
+            msg = "cargo not found; cannot render gating docs in --gating-only mode"
+            runner.failures.append(msg)
+            log_error(msg)
+        else:
+            generate_gating_docs_fast(runner, cargo_cmd)
+        if runner.failures:
+            log_error(f"{len(runner.failures)} step(s) failed")
+            return 1
+        if runner.warnings and not runner.quiet:
+            log_warn(f"{len(runner.warnings)} warning(s) emitted")
+        return 0
+
     python_cmd = sys.executable
     repo_base = guess_repo_blob_base(runner)
 
@@ -380,7 +396,6 @@ def run_docgen(args: argparse.Namespace) -> int:
     for label, path in scripts:
         runner.run(label, [python_cmd, str(path)])
 
-    cargo_cmd = which("cargo")
     metadata = None
     if cargo_cmd:
         stdout = runner.capture(
@@ -483,6 +498,57 @@ def generate_gating_docs(runner: Runner, cli_path: Path) -> None:
         write_if_changed(dest, stdout, normalizer)
 
 
+def generate_gating_docs_fast(runner: Runner, cargo_cmd: str) -> None:
+    docs_dir = DOCS_DIR
+    (docs_dir / "reference").mkdir(parents=True, exist_ok=True)
+
+    exe_suffix = ".exe" if os.name == "nt" else ""
+    release_cli = ROOT / "target" / "release" / f"arw-cli{exe_suffix}"
+
+    def build_commands(base: list[str]) -> list[tuple[str, list[str], Path, Callable[[str], str] | None]]:
+        return [
+            (
+                "Rendering gating keys (json)",
+                base + ["gate", "keys", "--json", "--pretty"],
+                docs_dir / "GATING_KEYS.json",
+                normalize_generated_json,
+            ),
+            (
+                "Rendering gating keys (markdown)",
+                base + ["gate", "keys", "--doc"],
+                docs_dir / "GATING_KEYS.md",
+                normalize_generated_markdown,
+            ),
+            (
+                "Rendering gating config schema",
+                base + ["gate", "config", "schema", "--pretty"],
+                docs_dir / "reference" / "gating_config.schema.json",
+                None,
+            ),
+            (
+                "Rendering gating config reference",
+                base + ["gate", "config", "doc"],
+                docs_dir / "reference" / "gating_config.md",
+                normalize_generated_markdown,
+            ),
+        ]
+
+    if release_cli.exists():
+        command_specs = build_commands([str(release_cli)])
+    else:
+        command_specs = build_commands(
+            [cargo_cmd, "run", "--quiet", "--locked", "-p", "arw-cli", "--"],
+        )
+
+    for label, cmd, dest, normalizer in command_specs:
+        stdout = runner.capture(label, cmd, required=True)
+        if stdout is None:
+            continue
+        if dest.name == "GATING_KEYS.md":
+            stdout = ensure_updated_from_generated(stdout)
+        write_if_changed(dest, stdout, normalizer)
+
+
 def generate_mcp_tools(runner: Runner, cli_path: Path) -> None:
     stdout = runner.capture(
         "Rendering MCP tools spec",
@@ -513,6 +579,11 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         "--skip-builds",
         action="store_true",
         help="Skip release builds and downstream artifacts (respects ARW_DOCGEN_SKIP_BUILDS).",
+    )
+    parser.add_argument(
+        "--gating-only",
+        action="store_true",
+        help="Regenerate only gating docs (uses existing release binary or cargo run).",
     )
     parser.add_argument(
         "--quiet",

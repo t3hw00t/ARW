@@ -1,16 +1,29 @@
 #!powershell
-Set-StrictMode -Version Latest
-$ErrorActionPreference = 'Stop'
-
 param(
   [switch]$VerboseOutput
 )
 
+Set-StrictMode -Version Latest
+$ErrorActionPreference = 'Stop'
+
 Write-Host '[tests] Preparing Pester' -ForegroundColor Cyan
-if (-not (Get-Module -ListAvailable -Name Pester)) {
-  try { Install-Module Pester -Scope CurrentUser -Force -SkipPublisherCheck -ErrorAction Stop } catch { Write-Warning "Pester install failed: $($_.Exception.Message)" }
+$minimumPesterVersion = [Version]'5.4.0'
+$availablePester = Get-Module -ListAvailable -Name Pester | Where-Object { $_.Version -ge $minimumPesterVersion }
+if (-not $availablePester) {
+  Write-Host "[tests] Installing Pester >= $minimumPesterVersion (CurrentUser scope)" -ForegroundColor Cyan
+  try {
+    Install-Module Pester -Scope CurrentUser -Force -SkipPublisherCheck -MinimumVersion $minimumPesterVersion -ErrorAction Stop
+  } catch {
+    Write-Error "Failed to install required Pester version: $($_.Exception.Message)"
+    exit 1
+  }
+  $availablePester = Get-Module -ListAvailable -Name Pester | Where-Object { $_.Version -ge $minimumPesterVersion }
+  if (-not $availablePester) {
+    Write-Error "Pester >= $minimumPesterVersion not available after install attempt."
+    exit 1
+  }
 }
-Import-Module Pester -ErrorAction SilentlyContinue
+Import-Module Pester -MinimumVersion $minimumPesterVersion -ErrorAction Stop
 
 $tests = Join-Path $PSScriptRoot 'WindowsScripts.Tests.ps1'
 if (-not (Test-Path $tests)) { Write-Error "Missing tests file: $tests"; exit 1 }

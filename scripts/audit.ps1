@@ -27,7 +27,7 @@ function Need-Tool($name, [string]$CargoCrate) {
   }
   if (-not (Get-Command cargo -ErrorAction SilentlyContinue)) { Warn 'cargo not found; cannot install tools'; return $false }
   if ($CargoCrate) {
-    try { cargo install --locked $CargoCrate | Out-Null } catch { Warn "Install failed for $CargoCrate: $($_.Exception.Message)"; return $false }
+    try { cargo install --locked $CargoCrate | Out-Null } catch { Warn "Install failed for ${CargoCrate}: $($_.Exception.Message)"; return $false }
   }
   return [bool](Get-Command $name -ErrorAction SilentlyContinue)
 }

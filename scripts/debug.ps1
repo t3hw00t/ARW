@@ -1,5 +1,4 @@
 #!powershell
-Set-StrictMode -Version Latest
 param(
   [switch]$Interactive,
   [int]$Port = 0,
@@ -13,6 +12,7 @@ param(
   [int]$HealthTimeout = 20
 )
 
+Set-StrictMode -Version Latest
 function Info($t){ Write-Host "[debug] $t" -ForegroundColor Cyan }
 function Warn($t){ Write-Host "[debug] $t" -ForegroundColor Yellow }
 

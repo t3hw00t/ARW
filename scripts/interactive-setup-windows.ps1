@@ -42,7 +42,7 @@ function Show-GeneratedToken {
   $dir = Join-Path $root '.arw'
   New-Item -ItemType Directory -Force $dir | Out-Null
   if (-not [Console]::IsOutputRedirected) {
-    Info ("Generated $Label: $Token")
+    Info ("Generated ${Label}: $Token")
     Warn 'Store this value securely; remove it from scrollback if copied.'
   } else {
     $fileLabel = ($Label.ToLower() -replace '[^a-z0-9._-]', '_')
