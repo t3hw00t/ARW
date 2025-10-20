@@ -1008,6 +1008,119 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn persona_vibe_metrics_recovers_from_persisted_history() {
+        crate::test_support::init_tracing();
+        let temp = tempdir().expect("tempdir");
+        let mut ctx = begin_state_env(temp.path());
+        ctx.env.set("ARW_PERSONA_ENABLE", "1");
+        ctx.env.set("ARW_DEBUG", "1");
+
+        let policy_path = temp.path().join("policy.json");
+        fs::write(&policy_path, r#"{ "allow_all": true }"#).expect("write policy");
+        ctx.env
+            .set("ARW_POLICY_FILE", policy_path.to_string_lossy().as_ref());
+
+        crate::util::reset_state_dir_for_tests();
+        ctx.env
+            .set("ARW_STATE_DIR", temp.path().display().to_string());
+
+        {
+            let bus = arw_events::Bus::new_with_replay(64, 64);
+            let kernel = arw_kernel::Kernel::open(temp.path()).expect("init kernel");
+            let policy = arw_policy::PolicyEngine::load_from_env();
+            let policy_handle = crate::policy::PolicyHandle::new(policy, bus.clone());
+            let host: Arc<dyn arw_wasi::ToolHost> = Arc::new(arw_wasi::NoopHost);
+            let state = crate::AppState::builder(bus, kernel, policy_handle, host, true)
+                .with_sse_capacity(64)
+                .with_persona_enabled(true)
+                .build()
+                .await;
+            seed_persona(&state, true).await;
+
+            let ttl =
+                (Utc::now() + Duration::hours(1)).to_rfc3339_opts(SecondsFormat::Millis, true);
+            state
+                .kernel()
+                .insert_lease(
+                    "lease-telemetry",
+                    "local",
+                    "telemetry:persona:workspace",
+                    None,
+                    &ttl,
+                    None,
+                    None,
+                )
+                .expect("insert telemetry lease");
+
+            let resp = persona_feedback_submit(
+                State(state.clone()),
+                Path("persona-1".to_string()),
+                Query(PersonaFeedbackQuery {
+                    kind: Some("vibe".into()),
+                }),
+                Json(PersonaFeedbackRequest::Single(PersonaFeedbackBody {
+                    kind: None,
+                    signal: Some("warmer".into()),
+                    strength: Some(0.7),
+                    note: Some("felt closer".into()),
+                    metadata: None,
+                })),
+            )
+            .await
+            .into_response();
+            assert_eq!(resp.status(), StatusCode::ACCEPTED);
+
+            let metrics_resp =
+                state_persona_vibe_metrics(State(state.clone()), Path("persona-1".to_string()))
+                    .await
+                    .into_response();
+            assert_eq!(metrics_resp.status(), StatusCode::OK);
+            let metrics_body = metrics_resp.into_body().collect().await.unwrap();
+            let metrics_json: serde_json::Value =
+                serde_json::from_slice(&metrics_body.to_bytes()).unwrap();
+            assert_eq!(metrics_json["total_feedback"], json!(1));
+        }
+
+        let bus = arw_events::Bus::new_with_replay(64, 64);
+        let kernel = arw_kernel::Kernel::open(temp.path()).expect("reopen kernel");
+        let policy = arw_policy::PolicyEngine::load_from_env();
+        let policy_handle = crate::policy::PolicyHandle::new(policy, bus.clone());
+        let host: Arc<dyn arw_wasi::ToolHost> = Arc::new(arw_wasi::NoopHost);
+        let state = crate::AppState::builder(bus, kernel, policy_handle, host, true)
+            .with_sse_capacity(64)
+            .with_persona_enabled(true)
+            .build()
+            .await;
+
+        let ttl = (Utc::now() + Duration::hours(1)).to_rfc3339_opts(SecondsFormat::Millis, true);
+        state
+            .kernel()
+            .insert_lease(
+                "lease-telemetry-restart",
+                "local",
+                "telemetry:persona:workspace",
+                None,
+                &ttl,
+                None,
+                None,
+            )
+            .expect("insert telemetry lease after restart");
+
+        let metrics_resp =
+            state_persona_vibe_metrics(State(state.clone()), Path("persona-1".to_string()))
+                .await
+                .into_response();
+        assert_eq!(metrics_resp.status(), StatusCode::OK);
+        let metrics_body = metrics_resp.into_body().collect().await.unwrap();
+        let metrics_json: serde_json::Value =
+            serde_json::from_slice(&metrics_body.to_bytes()).unwrap();
+        assert_eq!(metrics_json["total_feedback"], json!(1));
+        assert_eq!(metrics_json["last_signal"], json!("warmer"));
+        assert_eq!(metrics_json["last_strength"], json!(0.7));
+        assert_eq!(metrics_json["signal_counts"]["warmer"], json!(1));
+    }
+
+    #[tokio::test]
     async fn persona_vibe_history_respects_retain_env() {
         crate::test_support::init_tracing();
         let temp = tempdir().expect("tempdir");

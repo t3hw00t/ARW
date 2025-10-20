@@ -148,7 +148,24 @@ impl PersonaService {
     }
 
     pub async fn vibe_metrics_snapshot(&self, persona_id: String) -> PersonaVibeMetricsSnapshot {
-        self.metrics.snapshot(&persona_id).await
+        let snapshot = self.metrics.snapshot(&persona_id).await;
+        if snapshot.total_feedback > 0 {
+            return snapshot;
+        }
+
+        match self
+            .kernel
+            .list_persona_vibe_samples_async(persona_id.clone(), vibe_sample_retain())
+            .await
+        {
+            Ok(samples) if !samples.is_empty() => {
+                self.metrics
+                    .rebuild_from_samples(&persona_id, &samples)
+                    .await;
+                self.metrics.snapshot(&persona_id).await
+            }
+            _ => snapshot,
+        }
     }
 
     pub async fn list_vibe_history(
@@ -223,6 +240,20 @@ impl VibeMetricsStore {
             .get(persona_id)
             .map(|state| state.snapshot(persona_id.to_string()))
             .unwrap_or_else(|| PersonaVibeMetricsSnapshot::empty(persona_id.to_string()))
+    }
+
+    async fn rebuild_from_samples(&self, persona_id: &str, samples: &[PersonaVibeSample]) {
+        let mut state = PersonaVibeMetricsState::default();
+        for sample in samples.iter().rev() {
+            state.record(
+                sample.signal.clone(),
+                sample.strength,
+                sample.recorded_at.clone(),
+            );
+        }
+
+        let mut guard = self.inner.write().await;
+        guard.insert(persona_id.to_string(), state);
     }
 }
 
