@@ -48,7 +48,7 @@ jobs:
           shared-key: ${{ env.ARW_ENV_CACHE_KEY }}
 
       - name: Install nextest
-        uses: taiki-e/install-action@7ec692fc37da04f8da31c22ba9f3b71ef267e650 # v2
+        uses: taiki-e/install-action@e43a5023a747770bfcb71ae048541a681714b951 # v2
         with:
           tool: nextest
           version: ${{ env.NEXTEST_VERSION }}
