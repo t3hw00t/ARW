@@ -4,7 +4,20 @@ import subprocess, sys, os, datetime, re
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 DOCS = os.path.join(ROOT, 'docs')
 
+def git_status_has_changes(path: str) -> bool:
+    rel = os.path.relpath(path, ROOT).replace(os.sep, '/')
+    try:
+        out = subprocess.check_output(
+            ['git','status','--porcelain','--', rel],
+            cwd=ROOT, stderr=subprocess.DEVNULL, text=True
+        ).strip()
+        return bool(out)
+    except Exception:
+        return False
+
 def git_last_date(path: str) -> str:
+    if git_status_has_changes(path):
+        return datetime.date.today().isoformat()
     try:
         out = subprocess.check_output(
             ['git','log','-1','--format=%ad','--date=format:%Y-%m-%d','--', path],
@@ -40,6 +53,7 @@ def find_h1(lines):
 
 SKIP_UPDATED = {
     os.path.join('docs', 'reference', 'gating_config.md').replace("\\", "/"),
+    os.path.join('docs', 'reference', 'deprecations.md').replace("\\", "/"),
 }
 
 
