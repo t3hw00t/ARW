@@ -1,370 +1,25 @@
-use crate::{util, AppState};
+use std::cmp::Ordering;
+use std::collections::{BTreeMap, BinaryHeap};
+use std::sync::Arc;
+use std::time::{Duration, Instant};
+
 use anyhow::Result;
 use arw_kernel::KernelSession;
 use chrono::SecondsFormat;
 use metrics::{counter, histogram};
 use rustc_hash::{FxHashMap, FxHashSet};
 use serde_json::{json, Map, Value};
-use std::cmp::Ordering;
-use std::collections::{BTreeMap, BinaryHeap};
-use std::sync::Arc;
-use std::time::Duration;
-use std::time::Instant;
-use tokio::sync::mpsc::error::TrySendError;
 
-use arw_topics as topics;
+use crate::{util, AppState};
 
-pub const STREAM_EVENT_STARTED: &str = topics::TOPIC_WORKING_SET_STARTED;
-pub const STREAM_EVENT_SEED: &str = topics::TOPIC_WORKING_SET_SEED;
-pub const STREAM_EVENT_EXPANDED: &str = topics::TOPIC_WORKING_SET_EXPANDED;
-pub const STREAM_EVENT_QUERY_EXPANDED: &str = topics::TOPIC_WORKING_SET_EXPAND_QUERY;
-pub const STREAM_EVENT_SELECTED: &str = topics::TOPIC_WORKING_SET_SELECTED;
-pub const STREAM_EVENT_COMPLETED: &str = topics::TOPIC_WORKING_SET_COMPLETED;
+use super::{
+    models::{WorkingSet, WorkingSetObserver, WorkingSetSummary},
+    spec::WorkingSetSpec,
+    SharedValue, DEFAULT_WORLD_LANE, METRIC_WORLD_CANDIDATES, STREAM_EVENT_COMPLETED,
+    STREAM_EVENT_EXPANDED, STREAM_EVENT_QUERY_EXPANDED, STREAM_EVENT_SEED, STREAM_EVENT_SELECTED,
+    STREAM_EVENT_STARTED,
+};
 
-const METRIC_WORLD_CANDIDATES: &str = "arw_context_world_candidates_total";
-const DEFAULT_WORLD_LANE: &str = "world";
-
-type SharedValue = Arc<Value>;
-
-#[derive(Clone, Debug)]
-pub struct WorkingSetSpec {
-    pub query: Option<String>,
-    pub embed: Option<Vec<f32>>,
-    pub lanes: Vec<String>,
-    pub limit: usize,
-    pub expand_per_seed: usize,
-    pub diversity_lambda: f32,
-    pub min_score: f32,
-    pub project: Option<String>,
-    pub lane_bonus: f32,
-    pub scorer: Option<String>,
-    pub expand_query: bool,
-    pub expand_query_top_k: usize,
-    pub slot_budgets: BTreeMap<String, usize>,
-}
-
-impl WorkingSetSpec {
-    pub fn normalize(&mut self) {
-        self.lanes = self
-            .lanes
-            .iter()
-            .map(|s| s.trim().to_string())
-            .filter(|s| !s.is_empty())
-            .collect();
-        self.lanes.sort();
-        self.lanes.dedup();
-        if self.lanes.is_empty() {
-            self.lanes = default_lanes();
-        }
-        if self.limit == 0 {
-            self.limit = default_limit();
-        }
-        self.limit = self.limit.clamp(1, 256);
-        self.expand_per_seed = self.expand_per_seed.min(16);
-        if !self.diversity_lambda.is_finite() {
-            self.diversity_lambda = default_diversity_lambda();
-        }
-        self.diversity_lambda = self.diversity_lambda.clamp(0.0, 1.0);
-        if !self.min_score.is_finite() {
-            self.min_score = default_min_score();
-        }
-        self.min_score = self.min_score.clamp(0.0, 1.0);
-        if !self.lane_bonus.is_finite() {
-            self.lane_bonus = default_lane_bonus();
-        }
-        self.lane_bonus = self.lane_bonus.clamp(0.0, 1.0);
-        let scorer_name = self
-            .scorer
-            .as_ref()
-            .map(|s| s.trim().to_ascii_lowercase())
-            .filter(|s| !s.is_empty())
-            .unwrap_or_else(default_scorer);
-        self.scorer = Some(scorer_name);
-        if self.expand_query_top_k == 0 {
-            self.expand_query_top_k = default_expand_query_top_k();
-        }
-        self.expand_query_top_k = self.expand_query_top_k.clamp(1, 32);
-        self.normalize_slot_budgets();
-    }
-
-    pub fn scorer_label(&self) -> String {
-        self.scorer.clone().unwrap_or_else(default_scorer)
-    }
-
-    pub fn snapshot(&self) -> Value {
-        let mut snapshot = serde_json::Map::new();
-        snapshot.insert("query_provided".into(), json!(self.query.is_some()));
-        snapshot.insert("lanes".into(), json!(self.lanes));
-        snapshot.insert("limit".into(), json!(self.limit));
-        snapshot.insert("expand_per_seed".into(), json!(self.expand_per_seed));
-        snapshot.insert("diversity_lambda".into(), json!(self.diversity_lambda));
-        snapshot.insert("min_score".into(), json!(self.min_score));
-        snapshot.insert("project".into(), json!(self.project));
-        snapshot.insert("lane_bonus".into(), json!(self.lane_bonus));
-        snapshot.insert("scorer".into(), json!(self.scorer));
-        snapshot.insert("expand_query".into(), json!(self.expand_query));
-        snapshot.insert("expand_query_top_k".into(), json!(self.expand_query_top_k));
-        if !self.slot_budgets.is_empty() {
-            let mut slots = serde_json::Map::new();
-            for (slot, limit) in self.slot_budgets.iter() {
-                slots.insert(slot.clone(), json!(limit));
-            }
-            snapshot.insert("slot_budgets".into(), Value::Object(slots));
-        }
-        Value::Object(snapshot)
-    }
-
-    fn normalize_slot_budgets(&mut self) {
-        if self.slot_budgets.is_empty() {
-            self.slot_budgets = default_slot_budgets();
-        }
-        if self.slot_budgets.is_empty() {
-            return;
-        }
-        let mut normalized = BTreeMap::new();
-        let limit_cap = self.limit.max(1);
-        for (slot, value) in std::mem::take(&mut self.slot_budgets) {
-            let slot = slot.trim().to_ascii_lowercase();
-            if slot.is_empty() {
-                continue;
-            }
-            let capped = value.min(limit_cap);
-            if capped == 0 {
-                continue;
-            }
-            normalized.insert(slot, capped);
-        }
-        self.slot_budgets = normalized;
-    }
-
-    pub fn slot_limit(&self, slot: &str) -> Option<usize> {
-        if self.slot_budgets.is_empty() {
-            return None;
-        }
-        let key = slot.trim().to_ascii_lowercase();
-        self.slot_budgets
-            .get(&key)
-            .copied()
-            .or_else(|| self.slot_budgets.get("*").copied())
-    }
-}
-
-#[derive(Debug)]
-pub struct WorkingSet {
-    pub items: Vec<SharedValue>,
-    pub seeds: Vec<SharedValue>,
-    pub expanded: Vec<SharedValue>,
-    pub diagnostics: SharedValue,
-    pub summary: WorkingSetSummary,
-}
-
-#[derive(Debug, Clone, Default)]
-pub struct WorkingSetSummary {
-    pub target_limit: usize,
-    pub lanes_requested: usize,
-    pub selected: usize,
-    pub avg_cscore: f32,
-    pub max_cscore: f32,
-    pub min_cscore: f32,
-    pub threshold_hits: usize,
-    pub total_candidates: usize,
-    pub lane_counts: BTreeMap<String, usize>,
-    pub slot_counts: BTreeMap<String, usize>,
-    pub slot_budgets: BTreeMap<String, usize>,
-    pub min_score: f32,
-    pub scorer: String,
-}
-
-impl WorkingSetSummary {
-    pub fn to_json(&self) -> Value {
-        let mut obj = serde_json::Map::new();
-        obj.insert("target_limit".into(), json!(self.target_limit));
-        obj.insert("lanes_requested".into(), json!(self.lanes_requested));
-        obj.insert("selected".into(), json!(self.selected));
-        obj.insert("avg_cscore".into(), json!(self.avg_cscore));
-        obj.insert("max_cscore".into(), json!(self.max_cscore));
-        obj.insert("min_cscore".into(), json!(self.min_cscore));
-        obj.insert("threshold_hits".into(), json!(self.threshold_hits));
-        obj.insert("total_candidates".into(), json!(self.total_candidates));
-        let mut lanes = serde_json::Map::new();
-        for (lane, count) in self.lane_counts.iter() {
-            lanes.insert(lane.clone(), json!(count));
-        }
-        obj.insert("lane_counts".into(), Value::Object(lanes));
-        if !self.slot_counts.is_empty() || !self.slot_budgets.is_empty() {
-            let mut slots = serde_json::Map::new();
-            if !self.slot_counts.is_empty() {
-                let mut counts = serde_json::Map::new();
-                for (slot, count) in self.slot_counts.iter() {
-                    counts.insert(slot.clone(), json!(count));
-                }
-                slots.insert("counts".into(), Value::Object(counts));
-            }
-            if !self.slot_budgets.is_empty() {
-                let mut budgets = serde_json::Map::new();
-                for (slot, limit) in self.slot_budgets.iter() {
-                    budgets.insert(slot.clone(), json!(limit));
-                }
-                slots.insert("budgets".into(), Value::Object(budgets));
-            }
-            obj.insert("slots".into(), Value::Object(slots));
-        }
-        obj.insert("min_score".into(), json!(self.min_score));
-        obj.insert("scorer".into(), json!(self.scorer));
-        Value::Object(obj)
-    }
-}
-
-#[derive(Clone, Debug)]
-pub struct WorkingSetStreamEvent {
-    pub iteration: usize,
-    pub kind: String,
-    pub payload: SharedValue,
-}
-
-pub trait WorkingSetObserver {
-    fn emit(&mut self, kind: &'static str, payload: SharedValue);
-}
-
-impl WorkingSetObserver for () {
-    fn emit(&mut self, _kind: &'static str, _payload: SharedValue) {}
-}
-
-pub struct ChannelObserver {
-    iteration: usize,
-    tx: tokio::sync::mpsc::Sender<WorkingSetStreamEvent>,
-}
-
-impl ChannelObserver {
-    pub fn new(iteration: usize, tx: tokio::sync::mpsc::Sender<WorkingSetStreamEvent>) -> Self {
-        Self { iteration, tx }
-    }
-}
-
-impl WorkingSetObserver for ChannelObserver {
-    fn emit(&mut self, kind: &'static str, payload: SharedValue) {
-        counter!(
-            "arw_context_observer_emit_total",
-            "observer" => "channel",
-            "event" => kind
-        )
-        .increment(1);
-        let evt = WorkingSetStreamEvent {
-            iteration: self.iteration,
-            kind: kind.to_string(),
-            payload,
-        };
-        if let Err(err) = self.tx.try_send(evt) {
-            match err {
-                TrySendError::Full(evt) => {
-                    let tx = self.tx.clone();
-                    tokio::spawn(async move {
-                        let _ = tx.send(evt).await;
-                    });
-                }
-                TrySendError::Closed(_) => {
-                    // receiver dropped; nothing else to do
-                }
-            }
-        }
-    }
-}
-
-#[derive(Clone)]
-pub struct BusObserver {
-    bus: arw_events::Bus,
-    iteration: usize,
-    corr_id: Option<String>,
-    project: Option<String>,
-    query: Option<String>,
-}
-
-impl BusObserver {
-    pub fn new(
-        bus: arw_events::Bus,
-        iteration: usize,
-        corr_id: Option<String>,
-        project: Option<String>,
-        query: Option<String>,
-    ) -> Self {
-        Self {
-            bus,
-            iteration,
-            corr_id,
-            project,
-            query,
-        }
-    }
-
-    fn enrich_value(&self, payload: &Value) -> Value {
-        let mut map: Map<String, Value> = match payload {
-            Value::Object(map) => map.clone(),
-            other => {
-                let mut map = Map::new();
-                map.insert("value".into(), other.clone());
-                map
-            }
-        };
-        map.insert("iteration".into(), json!(self.iteration));
-        if let Some(corr) = &self.corr_id {
-            map.insert("corr_id".into(), Value::String(corr.clone()));
-        }
-        if let Some(project) = &self.project {
-            map.insert("project".into(), Value::String(project.clone()));
-        }
-        if let Some(query) = &self.query {
-            map.insert("query".into(), Value::String(query.clone()));
-        }
-        Value::Object(map)
-    }
-
-    fn publish_enriched(&self, kind: &'static str, value: &Value) {
-        self.bus.publish(kind, value);
-    }
-}
-
-impl WorkingSetObserver for BusObserver {
-    fn emit(&mut self, kind: &'static str, payload: SharedValue) {
-        counter!(
-            "arw_context_observer_emit_total",
-            "observer" => "bus",
-            "event" => kind
-        )
-        .increment(1);
-        let enriched = self.enrich_value(payload.as_ref());
-        self.publish_enriched(kind, &enriched);
-    }
-}
-
-pub struct CompositeObserver<A> {
-    first: A,
-    second: BusObserver,
-}
-
-impl<A> CompositeObserver<A> {
-    pub fn new(first: A, second: BusObserver) -> Self {
-        Self { first, second }
-    }
-}
-
-impl<A> WorkingSetObserver for CompositeObserver<A>
-where
-    A: WorkingSetObserver,
-{
-    fn emit(&mut self, kind: &'static str, payload: SharedValue) {
-        counter!(
-            "arw_context_observer_emit_total",
-            "observer" => "composite",
-            "event" => kind
-        )
-        .increment(1);
-        self.first.emit(kind, Arc::clone(&payload));
-        let enriched = self.second.enrich_value(payload.as_ref());
-        self.second.publish_enriched(kind, &enriched);
-    }
-}
-
-#[allow(dead_code)]
 pub fn assemble(
     state: &AppState,
     spec: &WorkingSetSpec,
@@ -834,15 +489,15 @@ impl WorkingSetBuilder {
 }
 
 #[derive(Clone)]
-struct Candidate {
-    id: String,
-    lane: Option<String>,
-    key: Option<String>,
-    tags: Vec<String>,
-    embed: Option<Arc<[f32]>>,
-    cscore: f32,
-    value: SharedValue,
-    slot_key: String,
+pub(super) struct Candidate {
+    pub(super) id: String,
+    pub(super) lane: Option<String>,
+    pub(super) key: Option<String>,
+    pub(super) tags: Vec<String>,
+    pub(super) embed: Option<Arc<[f32]>>,
+    pub(super) cscore: f32,
+    pub(super) value: SharedValue,
+    pub(super) slot_key: String,
 }
 
 #[derive(Clone)]
@@ -853,12 +508,12 @@ struct SeedInfo {
     embed: Option<Arc<[f32]>>,
 }
 
-trait CandidateScorer: Send + Sync {
+pub(super) trait CandidateScorer: Send + Sync {
     fn name(&self) -> &'static str;
     fn score(&self, candidate: &Candidate, ctx: &SelectionContext) -> f32;
 }
 
-struct SelectionContext<'a> {
+pub(super) struct SelectionContext<'a> {
     spec: &'a WorkingSetSpec,
     selected: &'a [Candidate],
     lane_counts: &'a BTreeMap<String, usize>,
@@ -910,7 +565,7 @@ impl CandidateScorer for ConfidenceScorer {
     }
 }
 
-fn resolve_scorer(name: Option<&str>) -> Box<dyn CandidateScorer + Send + Sync> {
+pub(super) fn resolve_scorer(name: Option<&str>) -> Box<dyn CandidateScorer + Send + Sync> {
     match name.unwrap_or("mmrd") {
         "confidence" | "greedy" => Box::new(ConfidenceScorer),
         _ => Box::new(MmrdScorer),
@@ -956,7 +611,7 @@ impl PartialOrd for HeapEntry {
     }
 }
 
-fn select_candidates<O: WorkingSetObserver>(
+pub(super) fn select_candidates<O: WorkingSetObserver>(
     candidates: Vec<Candidate>,
     spec: &WorkingSetSpec,
     has_above: bool,
@@ -1231,7 +886,7 @@ fn build_expansion_candidate(
     Some(Candidate::from_value(id, lane, record, cscore))
 }
 
-fn build_world_candidate(belief: &Value, project: Option<&str>) -> Option<Candidate> {
+pub(super) fn build_world_candidate(belief: &Value, project: Option<&str>) -> Option<Candidate> {
     let raw_id = belief.get("id").and_then(|v| v.as_str())?.trim();
     if raw_id.is_empty() {
         return None;
@@ -1541,11 +1196,11 @@ fn build_diagnostics(
 }
 
 impl Candidate {
-    fn from_value(id: String, lane: Option<String>, value: Value, cscore: f32) -> Self {
+    pub(super) fn from_value(id: String, lane: Option<String>, value: Value, cscore: f32) -> Self {
         Self::from_value_with_embed(id, lane, value, cscore, None)
     }
 
-    fn from_value_with_embed(
+    pub(super) fn from_value_with_embed(
         id: String,
         lane: Option<String>,
         mut value: Value,
@@ -1839,483 +1494,5 @@ impl WorkingSetSummary {
             min_score: spec.min_score,
             scorer: scorer.to_string(),
         }
-    }
-}
-
-fn env_flag(key: &str) -> Option<bool> {
-    std::env::var(key).ok().and_then(|v| {
-        let v = v.trim().to_ascii_lowercase();
-        match v.as_str() {
-            "1" | "true" | "yes" | "on" => Some(true),
-            "0" | "false" | "no" | "off" => Some(false),
-            _ => None,
-        }
-    })
-}
-
-#[cfg(test)]
-const CONTEXT_ENV_KEYS: &[&str] = &[
-    "ARW_CONTEXT_COVERAGE_MAX_ITERS",
-    "ARW_CONTEXT_DIVERSITY_LAMBDA",
-    "ARW_CONTEXT_EXPAND_PER_SEED",
-    "ARW_CONTEXT_EXPAND_QUERY",
-    "ARW_CONTEXT_EXPAND_QUERY_TOP_K",
-    "ARW_CONTEXT_K",
-    "ARW_CONTEXT_LANE_BONUS",
-    "ARW_CONTEXT_LANES_DEFAULT",
-    "ARW_CONTEXT_MIN_SCORE",
-    "ARW_CONTEXT_SCORER",
-    "ARW_CONTEXT_SLOT_BUDGETS",
-    "ARW_CONTEXT_STREAM_DEFAULT",
-];
-
-pub fn default_lanes() -> Vec<String> {
-    std::env::var("ARW_CONTEXT_LANES_DEFAULT")
-        .ok()
-        .map(|s| {
-            s.split(',')
-                .map(|v| v.trim().to_string())
-                .filter(|v| !v.is_empty())
-                .collect::<Vec<_>>()
-        })
-        .filter(|lanes: &Vec<String>| !lanes.is_empty())
-        .unwrap_or_else(|| {
-            vec![
-                "semantic".to_string(),
-                "procedural".to_string(),
-                "episodic".to_string(),
-                "story_thread".to_string(),
-            ]
-        })
-}
-
-pub fn default_limit() -> usize {
-    std::env::var("ARW_CONTEXT_K")
-        .ok()
-        .and_then(|s| s.parse::<usize>().ok())
-        .filter(|v| *v > 0)
-        .unwrap_or(18)
-}
-
-pub fn default_expand_per_seed() -> usize {
-    std::env::var("ARW_CONTEXT_EXPAND_PER_SEED")
-        .ok()
-        .and_then(|s| s.parse::<usize>().ok())
-        .unwrap_or(3)
-        .min(16)
-}
-
-pub fn default_diversity_lambda() -> f32 {
-    std::env::var("ARW_CONTEXT_DIVERSITY_LAMBDA")
-        .ok()
-        .and_then(|s| s.parse::<f32>().ok())
-        .unwrap_or(0.72)
-}
-
-pub fn default_min_score() -> f32 {
-    std::env::var("ARW_CONTEXT_MIN_SCORE")
-        .ok()
-        .and_then(|s| s.parse::<f32>().ok())
-        .unwrap_or(0.1)
-}
-
-pub fn default_lane_bonus() -> f32 {
-    std::env::var("ARW_CONTEXT_LANE_BONUS")
-        .ok()
-        .and_then(|s| s.parse::<f32>().ok())
-        .unwrap_or(0.05)
-        .clamp(0.0, 1.0)
-}
-
-pub fn default_expand_query() -> bool {
-    env_flag("ARW_CONTEXT_EXPAND_QUERY").unwrap_or(false)
-}
-
-pub fn default_expand_query_top_k() -> usize {
-    std::env::var("ARW_CONTEXT_EXPAND_QUERY_TOP_K")
-        .ok()
-        .and_then(|s| s.parse::<usize>().ok())
-        .filter(|v| *v > 0)
-        .unwrap_or(4)
-        .min(32)
-}
-
-pub fn default_scorer() -> String {
-    std::env::var("ARW_CONTEXT_SCORER")
-        .ok()
-        .map(|s| s.trim().to_ascii_lowercase())
-        .filter(|s| !s.is_empty())
-        .unwrap_or_else(|| "mmrd".to_string())
-}
-
-pub fn default_max_iterations() -> usize {
-    std::env::var("ARW_CONTEXT_COVERAGE_MAX_ITERS")
-        .ok()
-        .and_then(|s| s.parse::<usize>().ok())
-        .filter(|v| *v > 0)
-        .unwrap_or(2)
-        .min(6)
-}
-
-pub fn default_streaming_enabled() -> bool {
-    env_flag("ARW_CONTEXT_STREAM_DEFAULT").unwrap_or(false)
-}
-
-pub fn default_slot_budgets() -> BTreeMap<String, usize> {
-    let mut budgets = BTreeMap::new();
-    let raw = match std::env::var("ARW_CONTEXT_SLOT_BUDGETS") {
-        Ok(raw) => raw,
-        Err(_) => return budgets,
-    };
-    let trimmed = raw.trim();
-    if trimmed.is_empty() {
-        return budgets;
-    }
-    if trimmed.starts_with('{') {
-        if let Ok(Value::Object(map)) = serde_json::from_str::<Value>(trimmed) {
-            for (slot, value) in map.into_iter() {
-                if let Some(parsed) = parse_slot_budget_value(value) {
-                    let key = normalize_slot_key(&slot);
-                    if !key.is_empty() {
-                        budgets.insert(key, parsed);
-                    }
-                }
-            }
-        }
-        return budgets;
-    }
-    for part in trimmed.split(',') {
-        let mut iter = part.splitn(2, '=');
-        let key = iter.next().unwrap_or("").trim();
-        let value = iter.next().unwrap_or("").trim();
-        if key.is_empty() || value.is_empty() {
-            continue;
-        }
-        if let Ok(parsed) = value.parse::<usize>() {
-            let key = normalize_slot_key(key);
-            if !key.is_empty() {
-                budgets.insert(key, parsed);
-            }
-        }
-    }
-    budgets
-}
-
-fn parse_slot_budget_value(value: Value) -> Option<usize> {
-    match value {
-        Value::Number(num) => num.as_u64().map(|v| v as usize),
-        Value::String(s) => s.trim().parse::<usize>().ok(),
-        Value::Bool(b) => Some(if b { 1 } else { 0 }),
-        Value::Null => None,
-        Value::Array(_) | Value::Object(_) => None,
-    }
-}
-
-fn normalize_slot_key(input: &str) -> String {
-    input.trim().to_ascii_lowercase()
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::test_support::env as test_env;
-    use chrono::{SecondsFormat, Utc};
-    use serde_json::json;
-    use std::sync::{Arc as StdArc, Mutex};
-
-    #[tokio::test]
-    async fn channel_observer_reuses_payload_arc() {
-        let (tx, mut rx) = tokio::sync::mpsc::channel(1);
-        let mut observer = ChannelObserver::new(7, tx);
-        let payload = Arc::new(json!({"value": 1}));
-
-        observer.emit("test.event", Arc::clone(&payload));
-
-        let event = rx.recv().await.expect("channel event");
-        assert!(StdArc::ptr_eq(&payload, &event.payload));
-        assert_eq!(event.iteration, 7);
-    }
-
-    #[derive(Clone, Default)]
-    struct RecordingObserver {
-        events: StdArc<Mutex<Vec<SharedValue>>>,
-    }
-
-    impl RecordingObserver {
-        fn new() -> Self {
-            Self::default()
-        }
-
-        fn events(&self) -> StdArc<Mutex<Vec<SharedValue>>> {
-            StdArc::clone(&self.events)
-        }
-    }
-
-    impl WorkingSetObserver for RecordingObserver {
-        fn emit(&mut self, _kind: &'static str, payload: SharedValue) {
-            self.events.lock().unwrap().push(payload);
-        }
-    }
-
-    #[tokio::test]
-    async fn composite_observer_shares_payload_with_inner_observer() {
-        let bus = arw_events::Bus::new(16);
-        let mut bus_rx = bus.subscribe();
-
-        let recorder = RecordingObserver::new();
-        let events = recorder.events();
-
-        let bus_observer = BusObserver::new(bus.clone(), 0, None, None, None);
-        let mut composite = CompositeObserver::new(recorder, bus_observer);
-
-        let payload = Arc::new(json!({"foo": "bar"}));
-        composite.emit("custom.event", Arc::clone(&payload));
-
-        {
-            let stored = events.lock().unwrap();
-            assert_eq!(stored.len(), 1);
-            assert!(StdArc::ptr_eq(&payload, &stored[0]));
-        }
-
-        let envelope = bus_rx.recv().await.expect("bus event");
-        assert_eq!(envelope.kind, "custom.event");
-        assert_eq!(envelope.payload.get("iteration"), Some(&json!(0)));
-        assert_eq!(envelope.payload.get("foo"), Some(&json!("bar")));
-    }
-
-    fn context_env_guard() -> test_env::EnvGuard {
-        let mut guard = test_env::guard();
-        guard.apply(CONTEXT_ENV_KEYS.iter().map(|&key| (key, None)));
-        guard
-    }
-
-    fn base_spec() -> WorkingSetSpec {
-        WorkingSetSpec {
-            query: None,
-            embed: None,
-            lanes: Vec::new(),
-            limit: 0,
-            expand_per_seed: 0,
-            diversity_lambda: f32::NAN,
-            min_score: f32::NAN,
-            project: None,
-            lane_bonus: f32::NAN,
-            scorer: None,
-            expand_query: default_expand_query(),
-            expand_query_top_k: 0,
-            slot_budgets: BTreeMap::new(),
-        }
-    }
-
-    fn make_candidate(id: &str, slot: &str, score: f32) -> Candidate {
-        let value = json!({
-            "id": id,
-            "lane": "semantic",
-            "kind": slot,
-            "value": {"text": format!("{slot} memo")},
-            "cscore": score,
-        });
-        Candidate::from_value(id.to_string(), Some("semantic".into()), value, score)
-    }
-
-    #[test]
-    fn normalize_applies_defaults_when_missing() {
-        let _env_guard = context_env_guard();
-        let mut spec = base_spec();
-        spec.expand_per_seed = 99;
-        spec.normalize();
-
-        assert_eq!(spec.lanes, default_lanes());
-        assert_eq!(spec.limit, default_limit());
-        assert_eq!(spec.expand_per_seed, 16);
-        assert_eq!(spec.diversity_lambda, default_diversity_lambda());
-        assert_eq!(spec.min_score, default_min_score());
-        assert_eq!(spec.lane_bonus, default_lane_bonus());
-        assert_eq!(spec.scorer_label(), default_scorer());
-        assert_eq!(spec.expand_query_top_k, default_expand_query_top_k());
-        assert!(spec.slot_budgets.is_empty());
-    }
-
-    #[test]
-    fn normalize_trims_and_clamps_inputs() {
-        let _env_guard = context_env_guard();
-        let mut spec = WorkingSetSpec {
-            lanes: vec![
-                " procedural ".into(),
-                "semantic".into(),
-                "".into(),
-                "episodic".into(),
-                "semantic".into(),
-            ],
-            limit: 300,
-            expand_per_seed: 8,
-            diversity_lambda: 0.4,
-            min_score: 0.2,
-            project: Some("demo".into()),
-            lane_bonus: 0.7,
-            scorer: Some("  CONFIDENCE  ".into()),
-            expand_query: false,
-            expand_query_top_k: 100,
-            slot_budgets: BTreeMap::from([
-                (" Evidence ".to_string(), 999usize),
-                ("".to_string(), 5usize),
-            ]),
-            ..base_spec()
-        };
-        spec.normalize();
-
-        assert_eq!(spec.lanes, vec!["episodic", "procedural", "semantic"]);
-        assert_eq!(spec.limit, 256);
-        assert_eq!(spec.expand_per_seed, 8);
-        assert_eq!(spec.scorer_label(), "confidence");
-        assert_eq!(spec.expand_query_top_k, 32);
-        assert_eq!(spec.slot_budgets.get("evidence"), Some(&256));
-        assert!(!spec.slot_budgets.contains_key(""));
-    }
-
-    #[test]
-    fn slot_budgets_seeded_from_json_env() {
-        let mut guard = context_env_guard();
-        guard.set(
-            "ARW_CONTEXT_SLOT_BUDGETS",
-            "{\"instructions\":2,\"plan\":3,\"evidence\":8}",
-        );
-        let mut spec = base_spec();
-        spec.normalize();
-        assert_eq!(spec.slot_budgets.get("instructions"), Some(&2));
-        assert_eq!(spec.slot_budgets.get("plan"), Some(&3));
-        assert_eq!(spec.slot_budgets.get("evidence"), Some(&8));
-    }
-
-    #[test]
-    fn slot_budgets_parse_pair_list() {
-        let mut guard = context_env_guard();
-        guard.set(
-            "ARW_CONTEXT_SLOT_BUDGETS",
-            "instructions=4,evidence=10, policy = 2",
-        );
-        let mut spec = base_spec();
-        spec.normalize();
-        assert_eq!(spec.slot_budgets.get("instructions"), Some(&4));
-        assert_eq!(spec.slot_budgets.get("evidence"), Some(&10));
-        assert_eq!(spec.slot_budgets.get("policy"), Some(&2));
-    }
-
-    #[test]
-    fn snapshot_reflects_normalized_state() {
-        let _env_guard = context_env_guard();
-        let mut spec = base_spec();
-        spec.lanes = vec!["semantic".into()];
-        spec.limit = 12;
-        spec.expand_per_seed = 2;
-        spec.min_score = 0.3;
-        spec.scorer = Some("mmrd".into());
-        spec.expand_query = true;
-        spec.expand_query_top_k = 6;
-        spec.normalize();
-
-        let snap = spec.snapshot();
-        assert_eq!(snap["limit"], json!(12));
-        assert_eq!(snap["lanes"], json!(vec!["semantic".to_string()]));
-        assert_eq!(snap["expand_query"], json!(true));
-        assert_eq!(snap["expand_query_top_k"], json!(6));
-        assert_eq!(snap["min_score"], json!(spec.min_score));
-        assert_eq!(snap["scorer"], json!(spec.scorer));
-    }
-
-    #[test]
-    fn env_overrides_expand_query_default() {
-        let mut env_guard = context_env_guard();
-        env_guard.set("ARW_CONTEXT_EXPAND_QUERY", "true");
-
-        assert!(default_expand_query());
-
-        let spec = base_spec();
-        assert!(spec.expand_query);
-    }
-
-    #[test]
-    fn env_overrides_expand_query_top_k_default() {
-        let mut env_guard = context_env_guard();
-        env_guard.set("ARW_CONTEXT_EXPAND_QUERY_TOP_K", "7");
-
-        assert_eq!(default_expand_query_top_k(), 7);
-
-        let mut spec = base_spec();
-        spec.expand_query_top_k = 0;
-        spec.normalize();
-        assert_eq!(spec.expand_query_top_k, 7);
-    }
-
-    #[test]
-    fn env_overrides_streaming_default() {
-        let mut env_guard = context_env_guard();
-        env_guard.set("ARW_CONTEXT_STREAM_DEFAULT", "1");
-
-        assert!(default_streaming_enabled());
-    }
-
-    #[test]
-    fn build_world_candidate_wraps_belief() {
-        let _env_guard = context_env_guard();
-        let ts = Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true);
-        let belief = json!({
-            "id": "hint-http-timeout",
-            "action": "hint",
-            "confidence": 0.72,
-            "severity": 4,
-            "ts": ts,
-            "rationale": "raise timeout",
-        });
-        let candidate = build_world_candidate(&belief, Some("demo"));
-        let candidate = candidate.expect("world candidate");
-        assert!(candidate.id.starts_with("world:"));
-        assert_eq!(candidate.lane.as_deref(), Some("world"));
-        assert!(candidate.cscore <= 1.0 && candidate.cscore >= 0.05);
-        let stored_id = candidate
-            .value
-            .get("value")
-            .and_then(|v| v.get("record"))
-            .and_then(|v| v.get("id"))
-            .and_then(|v| v.as_str());
-        assert_eq!(stored_id, Some("hint-http-timeout"));
-    }
-
-    #[test]
-    fn slot_budgets_cap_selection_counts() {
-        let mut spec = base_spec();
-        spec.lanes = vec!["semantic".into()];
-        spec.limit = 4;
-        spec.expand_per_seed = 0;
-        spec.diversity_lambda = 0.5;
-        spec.min_score = 0.1;
-        spec.lane_bonus = 0.0;
-        spec.scorer = Some("confidence".into());
-        spec.slot_budgets =
-            BTreeMap::from([("instructions".into(), 1usize), ("evidence".into(), 2usize)]);
-        spec.normalize();
-
-        let candidates = vec![
-            make_candidate("inst-1", "instructions", 0.9),
-            make_candidate("inst-2", "instructions", 0.8),
-            make_candidate("ev-1", "evidence", 0.85),
-            make_candidate("ev-2", "evidence", 0.7),
-            make_candidate("ev-3", "evidence", 0.65),
-            make_candidate("plan-1", "plan", 0.6),
-        ];
-
-        let scorer = resolve_scorer(spec.scorer.as_deref());
-        let mut observer = ();
-        let (selected, _lanes, slot_counts) =
-            select_candidates(candidates, &spec, true, scorer.as_ref(), &mut observer);
-
-        assert_eq!(slot_counts.get("instructions"), Some(&1));
-        assert_eq!(slot_counts.get("evidence"), Some(&2));
-        let selected_instructions = selected
-            .iter()
-            .filter(|c| c.slot_key() == "instructions")
-            .count();
-        assert_eq!(selected_instructions, 1);
-        assert!(selected.len() <= spec.limit);
     }
 }
