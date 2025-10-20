@@ -1250,7 +1250,7 @@ impl Candidate {
         }
     }
 
-    fn slot_key(&self) -> &str {
+    pub(super) fn slot_key(&self) -> &str {
         &self.slot_key
     }
 

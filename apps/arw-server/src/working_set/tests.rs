@@ -1,8 +1,6 @@
-use super::*;
-use super::builder::{
-    build_world_candidate, resolve_scorer, select_candidates, Candidate,
-};
+use super::builder::{build_world_candidate, resolve_scorer, select_candidates, Candidate};
 use super::models::{BusObserver, ChannelObserver, CompositeObserver, WorkingSetObserver};
+use super::*;
 use crate::test_support::env as test_env;
 use chrono::{SecondsFormat, Utc};
 use serde_json::json;
