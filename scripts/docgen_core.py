@@ -157,6 +157,13 @@ def ensure_updated_from_generated(markdown: str) -> str:
     return normalized
 
 
+def extract_generated_label(markdown: str) -> str | None:
+    for line in markdown.splitlines():
+        if line.startswith("Generated: "):
+            return line.split("Generated:", 1)[1].strip()
+    return None
+
+
 def normalize_generated_json(text: str) -> str:
     try:
         payload = json.loads(text)
@@ -168,9 +175,23 @@ def normalize_generated_json(text: str) -> str:
     return json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
 
 
+def ensure_json_generated(content: str, generated_label: str | None) -> str:
+    try:
+        payload = json.loads(content)
+    except json.JSONDecodeError:
+        return content
+    if not isinstance(payload, dict):
+        return content
+    label = generated_label or payload.get("generated")
+    if not label:
+        label = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+    payload["generated"] = label
+    return json.dumps(payload, indent=2, ensure_ascii=False) + "\n"
+
+
 def write_if_changed(
     dest: Path, content: str, normalizer: Callable[[str], str] | None = None
-) -> None:
+) -> bool:
     if dest.exists():
         existing = dest.read_text(encoding="utf-8")
         existing_norm = normalizer(existing) if normalizer else existing
@@ -178,9 +199,10 @@ def write_if_changed(
         if existing_norm == incoming_norm:
             if normalizer:
                 log_info(f"Skipping update for {dest} (timestamp-only changes)")
-            return
+            return False
     dest.parent.mkdir(parents=True, exist_ok=True)
     dest.write_text(content, encoding="utf-8")
+    return True
 
 
 def guess_repo_blob_base(runner: Runner) -> str:
@@ -463,18 +485,27 @@ def generate_gating_docs(runner: Runner, cli_path: Path) -> None:
     docs_dir = DOCS_DIR
     (docs_dir / "reference").mkdir(parents=True, exist_ok=True)
 
+    generated_label: str | None = None
+    doc_path = docs_dir / "GATING_KEYS.md"
+    existing_doc_label: str | None = None
+    if doc_path.exists():
+        try:
+            existing_doc_label = extract_generated_label(doc_path.read_text(encoding="utf-8"))
+        except OSError:
+            existing_doc_label = None
+
     commands = [
-        (
-            "Rendering gating keys (json)",
-            [str(cli_path), "gate", "keys", "--json", "--pretty"],
-            docs_dir / "GATING_KEYS.json",
-            normalize_generated_json,
-        ),
         (
             "Rendering gating keys (markdown)",
             [str(cli_path), "gate", "keys", "--doc"],
             docs_dir / "GATING_KEYS.md",
             normalize_generated_markdown,
+        ),
+        (
+            "Rendering gating keys (json)",
+            [str(cli_path), "gate", "keys", "--json", "--pretty"],
+            docs_dir / "GATING_KEYS.json",
+            normalize_generated_json,
         ),
         (
             "Rendering gating config schema",
@@ -495,6 +526,17 @@ def generate_gating_docs(runner: Runner, cli_path: Path) -> None:
             continue
         if dest.name == "GATING_KEYS.md":
             stdout = ensure_updated_from_generated(stdout)
+            proposed_label = extract_generated_label(stdout) or generated_label
+            wrote = write_if_changed(dest, stdout, normalizer)
+            if wrote:
+                existing_doc_label = proposed_label or existing_doc_label
+            generated_label = existing_doc_label or proposed_label
+            continue
+        if dest.name == "GATING_KEYS.json":
+            label_for_json = generated_label or existing_doc_label
+            stdout = ensure_json_generated(stdout, label_for_json)
+            write_if_changed(dest, stdout, None)
+            continue
         write_if_changed(dest, stdout, normalizer)
 
 
@@ -504,20 +546,28 @@ def generate_gating_docs_fast(runner: Runner, cargo_cmd: str) -> None:
 
     exe_suffix = ".exe" if os.name == "nt" else ""
     release_cli = ROOT / "target" / "release" / f"arw-cli{exe_suffix}"
+    generated_label: str | None = None
+    doc_path = docs_dir / "GATING_KEYS.md"
+    existing_doc_label: str | None = None
+    if doc_path.exists():
+        try:
+            existing_doc_label = extract_generated_label(doc_path.read_text(encoding="utf-8"))
+        except OSError:
+            existing_doc_label = None
 
     def build_commands(base: list[str]) -> list[tuple[str, list[str], Path, Callable[[str], str] | None]]:
         return [
-            (
-                "Rendering gating keys (json)",
-                base + ["gate", "keys", "--json", "--pretty"],
-                docs_dir / "GATING_KEYS.json",
-                normalize_generated_json,
-            ),
             (
                 "Rendering gating keys (markdown)",
                 base + ["gate", "keys", "--doc"],
                 docs_dir / "GATING_KEYS.md",
                 normalize_generated_markdown,
+            ),
+            (
+                "Rendering gating keys (json)",
+                base + ["gate", "keys", "--json", "--pretty"],
+                docs_dir / "GATING_KEYS.json",
+                normalize_generated_json,
             ),
             (
                 "Rendering gating config schema",
@@ -546,6 +596,17 @@ def generate_gating_docs_fast(runner: Runner, cargo_cmd: str) -> None:
             continue
         if dest.name == "GATING_KEYS.md":
             stdout = ensure_updated_from_generated(stdout)
+            proposed_label = extract_generated_label(stdout) or generated_label
+            wrote = write_if_changed(dest, stdout, normalizer)
+            if wrote:
+                existing_doc_label = proposed_label or existing_doc_label
+            generated_label = existing_doc_label or proposed_label
+            continue
+        if dest.name == "GATING_KEYS.json":
+            label_for_json = generated_label or existing_doc_label
+            stdout = ensure_json_generated(stdout, label_for_json)
+            write_if_changed(dest, stdout, None)
+            continue
         write_if_changed(dest, stdout, normalizer)
 
 
