@@ -36,7 +36,7 @@ fn triad_smoke_script_tags_persona() -> Result<()> {
         when.method(POST)
             .path("/actions")
             .header("content-type", "application/json")
-            .body_contains("\"persona_id\":\"persona.triad\"");
+            .body_contains("\"persona_id\": \"persona.triad\"");
         then.status(200)
             .header("content-type", "application/json")
             .json_body(json!({ "id": action_id }));
@@ -67,7 +67,6 @@ fn triad_smoke_script_tags_persona() -> Result<()> {
             .header("content-type", "text/event-stream")
             .body("event: service.connected\n\n");
     });
-    events.expect(2);
 
     let script_path =
         PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../scripts/triad_smoke.sh");
@@ -85,7 +84,7 @@ fn triad_smoke_script_tags_persona() -> Result<()> {
     actions_post.assert();
     actions_get.assert();
     state_projects.assert();
-    events.assert();
+    events.assert_hits(2);
 
     Ok(())
 }
@@ -115,7 +114,7 @@ fn triad_smoke_script_uses_basic_auth_header() -> Result<()> {
         when.method(POST)
             .path("/actions")
             .header("content-type", "application/json")
-            .body_contains("\"persona_id\":\"persona.basic\"");
+            .body_contains("\"persona_id\": \"persona.basic\"");
         then.status(200)
             .header("content-type", "application/json")
             .json_body(json!({ "id": action_id }));
@@ -146,7 +145,6 @@ fn triad_smoke_script_uses_basic_auth_header() -> Result<()> {
             .header("content-type", "text/event-stream")
             .body("event: service.connected\n\n");
     });
-    events.expect(2);
 
     let script_path =
         PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../scripts/triad_smoke.sh");
@@ -168,7 +166,7 @@ fn triad_smoke_script_uses_basic_auth_header() -> Result<()> {
     actions_post.assert();
     actions_get.assert();
     state_projects.assert();
-    events.assert();
+    events.assert_hits(2);
 
     Ok(())
 }
@@ -196,7 +194,7 @@ fn triad_smoke_script_uses_healthz_bearer_header() -> Result<()> {
         when.method(POST)
             .path("/actions")
             .header("content-type", "application/json")
-            .body_contains("\"persona_id\":\"persona.health\"");
+            .body_contains("\"persona_id\": \"persona.health\"");
         then.status(200)
             .header("content-type", "application/json")
             .json_body(json!({ "id": action_id }));
@@ -227,7 +225,6 @@ fn triad_smoke_script_uses_healthz_bearer_header() -> Result<()> {
             .header("content-type", "text/event-stream")
             .body("event: service.connected\n\n");
     });
-    events.expect(2);
 
     let script_path =
         PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../scripts/triad_smoke.sh");
@@ -247,7 +244,7 @@ fn triad_smoke_script_uses_healthz_bearer_header() -> Result<()> {
     actions_post.assert();
     actions_get.assert();
     state_projects.assert();
-    events.assert();
+    events.assert_hits(2);
 
     Ok(())
 }

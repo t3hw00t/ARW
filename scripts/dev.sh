@@ -241,6 +241,9 @@ PY
       echo "[verify] python check_operation_docs_sync.py"
       if ! "$PYTHON" "$REPO_ROOT/scripts/check_operation_docs_sync.py"; then ok=1; fi
 
+      echo "[verify] python scripts/check_tasks_sync.py"
+      if ! "$PYTHON" "$REPO_ROOT/scripts/check_tasks_sync.py"; then ok=1; fi
+
       echo "[verify] python scripts/gen_topics_doc.py --check"
       if ! "$PYTHON" "$REPO_ROOT/scripts/gen_topics_doc.py" --check; then ok=1; fi
     fi

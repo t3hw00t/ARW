@@ -11,6 +11,7 @@ members = [
   "crates/arw-heuristics",
   "crates/arw-memory-core",
   "crates/arw-runtime",
+  "crates/arw-runtime-adapter",
   "apps/arw-cli",
   "crates/arw-otel",
   "apps/arw-server",
@@ -34,6 +35,7 @@ default-members = [
   "crates/arw-heuristics",
   "crates/arw-memory-core",
   "crates/arw-runtime",
+  "crates/arw-runtime-adapter",
   "apps/arw-cli",
   "crates/arw-otel",
   "apps/arw-server",
@@ -81,6 +83,8 @@ os_info = "3"
 base64 = "0.22"
 ipnet = "2"
 sha2 = "0.10"
+semver = "1"
+tempfile = "3"
 
 [profile.dev]
 opt-level = 1

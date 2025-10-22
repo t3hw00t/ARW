@@ -34,8 +34,10 @@ use super::util::{
 #[cfg(test)]
 mod runtime_bundle_manifest_tests {
     use super::*;
+    use arw_runtime_adapter::manifest::AdapterEntrypoint;
+    use arw_runtime_adapter::RuntimeAdapterManifest;
     use serde_json::{json, Value as JsonValue};
-    use tempfile::tempdir;
+    use tempfile::{tempdir, NamedTempFile};
 
     #[test]
     fn sign_and_verify_manifest_roundtrip() -> Result<()> {
@@ -95,6 +97,57 @@ mod runtime_bundle_manifest_tests {
             "expected failure due to untrusted signatures, got {err:?}"
         );
         Ok(())
+    }
+
+    #[test]
+    fn runtime_adapter_lint_valid_manifest() -> Result<()> {
+        let manifest = RuntimeAdapterManifest {
+            id: "demo.adapter".into(),
+            version: "0.1.0".into(),
+            name: Some("Demo Adapter".into()),
+            entrypoint: AdapterEntrypoint {
+                crate_name: "demo_adapter".into(),
+                symbol: "create_adapter".into(),
+                kind: None,
+            },
+            modalities: vec![RuntimeModality::Text],
+            ..RuntimeAdapterManifest::default()
+        };
+        let mut tmp = NamedTempFile::new()?;
+        serde_json::to_writer_pretty(tmp.as_file_mut(), &manifest)?;
+
+        let args = RuntimeAdaptersLintArgs {
+            manifest: tmp.path().to_path_buf(),
+            json: true,
+        };
+        cmd_runtime_adapters_lint(&args)
+    }
+
+    #[test]
+    fn runtime_adapter_lint_rejects_missing_id() {
+        let manifest = RuntimeAdapterManifest {
+            id: "".into(),
+            version: "0.1.0".into(),
+            entrypoint: AdapterEntrypoint {
+                crate_name: "demo_adapter".into(),
+                symbol: "create_adapter".into(),
+                kind: None,
+            },
+            modalities: vec![RuntimeModality::Text],
+            ..RuntimeAdapterManifest::default()
+        };
+        let mut tmp = NamedTempFile::new().expect("tmp");
+        serde_json::to_writer_pretty(tmp.as_file_mut(), &manifest).expect("write manifest");
+
+        let args = RuntimeAdaptersLintArgs {
+            manifest: tmp.path().to_path_buf(),
+            json: false,
+        };
+        let err = cmd_runtime_adapters_lint(&args).expect_err("manifest should fail validation");
+        assert!(
+            err.to_string().contains("validation"),
+            "unexpected error message: {err}"
+        );
     }
 }
 
@@ -241,6 +294,11 @@ pub enum RuntimeCmd {
     Bundles {
         #[command(subcommand)]
         cmd: RuntimeBundlesCmd,
+    },
+    /// Utilities for adapter manifests and SDK scaffolding
+    Adapters {
+        #[command(subcommand)]
+        cmd: RuntimeAdaptersCmd,
     },
 }
 
@@ -3761,6 +3819,22 @@ fn combine_runtime_snapshots(supervisor: &JsonValue, matrix: Option<JsonValue>) 
     JsonValue::Object(wrapper)
 }
 
+#[derive(Subcommand)]
+pub(crate) enum RuntimeAdaptersCmd {
+    /// Lint and summarize an adapter manifest
+    Lint(RuntimeAdaptersLintArgs),
+}
+
+#[derive(Args, Debug)]
+pub(crate) struct RuntimeAdaptersLintArgs {
+    /// Path to the adapter manifest (JSON or TOML)
+    #[arg(value_name = "PATH")]
+    pub manifest: PathBuf,
+    /// Emit report as JSON for tooling consumption
+    #[arg(long)]
+    pub json: bool,
+}
+
 #[cfg(test)]
 mod combine_snapshot_tests {
     use super::combine_runtime_snapshots;
@@ -4076,6 +4150,74 @@ fn format_reset_time_local(dt: &DateTime<Utc>) -> String {
         .to_string()
 }
 
+fn cmd_runtime_adapters_lint(args: &RuntimeAdaptersLintArgs) -> Result<()> {
+    let (manifest, report) = arw_runtime_adapter::load_manifest_with_report(&args.manifest)?;
+
+    if args.json {
+        let status = if report.is_success() { "ok" } else { "error" };
+        let payload = json!({
+            "status": status,
+            "manifest": manifest,
+            "issues": {
+                "errors": report.errors,
+                "warnings": report.warnings,
+            }
+        });
+        println!("{}", serde_json::to_string_pretty(&payload)?);
+    } else {
+        println!("Adapter manifest: {}", args.manifest.display());
+        println!("  id        : {}", manifest.id);
+        println!("  version   : {}", manifest.version);
+        if let Some(name) = manifest.name.as_deref() {
+            println!("  name      : {}", name);
+        }
+        if let Some(desc) = manifest.description.as_deref() {
+            println!("  summary   : {}", desc);
+        }
+        if !manifest.modalities.is_empty() {
+            let mut buf = String::new();
+            for (idx, modality) in manifest.modalities.iter().enumerate() {
+                if idx > 0 {
+                    buf.push_str(", ");
+                }
+                let _ = write!(&mut buf, "{modality:?}");
+            }
+            println!("  modalities: {}", buf);
+        }
+        if !manifest.tags.is_empty() {
+            println!("  tags      : {}", manifest.tags.join(", "));
+        }
+        println!(
+            "  entrypoint: {}::{}",
+            manifest.entrypoint.crate_name, manifest.entrypoint.symbol
+        );
+
+        if report.warnings.is_empty() {
+            println!("  warnings  : none");
+        } else {
+            println!("  warnings  :");
+            for warning in &report.warnings {
+                println!("    - [{}] {}", warning.field, warning.message);
+            }
+        }
+
+        if report.errors.is_empty() {
+            println!("  validation: ok");
+        } else {
+            println!("  errors    :");
+            for error in &report.errors {
+                println!("    - [{}] {}", error.field, error.message);
+            }
+        }
+    }
+
+    if report.is_success() {
+        Ok(())
+    } else {
+        bail!("manifest validation found {} error(s)", report.errors.len())
+    }
+}
+
 pub fn execute(cmd: RuntimeCmd) -> Result<()> {
     match cmd {
         RuntimeCmd::Status(args) => cmd_runtime_status(&args),
@@ -4095,6 +4237,9 @@ pub fn execute(cmd: RuntimeCmd) -> Result<()> {
             },
             RuntimeBundlesCmd::Audit(args) => cmd_runtime_bundles_audit(&args),
             RuntimeBundlesCmd::TrustShortfall(args) => cmd_runtime_bundles_trust_shortfall(&args),
+        },
+        RuntimeCmd::Adapters { cmd } => match cmd {
+            RuntimeAdaptersCmd::Lint(args) => cmd_runtime_adapters_lint(&args),
         },
     }
 }

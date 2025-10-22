@@ -360,6 +360,7 @@ dependencies = [
  "arw-kernel",
  "arw-protocol",
  "arw-runtime",
+ "arw-runtime-adapter",
  "assert_cmd",
  "base64 0.22.1",
  "chrono",
@@ -572,6 +573,23 @@ dependencies = [
  "serde",
  "serde_json",
  "thiserror 2.0.17",
+]
+
+[[package]]
+name = "arw-runtime-adapter"
+version = "0.2.0-dev"
+dependencies = [
+ "anyhow",
+ "arw-runtime",
+ "async-trait",
+ "once_cell",
+ "schemars 0.8.22",
+ "semver",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.17",
+ "toml 0.9.7",
 ]
 
 [[package]]

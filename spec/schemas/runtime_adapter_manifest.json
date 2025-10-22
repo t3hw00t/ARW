@@ -1,0 +1,147 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://arw/spec/runtime_adapter_manifest.json",
+  "title": "Runtime Adapter Manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "version", "entrypoint"],
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9._-]+$",
+      "description": "Stable identifier used by the runtime registry."
+    },
+    "version": {
+      "type": "string",
+      "description": "Semantic version of the adapter manifest."
+    },
+    "name": {
+      "type": ["string", "null"],
+      "description": "Human friendly adapter name."
+    },
+    "description": {
+      "type": ["string", "null"],
+      "description": "Short description of what the adapter does."
+    },
+    "modalities": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "description": "Values from RuntimeModality (text, vision, audio, ...)."
+      },
+      "uniqueItems": true,
+      "description": "Modalities supported by default when descriptors omit them."
+    },
+    "tags": {
+      "type": "array",
+      "items": { "type": "string" },
+      "uniqueItems": true,
+      "description": "Arbitrary tags for discovery and filtering."
+    },
+    "entrypoint": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["crate_name", "symbol"],
+      "properties": {
+        "crate_name": {
+          "type": "string",
+          "description": "Crate providing the adapter entrypoint."
+        },
+        "symbol": {
+          "type": "string",
+          "description": "Entry function returning an adapter implementation."
+        },
+        "kind": {
+          "type": ["string", "null"],
+          "description": "Optional hint for the loader about how to initialise the adapter."
+        }
+      }
+    },
+    "resources": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "accelerator": {
+          "type": ["string", "null"],
+          "description": "Preferred accelerator when descriptors omit one (cpu, cuda, rocm, metal...)."
+        },
+        "recommended_memory_mb": {
+          "type": ["integer", "null"],
+          "minimum": 0,
+          "description": "Suggested working-set memory in MiB."
+        },
+        "recommended_cpu_threads": {
+          "type": ["integer", "null"],
+          "minimum": 1,
+          "description": "Suggested baseline CPU thread count."
+        },
+        "requires_network": {
+          "type": ["boolean", "null"],
+          "description": "Whether the adapter requires outbound network access."
+        }
+      }
+    },
+    "consent": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "required": ["summary"],
+      "properties": {
+        "summary": {
+          "type": "string",
+          "description": "Short operator-facing explanation of the adapter's capability requests."
+        },
+        "details_url": {
+          "type": ["string", "null"],
+          "description": "Optional URL with more detail about consent requirements."
+        },
+        "capabilities": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Named capabilities requested by the adapter (e.g. read_files, network_egress).",
+          "uniqueItems": true
+        }
+      }
+    },
+    "metrics": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name"],
+        "properties": {
+          "name": { "type": "string" },
+          "description": { "type": ["string", "null"] },
+          "unit": { "type": ["string", "null"] }
+        }
+      },
+      "description": "Optional metric descriptors published by the adapter."
+    },
+    "health": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "poll_interval_ms": {
+          "type": "integer",
+          "minimum": 100,
+          "default": 5000,
+          "description": "Desired health polling interval for the supervisor."
+        },
+        "grace_period_ms": {
+          "type": "integer",
+          "minimum": 0,
+          "default": 15000,
+          "description": "Grace period before marking the adapter unhealthy."
+        },
+        "status_endpoint": {
+          "type": ["string", "null"],
+          "description": "Optional endpoint used for custom health probes."
+        }
+      }
+    },
+    "metadata": {
+      "type": "object",
+      "additionalProperties": { "type": "string" },
+      "description": "Free-form metadata for adapter discovery."
+    }
+  }
+}

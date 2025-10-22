@@ -3,6 +3,9 @@
 #![cfg_attr(docsrs, feature(doc_cfg))]
 #![allow(clippy::missing_safety_doc)]
 #![allow(renamed_and_removed_lints)]
+#![allow(mismatched_lifetime_syntaxes)]
+#![allow(clippy::mismatched_lifetime_syntaxes)]
+#![allow(clippy::unused_parens)]
 #![doc = include_str!("../README.md")]
 
 pub use bitflags;

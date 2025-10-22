@@ -221,6 +221,7 @@ nav:
       - SSE Patch Contract: architecture/sse_patch_contract.md
       - Managed llama.cpp Runtime: architecture/managed_llamacpp_runtime.md
       - Managed Runtime Supervisor: architecture/managed_runtime_supervisor.md
+      - Runtime Adapter SDK (Draft): architecture/runtime_adapter_sdk_rfc.md
       - Multimodal Runtime Plan: architecture/multimodal_runtime_plan.md
   - Contribute:
       - Overview: developer/index.md

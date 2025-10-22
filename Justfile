@@ -588,6 +588,13 @@ tokens-tailwind:
 tokens-sd:
   bash scripts/build_tokens_sd.sh
 
+# Task metadata
+tasks-sync:
+  python3 scripts/tasks_sync.py
+
+tasks-check:
+  python3 scripts/check_tasks_sync.py
+
 # Release: bump versions are already committed; tag and push
 release-tag v:
   bash -ceu '

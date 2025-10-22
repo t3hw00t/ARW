@@ -39,6 +39,8 @@ scripts/dev.ps1 verify  # cross-platform guardrail run (fmt → clippy → tests
 just docs-check    # quick docs lint (links/headings), optional
 just docs-type-stamp  # insert Type: badges based on path
 just docs-stamp       # stamp Updated: dates from git history
+just tasks-sync       # regenerate docs/developer/tasks.md from .arw/tasks.json
+just tasks-check      # verify task docs match .arw/tasks.json
 
 # Serve docs locally (hot reload)
 just docs-serve
