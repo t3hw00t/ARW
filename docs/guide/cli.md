@@ -28,8 +28,11 @@ Basics
 - Tools
   - `arw-cli tools` — list registered tools (id/version/caps)
   - `arw-cli tools --pretty` — pretty JSON
-- Orchestrator training & catalog
-  - `arw-cli orchestrator catalog --status beta --category governor` — list mini-agents from `/orchestrator/mini_agents` with optional filters; add `--json --pretty` for raw output.
+- Orchestrator training & catalog  
+  > Persona tagging is **preview-only**. Enable `ARW_PERSONA_ENABLE=1` and seed a persona per [Persona Preview Quickstart](persona_quickstart.md) before using `--persona-id` or `ARW_PERSONA_ID`.
+  - `arw-cli admin persona seed --help` - bootstrap a persona entry locally without touching SQLite (preview helper; see Quickstart for examples).
+  - `just persona-seed id=persona.alpha telemetry=true scope=workspace` - wrapper around the preview helper that flips telemetry on and resolves the workspace id automatically.
+  - `arw-cli orchestrator catalog --status beta --category governor` - list mini-agents from `/orchestrator/mini_agents` with optional filters; add `--json --pretty` for raw output.
   - `arw-cli orchestrator start "Improve summarisation" --persona-id persona.alpha --preset balanced --diversity 0.35 --project demo --topic empathy --follow` — launch a persona-tagged training run. The CLI merges overrides, applies validation to hint ranges, and (with `--follow`) polls `/state/orchestrator/jobs` until the job finishes.
   - `arw-cli orchestrator start ... --data-json '{ "training": { "mode": "guided" } }'` or `--data-file overrides.json` — pre-seed the payload with structured overrides before flag-based tweaks.
   - `arw-cli orchestrator jobs --limit 100` — show recent orchestrator runs with persona, progress, and training hints. Use `--json`/`--pretty` for machine parsing.

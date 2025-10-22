@@ -8,6 +8,8 @@ Type: How‑to
 
 The `orchestrator` command group inside `arw-cli` helps operators explore the mini-agent catalog, launch persona-aware training runs, and inspect job status directly from the terminal. It mirrors the Training Park launcher flow, including persona tagging and hint propagation, so that CLI, UI, and automation stay in sync.
 
+> Personas are **preview-only**. Enable the flag and seed an initial persona before using persona-aware commands; see [Persona Preview Quickstart](persona_quickstart.md) for instructions.
+
 ## Subcommands
 
 ### `catalog`
@@ -62,8 +64,9 @@ The workspace Justfile provides wrappers that compile/run the CLI with sensible 
 
 ## Environment Variables
 
-- `ARW_ADMIN_TOKEN` — token used for admin-gated endpoints; respected by all subcommands via `--admin-token` overrides.
-- `ARW_PERSONA_ID` — default persona for `orchestrator start` when `--persona-id` is omitted.
+- `ARW_ADMIN_TOKEN` - token used for admin-gated endpoints; respected by all subcommands via `--admin-token` overrides.
+- `ARW_PERSONA_ID` - default persona for `orchestrator start` when `--persona-id` is omitted.
+- Need to create a persona first? Run `arw-cli admin persona seed --help` (preview) or follow the [Persona Preview Quickstart](persona_quickstart.md).
 
 ## Exit Codes
 

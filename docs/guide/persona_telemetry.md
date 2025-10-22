@@ -4,7 +4,9 @@ title: Persona Telemetry
 
 # Persona Telemetry
 
-Updated: 2025-10-19
+> **Preview:** Persona telemetry is disabled unless `ARW_PERSONA_ENABLE=1` and a persona exists. Follow the [Persona Preview Quickstart](persona_quickstart.md) before enabling vibe feedback in live workspaces.
+
+Updated: 2025-10-22
 Type: How-to
 
 Persona telemetry is opt-in. This guide explains how to enable vibe feedback loops, satisfy policy requirements, and inspect the live metrics exposed by `arw-server`.

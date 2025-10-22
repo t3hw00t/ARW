@@ -786,7 +786,7 @@ fn probe_gpu_metrics_best_effort() -> Vec<Value> {
                         .QueryVideoMemoryInfo(0, DXGI_MEMORY_SEGMENT_GROUP_LOCAL, &mut info)
                         .is_ok()
                     {
-                        used_local = Some(info.CurrentUsage as u64);
+                        used_local = Some(info.CurrentUsage);
                     }
                     if used_local.is_none() {
                         let mut info2: DXGI_QUERY_VIDEO_MEMORY_INFO = std::mem::zeroed();
@@ -798,7 +798,7 @@ fn probe_gpu_metrics_best_effort() -> Vec<Value> {
                             )
                             .is_ok()
                         {
-                            used_local = Some(info2.CurrentUsage as u64);
+                            used_local = Some(info2.CurrentUsage);
                         }
                     }
                 }

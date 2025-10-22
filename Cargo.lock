@@ -357,6 +357,7 @@ version = "0.2.0-dev"
 dependencies = [
  "anyhow",
  "arw-core",
+ "arw-kernel",
  "arw-protocol",
  "arw-runtime",
  "assert_cmd",

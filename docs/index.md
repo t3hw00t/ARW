@@ -29,7 +29,7 @@ Assistant quickstart: [Agent Onboarding](ai/AGENT_ONBOARDING.md)
 - It grows with you: start on one laptop; federation preview lets invited machines help or co-drive under your supervision.
 - Configurable, not brittle: “[Logic Units](architecture/logic_units.md)” are safe strategy packs you can A/B test, apply, and roll back.
 - Modular by design: a cognitive stack of specialist agents keeps dialogue, memory, validation, and tooling aligned with full provenance.
-- Persona-first interactions: opt into an empathetic persona builder, review self-model updates, and tune vibe feedback so the agent grows with you transparently.
+- Persona-first interactions (preview): opt into an empathetic persona builder, review self-model updates, and tune vibe feedback so the agent grows with you transparently once you enable the persona preview flag.
 
 ## What You Can Do
 - Turn messy folders, PDFs, and links into clean briefs, reports, or knowledge bases.
@@ -60,6 +60,7 @@ Assistant quickstart: [Agent Onboarding](ai/AGENT_ONBOARDING.md)
 
 ## Get Started
 - [Runtime Quickstart (Non-Technical)](guide/runtime_quickstart.md): step-by-step operator checklist (includes zero-auth mirrors and checksum guidance).
+- [Persona Preview Quickstart](guide/persona_quickstart.md): enable the optional persona stack, seed an initial persona, and review consent notes before collecting vibe telemetry.
 - [Quickstart](guide/quickstart.md): run ARW locally in minutes.
 - [Feature Matrix](reference/feature_matrix.md): review what ships today and what’s planned.
 - [Architecture overview](architecture/object_graph.md): follow the unified object graph and SSE stream.

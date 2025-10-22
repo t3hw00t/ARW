@@ -23,6 +23,7 @@ This project follows Keep a Changelog and Semantic Versioning. All notable chang
 - Queue wakeups avoid SeqCst fences and polling sleeps; access logs capture only the required headers and stream through `tracing`, reducing scheduler wakeups and stdout backpressure.
 - Tool cache hashing streams canonical JSON directly into the digest, avoiding large intermediate buffers when caching sizable tool inputs.
 - Kernel async helpers now ride a dedicated blocking pool (tunable via `ARW_KERNEL_BLOCKING_THREADS`), replacing ad-hoc `spawn_blocking`, smoothing rusqlite latency tails, and exporting queue-depth/counter metrics for observability.
+- Preview persona tooling: added `arw-cli admin persona seed` (with `just persona-seed` wrapper) and documented the [Persona Preview Quickstart](docs/guide/persona_quickstart.md) so operators can enable `ARW_PERSONA_ENABLE` without writing SQL; related guides now flag persona surfaces as preview-only and link to the helper.
 
 ## [0.1.4] - 2025-09-15
 

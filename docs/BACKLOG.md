@@ -103,7 +103,7 @@ Experience Outcomes
 - [Kernel] Complexity Collapse mission brief cadence: monthly stakeholder digest (wins, risks, upcoming user moments) archived into `docs/release_notes.md` — recurring (kick off with Runtime Supervisor beta)
 
 Persona & Empathy (High Priority)
-- [Pack: Persona][Kernel] Persona core schema: add `/state/persona/{id}` read-models, diff-based proposals, and policy leases for approvals — in_progress (kernel schema + read/approve endpoints shipped behind `ARW_PERSONA_ENABLE`; lease gating pending)
+- [Pack: Persona][Kernel] Persona core schema: add `/state/persona/{id}` read-models, diff-based proposals, and policy leases for approvals — in_progress (kernel schema + read/approve endpoints shipped behind `ARW_PERSONA_ENABLE`; preview seeding helpers `arw-cli admin persona seed` / `just persona-seed`; lease gating pending)
 - [Pack: Persona][Pack: Research] Worldview bridge: map episodic/semantic memories into persona traits with guardrails against unreviewed sentiment drift — todo
 - [Pack: Persona][Pack: Collaboration] Empathy signal loop: instrument tone/pacing/sentiment telemetry (opt-in), expose vibe feedback controls in Chat/Launcher, ensure accessibility parity — todo
 - [Pack: Persona] Narrative toolkit: journaling + reflection prompts tied to self-model changes; ship configurable growth checkpoints — todo

@@ -39,7 +39,7 @@ Translate the project vision of empathetic, personally managed agents into tangi
 - **Phase 1: Worldview & Memory Bridge** — [Pack: Persona][Pack: Research] connect persona traits to the memory overlay so episodic, semantic, and preference memories inform worldview growth with guardrails.
 - **Phase 2: Empathy Signals & Feedback** — [Pack: Persona][Pack: Collaboration] instrument tone/pacing sentiment loops (opt-in), expose vibe dashboards in Launcher/Chat, and add adaptive response controls with accessibility parity.
 - **Phase 3: Narrative UX** — [Pack: Persona] ship journaling, reflection prompts, and “why I chose this” explainers grounded in the self-model; add configuration for multiple personas per workspace.
-- **Documentation & Studies** — Publish empathy design language, inclusive research findings, and developer APIs for custom persona plugins.
+- **Documentation & Studies** — Publish empathy design language, inclusive research findings, and developer APIs for custom persona plugins. Keep the preview helper (`arw-cli admin persona seed` / `just persona-seed`) and the [Persona Preview Quickstart](guide/persona_quickstart.md) updated as the feature evolves.
 
 ## Priority Four – Autonomous Economy & Federation
 

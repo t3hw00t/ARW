@@ -1,7 +1,7 @@
 use std::cmp::Reverse;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fmt::Write as _;
-use std::fs::create_dir_all;
+use std::fs::{create_dir_all, read_to_string};
 use std::io;
 use std::io::Read;
 use std::path::{Path, PathBuf};
@@ -23,6 +23,7 @@ use sha2::Digest;
 use super::util::{resolve_admin_token, resolve_persona_id, truncate_payload, with_admin_headers};
 use crate::commands::state::{render_identity_snapshot, CliIdentityPrincipal, CliIdentitySnapshot};
 use arw_core::{effective_paths, resolve_config_path};
+use arw_kernel::{Kernel, PersonaEntry, PersonaEntryUpsert};
 
 #[derive(Subcommand)]
 pub enum AdminCmd {
@@ -77,9 +78,12 @@ pub(crate) enum AdminAutonomyCmd {
 }
 
 #[derive(Subcommand)]
+#[allow(clippy::large_enum_variant)]
 pub(crate) enum AdminPersonaCmd {
     /// Grant a persona:manage lease
     Grant(AdminPersonaGrantArgs),
+    /// Seed or update a persona entry directly in the state store
+    Seed(AdminPersonaSeedArgs),
 }
 
 #[derive(Args, Clone)]
@@ -103,6 +107,64 @@ pub(crate) struct AdminPersonaGrantArgs {
     #[arg(long, default_value_t = 3600)]
     ttl_secs: u64,
     /// Emit raw JSON
+    #[arg(long)]
+    json: bool,
+    /// Pretty-print JSON output (requires --json)
+    #[arg(long, requires = "json")]
+    pretty: bool,
+}
+
+#[derive(Args, Clone)]
+pub(crate) struct AdminPersonaSeedArgs {
+    /// Persona identifier (default: persona.alpha)
+    #[arg(long, default_value = "persona.alpha")]
+    id: String,
+    /// Persona owner kind (workspace | project | agent)
+    #[arg(long, default_value = "workspace")]
+    owner_kind: String,
+    /// Persona owner reference (workspace/project/agent id). Fetched from /state/identity when omitted.
+    #[arg(long)]
+    owner_ref: Option<String>,
+    /// Optional display name.
+    #[arg(long)]
+    name: Option<String>,
+    /// Optional archetype label.
+    #[arg(long)]
+    archetype: Option<String>,
+    /// Traits JSON (inline or @file path). Defaults to {}.
+    #[arg(long)]
+    traits: Option<String>,
+    /// Preferences JSON (inline or @file path). Defaults to {}.
+    #[arg(long)]
+    preferences: Option<String>,
+    /// Worldview JSON (inline or @file path). Defaults to {}.
+    #[arg(long)]
+    worldview: Option<String>,
+    /// Vibe profile JSON (inline or @file path). Defaults to {}.
+    #[arg(long)]
+    vibe_profile: Option<String>,
+    /// Calibration JSON (inline or @file path). Defaults to {}.
+    #[arg(long)]
+    calibration: Option<String>,
+    /// Set telemetry.vibe.enabled = true (optional scope with --telemetry-scope)
+    #[arg(long)]
+    enable_telemetry: bool,
+    /// Scope applied when --enable-telemetry is set (default: owner kind)
+    #[arg(long)]
+    telemetry_scope: Option<String>,
+    /// Base URL used to resolve owner_ref when --owner-ref is omitted (default: local server)
+    #[arg(long, default_value = "http://127.0.0.1:8091")]
+    base: String,
+    /// Admin token for /state/identity fallback (optional).
+    #[arg(long)]
+    admin_token: Option<String>,
+    /// Timeout seconds when calling the API
+    #[arg(long, default_value_t = 5)]
+    timeout: u64,
+    /// Override the state directory (defaults to effective state path)
+    #[arg(long)]
+    state_dir: Option<PathBuf>,
+    /// Emit the resulting persona entry as JSON
     #[arg(long)]
     json: bool,
     /// Pretty-print JSON output (requires --json)
@@ -829,6 +891,7 @@ pub fn execute(cmd: AdminCmd) -> Result<()> {
         },
         AdminCmd::Persona { cmd } => match cmd {
             AdminPersonaCmd::Grant(args) => cmd_admin_persona_grant(&args),
+            AdminPersonaCmd::Seed(args) => cmd_admin_persona_seed(&args),
         },
     }
 }
@@ -1463,6 +1526,145 @@ fn cmd_admin_autonomy_budgets(args: &AdminAutonomyBudgetsArgs) -> Result<()> {
         println!("(No lane snapshot returned by the server.)");
     }
     Ok(())
+}
+
+fn cmd_admin_persona_seed(args: &AdminPersonaSeedArgs) -> Result<()> {
+    let token = resolve_admin_token(&args.admin_token);
+    let base = args.base.trim_end_matches('/');
+
+    let owner_ref = if let Some(value) = args.owner_ref.as_ref() {
+        value.clone()
+    } else {
+        fetch_workspace_owner_ref(base, token.as_deref(), args.timeout)
+            .context("resolving owner_ref via /state/identity")?
+    };
+
+    let state_dir = args
+        .state_dir
+        .clone()
+        .unwrap_or_else(|| PathBuf::from(effective_paths().state_dir));
+
+    let traits = load_json_arg("traits", &args.traits)?;
+    let mut preferences = load_json_arg("preferences", &args.preferences)?;
+    if args.enable_telemetry {
+        let scope = args
+            .telemetry_scope
+            .clone()
+            .unwrap_or_else(|| args.owner_kind.clone());
+        apply_vibe_preferences(&mut preferences, scope);
+    }
+    let worldview = load_json_arg("worldview", &args.worldview)?;
+    let vibe_profile = load_json_arg("vibe_profile", &args.vibe_profile)?;
+    let calibration = load_json_arg("calibration", &args.calibration)?;
+
+    let kernel = Kernel::open(&state_dir)
+        .with_context(|| format!("opening kernel at {}", state_dir.display()))?;
+
+    let entry = kernel
+        .upsert_persona_entry(PersonaEntryUpsert {
+            id: args.id.clone(),
+            owner_kind: args.owner_kind.clone(),
+            owner_ref,
+            name: args.name.clone(),
+            archetype: args.archetype.clone(),
+            traits,
+            preferences,
+            worldview,
+            vibe_profile,
+            calibration,
+        })
+        .with_context(|| format!("upserting persona {}", args.id))?;
+
+    output_persona_entry(&entry, args.json, args.pretty)?;
+
+    if !args.json {
+        println!(
+            "Seeded persona {} (owner_kind={}, owner_ref={})",
+            entry.id, entry.owner_kind, entry.owner_ref
+        );
+        if args.enable_telemetry {
+            let scope = args
+                .telemetry_scope
+                .clone()
+                .unwrap_or_else(|| args.owner_kind.clone());
+            println!("Telemetry enabled (scope: {scope})");
+        }
+    }
+
+    Ok(())
+}
+
+fn output_persona_entry(entry: &PersonaEntry, json: bool, pretty: bool) -> Result<()> {
+    if json {
+        let value = serde_json::to_value(entry)?;
+        if pretty {
+            println!("{}", serde_json::to_string_pretty(&value)?);
+        } else {
+            println!("{}", serde_json::to_string(&value)?);
+        }
+    }
+    Ok(())
+}
+
+fn fetch_workspace_owner_ref(base: &str, token: Option<&str>, timeout: u64) -> Result<String> {
+    let client = Client::builder()
+        .timeout(Duration::from_secs(timeout))
+        .build()
+        .context("building HTTP client")?;
+    let url = format!("{}/state/identity", base);
+    let mut req = client.get(&url);
+    req = with_admin_headers(req, token);
+    let resp = req.send().with_context(|| format!("requesting {}", url))?;
+    if resp.status() == StatusCode::UNAUTHORIZED {
+        bail!("Unauthorized: provide --admin-token or set ARW_ADMIN_TOKEN");
+    }
+    if !resp.status().is_success() {
+        bail!("failed to fetch identity: status {}", resp.status());
+    }
+    let body: JsonValue = resp.json().context("parsing identity response")?;
+    body.get("workspace")
+        .and_then(|v| v.get("id"))
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string())
+        .ok_or_else(|| anyhow!("workspace id missing in identity response"))
+}
+
+fn load_json_arg(label: &str, raw: &Option<String>) -> Result<JsonValue> {
+    if let Some(source) = raw {
+        let text = if let Some(path) = source.strip_prefix('@') {
+            read_to_string(path).with_context(|| format!("reading {label} from {}", path))?
+        } else {
+            source.clone()
+        };
+        serde_json::from_str(&text).with_context(|| format!("parsing {label} JSON"))
+    } else {
+        Ok(json!({}))
+    }
+}
+
+fn apply_vibe_preferences(preferences: &mut JsonValue, scope: String) {
+    if !preferences.is_object() {
+        *preferences = json!({});
+    }
+    let telemetry = preferences
+        .as_object_mut()
+        .expect("preferences object")
+        .entry("telemetry".to_string())
+        .or_insert_with(|| json!({}));
+    if !telemetry.is_object() {
+        *telemetry = json!({});
+    }
+    let vibe = telemetry
+        .as_object_mut()
+        .expect("telemetry object")
+        .entry("vibe".to_string())
+        .or_insert_with(|| json!({}));
+    if !vibe.is_object() {
+        *vibe = json!({});
+    }
+    let vibe_obj = vibe.as_object_mut().expect("vibe object");
+    vibe_obj.insert("enabled".to_string(), JsonValue::Bool(true));
+    vibe_obj.insert("scope".to_string(), JsonValue::String(scope));
 }
 
 fn cmd_admin_persona_grant(args: &AdminPersonaGrantArgs) -> Result<()> {

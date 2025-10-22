@@ -167,57 +167,38 @@ triad-smoke:
 
 # Orchestrator CLI helpers
 orchestrator-start goal persona base="http://127.0.0.1:8091" preset="" follow="true":
-  set -euo pipefail
-  goal='{{goal}}'
-  persona='{{persona}}'
-  base='{{base}}'
-  preset='{{preset}}'
-  follow='{{follow}}'
-  if [ -z "$goal" ]; then
-    echo "error: goal required (invoke as: just orchestrator-start \"goal\" persona)" >&2
-    exit 1
-  fi
-  if [ -z "$persona" ]; then
-    echo "error: persona required (invoke as: just orchestrator-start \"goal\" persona)" >&2
-    exit 1
-  fi
-  args=(orchestrator start "$goal" --base "$base")
-  if [ -n "$preset" ]; then
-    args+=(--preset "$preset")
-  fi
-  if [ "$follow" = "true" ]; then
-    args+=(--follow)
-  fi
-  ARW_PERSONA_ID="$persona" cargo run -p arw-cli -- "${args[@]}"
+	set -euo pipefail; goal='{{goal}}'; persona='{{persona}}'; base='{{base}}'; preset='{{preset}}'; follow='{{follow}}'; \
+	if [ -z "$goal" ]; then echo "error: goal required (invoke as: just orchestrator-start \"goal\" persona)" >&2; exit 1; fi; \
+	if [ -z "$persona" ]; then echo "error: persona required (invoke as: just orchestrator-start \"goal\" persona)" >&2; exit 1; fi; \
+	args=(orchestrator start "$goal" --base "$base"); \
+	if [ -n "$preset" ]; then args+=(--preset "$preset"); fi; \
+	if [ "$follow" = "true" ]; then args+=(--follow); fi; \
+	ARW_PERSONA_ID="$persona" cargo run -p arw-cli -- "${args[@]}"
 
 orchestrator-jobs base="http://127.0.0.1:8091" limit="25" json="false":
-  set -euo pipefail
-  base='{{base}}'
-  limit='{{limit}}'
-  json='{{json}}'
-  args=(orchestrator jobs --base "$base" --limit "$limit")
-  if [ "$json" = "true" ]; then
-    args+=(--json --pretty)
-  fi
-  cargo run -p arw-cli -- "${args[@]}"
+	set -euo pipefail; base='{{base}}'; limit='{{limit}}'; json='{{json}}'; \
+	args=(orchestrator jobs --base "$base" --limit "$limit"); \
+	if [ "$json" = "true" ]; then args+=(--json --pretty); fi; \
+	cargo run -p arw-cli -- "${args[@]}"
 
 orchestrator-catalog base="http://127.0.0.1:8091" status="" category="" json="false":
-  set -euo pipefail
-  base='{{base}}'
-  status='{{status}}'
-  category='{{category}}'
-  json='{{json}}'
-  args=(orchestrator catalog --base "$base")
-  if [ -n "$status" ]; then
-    args+=(--status "$status")
-  fi
-  if [ -n "$category" ]; then
-    args+=(--category "$category")
-  fi
-  if [ "$json" = "true" ]; then
-    args+=(--json --pretty)
-  fi
-  cargo run -p arw-cli -- "${args[@]}"
+	set -euo pipefail; base='{{base}}'; status='{{status}}'; category='{{category}}'; json='{{json}}'; \
+	args=(orchestrator catalog --base "$base"); \
+	if [ -n "$status" ]; then args+=(--status "$status"); fi; \
+	if [ -n "$category" ]; then args+=(--category "$category"); fi; \
+	if [ "$json" = "true" ]; then args+=(--json --pretty); fi; \
+	cargo run -p arw-cli -- "${args[@]}"
+
+persona-seed base="http://127.0.0.1:8091" id="persona.alpha" name="" archetype="" telemetry="false" scope="" state_dir="" json="false" pretty="false":
+	set -euo pipefail; base='{{base}}'; id='{{id}}'; name='{{name}}'; archetype='{{archetype}}'; \
+	telemetry='{{telemetry}}'; scope='{{scope}}'; state_dir='{{state_dir}}'; json='{{json}}'; pretty='{{pretty}}'; \
+	args=(admin persona seed --base "$base" --id "$id"); \
+	if [ -n "$name" ]; then args+=(--name "$name"); fi; \
+	if [ -n "$archetype" ]; then args+=(--archetype "$archetype"); fi; \
+	if [ "$telemetry" = "true" ]; then args+=(--enable-telemetry); if [ -n "$scope" ]; then args+=(--telemetry-scope "$scope"); fi; fi; \
+	if [ -n "$state_dir" ]; then args+=(--state-dir "$state_dir"); fi; \
+	if [ "$json" = "true" ]; then args+=(--json); if [ "$pretty" = "true" ]; then args+=(--pretty); fi; fi; \
+	cargo run -p arw-cli -- "${args[@]}"
 
 runtime-smoke:
   RUNTIME_SMOKE_GPU_POLICY="${RUNTIME_SMOKE_GPU_POLICY:-auto}" bash scripts/runtime_smoke_suite.sh
