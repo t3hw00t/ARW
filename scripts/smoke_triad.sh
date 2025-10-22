@@ -64,4 +64,20 @@ run_cli() {
   exit 1
 }
 
-run_cli "$@"
+# Optional persona tagging via SMOKE_TRIAD_PERSONA / TRIAD_SMOKE_PERSONA / ARW_PERSONA_ID.
+persona_env="${SMOKE_TRIAD_PERSONA:-${TRIAD_SMOKE_PERSONA:-${ARW_PERSONA_ID:-}}}"
+extra_args=()
+if [[ -n "$persona_env" ]]; then
+  persona_flag_present=0
+  for arg in "$@"; do
+    if [[ "$arg" == "--persona-id" || "$arg" == --persona-id=* ]]; then
+      persona_flag_present=1
+      break
+    fi
+  done
+  if [[ $persona_flag_present -eq 0 ]]; then
+    extra_args+=(--persona-id "$persona_env")
+  fi
+fi
+
+run_cli "${extra_args[@]}" "$@"

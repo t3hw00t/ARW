@@ -62,6 +62,8 @@ pub(crate) struct AssembleReq {
     pub corr_id: Option<String>,
     #[serde(default)]
     pub slot_budgets: Option<BTreeMap<String, usize>>,
+    #[serde(default)]
+    pub persona: Option<String>,
 }
 
 /// Assemble context working set; optionally stream iterations via SSE.
@@ -245,6 +247,7 @@ async fn stream_working_set(
         let mut payload = evt.payload.as_ref().clone();
         let corr_meta = payload.as_object().and_then(|m| m.get("corr_id")).cloned();
         let project_meta = payload.as_object().and_then(|m| m.get("project")).cloned();
+        let persona_meta = payload.as_object().and_then(|m| m.get("persona")).cloned();
         let query_meta = payload.as_object().and_then(|m| m.get("query")).cloned();
         if let Some(obj) = payload.as_object_mut() {
             if !debug {
@@ -263,6 +266,9 @@ async fn stream_working_set(
         }
         if let Some(project) = project_meta {
             data_map.insert("project".into(), project);
+        }
+        if let Some(persona) = persona_meta {
+            data_map.insert("persona".into(), persona);
         }
         if let Some(query) = query_meta {
             data_map.insert("query".into(), query);
@@ -347,6 +353,7 @@ fn build_context_response(params: ContextResponseInputs<'_>) -> Value {
     let mut body = json!({
         "query": request.q,
         "project": request.proj,
+        "persona": final_spec.persona_id.clone(),
         "lanes": final_spec.lanes.clone(),
         "limit": final_spec.limit,
         "expand_per_seed": final_spec.expand_per_seed,
@@ -452,6 +459,7 @@ mod context_response_tests {
             diversity_lambda: 0.5,
             min_score: 0.2,
             project: None,
+            persona_id: None,
             lane_bonus: 0.0,
             scorer: Some("mmr".into()),
             expand_query: false,
@@ -498,6 +506,7 @@ mod context_response_tests {
             max_iterations: None,
             corr_id: None,
             slot_budgets: None,
+            persona: None,
         }
     }
 
@@ -613,6 +622,7 @@ fn build_spec(req: &AssembleReq) -> working_set::WorkingSetSpec {
             .unwrap_or_else(working_set::default_diversity_lambda),
         min_score: req.min_score.unwrap_or_else(working_set::default_min_score),
         project: req.proj.clone(),
+        persona_id: req.persona.clone(),
         lane_bonus: req
             .lane_bonus
             .unwrap_or_else(working_set::default_lane_bonus),

@@ -1,5 +1,3 @@
-#![allow(dead_code, unused_imports)]
-
 use std::cmp::Reverse;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fmt::Write as _;
@@ -22,10 +20,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Map as JsonMap, Value as JsonValue};
 use sha2::Digest;
 
-use crate::{
-    render_identity_snapshot, resolve_admin_token, truncate_payload, with_admin_headers,
-    CliIdentityPrincipal, CliIdentitySnapshot,
-};
+use super::util::{resolve_admin_token, resolve_persona_id, truncate_payload, with_admin_headers};
+use crate::commands::state::{render_identity_snapshot, CliIdentityPrincipal, CliIdentitySnapshot};
 use arw_core::{effective_paths, resolve_config_path};
 
 #[derive(Subcommand)]
@@ -371,11 +367,18 @@ pub(crate) struct AdminAutonomyBaseArgs {
     /// Timeout seconds when calling the API
     #[arg(long, default_value_t = 5)]
     timeout: u64,
+    /// Persona id to tag autonomy control actions (falls back to ARW_PERSONA_ID)
+    #[arg(long)]
+    persona_id: Option<String>,
 }
 
 impl AdminAutonomyBaseArgs {
     fn base_url(&self) -> &str {
         self.base.trim_end_matches('/')
+    }
+
+    fn persona_id(&self) -> Option<String> {
+        resolve_persona_id(&self.persona_id)
     }
 }
 
@@ -1279,6 +1282,7 @@ fn cmd_admin_autonomy_pause(args: &AdminAutonomyActionArgs) -> Result<()> {
         .build()
         .context("building HTTP client")?;
     let base = args.base.base_url();
+    let persona = args.base.persona_id();
     let mut payload = JsonMap::new();
     if let Some(operator) = sanitize_option_string(&args.operator) {
         payload.insert("operator".into(), JsonValue::String(operator));
@@ -1293,6 +1297,7 @@ fn cmd_admin_autonomy_pause(args: &AdminAutonomyActionArgs) -> Result<()> {
         &args.lane,
         "pause",
         payload,
+        persona.as_deref(),
     )?;
     println!("Lane '{}' paused.", lane.lane_id);
     render_autonomy_lane_detail(&lane);
@@ -1306,6 +1311,7 @@ fn cmd_admin_autonomy_resume(args: &AdminAutonomyResumeArgs) -> Result<()> {
         .build()
         .context("building HTTP client")?;
     let base = args.action.base.base_url();
+    let persona = args.action.base.persona_id();
     let mut payload = JsonMap::new();
     if let Some(operator) = sanitize_option_string(&args.action.operator) {
         payload.insert("operator".into(), JsonValue::String(operator));
@@ -1325,6 +1331,7 @@ fn cmd_admin_autonomy_resume(args: &AdminAutonomyResumeArgs) -> Result<()> {
         &args.action.lane,
         "resume",
         payload,
+        persona.as_deref(),
     )?;
     println!("Lane '{}' resumed (mode: {}).", lane.lane_id, lane.mode);
     render_autonomy_lane_detail(&lane);
@@ -1338,6 +1345,7 @@ fn cmd_admin_autonomy_stop(args: &AdminAutonomyActionArgs) -> Result<()> {
         .build()
         .context("building HTTP client")?;
     let base = args.base.base_url();
+    let persona = args.base.persona_id();
     let mut payload = JsonMap::new();
     if let Some(operator) = sanitize_option_string(&args.operator) {
         payload.insert("operator".into(), JsonValue::String(operator));
@@ -1345,7 +1353,15 @@ fn cmd_admin_autonomy_stop(args: &AdminAutonomyActionArgs) -> Result<()> {
     if let Some(reason) = sanitize_option_string(&args.reason) {
         payload.insert("reason".into(), JsonValue::String(reason));
     }
-    let lane = post_autonomy_action(&client, base, token.as_deref(), &args.lane, "stop", payload)?;
+    let lane = post_autonomy_action(
+        &client,
+        base,
+        token.as_deref(),
+        &args.lane,
+        "stop",
+        payload,
+        persona.as_deref(),
+    )?;
     println!(
         "Lane '{}' stopped and remaining jobs flushed.",
         lane.lane_id
@@ -1387,6 +1403,7 @@ fn cmd_admin_autonomy_budgets(args: &AdminAutonomyBudgetsArgs) -> Result<()> {
         .build()
         .context("building HTTP client")?;
     let base = args.base.base_url();
+    let persona = args.base.persona_id();
 
     let mut payload = JsonMap::new();
     if args.clear {
@@ -1411,7 +1428,8 @@ fn cmd_admin_autonomy_budgets(args: &AdminAutonomyBudgetsArgs) -> Result<()> {
         base,
         token.as_deref(),
         &args.lane,
-        JsonValue::Object(payload),
+        payload,
+        persona.as_deref(),
     )?;
 
     if args.json {
@@ -1615,8 +1633,12 @@ fn post_autonomy_action(
     token: Option<&str>,
     lane: &str,
     action: &str,
-    payload: JsonMap<String, JsonValue>,
+    mut payload: JsonMap<String, JsonValue>,
+    persona_id: Option<&str>,
 ) -> Result<CliAutonomyLane> {
+    if let Some(pid) = persona_id {
+        payload.insert("persona_id".into(), JsonValue::String(pid.to_string()));
+    }
     let url = format!("{}/admin/autonomy/{}/{}", base, lane, action);
     let mut req = client.post(&url);
     req = with_admin_headers(req, token);
@@ -1658,12 +1680,16 @@ fn post_autonomy_budgets(
     base: &str,
     token: Option<&str>,
     lane: &str,
-    payload: JsonValue,
+    mut payload: JsonMap<String, JsonValue>,
+    persona_id: Option<&str>,
 ) -> Result<CliAutonomyBudgetsEnvelope> {
+    if let Some(pid) = persona_id {
+        payload.insert("persona_id".into(), JsonValue::String(pid.to_string()));
+    }
     let url = format!("{}/admin/autonomy/{}/budgets", base, lane);
     let mut req = client.post(&url);
     req = with_admin_headers(req, token);
-    let req = req.json(&payload);
+    let req = req.json(&JsonValue::Object(payload));
     let resp = req.send().with_context(|| format!("requesting {}", url))?;
     let status = resp.status();
     let body = resp.text().context("reading autonomy budgets response")?;

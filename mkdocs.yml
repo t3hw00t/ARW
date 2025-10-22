@@ -76,10 +76,12 @@ nav:
           - Install & Launcher: guide/windows_install.md
       - macOS:
           - Install & Launcher: guide/macos_install.md
-      - Screenshots: guide/screenshots.md
-      - Screenshots Gallery: guide/gallery.md
-      - CLI Guide: guide/cli.md
-      - Debug UI: guide/debug_ui.md
+      - Screenshots:
+          - Overview: guide/screenshots.md
+          - Screenshots Gallery: guide/gallery.md
+          - CLI Guide: guide/cli.md
+          - Orchestrator CLI: guide/orchestrator_cli.md
+          - Debug UI: guide/debug_ui.md
       - Offline & Sync: guide/offline_sync.md
       - Plugins: guide/plugins.md
       - Policy Permissions: guide/policy_permissions.md
@@ -88,6 +90,7 @@ nav:
       - Projects UI: guide/projects_ui.md
       - Recipes: guide/recipes.md
       - Runtime Matrix: guide/runtime_matrix.md
+      - Runtime Manager: guide/runtime_manager.md
       - Vision Runtime Preview: guide/vision_runtime.md
       - Security Posture: guide/security_posture.md
       - Threat Model: guide/threat_model.md

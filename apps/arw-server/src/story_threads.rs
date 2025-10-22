@@ -544,6 +544,7 @@ async fn upsert_thread(
         prob: Some(avg_weight as f64),
         agent_id: existing_agent,
         project_id,
+        persona_id: None,
         text: Some(text),
         durability: Some(durability),
         trust: Some(avg_weight as f64),

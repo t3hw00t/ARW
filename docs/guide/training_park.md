@@ -3,7 +3,7 @@ title: Training Park
 ---
 
 # Training Park
-Updated: 2025-10-12
+Updated: 2025-10-22
 Type: How‑to
 
 Status: **Telemetry and launcher controls are live; richer charts are still in flight.** `arw-server` now exposes `/state/training/telemetry` plus `training_metrics` and `context_metrics` read-models, and the launcher streams live metrics, job actions, and logic-unit history while we finish the advanced visualization pass.
@@ -15,6 +15,8 @@ The goal remains: a third primary perspective for tuning instincts, memory, and 
 - Shared right-sidecar lanes (Timeline, Context, Policy, Metrics, Models) via the general SSE connection.
 - Mini-agent catalog lives in `catalog/mini_agents/`; run `just mini-catalog-gen` to refresh `interfaces/mini_agents.json` so Training Park surfaces stay reproducible.
 - `GET /state/training/telemetry` snapshot with route stats, tool success rate, cache/gov/capsule health, and bus metrics, plus `state.read.model.patch` ids `training_metrics` and `context_metrics` for live updates. The context portion now includes aggregate slot-gap analytics (`coverage.top_slots`, `recall_risk.top_slots`) so you can spot recurring under-filled slots without diffing raw events. Additional `context.assembly` and `context.retriever` sections surface iteration summaries, lane/slot diagnostics, and timing averages, while the top-level `memory` block reports recent lane counts and modular review status.
+- Persona-aware runs: the launcher now exposes a Persona card in Training Park. Pick the active persona once and every `/orchestrator/mini_agents/start_training` request carries `persona_id`, tagging the orchestrator job, summaries, and suggested logic units so downstream analytics stay aligned with the empathy stack.
+- Prefer automation or terminal workflows? `arw-cli orchestrator start --persona-id persona.alpha --follow` mirrors the launcher flow, including persona tagging and training hints. See [Orchestrator CLI](orchestrator_cli.md) for details.
 - Prometheus metrics (`arw_context_slot_gap`, `arw_context_slot_gap_latest`, `arw_context_slot_fill_ratio`, `arw_context_slot_underfilled_total`) persist slot-gap trends beyond the in-memory replay window so dashboards can chart regressions over longer horizons.
 - Launcher controls submit training runs through `/orchestrator/mini_agents/start_training`, sending preset/diversity/recency/compression hints and streaming job progress back into the results panel.
 - Job table filters allow you to focus on running/completed/failed runs, while inline details expand to show payloads captured in `/state/orchestrator/jobs`. Each entry now echoes the submitted training hints (mode/preset/diversity/recency/compression) directly beneath the goal and repeats them in the details drawer alongside the canonical `status_slug` + `status_label` fields so launchers, CLIs, and scripts stay aligned without bespoke mappings. The orchestrator normalises and applies the same bundle to `governor.hints` as soon as the run starts, the details drawer includes an “Apply hints to governor” button for follow-up runs, and suggested Logic Units arrive with the ready-to-reapply patch for later promotion. The controls card keeps a short history of recent governor profiles so you can replay or clear them without rerunning training. Capsule telemetry mirrors this convention (`sample[].status_slug` + `sample[].status_label`) so countdown cards reuse the same labels without local lookup tables.

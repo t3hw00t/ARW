@@ -66,6 +66,7 @@
           <section class="card" role="region" aria-labelledby="controlsTitle">
             <h3 id="controlsTitle">Controls</h3>
             <p class="section-lead">Start with a preset, then adjust the governor sliders before running new experiments.</p>
+            <p id="trainingPersonaActive" class="dim mono" aria-live="polite">Persona: —</p>
             <div class="row">
               <label for="presetSelect">Preset</label>
               <select id="presetSelect">
@@ -95,6 +96,33 @@
               <div class="row">
                 <button id="clearGovernorHistory" class="ghost" type="button">Clear history</button>
               </div>
+            </div>
+          </section>
+          <section class="card" id="trainingPersonaPanel" role="region" aria-labelledby="trainingPersonaTitle">
+            <h3 id="trainingPersonaTitle">Persona Context</h3>
+            <p class="section-lead">Training runs tag cascades with the active persona. Refresh personas after switching bases.</p>
+            <div class="row persona-controls">
+              <label class="key" for="trainingPersonaSelect">Persona</label>
+              <select id="trainingPersonaSelect" aria-label="Select persona for training" style="min-width:180px"></select>
+              <button id="trainingPersonaRefresh" class="ghost" type="button">Refresh</button>
+              <span id="trainingPersonaStatus" class="dim" role="status" aria-live="polite"></span>
+            </div>
+            <div class="row persona-toggle" data-mode="expert-only">
+              <label class="key" for="trainingPersonaScope">Scope</label>
+              <input id="trainingPersonaScope" aria-label="Telemetry scope" placeholder="workspace" style="min-width:160px" />
+              <label class="key"><input type="checkbox" id="trainingPersonaTelemetryEnable" /> enable telemetry</label>
+              <button id="trainingPersonaTelemetrySave" class="ghost" type="button">Save</button>
+              <button id="trainingPersonaTelemetryApplyAll" class="ghost" type="button">Apply to all</button>
+            </div>
+            <p id="trainingPersonaEmpty" class="dim" role="status" aria-live="polite" hidden>Persona subsystem disabled or no personas found.</p>
+            <p class="dim persona-hint" data-mode="expert-only">Saved changes update the persona record. Use “Apply to all” to broadcast the current scope and consent.</p>
+            <div id="trainingPersonaMetrics" class="persona-metrics" aria-live="polite" data-mode="expert-only"></div>
+            <div class="persona-history-block" data-mode="expert-only">
+              <div class="row">
+                <h4 id="trainingPersonaHistoryTitle">Recent feedback</h4>
+                <span id="trainingPersonaHistoryMeta" class="dim" role="status" aria-live="polite"></span>
+              </div>
+              <ol id="trainingPersonaHistory" class="persona-history" aria-labelledby="trainingPersonaHistoryTitle"></ol>
             </div>
           </section>
           <section class="card" role="region" aria-labelledby="contextTitle">

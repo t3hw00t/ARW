@@ -6,6 +6,8 @@ use axum::{
 };
 use serde::Deserialize;
 use serde_json::json;
+use std::collections::HashMap;
+use tracing::warn;
 use utoipa::IntoParams;
 
 use crate::{
@@ -58,7 +60,46 @@ pub async fn state_persona_list(
         .list_entries(query.owner_kind.clone(), query.owner_ref.clone(), limit)
         .await
     {
-        Ok(entries) => Json(json!({ "items": entries })).into_response(),
+        Ok(entries) => {
+            let pending_map = match service
+                .list_proposals(None, Some("pending".to_string()), 500)
+                .await
+            {
+                Ok(pending) => {
+                    let mut map: HashMap<String, usize> = HashMap::new();
+                    for proposal in pending {
+                        *map.entry(proposal.persona_id).or_insert(0) += 1;
+                    }
+                    map
+                }
+                Err(err) => {
+                    warn!(
+                        target: "arw::persona",
+                        error = %err,
+                        "failed to load pending persona proposals"
+                    );
+                    HashMap::new()
+                }
+            };
+            let items: Vec<_> = entries
+                .into_iter()
+                .map(|entry| {
+                    let mut value = serde_json::to_value(entry).unwrap_or_else(|_| json!({}));
+                    if let Some(obj) = value.as_object_mut() {
+                        let pending = obj
+                            .get("id")
+                            .and_then(|v| v.as_str())
+                            .and_then(|id| pending_map.get(id))
+                            .copied()
+                            .unwrap_or(0);
+                        obj.insert("pending_proposals".into(), json!(pending));
+                        obj.insert("approvals_required".into(), json!(pending > 0));
+                    }
+                    value
+                })
+                .collect();
+            Json(json!({ "items": items })).into_response()
+        }
         Err(err) => responses::problem_response(
             StatusCode::INTERNAL_SERVER_ERROR,
             "Failed to load personas",
@@ -92,7 +133,45 @@ pub async fn state_persona_get(
     };
 
     match service.get_entry(id.clone()).await {
-        Ok(Some(entry)) => Json(entry).into_response(),
+        Ok(Some(entry)) => {
+            let pending = match service
+                .list_proposals(Some(id.clone()), Some("pending".to_string()), 50)
+                .await
+            {
+                Ok(pending) => pending
+                    .into_iter()
+                    .map(|proposal| {
+                        json!({
+                            "proposal_id": proposal.proposal_id,
+                            "submitted_by": proposal.submitted_by,
+                            "status": proposal.status,
+                            "created": proposal.created,
+                            "updated": proposal.updated,
+                            "diff": proposal.diff,
+                            "rationale": proposal.rationale,
+                            "telemetry_scope": proposal.telemetry_scope,
+                            "leases_required": proposal.leases_required,
+                        })
+                    })
+                    .collect::<Vec<_>>(),
+                Err(err) => {
+                    warn!(
+                        target: "arw::persona",
+                        error = %err,
+                        persona_id = %id,
+                        "failed to load pending persona proposals"
+                    );
+                    Vec::new()
+                }
+            };
+            let approvals_required = !pending.is_empty();
+            let mut value = serde_json::to_value(entry).unwrap_or_else(|_| json!({}));
+            if let Some(obj) = value.as_object_mut() {
+                obj.insert("pending_proposals".into(), json!(pending));
+                obj.insert("approvals_required".into(), json!(approvals_required));
+            }
+            Json(value).into_response()
+        }
         Ok(None) => responses::problem_response(
             StatusCode::NOT_FOUND,
             "Persona Not Found",

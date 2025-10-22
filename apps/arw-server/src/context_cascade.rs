@@ -280,6 +280,7 @@ async fn persist_summary(state: &AppState, summary: &CascadeSummary) -> Result<V
         prob: summary.prob,
         agent_id: None,
         project_id: summary.project.clone(),
+        persona_id: None,
         text: Some(summary.text.clone()),
         durability: Some("short".to_string()),
         trust: None,

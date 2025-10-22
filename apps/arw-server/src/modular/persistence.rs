@@ -48,6 +48,7 @@ async fn persist_agent_memory_inner(
         .and_then(|v| v.get("text_preview"))
         .and_then(|v| v.as_str())
         .map(|s| s.to_string());
+    let persona_id = validated.message.persona_id.clone();
 
     let mut record_map = Map::new();
     record_map.insert("turn_id".into(), json!(validated.message.turn_id));
@@ -111,6 +112,7 @@ async fn persist_agent_memory_inner(
         value: base_value.clone(),
         text: text.clone(),
         agent_id: Some(validated.message.agent_id.clone()),
+        persona_id: persona_id.clone(),
         trust: Some(validated.message.confidence),
         ttl_s: Some(short_term_ttl_secs()),
         tags: tags.clone(),
@@ -122,6 +124,7 @@ async fn persist_agent_memory_inner(
             "lane": "short_term",
             "turn_id": validated.message.turn_id,
             "agent_id": validated.message.agent_id,
+            "persona_id": persona_id.clone(),
         }),
         extra: Value::Object(extra_map.clone()),
         dedupe: true,
@@ -151,6 +154,7 @@ async fn persist_agent_memory_inner(
         value: base_value,
         text,
         agent_id: Some(validated.message.agent_id.clone()),
+        persona_id: persona_id.clone(),
         trust: Some(validated.message.confidence),
         tags,
         keywords,
@@ -161,6 +165,7 @@ async fn persist_agent_memory_inner(
             "lane": "episodic",
             "turn_id": validated.message.turn_id,
             "agent_id": validated.message.agent_id,
+            "persona_id": persona_id,
         }),
         extra: Value::Object(episodic_extra),
         dedupe: true,
@@ -223,6 +228,7 @@ async fn persist_tool_memory_inner(
     summary: &Value,
 ) -> AnyhowResult<()> {
     let invocation = &validated.invocation;
+    let persona_id = invocation.persona_id.clone();
     let sandbox_value =
         serde_json::to_value(&invocation.sandbox_requirements).unwrap_or_else(|_| json!({}));
     let policy_scope_value = summary.get("policy_scope").cloned().unwrap_or_else(|| {
@@ -324,6 +330,7 @@ async fn persist_tool_memory_inner(
         value: base_value.clone(),
         text: Some(short_text.clone()),
         agent_id: Some(invocation.requested_by.clone()),
+        persona_id: persona_id.clone(),
         ttl_s: Some(short_term_ttl_secs()),
         tags: tags.clone(),
         keywords: keywords.clone(),
@@ -334,6 +341,7 @@ async fn persist_tool_memory_inner(
             "lane": "short_term",
             "invocation_id": invocation.invocation_id,
             "tool_id": invocation.tool_id,
+            "persona_id": persona_id.clone(),
         }),
         extra: Value::Object(extra_map.clone()),
         dedupe: true,
@@ -353,6 +361,7 @@ async fn persist_tool_memory_inner(
         value: base_value,
         text: Some(short_text),
         agent_id: Some(invocation.requested_by.clone()),
+        persona_id,
         tags,
         keywords,
         durability: Some("short".to_string()),
@@ -362,6 +371,7 @@ async fn persist_tool_memory_inner(
             "lane": "episodic",
             "invocation_id": invocation.invocation_id,
             "tool_id": invocation.tool_id,
+            "persona_id": invocation.persona_id.clone(),
         }),
         extra: Value::Object(episodic_extra),
         dedupe: true,

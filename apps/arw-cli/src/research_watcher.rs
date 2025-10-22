@@ -5,7 +5,7 @@ use serde_json::{json, Map as JsonMap, Value};
 use std::collections::{HashMap, HashSet};
 use std::time::Duration;
 
-use crate::{resolve_admin_token, with_admin_headers};
+use crate::commands::util::{resolve_admin_token, resolve_persona_id, with_admin_headers};
 
 #[derive(Subcommand)]
 pub enum ResearchWatcherCmd {
@@ -28,11 +28,18 @@ pub struct ResearchWatcherBaseArgs {
     /// Request timeout (seconds)
     #[arg(long, default_value_t = 10)]
     timeout: u64,
+    /// Persona id to tag watcher decisions (falls back to ARW_PERSONA_ID)
+    #[arg(long)]
+    persona_id: Option<String>,
 }
 
 impl ResearchWatcherBaseArgs {
     fn base_url(&self) -> &str {
         self.base.trim_end_matches('/')
+    }
+
+    fn persona_id(&self) -> Option<String> {
+        resolve_persona_id(&self.persona_id)
     }
 }
 
@@ -224,6 +231,7 @@ fn decide(args: ResearchWatcherDecideArgs, decision: Decision) -> Result<()> {
         .map(|s| s.trim())
         .filter(|s| !s.is_empty());
     let mut results = Vec::new();
+    let persona = args.base.persona_id();
 
     for id in &targets {
         let mut req = client.post(format!(
@@ -235,6 +243,9 @@ fn decide(args: ResearchWatcherDecideArgs, decision: Decision) -> Result<()> {
         let mut body = JsonMap::new();
         if let Some(note) = note {
             body.insert("note".to_string(), Value::String(note.to_string()));
+        }
+        if let Some(pid) = persona.as_ref() {
+            body.insert("persona_id".to_string(), Value::String(pid.clone()));
         }
         req = req.json(&Value::Object(body));
         let resp = with_admin_headers(req, token.as_deref())

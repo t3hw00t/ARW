@@ -7,20 +7,26 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use anyhow::{anyhow, bail, ensure, Context, Result};
+use base64::engine::general_purpose::STANDARD as BASE64;
+use base64::Engine;
 use clap::{Args, Subcommand};
 use reqwest::blocking::Client;
-use reqwest::header::ACCEPT;
+use reqwest::header::{HeaderName, HeaderValue, ACCEPT};
+use reqwest::{Certificate, Identity};
 use serde_json::{json, Value as JsonValue};
 use sha2::Digest;
 use tempfile::TempDir;
 
-use crate::{submit_action_payload, wait_for_action};
+use super::util::{resolve_persona_id_with_envs, submit_action_payload, wait_for_action};
 
 #[derive(Args, Clone)]
 pub struct SmokeCommonArgs {
     /// Port to bind the temporary server on (default: 18181 / 18182)
     #[arg(long)]
     pub port: Option<u16>,
+    /// Use an existing server instead of launching a local instance
+    #[arg(long, value_name = "URL")]
+    pub base_url: Option<String>,
     /// Path to an existing arw-server binary; auto-detected when omitted
     #[arg(long)]
     pub server_bin: Option<PathBuf>,
@@ -30,6 +36,9 @@ pub struct SmokeCommonArgs {
     /// Preserve the temporary state/logs directory instead of deleting it
     #[arg(long)]
     pub keep_temp: bool,
+    /// Persona id to tag generated smoke actions (falls back to ARW_PERSONA_ID)
+    #[arg(long)]
+    pub persona_id: Option<String>,
 }
 
 #[derive(Args, Clone)]
@@ -65,32 +74,198 @@ pub fn execute(cmd: SmokeCmd) -> Result<()> {
     }
 }
 
+fn env_trimmed(key: &str) -> Option<String> {
+    env::var(key)
+        .ok()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+}
+
+fn build_smoke_client(
+    timeout: Duration,
+    admin_token: &str,
+) -> Result<(Client, Vec<(HeaderName, HeaderValue)>)> {
+    let mut builder = Client::builder().timeout(timeout);
+
+    if let Some(ca_path) = env_trimmed("TRIAD_SMOKE_TLS_CA") {
+        let ca_bytes = fs::read(&ca_path)
+            .with_context(|| format!("read TRIAD_SMOKE_TLS_CA from {}", ca_path))?;
+        let cert = Certificate::from_pem(&ca_bytes)
+            .context("parse TRIAD_SMOKE_TLS_CA as PEM certificate")?;
+        builder = builder.add_root_certificate(cert);
+    }
+
+    let cert_path = env_trimmed("TRIAD_SMOKE_TLS_CERT");
+    let key_path = env_trimmed("TRIAD_SMOKE_TLS_KEY");
+    match (cert_path, key_path) {
+        (Some(cert_path), Some(key_path)) => {
+            let mut identity_pem = fs::read(&cert_path)
+                .with_context(|| format!("read TRIAD_SMOKE_TLS_CERT from {}", cert_path))?;
+            if !identity_pem.ends_with(b"\n") {
+                identity_pem.push(b'\n');
+            }
+            let key_bytes = fs::read(&key_path)
+                .with_context(|| format!("read TRIAD_SMOKE_TLS_KEY from {}", key_path))?;
+            identity_pem.extend_from_slice(&key_bytes);
+            let identity = Identity::from_pem(&identity_pem)
+                .context("parse TLS identity from TRIAD_SMOKE_TLS_CERT / TRIAD_SMOKE_TLS_KEY")?;
+            builder = builder.identity(identity);
+        }
+        (Some(_), None) => bail!("TRIAD_SMOKE_TLS_CERT set without TRIAD_SMOKE_TLS_KEY"),
+        (None, Some(_)) => bail!("TRIAD_SMOKE_TLS_KEY set without TRIAD_SMOKE_TLS_CERT"),
+        (None, None) => {}
+    }
+
+    let client = builder.build().context("build HTTP client")?;
+    let headers = build_health_headers(admin_token)?;
+    Ok((client, headers))
+}
+
+fn build_health_headers(admin_token: &str) -> Result<Vec<(HeaderName, HeaderValue)>> {
+    let mut headers: Vec<(HeaderName, HeaderValue)> = Vec::new();
+    let custom_header = match parse_header_env("TRIAD_SMOKE_HEALTHZ_HEADER")? {
+        Some(header) => Some(header),
+        None => parse_header_env("TRIAD_SMOKE_AUTH_HEADER")?,
+    };
+    let mut custom_header_used = false;
+
+    let mode = env_trimmed("TRIAD_SMOKE_AUTH_MODE")
+        .map(|mode| mode.to_ascii_lowercase())
+        .unwrap_or_else(|| "bearer".to_string());
+
+    match mode.as_str() {
+        "none" | "" => {}
+        "bearer" => {
+            let token = env_trimmed("TRIAD_SMOKE_HEALTHZ_BEARER")
+                .unwrap_or_else(|| admin_token.to_string());
+            headers.push((
+                HeaderName::from_static("authorization"),
+                HeaderValue::from_str(&format!("Bearer {}", token))
+                    .context("encode Authorization header for bearer auth")?,
+            ));
+        }
+        "basic" => {
+            let mut user = env_trimmed("TRIAD_SMOKE_BASIC_USER").unwrap_or_default();
+            let mut password = env_trimmed("TRIAD_SMOKE_BASIC_PASSWORD").unwrap_or_default();
+            if user.is_empty() && admin_token.contains(':') {
+                let parts: Vec<&str> = admin_token.splitn(2, ':').collect();
+                if parts.len() == 2 {
+                    user = parts[0].to_string();
+                    password = parts[1].to_string();
+                }
+            }
+            let encoded = BASE64.encode(format!("{user}:{password}"));
+            headers.push((
+                HeaderName::from_static("authorization"),
+                HeaderValue::from_str(&format!("Basic {}", encoded))
+                    .context("encode Authorization header for basic auth")?,
+            ));
+        }
+        "header" => {
+            let (name, value) = custom_header.clone().ok_or_else(|| {
+                anyhow!("TRIAD_SMOKE_AUTH_MODE=header requires TRIAD_SMOKE_AUTH_HEADER")
+            })?;
+            headers.push((name, value));
+            custom_header_used = true;
+        }
+        other => bail!("unsupported TRIAD_SMOKE_AUTH_MODE '{other}'"),
+    }
+
+    if let Some((name, value)) = custom_header {
+        if !custom_header_used
+            && !headers
+                .iter()
+                .any(|(existing, _)| existing.as_str() == name.as_str())
+        {
+            headers.push((name, value));
+        }
+    }
+
+    Ok(headers)
+}
+
+fn parse_header_env(key: &str) -> Result<Option<(HeaderName, HeaderValue)>> {
+    let raw = match env_trimmed(key) {
+        Some(raw) => raw,
+        None => return Ok(None),
+    };
+    let (name, value) = parse_header_value(&raw, key)?;
+    Ok(Some((name, value)))
+}
+
+fn parse_header_value(raw: &str, source: &str) -> Result<(HeaderName, HeaderValue)> {
+    let (name, value) = raw
+        .split_once(':')
+        .ok_or_else(|| anyhow!("{source} must be in `Header-Name: value` format"))?;
+    let header_name = HeaderName::from_bytes(name.trim().as_bytes())
+        .with_context(|| format!("parse header name from {source}"))?;
+    let header_value = HeaderValue::from_str(value.trim())
+        .with_context(|| format!("parse header value from {source}"))?;
+    Ok((header_name, header_value))
+}
+
 fn cmd_smoke_triad(args: &SmokeTriadArgs) -> Result<()> {
     let port = args.common.port.unwrap_or(18181);
     let admin_token = args
         .admin_token
         .clone()
         .unwrap_or_else(|| "triad-smoke-token".to_string());
-    let server_bin = ensure_server_binary(args.common.server_bin.as_deref())?;
-    let mut server = spawn_server(&server_bin, port, Some(&admin_token), Vec::new())?;
-    server.set_keep_temp(args.common.keep_temp);
+    let persona_id = resolve_persona_id_with_envs(
+        &args.common.persona_id,
+        &[
+            "SMOKE_TRIAD_PERSONA",
+            "TRIAD_SMOKE_PERSONA",
+            "ARW_PERSONA_ID",
+        ],
+    );
+    let base_override = args
+        .common
+        .base_url
+        .as_ref()
+        .map(|url| url.trim().trim_end_matches('/').to_string())
+        .filter(|url| !url.is_empty());
+    let mut server = if base_override.is_none() {
+        let server_bin = ensure_server_binary(args.common.server_bin.as_deref())?;
+        let mut srv = spawn_server(&server_bin, port, Some(&admin_token), Vec::new())?;
+        srv.set_keep_temp(args.common.keep_temp);
+        Some(srv)
+    } else {
+        None
+    };
+    let base = base_override
+        .clone()
+        .unwrap_or_else(|| format!("http://127.0.0.1:{port}"));
+    let (client, health_headers) = build_smoke_client(Duration::from_secs(10), &admin_token)?;
 
-    let base = format!("http://127.0.0.1:{port}");
-    let client = Client::builder()
-        .timeout(Duration::from_secs(10))
-        .build()
-        .context("build HTTP client")?;
+    if let Some(server) = server.as_mut() {
+        let log_path = server.log_path().to_path_buf();
+        let child = server.child_mut();
+        wait_for_health(
+            &client,
+            &base,
+            Some(child),
+            Some(log_path.as_path()),
+            Duration::from_secs(args.common.wait_timeout_secs),
+            &health_headers,
+        )?;
+    } else {
+        wait_for_health(
+            &client,
+            &base,
+            None,
+            None,
+            Duration::from_secs(args.common.wait_timeout_secs),
+            &health_headers,
+        )?;
+    }
 
-    let log_path = server.log_path().to_path_buf();
-    wait_for_health(
+    let action_id = submit_echo_action(
         &client,
         &base,
-        server.child_mut(),
-        &log_path,
-        Duration::from_secs(args.common.wait_timeout_secs),
+        Some(&admin_token),
+        "triad-smoke",
+        persona_id.as_deref(),
     )?;
-
-    let action_id = submit_echo_action(&client, &base, Some(&admin_token), "triad-smoke")?;
     let status_doc = wait_for_action(
         &client,
         &base,
@@ -98,18 +273,20 @@ fn cmd_smoke_triad(args: &SmokeTriadArgs) -> Result<()> {
         &action_id,
         Duration::from_secs(20),
     )?;
-    validate_echo_payload(&status_doc)?;
+    validate_echo_payload(&status_doc, persona_id.as_deref())?;
     ensure_projects_snapshot(&client, &base, Some(&admin_token))?;
     ensure_sse_connected(&client, &base, Some(&admin_token), None)?;
 
     println!("triad smoke OK");
-    if args.common.keep_temp {
-        println!(
-            "Temporary state preserved at {}",
-            server.state_path().display()
-        );
-        println!("Server log: {}", server.log_path().display());
-        server.persist();
+    if let Some(server) = server.as_mut() {
+        if args.common.keep_temp {
+            println!(
+                "Temporary state preserved at {}",
+                server.state_path().display()
+            );
+            println!("Server log: {}", server.log_path().display());
+            server.persist();
+        }
     }
     Ok(())
 }
@@ -120,56 +297,96 @@ fn cmd_smoke_context(args: &SmokeContextArgs) -> Result<()> {
         .admin_token
         .clone()
         .unwrap_or_else(|| "context-ci-token".to_string());
+    let persona_id = resolve_persona_id_with_envs(
+        &args.common.persona_id,
+        &[
+            "SMOKE_CONTEXT_PERSONA",
+            "CONTEXT_SMOKE_PERSONA",
+            "ARW_PERSONA_ID",
+        ],
+    );
     let token_sha = format!("{:x}", sha2::Sha256::digest(admin_token.as_bytes()));
     let extra_env = vec![
         ("ARW_ADMIN_TOKEN_SHA256".to_string(), token_sha),
         ("ARW_CONTEXT_CI_TOKEN".to_string(), admin_token.clone()),
     ];
 
-    let server_bin = ensure_server_binary(args.common.server_bin.as_deref())?;
-    let mut server = spawn_server(&server_bin, port, Some(&admin_token), extra_env)?;
-    server.set_keep_temp(args.common.keep_temp);
+    let base_override = args
+        .common
+        .base_url
+        .as_ref()
+        .map(|url| url.trim().trim_end_matches('/').to_string())
+        .filter(|url| !url.is_empty());
+    let mut server = if base_override.is_none() {
+        let server_bin = ensure_server_binary(args.common.server_bin.as_deref())?;
+        let mut srv = spawn_server(&server_bin, port, Some(&admin_token), extra_env)?;
+        srv.set_keep_temp(args.common.keep_temp);
+        Some(srv)
+    } else {
+        None
+    };
 
-    let base = format!("http://127.0.0.1:{port}");
-    let client = Client::builder()
-        .timeout(Duration::from_secs(10))
-        .build()
-        .context("build HTTP client")?;
+    let base = base_override
+        .clone()
+        .unwrap_or_else(|| format!("http://127.0.0.1:{port}"));
+    let (client, health_headers) = build_smoke_client(Duration::from_secs(10), &admin_token)?;
 
-    let log_path = server.log_path().to_path_buf();
-    wait_for_health(
-        &client,
-        &base,
-        server.child_mut(),
-        &log_path,
-        Duration::from_secs(args.common.wait_timeout_secs),
-    )?;
+    if let Some(server) = server.as_mut() {
+        let log_path = server.log_path().to_path_buf();
+        let child = server.child_mut();
+        wait_for_health(
+            &client,
+            &base,
+            Some(child),
+            Some(log_path.as_path()),
+            Duration::from_secs(args.common.wait_timeout_secs),
+            &health_headers,
+        )?;
+    } else {
+        wait_for_health(
+            &client,
+            &base,
+            None,
+            None,
+            Duration::from_secs(args.common.wait_timeout_secs),
+            &health_headers,
+        )?;
+    }
 
     let mut action_ids = Vec::new();
     for idx in 0..2 {
         let msg = format!("context-ci-{idx}");
-        let action_id = submit_echo_action(&client, &base, Some(&admin_token), &msg)?;
+        let action_id = submit_echo_action(
+            &client,
+            &base,
+            Some(&admin_token),
+            &msg,
+            persona_id.as_deref(),
+        )?;
         action_ids.push(action_id);
     }
     for action_id in &action_ids {
-        let _ = wait_for_action(
+        let doc = wait_for_action(
             &client,
             &base,
             Some(&admin_token),
             action_id,
             Duration::from_secs(20),
         )?;
+        validate_echo_payload(&doc, persona_id.as_deref())?;
     }
 
     ensure_context_telemetry(&client, &base, Some(&admin_token))?;
     println!("context telemetry smoke OK");
-    if args.common.keep_temp {
-        println!(
-            "Temporary state preserved at {}",
-            server.state_path().display()
-        );
-        println!("Server log: {}", server.log_path().display());
-        server.persist();
+    if let Some(server) = server.as_mut() {
+        if args.common.keep_temp {
+            println!(
+                "Temporary state preserved at {}",
+                server.state_path().display()
+            );
+            println!("Server log: {}", server.log_path().display());
+            server.persist();
+        }
     }
     Ok(())
 }
@@ -274,28 +491,39 @@ fn spawn_server(
 fn wait_for_health(
     client: &Client,
     base: &str,
-    child: &mut Child,
-    log_path: &Path,
+    mut child: Option<&mut Child>,
+    log_path: Option<&Path>,
     timeout: Duration,
+    headers: &[(HeaderName, HeaderValue)],
 ) -> Result<()> {
     let deadline = Instant::now() + timeout;
-    let url = format!("{}/healthz", base);
+    let url = format!("{}/healthz", base.trim_end_matches('/'));
     while Instant::now() < deadline {
-        if let Ok(resp) = client.get(&url).send() {
+        let mut request = client.get(&url);
+        for (name, value) in headers {
+            request = request.header(name.clone(), value.clone());
+        }
+        if let Ok(resp) = request.send() {
             if resp.status().is_success() {
                 return Ok(());
             }
         }
 
-        if let Some(status) = child.try_wait().context("check server health status")? {
-            let log = read_log_tail(log_path, 8192);
-            bail!("arw-server exited before health check (status {status:?})\n{log}");
+        if let Some(child_ref) = child.as_mut() {
+            if let Some(status) = child_ref.try_wait().context("check server health status")? {
+                let log = log_path
+                    .map(|path| read_log_tail(path, 8192))
+                    .unwrap_or_else(|| "(no log available)".to_string());
+                bail!("arw-server exited before health check (status {status:?})\n{log}");
+            }
         }
 
         thread::sleep(Duration::from_millis(400));
     }
 
-    let log = read_log_tail(log_path, 8192);
+    let log = log_path
+        .map(|path| read_log_tail(path, 8192))
+        .unwrap_or_else(|| "(no log available)".to_string());
     bail!("timed out waiting for {url}\n{log}");
 }
 
@@ -304,22 +532,31 @@ fn submit_echo_action(
     base: &str,
     admin_token: Option<&str>,
     message: &str,
+    persona_id: Option<&str>,
 ) -> Result<String> {
     submit_action_payload(
         client,
         base,
         admin_token,
+        persona_id,
         "demo.echo",
         json!({ "msg": message }),
     )
 }
 
-fn validate_echo_payload(doc: &JsonValue) -> Result<()> {
+fn validate_echo_payload(doc: &JsonValue, expected_persona: Option<&str>) -> Result<()> {
     let state = doc.get("state").and_then(|v| v.as_str()).unwrap_or("");
     ensure!(state == "completed", "unexpected action state: {doc}");
 
     if let Some(created) = doc.get("created").and_then(|v| v.as_str()) {
         parse_timestamp(created).context("invalid action created timestamp")?;
+    }
+    if let Some(expected) = expected_persona {
+        let actual = doc.get("persona_id").and_then(|v| v.as_str()).unwrap_or("");
+        ensure!(
+            actual == expected,
+            "persona mismatch: expected {expected}, got {actual}"
+        );
     }
 
     let output = doc
@@ -560,5 +797,79 @@ fn normalize_rfc3339(raw: &str) -> String {
         raw.trim_end_matches('Z').to_string() + "+00:00"
     } else {
         raw.to_string()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{build_health_headers, BASE64};
+    use base64::Engine as _;
+    use reqwest::header::HeaderName;
+    use serial_test::serial;
+    use std::env;
+
+    fn clear_auth_env() {
+        for key in [
+            "TRIAD_SMOKE_AUTH_MODE",
+            "TRIAD_SMOKE_HEALTHZ_BEARER",
+            "TRIAD_SMOKE_HEALTHZ_HEADER",
+            "TRIAD_SMOKE_AUTH_HEADER",
+            "TRIAD_SMOKE_BASIC_USER",
+            "TRIAD_SMOKE_BASIC_PASSWORD",
+        ] {
+            env::remove_var(key);
+        }
+    }
+
+    #[test]
+    #[serial]
+    fn build_health_headers_defaults_to_admin_token() {
+        clear_auth_env();
+        let headers = build_health_headers("admin-token").expect("headers");
+        assert_eq!(headers.len(), 1);
+        assert_eq!(headers[0].0, HeaderName::from_static("authorization"));
+        assert_eq!(headers[0].1.to_str().unwrap(), "Bearer admin-token");
+    }
+
+    #[test]
+    #[serial]
+    fn build_health_headers_prefers_override_bearer() {
+        clear_auth_env();
+        env::set_var("TRIAD_SMOKE_HEALTHZ_BEARER", "remote-token");
+        let headers = build_health_headers("admin-token").expect("headers");
+        assert_eq!(headers.len(), 1);
+        assert_eq!(headers[0].1.to_str().unwrap(), "Bearer remote-token");
+        clear_auth_env();
+    }
+
+    #[test]
+    #[serial]
+    fn build_health_headers_supports_basic_auth() {
+        clear_auth_env();
+        env::set_var("TRIAD_SMOKE_AUTH_MODE", "basic");
+        env::set_var("TRIAD_SMOKE_BASIC_USER", "smoke");
+        env::set_var("TRIAD_SMOKE_BASIC_PASSWORD", "secret");
+        let headers = build_health_headers("admin-token").expect("headers");
+        assert_eq!(headers.len(), 1);
+        let header_value = headers[0].1.to_str().unwrap();
+        assert!(header_value.starts_with("Basic "));
+        assert_eq!(
+            header_value,
+            format!("Basic {}", BASE64.encode("smoke:secret"))
+        );
+        clear_auth_env();
+    }
+
+    #[test]
+    #[serial]
+    fn build_health_headers_uses_custom_header() {
+        clear_auth_env();
+        env::set_var("TRIAD_SMOKE_HEALTHZ_HEADER", "X-Auth: custom");
+        env::set_var("TRIAD_SMOKE_AUTH_MODE", "none");
+        let headers = build_health_headers("admin-token").expect("headers");
+        assert_eq!(headers.len(), 1);
+        assert_eq!(headers[0].0, HeaderName::from_static("x-auth"));
+        assert_eq!(headers[0].1.to_str().unwrap(), "custom");
+        clear_auth_env();
     }
 }

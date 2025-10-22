@@ -16,6 +16,7 @@ let lastFetchedHistorySignature = '';
 let historyHydrated = false;
 let pendingHistoryFetch = null;
 let telemetryEventTimer = null;
+let jobsStatusTimer = null;
 const GOVERNOR_HISTORY_LIMIT = 6;
 let governorHistory = [];
 let lastGovernorToast = { key: null, time: 0 };
@@ -32,6 +33,8 @@ const lanesForMode = (mode) => (mode === 'expert' ? dedupeLanes(TRAINING_LANES_E
 let activeMode = (window.ARW?.mode?.current === 'expert') ? 'expert' : 'guided';
 let currentLaneProfile = lanesForMode(activeMode);
 let currentSidecarBase = null;
+let personaPanelInstance = null;
+let personaChangeUnsub = null;
 
 const updateBaseMeta = () => ARW.applyBaseMeta({ portInputId: 'port', badgeId: 'baseBadge', label: 'Base' });
 
@@ -128,6 +131,17 @@ function getCurrentBase() {
   return ARW.base(port);
 }
 
+function resolveJobPersona(job) {
+  if (!job || typeof job !== 'object') return null;
+  const direct = typeof job.persona_id === 'string' && job.persona_id.trim() ? job.persona_id.trim() : null;
+  const data = job.data && typeof job.data === 'object' ? job.data : null;
+  const dataPersona = data && typeof data.persona_id === 'string' && data.persona_id.trim() ? data.persona_id.trim() : null;
+  const trainingPersona = data && data.training && typeof data.training === 'object' && typeof data.training.persona_id === 'string'
+    ? data.training.persona_id.trim()
+    : null;
+  return dataPersona || trainingPersona || direct || null;
+}
+
 async function fetchTrainingTelemetry(baseUrl) {
   const token = await ARW.connections.tokenFor(baseUrl);
   const payload = await ARW.invoke('admin_get_json_base', {
@@ -173,16 +187,19 @@ async function fetchOrchestratorJobs(baseUrl) {
   return payload && typeof payload === 'object' ? payload.items || [] : [];
 }
 
-async function startTrainingJob(baseUrl, preset, diversity, recency, compression) {
+async function startTrainingJob(baseUrl, preset, diversity, recency, compression, personaId) {
   const token = await ARW.connections.tokenFor(baseUrl);
-  const goal = `Training preset=${preset} diversity=${diversity.toFixed(2)} recency=${recency.toFixed(2)} compression=${compression.toFixed(2)}`;
+  const personaSegment = personaId ? ` persona=${personaId}` : '';
+  const goal = `Training${personaSegment} preset=${preset} diversity=${diversity.toFixed(2)} recency=${recency.toFixed(2)} compression=${compression.toFixed(2)}`;
   const body = {
     goal,
+    persona_id: personaId || undefined,
     data: {
       preset,
       diversity,
       recency,
       compression,
+      persona_id: personaId || undefined,
     },
   };
   return ARW.invoke('admin_post_json_base', {
@@ -259,12 +276,25 @@ function showTelemetryBody(show) {
   if (body) body.hidden = !show;
 }
 
-function setJobsStatus(message, tone = 'dim') {
+function setJobsStatus(message, tone = 'dim', options = {}) {
   const node = document.getElementById('jobsStatus');
   if (!node) return;
+  if (jobsStatusTimer) {
+    clearTimeout(jobsStatusTimer);
+    jobsStatusTimer = null;
+  }
   const cls = tone === 'bad' ? 'bad mono' : tone === 'ok' ? 'ok mono' : 'dim mono';
   node.className = cls;
   node.textContent = message;
+  const clearAfter = Number.isFinite(options.clearAfter) ? Math.max(0, options.clearAfter) : null;
+  if (clearAfter) {
+    jobsStatusTimer = setTimeout(() => {
+      const defaultClass = 'dim mono';
+      node.textContent = '';
+      node.className = defaultClass;
+      jobsStatusTimer = null;
+    }, clearAfter);
+  }
 }
 
 function escapeText(value) {
@@ -514,7 +544,9 @@ function renderGovernorHistory() {
     const btn = document.createElement('button');
     btn.className = 'ghost';
     btn.type = 'button';
-    btn.textContent = entry.summary || 'Governor profile';
+    const summaryText = entry.summary || 'Governor profile';
+    const personaLabel = entry.personaId ? escapeText(entry.personaId) : null;
+    btn.textContent = personaLabel ? `${summaryText} (Persona ${personaLabel})` : summaryText;
     btn.addEventListener('click', async () => {
       btn.disabled = true;
       try {
@@ -1015,7 +1047,7 @@ function renderJobs(items) {
 
   const table = document.createElement('table');
   table.className = 'jobs-table';
-  table.innerHTML = '<thead><tr><th>Job</th><th>Category</th><th>Status</th><th>Progress</th><th>Goal</th><th>Updated</th></tr></thead>';
+  table.innerHTML = '<thead><tr><th>Job</th><th>Category</th><th>Persona</th><th>Status</th><th>Progress</th><th>Goal</th><th>Updated</th></tr></thead>';
   const tbody = document.createElement('tbody');
 
   filtered.forEach((job) => {
@@ -1035,10 +1067,12 @@ function renderJobs(items) {
         ? 'accent'
         : statusSlug === 'cancelled'
           ? 'dim'
-          : statusSlug === 'completed'
-            ? 'ok'
-            : '';
+        : statusSlug === 'completed'
+          ? 'ok'
+          : '';
     const trainingSummary = formatTrainingHintsSummary(job);
+    const personaId = resolveJobPersona(job);
+    const personaLabel = personaId ? escapeText(personaId) : '—';
     const updated = job.updated_at || job.updated || job.finished_at || job.created_at || job.created || '';
     let updatedLabel = '—';
     if (updated) {
@@ -1050,12 +1084,15 @@ function renderJobs(items) {
     const goalText = escapeText(job.goal || '');
     const categoryName = formatJobCategory(job);
     const categoryLabel = escapeText(categoryName);
-    const goalCell = trainingSummary && trainingSummary.text
-      ? `${goalText}<span class="hint">${escapeText(trainingSummary.text)}</span>`
-      : goalText;
+    const goalHints = [];
+    if (trainingSummary && trainingSummary.text) goalHints.push(trainingSummary.text);
+    if (personaId) goalHints.push(`Persona ${personaId}`);
+    const goalHintMarkup = goalHints.length ? `<span class="hint">${escapeText(goalHints.join(' · '))}</span>` : '';
+    const goalCell = `${goalText}${goalHintMarkup}`;
     tr.innerHTML = `
       <td class="mono">${escapeText(job.id || '')}</td>
       <td class="mono">${categoryLabel}</td>
+      <td class="mono">${personaLabel}</td>
       <td class="${statusClass}">${statusDisplay}</td>
       <td>${progress}</td>
       <td>${goalCell}</td>
@@ -1095,7 +1132,7 @@ function renderJobs(items) {
     const detailRow = document.createElement('tr');
     detailRow.className = 'job-detail';
     const detailCell = document.createElement('td');
-    detailCell.colSpan = 6;
+    detailCell.colSpan = 7;
     const details = document.createElement('details');
     const summary = document.createElement('summary');
     summary.textContent = 'Details';
@@ -1109,6 +1146,9 @@ function renderJobs(items) {
     const categoryItem = document.createElement('li');
     categoryItem.textContent = `Category: ${categoryName || '—'}`;
     metaList.appendChild(categoryItem);
+    const personaItem = document.createElement('li');
+    personaItem.textContent = `Persona: ${personaId ? personaLabel : '—'}`;
+    metaList.appendChild(personaItem);
     const tags = Array.isArray(job?.data?.tags) ? job.data.tags.filter((tag) => typeof tag === 'string' && tag.trim()) : [];
     if (tags.length) {
       const tagsItem = document.createElement('li');
@@ -1206,6 +1246,12 @@ function renderJobs(items) {
         hintLine.className = 'metric-inline dim';
         hintLine.textContent = `Training hints: ${trainingSummary.text}`;
         luBlock.appendChild(hintLine);
+      }
+      if (personaId) {
+        const personaLine = document.createElement('p');
+        personaLine.className = 'metric-inline';
+        personaLine.textContent = `Persona: ${personaLabel}`;
+        luBlock.appendChild(personaLine);
       }
       const actions = document.createElement('div');
       actions.className = 'row';
@@ -1500,6 +1546,8 @@ function pushHistory(entry) {
   const via = entry.via || 'local';
   const jobId = entry.jobId ? String(entry.jobId) : '';
   const logicUnitId = entry.logicUnitId ? String(entry.logicUnitId) : '';
+  const relatedJob = (lastJobs || []).find((item) => String(item.id || item.job_id || '') === jobId);
+  const personaForHistory = relatedJob ? resolveJobPersona(relatedJob) : null;
   const historyEntry = {
     ...entry,
     ts: entry.ts || now,
@@ -1507,10 +1555,14 @@ function pushHistory(entry) {
     logicUnitId,
     via,
     rawKind,
+    personaId: personaForHistory || entry.personaId || null,
   };
   logicUnitHistory.unshift(historyEntry);
   if (logicUnitHistory.length > 10) logicUnitHistory.length = 10;
-  const payload = entry.payload && typeof entry.payload === 'object' ? entry.payload : {};
+  const payload = entry.payload && typeof entry.payload === 'object' ? { ...entry.payload } : {};
+  if (personaForHistory && !payload.persona_id) {
+    payload.persona_id = personaForHistory;
+  }
   logicUnitHistoryRaw.unshift({
     time: historyEntry.ts,
     kind: rawKind,
@@ -1749,6 +1801,33 @@ document.addEventListener('DOMContentLoaded', async () => {
   baseMeta = updateBaseMeta();
   telemetryBase = baseMeta.base || getCurrentBase();
   const base = telemetryBase;
+  const personaOptions = {
+    root: document.getElementById('trainingPersonaPanel'),
+    select: document.getElementById('trainingPersonaSelect'),
+    refresh: document.getElementById('trainingPersonaRefresh'),
+    status: document.getElementById('trainingPersonaStatus'),
+    scope: document.getElementById('trainingPersonaScope'),
+    enable: document.getElementById('trainingPersonaTelemetryEnable'),
+    save: document.getElementById('trainingPersonaTelemetrySave'),
+    applyAll: document.getElementById('trainingPersonaTelemetryApplyAll'),
+    empty: document.getElementById('trainingPersonaEmpty'),
+    metrics: document.getElementById('trainingPersonaMetrics'),
+    history: document.getElementById('trainingPersonaHistory'),
+    historyMeta: document.getElementById('trainingPersonaHistoryMeta'),
+    historyLimit: 6,
+    getBase: () => telemetryBase || getCurrentBase(),
+  };
+  if (ARW.personaPanel && personaOptions.root) {
+    personaPanelInstance = ARW.personaPanel.attach(personaOptions);
+    if (personaPanelInstance && personaPanelInstance.disabled) {
+      personaPanelInstance = null;
+    }
+    try {
+      await personaPanelInstance?.init?.();
+    } catch (err) {
+      console.warn('persona panel init failed', err);
+    }
+  }
   const prefs = (await ARW.getPrefs('launcher')) || {};
   const guideCard = document.querySelector('.training-guide');
   if (guideCard && prefs.hideTrainingGuide) {
@@ -1777,6 +1856,9 @@ document.addEventListener('DOMContentLoaded', async () => {
       refreshTelemetry(),
       refreshJobs(),
       refreshCascadeSummaries({ project: cascadeTargetProject, quiet: true }),
+      personaPanelInstance && !personaPanelInstance.disabled
+        ? personaPanelInstance.reload({ preserveSelection: true })
+        : Promise.resolve(),
     ]);
   };
   ARW.sse.indicator('sseStat', { prefix: 'SSE' });
@@ -2008,10 +2090,18 @@ document.addEventListener('DOMContentLoaded', async () => {
         const diversity = diversitySlider ? parseFloat(diversitySlider.value || '0') : 0;
         const recency = recencySlider ? parseFloat(recencySlider.value || '0') : 0;
         const compression = compressionSlider ? parseFloat(compressionSlider.value || '0') : 0;
+        const personaId = personaPanelInstance
+          ? (typeof personaPanelInstance.currentPersonaId === 'function'
+              ? personaPanelInstance.currentPersonaId()
+              : personaPanelInstance.selectedId || null)
+          : null;
         setJobsStatus('Submitting job…');
-        await startTrainingJob(telemetryBase || getCurrentBase(), preset, diversity, recency, compression);
+        await startTrainingJob(telemetryBase || getCurrentBase(), preset, diversity, recency, compression, personaId);
         ARW.toast('Training job submitted');
         refreshJobs().catch(() => {});
+        if (!personaId && personaPanelInstance && !personaPanelInstance.disabled) {
+          setJobsStatus('Submitted without persona tag (no persona selected)', 'dim', { clearAfter: 5000 });
+        }
       } catch (err) {
         const message = err && err.message ? err.message : 'Start failed';
         ARW.toast(message);
@@ -2040,6 +2130,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     ARW.sse.unsubscribe(logicUnitSub);
     ARW.sse.unsubscribe(contextSub);
     ARW.sse.unsubscribe(governorHintSub);
+    personaPanelInstance?.dispose?.();
+    personaPanelInstance = null;
   });
   window.addEventListener('arw:base-override-changed', () => {
     applyBaseChange().catch(() => {});

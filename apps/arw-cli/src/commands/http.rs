@@ -10,7 +10,9 @@ use clap::{Args, Subcommand, ValueEnum};
 use reqwest::blocking::Client;
 use serde_json::{Map as JsonMap, Number as JsonNumber, Value as JsonValue};
 
-use crate::{resolve_admin_token, submit_action_payload, wait_for_action};
+use super::util::{
+    resolve_admin_token, resolve_persona_id, submit_action_payload, wait_for_action,
+};
 
 #[derive(Subcommand)]
 pub enum HttpCmd {
@@ -77,6 +79,9 @@ pub struct HttpBaseArgs {
     /// Request timeout when talking to arw-server (seconds)
     #[arg(long, default_value_t = 10)]
     pub timeout: u64,
+    /// Persona id to tag generated actions (falls back to ARW_PERSONA_ID)
+    #[arg(long)]
+    pub persona_id: Option<String>,
 }
 
 impl HttpBaseArgs {
@@ -169,6 +174,7 @@ fn cmd_http_fetch(args: &HttpFetchArgs) -> Result<()> {
         .build()
         .context("building HTTP client")?;
     let token = resolve_admin_token(&args.base.admin_token);
+    let persona_id = resolve_persona_id(&args.base.persona_id);
     let base = args.base.base_url().to_string();
 
     let mut body = args.data.clone();
@@ -237,6 +243,7 @@ fn cmd_http_fetch(args: &HttpFetchArgs) -> Result<()> {
         &client,
         &base,
         token.as_deref(),
+        persona_id.as_deref(),
         args.method.action_kind(),
         JsonValue::Object(input),
     )?;

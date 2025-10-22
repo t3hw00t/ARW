@@ -4,7 +4,7 @@ title: Trial Runbook
 
 # Trial Runbook
 
-Updated: 2025-10-12
+Updated: 2025-10-22
 Type: Checklist (quick reference)
 
 This runbook keeps our two-person trial routine lightweight. Use it with the Trial Readiness Plan, facilitator checklist, and quickstart note so we stay in sync without extra meetings.
@@ -46,7 +46,7 @@ This runbook keeps our two-person trial routine lightweight. Use it with the Tri
 2. If the run was under Autonomy Lane, jump to the [Autonomy rollback playbook](trials/autonomy_rollback_playbook.md) after pausing.
 3. Reapply the guardrail preset (`just trials-guardrails preset=trial --dry_run=false`) when the stop is real; keep `--dry-run` for rehearsals so we can preview without touching the config file.
 4. Capture the time and what people saw in the incident log.
-5. Run `arw-cli smoke triad` (or `just triad-smoke`) to confirm the core service. Use `arw-cli smoke --help` if you need to tweak ports or keep the temp directory for forensic logs; the wrappers honor `SMOKE_TRIAD_TIMEOUT_SECS`/`SMOKE_TIMEOUT_SECS` and exit after 600 s by default (set to `0` for long investigations). They now build/run against debug artifacts for faster recovery—set `ARW_SMOKE_USE_RELEASE=1` when you explicitly need a release binary.
+5. Run `arw-cli smoke triad` (or `just triad-smoke`) to confirm the core service. Use `arw-cli smoke --help` if you need to tweak ports or keep the temp directory for forensic logs; the wrappers honor `SMOKE_TRIAD_TIMEOUT_SECS`/`SMOKE_TIMEOUT_SECS` and exit after 600 s by default (set to `0` for long investigations). They now build/run against debug artifacts for faster recovery—set `ARW_SMOKE_USE_RELEASE=1` when you explicitly need a release binary. Set `TRIAD_SMOKE_PERSONA` / `SMOKE_TRIAD_PERSONA` (or `ARW_PERSONA_ID`) before running if you want the synthetic action to tag a persona for telemetry dashboards. Point the harness at an already-running cluster by exporting `TRIAD_SMOKE_BASE_URL` (or passing `--base-url` to the CLI) so we talk to that URL instead of launching a temporary server. When `/healthz` needs authentication, export `TRIAD_SMOKE_HEALTHZ_BEARER` (or a raw `TRIAD_SMOKE_HEALTHZ_HEADER`) so the probe includes the right header; otherwise the script falls back to the admin token automatically. The same harness now supports `TRIAD_SMOKE_AUTH_MODE=basic` (add `TRIAD_SMOKE_BASIC_USER` / `TRIAD_SMOKE_BASIC_PASSWORD`), `TRIAD_SMOKE_AUTH_MODE=header` (pair with `TRIAD_SMOKE_AUTH_HEADER`), or mutual TLS via `TRIAD_SMOKE_TLS_CERT` / `TRIAD_SMOKE_TLS_KEY` / `TRIAD_SMOKE_TLS_CA`. The context smoke wrappers follow the persona flow—set SMOKE_CONTEXT_PERSONA (or reuse ARW_PERSONA_ID) if you want those checks to emit persona-tagged telemetry, and provide SMOKE_CONTEXT_BASE_URL / CONTEXT_SMOKE_BASE_URL when you are pointing at a remote hub.
 6. DM each other with the incident note so we decide fast.
 7. Decide whether to resume, retry, or end the session.
 

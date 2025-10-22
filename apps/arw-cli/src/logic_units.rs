@@ -9,7 +9,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use crate::{resolve_admin_token, with_admin_headers};
+use crate::commands::util::{resolve_admin_token, with_admin_headers};
 
 static LOGIC_UNIT_SCHEMA: Lazy<Validator> = Lazy::new(|| {
     let raw = include_str!(concat!(

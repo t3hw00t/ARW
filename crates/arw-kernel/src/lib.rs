@@ -2365,9 +2365,13 @@ impl Kernel {
             let data_raw: Option<String> = r.get(3)?;
             if let Some(data_raw) = data_raw {
                 if let Ok(val) = serde_json::from_str::<serde_json::Value>(&data_raw) {
+                    let persona = Self::extract_persona_id(&val);
                     if !val.is_null() {
                         if let serde_json::Value::Object(ref mut map) = payload {
-                            map.insert("data".into(), val);
+                            map.insert("data".into(), val.clone());
+                            if let Some(persona) = persona {
+                                map.insert("persona_id".into(), serde_json::Value::String(persona));
+                            }
                         }
                     }
                 }
@@ -2398,6 +2402,27 @@ impl Kernel {
             other if other.starts_with("complete") => ("completed", "Completed"),
             _ => ("unknown", "Unknown"),
         }
+    }
+
+    fn extract_persona_id(value: &serde_json::Value) -> Option<String> {
+        if let Some(obj) = value.as_object() {
+            if let Some(pid) = obj
+                .get("persona_id")
+                .and_then(|v| v.as_str())
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+            {
+                return Some(pid.to_string());
+            }
+            for key in ["training", "submitted"] {
+                if let Some(next) = obj.get(key) {
+                    if let Some(found) = Self::extract_persona_id(next) {
+                        return Some(found);
+                    }
+                }
+            }
+        }
+        None
     }
 
     // ---------- Personas ----------
@@ -3641,9 +3666,13 @@ impl KernelSession {
             let data_raw: Option<String> = r.get(3)?;
             if let Some(data_raw) = data_raw {
                 if let Ok(val) = serde_json::from_str::<serde_json::Value>(&data_raw) {
+                    let persona = Kernel::extract_persona_id(&val);
                     if !val.is_null() {
                         if let serde_json::Value::Object(ref mut map) = payload {
-                            map.insert("data".into(), val);
+                            map.insert("data".into(), val.clone());
+                            if let Some(persona) = persona {
+                                map.insert("persona_id".into(), serde_json::Value::String(persona));
+                            }
                         }
                     }
                 }
@@ -3785,6 +3814,7 @@ mod tests {
         let kernel = Kernel::open(dir.path()).expect("kernel open");
 
         let data = json!({
+            "persona_id": "persona.test",
             "preset": "balanced",
             "diversity": 0.5,
             "recency": 0.35,
@@ -3809,6 +3839,7 @@ mod tests {
         assert_eq!(job["status_slug"], json!("queued"));
         assert_eq!(job["status_label"], json!("Queued"));
         assert_eq!(job["progress"], json!(0.0));
+        assert_eq!(job["persona_id"], json!("persona.test"));
 
         let data_field = job.get("data").cloned().expect("data field surfaced");
         assert_eq!(data_field["preset"], json!("balanced"));

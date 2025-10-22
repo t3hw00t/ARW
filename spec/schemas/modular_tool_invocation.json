@@ -31,6 +31,11 @@
       "type": "string",
       "description": "Specific operation/version combination (e.g., tool@semver)."
     },
+    "persona_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Active persona guiding this tool invocation."
+    },
     "input_payload": {
       "type": "object",
       "description": "Input body supplied to the tool."

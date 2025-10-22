@@ -1,5 +1,3 @@
-#![allow(dead_code, unused_imports)]
-
 use anyhow::Result;
 use arw_core::{gating, gating_keys};
 use chrono::Utc;
@@ -88,7 +86,11 @@ fn render_keys(args: GateKeysArgs) -> Result<()> {
     if args.details {
         let groups = gating_keys::groups();
         let total_keys: usize = groups.iter().map(|g| g.keys.len()).sum();
-        println!("Total groups: {} | Total keys: {}\n", groups.len(), total_keys);
+        println!(
+            "Total groups: {} | Total keys: {}\n",
+            groups.len(),
+            total_keys
+        );
         for group in groups {
             println!("{} - {}", group.name, group.summary);
             for key in group.keys {

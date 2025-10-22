@@ -1,5 +1,3 @@
-#![allow(dead_code, unused_imports)]
-
 use std::collections::HashSet;
 use std::fmt::Write as _;
 use std::fs::create_dir_all;
@@ -28,8 +26,9 @@ use serde_json::{json, Map as JsonMap, Value as JsonValue};
 use sha2::{Digest, Sha256};
 use walkdir::WalkDir;
 
-use crate::{
-    append_json_output, append_text_output, format_bytes, resolve_admin_token, with_admin_headers,
+use super::util::{
+    append_json_output, append_text_output, format_bytes, parse_byte_limit_arg,
+    resolve_admin_token, with_admin_headers,
 };
 
 #[cfg(test)]
@@ -58,7 +57,7 @@ mod runtime_bundle_manifest_tests {
             }))?,
         )?;
 
-        let (_pk_b64, sk_b64) = crate::generate_ed25519_pair_b64()?;
+        let (_pk_b64, sk_b64) = crate::commands::capsule::generate_ed25519_pair_b64()?;
         let sign_args = RuntimeBundlesManifestSignArgs {
             manifest: manifest_path.clone(),
             key_b64: Some(sk_b64),
@@ -179,7 +178,7 @@ mod runtime_bundle_audit_tests {
         let manifest_path = bundle_dir.join("bundle.json");
         std::fs::write(&manifest_path, serde_json::to_vec_pretty(&manifest)?)?;
 
-        let (pk, sk) = crate::generate_ed25519_pair_b64()?;
+        let (pk, sk) = crate::commands::capsule::generate_ed25519_pair_b64()?;
         let sign_args = RuntimeBundlesManifestSignArgs {
             manifest: manifest_path.clone(),
             key_b64: Some(sk),
@@ -3703,71 +3702,6 @@ fn bundle_consent_summary(bundle: &runtime_bundles::RuntimeBundle) -> Option<Str
         }
     })
 }
-
-pub(crate) fn parse_byte_limit_arg(raw: &str) -> Result<u64, String> {
-    let trimmed = raw.trim();
-    if trimmed.is_empty() {
-        return Err("rotate limit must not be empty".into());
-    }
-    if trimmed.eq_ignore_ascii_case("0") {
-        return Ok(0);
-    }
-    let digit_count = trimmed
-        .chars()
-        .position(|c| !c.is_ascii_digit())
-        .unwrap_or(trimmed.len());
-    let (num_part, suffix_part) = trimmed.split_at(digit_count);
-    if num_part.is_empty() {
-        return Err("rotate limit must start with digits".into());
-    }
-    let base = num_part
-        .parse::<u64>()
-        .map_err(|_| "rotate limit digits out of range".to_string())?;
-    let suffix = suffix_part.trim().to_ascii_lowercase();
-    let multiplier = match suffix.as_str() {
-        "" => 1u64,
-        "k" | "kb" => 1024,
-        "m" | "mb" => 1024 * 1024,
-        "g" | "gb" => 1024 * 1024 * 1024,
-        "t" | "tb" => 1024u64.pow(4),
-        _ => {
-            return Err("unsupported rotate suffix (use K, M, G, or T with optional B)".to_string())
-        }
-    };
-    let value = base
-        .checked_mul(multiplier)
-        .ok_or_else(|| "rotate limit overflow".to_string())?;
-    if value != 0 && value < 64 * 1024 {
-        Err("rotate limit must be at least 64KB; see CLI docs for details".to_string())
-    } else {
-        Ok(value)
-    }
-}
-
-#[cfg(test)]
-mod byte_limit_tests {
-    use super::parse_byte_limit_arg;
-
-    #[test]
-    fn parse_byte_limit_arg_supports_suffixes() {
-        assert_eq!(parse_byte_limit_arg("64KB").unwrap(), 64 * 1024);
-        assert_eq!(parse_byte_limit_arg("3m").unwrap(), 3 * 1024 * 1024);
-        assert_eq!(parse_byte_limit_arg("4MB").unwrap(), 4 * 1024 * 1024);
-        assert_eq!(parse_byte_limit_arg("5G").unwrap(), 5 * 1024 * 1024 * 1024);
-        assert_eq!(parse_byte_limit_arg("0").unwrap(), 0);
-    }
-
-    #[test]
-    fn parse_byte_limit_arg_rejects_invalid() {
-        assert!(parse_byte_limit_arg("").is_err());
-        assert!(parse_byte_limit_arg("kb").is_err());
-        assert!(parse_byte_limit_arg("2KB").is_err());
-        assert!(parse_byte_limit_arg("63KB").is_err());
-        assert!(parse_byte_limit_arg("10x").is_err());
-        assert!(parse_byte_limit_arg("1000000000000000000000000000000").is_err());
-    }
-}
-
 fn fetch_runtime_matrix(
     client: &Client,
     base: &str,

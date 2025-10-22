@@ -1566,6 +1566,7 @@ mod tests {
         );
 
         let action_id = Uuid::new_v4().to_string();
+        let persona_id = "persona.alpha";
         let payload = json!({
             "agent_id": "assistant.chat",
             "turn_id": "test-turn",
@@ -1578,7 +1579,8 @@ mod tests {
             "policy_scope": {
                 "leases": [lease_id.clone()],
                 "capabilities": ["context:read"]
-            }
+            },
+            "persona_id": persona_id
         });
         state
             .kernel()
@@ -1609,6 +1611,10 @@ mod tests {
         );
         assert_eq!(completed_env.payload["id"], json!(action_id));
         assert_eq!(completed_env.payload["output"]["status"], json!("accepted"));
+        assert_eq!(
+            completed_env.payload["output"]["persona_id"],
+            json!(persona_id)
+        );
 
         let leases = completed_env.payload["output"]["policy_scope"]["leases"]
             .as_array()
@@ -1621,6 +1627,7 @@ mod tests {
             .expect("modular agent accepted event timeout")
             .expect("modular agent accepted event");
         assert_eq!(modular_env.payload["agent_id"], json!("assistant.chat"));
+        assert_eq!(modular_env.payload["persona_id"], json!(persona_id));
 
         let action = state
             .kernel()
@@ -1629,6 +1636,18 @@ mod tests {
             .expect("load modular agent action")
             .expect("action present");
         assert_eq!(action.state, "completed");
+
+        let recent_records = state
+            .kernel()
+            .list_recent_memory_async(None, 20)
+            .await
+            .expect("list recent memory");
+        assert!(
+            recent_records.iter().any(|record| {
+                record.get("persona_id").and_then(|v| v.as_str()) == Some(persona_id)
+            }),
+            "expected memory record tagged with persona_id"
+        );
 
         let metrics_snapshot = state.metrics().snapshot();
         assert_eq!(
@@ -1750,6 +1769,7 @@ mod tests {
             .expect("insert lease");
 
         let action_id = Uuid::new_v4().to_string();
+        let persona_id = "persona.alpha";
         let payload = json!({
             "invocation_id": "invoke-1",
             "requested_by": "agent.recall",
@@ -1767,7 +1787,8 @@ mod tests {
                 "leases": [lease_id],
                 "capabilities": []
             },
-            "evidence_id": "evidence-1"
+            "evidence_id": "evidence-1",
+            "persona_id": persona_id
         });
         state
             .kernel()
@@ -1802,12 +1823,17 @@ mod tests {
             completed_env.payload["output"]["tool_id"],
             json!("memory.search")
         );
+        assert_eq!(
+            completed_env.payload["output"]["persona_id"],
+            json!(persona_id)
+        );
 
         let modular_env = timeout(Duration::from_secs(2), modular_rx.recv())
             .await
             .expect("modular tool accepted event timeout")
             .expect("modular tool accepted event");
         assert_eq!(modular_env.payload["tool_id"], json!("memory.search"));
+        assert_eq!(modular_env.payload["persona_id"], json!(persona_id));
 
         let action = state
             .kernel()
@@ -1816,6 +1842,18 @@ mod tests {
             .expect("load modular tool action")
             .expect("action present");
         assert_eq!(action.state, "completed");
+
+        let recent_records = state
+            .kernel()
+            .list_recent_memory_async(None, 20)
+            .await
+            .expect("list recent memory");
+        assert!(
+            recent_records.iter().any(|record| {
+                record.get("persona_id").and_then(|v| v.as_str()) == Some(persona_id)
+            }),
+            "expected tool memory record tagged with persona_id"
+        );
 
         let metrics_snapshot = state.metrics().snapshot();
         assert_eq!(

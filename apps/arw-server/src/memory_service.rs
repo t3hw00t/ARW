@@ -5,7 +5,7 @@ use serde_json::{json, Map, Value};
 use std::collections::BTreeMap;
 use utoipa::ToSchema;
 
-use crate::{story_threads, util, working_set, AppState};
+use crate::{persona, story_threads, util, working_set, AppState};
 use arw_memory_core::MemoryInsertOwned;
 use arw_topics as topics;
 use tracing::warn;
@@ -38,6 +38,7 @@ pub struct MemoryUpsertInput {
     pub text: Option<String>,
     pub agent_id: Option<String>,
     pub project_id: Option<String>,
+    pub persona_id: Option<String>,
     pub durability: Option<String>,
     pub trust: Option<f64>,
     pub privacy: Option<String>,
@@ -93,6 +94,7 @@ pub struct MemoryPackInput {
     pub diversity_lambda: Option<f32>,
     pub min_score: Option<f32>,
     pub project_id: Option<String>,
+    pub persona_id: Option<String>,
     pub lane_bonus: Option<f32>,
     pub scorer: Option<String>,
     pub expand_query: Option<bool>,
@@ -122,6 +124,14 @@ impl MemoryUpsertInput {
             })
             .or_else(|| Some("private".to_string()));
         self.durability = self.durability.map(|d| d.trim().to_string());
+        if let Some(persona) = self.persona_id.as_mut() {
+            let trimmed = persona.trim();
+            if trimmed.is_empty() {
+                self.persona_id = None;
+            } else if trimmed != persona.as_str() {
+                *persona = trimmed.to_string();
+            }
+        }
         self
     }
 
@@ -181,6 +191,7 @@ impl MemoryUpsertInput {
             prob: normalized.prob,
             agent_id: normalized.agent_id,
             project_id: normalized.project_id,
+            persona_id: normalized.persona_id,
             text: derived_text,
             durability: normalized.durability,
             trust: normalized.trust,
@@ -444,6 +455,7 @@ pub async fn pack_memory(state: &AppState, input: MemoryPackInput) -> Result<Mem
         diversity_lambda: input.diversity_lambda.unwrap_or(f32::NAN),
         min_score: input.min_score.unwrap_or(f32::NAN),
         project: input.project_id.clone(),
+        persona_id: input.persona_id.clone(),
         lane_bonus: input.lane_bonus.unwrap_or(f32::NAN),
         scorer: input.scorer.clone(),
         expand_query: input.expand_query.unwrap_or(false),
@@ -454,9 +466,30 @@ pub async fn pack_memory(state: &AppState, input: MemoryPackInput) -> Result<Mem
 
     let state_clone = state.clone();
     let spec_for_block = spec.clone();
-    let world_beliefs = crate::state_observer::beliefs_snapshot().await.1;
+    let (_, world_beliefs) = crate::state_observer::beliefs_snapshot().await;
+    let persona_context = if let Some(persona_id) = spec.persona_id.as_deref() {
+        if let Some(service) = state.persona() {
+            match persona::load_world_beliefs(&service, persona_id).await {
+                Ok(values) => values,
+                Err(err) => {
+                    warn!(
+                        target: "arw::persona",
+                        error = %err,
+                        persona_id = %persona_id,
+                        "failed to load persona worldview"
+                    );
+                    Vec::new()
+                }
+            }
+        } else {
+            Vec::new()
+        }
+    } else {
+        Vec::new()
+    };
+    let merged_beliefs = persona::merge_world_beliefs(&world_beliefs, persona_context);
     let working = tokio::task::spawn_blocking(move || {
-        working_set::assemble(&state_clone, &spec_for_block, world_beliefs)
+        working_set::assemble(&state_clone, &spec_for_block, merged_beliefs)
     })
     .await
     .context("pack_memory assemble join failed")??;

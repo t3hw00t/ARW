@@ -1,4 +1,4 @@
-use crate::{coverage, working_set, AppState};
+use crate::{coverage, persona, working_set, AppState};
 use metrics::{counter, gauge, histogram};
 use serde_json::{json, Map, Number, Value};
 use std::collections::HashSet;
@@ -9,6 +9,7 @@ use tokio::sync::mpsc;
 use tokio::task::JoinError;
 
 use arw_topics as topics;
+use tracing::warn;
 #[derive(Debug, Clone)]
 pub(crate) enum ContextIterationEvent {
     Summary {
@@ -218,13 +219,34 @@ async fn run_context_iteration(
     let corr_for_payload = corr_id.clone();
     let spec_for_payload = spec.clone();
     let (_, world_beliefs) = crate::state_observer::beliefs_snapshot().await;
+    let persona_context = if let Some(persona_id) = spec.persona_id.as_deref() {
+        if let Some(service) = state.persona() {
+            match persona::load_world_beliefs(&service, persona_id).await {
+                Ok(values) => values,
+                Err(err) => {
+                    warn!(
+                        target: "arw::persona",
+                        error = %err,
+                        persona_id = %persona_id,
+                        "failed to load persona worldview"
+                    );
+                    Vec::new()
+                }
+            }
+        } else {
+            Vec::new()
+        }
+    } else {
+        Vec::new()
+    };
+    let merged_beliefs = persona::merge_world_beliefs(&world_beliefs, persona_context);
 
     let join = tokio::task::spawn_blocking({
         let state_for_block = state.clone();
         let bus_for_block = bus.clone();
         let corr_for_block = corr_id.clone();
         let sender_for_block = stream_sender.clone();
-        let beliefs_for_block = world_beliefs.clone();
+        let beliefs_for_block = merged_beliefs.clone();
         move || {
             let spec_for_block = spec;
             let bus_observer = working_set::BusObserver::new(
@@ -451,6 +473,7 @@ mod tests {
             diversity_lambda: 0.5,
             min_score: 0.6,
             project: None,
+            persona_id: None,
             lane_bonus: 0.3,
             scorer: Some("mmrd".into()),
             expand_query: false,
@@ -642,6 +665,7 @@ mod tests {
             diversity_lambda: crate::working_set::default_diversity_lambda(),
             min_score: crate::working_set::default_min_score(),
             project: None,
+            persona_id: None,
             lane_bonus: crate::working_set::default_lane_bonus(),
             scorer: Some(crate::working_set::default_scorer()),
             expand_query: crate::working_set::default_expand_query(),
@@ -735,6 +759,9 @@ fn build_iteration_summary_payload(
     if let Some(project) = spec.project.as_ref() {
         payload.insert("project".into(), json!(project));
     }
+    if let Some(persona) = spec.persona_id.as_ref() {
+        payload.insert("persona".into(), json!(persona));
+    }
     if let Some(query) = spec.query.as_ref() {
         payload.insert("query".into(), json!(query));
     }
@@ -793,6 +820,9 @@ fn build_context_coverage_payload(
     }
     if let Some(project) = spec.project.as_ref() {
         payload.insert("project".into(), json!(project));
+    }
+    if let Some(persona) = spec.persona_id.as_ref() {
+        payload.insert("persona".into(), json!(persona));
     }
     if let Some(query) = spec.query.as_ref() {
         payload.insert("query".into(), json!(query));
@@ -951,6 +981,9 @@ fn build_context_recall_risk_payload(
     if let Some(project) = spec.project.as_ref() {
         payload.insert("project".into(), json!(project));
     }
+    if let Some(persona) = spec.persona_id.as_ref() {
+        payload.insert("persona".into(), json!(persona));
+    }
     if let Some(query) = spec.query.as_ref() {
         payload.insert("query".into(), json!(query));
     }
@@ -1078,7 +1111,7 @@ pub mod harness {
     pub enum NextSpec {
         Keep,
         AutoAdjust,
-        Override(working_set::WorkingSetSpec),
+        Override(Box<working_set::WorkingSetSpec>),
     }
 
     #[derive(Debug, Clone)]
@@ -1271,7 +1304,7 @@ pub mod harness {
                             NextSpec::AutoAdjust => Some(super::adjust_spec_for_iteration(
                                 iteration, &spec_used, &ws, &verdict,
                             )),
-                            NextSpec::Override(custom) => Some(custom.clone()),
+                            NextSpec::Override(custom) => Some((**custom).clone()),
                         };
 
                         let base_duration = success.duration_ms.unwrap_or(48.0);
@@ -1426,6 +1459,7 @@ pub mod harness {
                 diversity_lambda: 0.7,
                 min_score: 0.5,
                 project: Some("demo".into()),
+                persona_id: None,
                 lane_bonus: 0.1,
                 scorer: Some("mmr".into()),
                 expand_query: false,

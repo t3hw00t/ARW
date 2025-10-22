@@ -7,6 +7,11 @@ use reqwest::blocking::Client;
 use serde::Deserialize;
 use serde_json::Value as JsonValue;
 
+use super::util::{
+    format_bytes, format_bytes_f64, format_duration_ms, format_seconds, format_seconds_f64,
+    resolve_admin_token, with_admin_headers,
+};
+
 #[derive(Args, Default, Clone, Copy)]
 pub struct ToolsListArgs {
     /// Pretty-print JSON
@@ -104,10 +109,10 @@ pub fn cmd_tools_cache(args: &ToolsCacheArgs) -> Result<()> {
         .timeout(Duration::from_secs(args.timeout))
         .build()
         .context("building HTTP client")?;
-    let token = crate::resolve_admin_token(&args.admin_token);
+    let token = resolve_admin_token(&args.admin_token);
     let base = args.base.trim_end_matches('/');
     let url = format!("{}/admin/tools/cache_stats", base);
-    let resp = crate::with_admin_headers(client.get(&url), token.as_deref())
+    let resp = with_admin_headers(client.get(&url), token.as_deref())
         .send()
         .with_context(|| format!("requesting {}", url))?;
     let status = resp.status();
@@ -156,7 +161,7 @@ fn render_tool_cache_summary(stats: &ToolCacheSnapshot, base: &str) -> String {
     let mut buf = String::new();
     let _ = writeln!(buf, "Tool cache @ {}", base);
     let limit_fragment = match stats.max_payload_bytes {
-        Some(limit) => format!("limit {}", crate::format_bytes(limit)),
+        Some(limit) => format!("limit {}", format_bytes(limit)),
         None => "limit off".to_string(),
     };
     if stats.capacity == 0 {
@@ -200,7 +205,7 @@ fn render_tool_cache_summary(stats: &ToolCacheSnapshot, base: &str) -> String {
             "- latency saved: avg {:.1} ms (samples {}, total {})",
             stats.avg_latency_saved_ms,
             stats.latency_saved_samples,
-            crate::format_duration_ms(stats.latency_saved_ms_total)
+            format_duration_ms(stats.latency_saved_ms_total)
         );
         if let Some(last) = stats.last_latency_saved_ms {
             line.push_str(&format!(", last {} ms", last));
@@ -211,12 +216,12 @@ fn render_tool_cache_summary(stats: &ToolCacheSnapshot, base: &str) -> String {
     if stats.payload_saved_samples > 0 {
         let mut line = format!(
             "- payload saved: avg {} (samples {}, total {})",
-            crate::format_bytes_f64(stats.avg_payload_bytes_saved),
+            format_bytes_f64(stats.avg_payload_bytes_saved),
             stats.payload_saved_samples,
-            crate::format_bytes(stats.payload_bytes_saved_total)
+            format_bytes(stats.payload_bytes_saved_total)
         );
         if let Some(last) = stats.last_payload_bytes {
-            line.push_str(&format!(", last {}", crate::format_bytes(last)));
+            line.push_str(&format!(", last {}", format_bytes(last)));
         }
         let _ = writeln!(buf, "{}", line);
     }
@@ -224,14 +229,14 @@ fn render_tool_cache_summary(stats: &ToolCacheSnapshot, base: &str) -> String {
     if stats.hit_age_samples > 0 {
         let mut line = format!(
             "- hit age: avg {} (samples {})",
-            crate::format_seconds_f64(stats.avg_hit_age_secs),
+            format_seconds_f64(stats.avg_hit_age_secs),
             stats.hit_age_samples
         );
         if let Some(last) = stats.last_hit_age_secs {
-            line.push_str(&format!(", last {}", crate::format_seconds(last)));
+            line.push_str(&format!(", last {}", format_seconds(last)));
         }
         if let Some(max) = stats.max_hit_age_secs {
-            line.push_str(&format!(", max {}", crate::format_seconds(max)));
+            line.push_str(&format!(", max {}", format_seconds(max)));
         }
         let _ = writeln!(buf, "{}", line);
     }

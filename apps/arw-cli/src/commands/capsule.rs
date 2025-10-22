@@ -1,22 +1,18 @@
-#![allow(dead_code, unused_imports)]
-
 use std::collections::{BTreeMap, HashSet};
-use std::fs;
-use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use anyhow::{anyhow, bail, ensure, Context, Result};
+use anyhow::{anyhow, bail, Context, Result};
 use arw_core::{capsule_presets, capsule_trust};
 use arw_protocol::GatingCapsule;
 use base64::Engine;
-use chrono::{DateTime, Local, SecondsFormat, TimeZone, Utc};
+use chrono::Utc;
 use clap::{Args, Subcommand};
 use reqwest::{blocking::Client, header::ACCEPT};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value as JsonValue};
 
-use crate::{
+use super::util::{
     format_local_timestamp, format_observation_timestamp, format_relative_from_now,
     resolve_admin_token, truncate_payload, validate_trust_key, with_admin_headers,
 };
@@ -397,13 +393,11 @@ pub fn execute(cmd: CapCmd) -> Result<()> {
               ]
             });
             let serialized = if args.compact {
-                serde_json::to_string(&tpl).map_err(|e| {
-                    anyhow!("failed to render capsule template JSON (compact): {e}")
-                })
+                serde_json::to_string(&tpl)
+                    .map_err(|e| anyhow!("failed to render capsule template JSON (compact): {e}"))
             } else {
-                serde_json::to_string_pretty(&tpl).map_err(|e| {
-                    anyhow!("failed to render capsule template JSON (pretty): {e}")
-                })
+                serde_json::to_string_pretty(&tpl)
+                    .map_err(|e| anyhow!("failed to render capsule template JSON (pretty): {e}"))
             }?;
             println!("{}", serialized);
             Ok(())
@@ -413,8 +407,9 @@ pub fn execute(cmd: CapCmd) -> Result<()> {
             args.out_priv.as_deref(),
             args.issuer.as_deref(),
         ),
-        CapCmd::SignEd25519(args) =>
-            cmd_sign_ed25519(&args.sk_b64, &args.capsule_json, args.out.as_deref()),
+        CapCmd::SignEd25519(args) => {
+            cmd_sign_ed25519(&args.sk_b64, &args.capsule_json, args.out.as_deref())
+        }
         CapCmd::VerifyEd25519(args) => {
             cmd_verify_ed25519(&args.pk_b64, &args.capsule_json, &args.sig_b64)?;
             println!("ok");
@@ -1228,8 +1223,7 @@ fn format_status_label(raw: &str) -> String {
     }
 }
 
-
-fn generate_ed25519_pair_b64() -> Result<(String, String)> {
+pub(crate) fn generate_ed25519_pair_b64() -> Result<(String, String)> {
     use ed25519_dalek::SigningKey;
     use rand::rngs::OsRng;
     use rand_core::TryRngCore;

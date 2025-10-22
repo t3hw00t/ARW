@@ -83,6 +83,7 @@ fn base_spec() -> WorkingSetSpec {
         diversity_lambda: f32::NAN,
         min_score: f32::NAN,
         project: None,
+        persona_id: None,
         lane_bonus: f32::NAN,
         scorer: None,
         expand_query: default_expand_query(),
@@ -118,6 +119,7 @@ fn normalize_applies_defaults_when_missing() {
     assert_eq!(spec.scorer_label(), default_scorer());
     assert_eq!(spec.expand_query_top_k, default_expand_query_top_k());
     assert!(spec.slot_budgets.is_empty());
+    assert!(spec.persona_id.is_none());
 }
 
 #[test]
@@ -144,6 +146,7 @@ fn normalize_trims_and_clamps_inputs() {
             (" Evidence ".to_string(), 999usize),
             ("".to_string(), 5usize),
         ]),
+        persona_id: Some(" persona-alpha ".into()),
         ..base_spec()
     };
     spec.normalize();
@@ -155,6 +158,7 @@ fn normalize_trims_and_clamps_inputs() {
     assert_eq!(spec.expand_query_top_k, 32);
     assert_eq!(spec.slot_budgets.get("evidence"), Some(&256));
     assert!(!spec.slot_budgets.contains_key(""));
+    assert_eq!(spec.persona_id.as_deref(), Some("persona-alpha"));
 }
 
 #[test]
@@ -196,6 +200,7 @@ fn snapshot_reflects_normalized_state() {
     spec.scorer = Some("mmrd".into());
     spec.expand_query = true;
     spec.expand_query_top_k = 6;
+    spec.persona_id = Some(" persona-beta ".into());
     spec.normalize();
 
     let snap = spec.snapshot();
@@ -205,6 +210,7 @@ fn snapshot_reflects_normalized_state() {
     assert_eq!(snap["expand_query_top_k"], json!(6));
     assert_eq!(snap["min_score"], json!(spec.min_score));
     assert_eq!(snap["scorer"], json!(spec.scorer));
+    assert_eq!(snap["persona"], json!(spec.persona_id));
 }
 
 #[test]

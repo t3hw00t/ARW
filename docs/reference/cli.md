@@ -1,5 +1,5 @@
 # CLI Reference
-Updated: 2025-10-16
+Updated: 2025-10-22
 Type: Reference
 
 Microsummary: Commands, subcommands, and flags for `arw-cli` with pointers to tutorials. Beta.
@@ -25,6 +25,9 @@ Commands (summary)
 - `arw-cli capsule audit [--base URL] [--limit N] [--json {--pretty}]` — tail capsule adoption/teardown events through `/admin/policy/capsules/audit`
 - `arw-cli capsule trust list|add|remove|rotate [...]` — inspect and rotate trusted capsule issuers (writes `configs/trust_capsules.json`; `rotate` can trigger `/admin/rpu/reload`)
 - `arw-cli screenshots backfill-ocr [--lang <code>] [--force] [--dry-run]` — regenerate OCR sidecars via `/admin/tools/run`
+- `arw-cli orchestrator catalog [--status STATUS] [--category CAT] [--json {--pretty}]` — inspect the mini-agent catalog served by `/orchestrator/mini_agents`
+- `arw-cli orchestrator start <goal> [--persona-id ID] [--preset NAME] [--diversity F] [--recency F] [--compression F] [--budget-tokens N] [--episodes N] [--project ID] [--topic TOPIC] [--data-json JSON | --data-file FILE] [--follow] [--json {--pretty}]` — launch persona-aware training runs and optionally tail progress via `/state/orchestrator/jobs`
+- `arw-cli orchestrator jobs [--limit N] [--json {--pretty}]` — list recent orchestrator jobs with persona tags, hints, and progress summaries
 - `arw-cli runtime bundles list [--dir PATH] [--install-dir PATH] [--remote] [--json {--pretty}]` — inspect managed runtime bundle catalogs and installed bundles locally or via `/state/runtime/bundles`
 - `arw-cli runtime bundles reload [--json {--pretty}]` — trigger `/admin/runtime/bundles/reload` to rescan bundle catalogs on the server
 - `arw-cli runtime bundles install [--dir PATH] [--remote] [--dest DIR] [--artifact-kind KIND] [--artifact-format FORMAT] [--force] [--dry-run] <bundle-id>...` — download bundle artifacts into the managed runtime directory (defaults to `<state_dir>/runtime/bundles`)

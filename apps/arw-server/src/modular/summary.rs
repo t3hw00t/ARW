@@ -35,6 +35,9 @@ pub fn agent_message_summary(validated: &ValidatedAgentMessage) -> Value {
     });
 
     if let Value::Object(ref mut obj) = summary {
+        if let Some(persona) = validated.message.persona_id.as_ref() {
+            obj.insert("persona_id".into(), json!(persona));
+        }
         match &validated.payload {
             AgentPayload::Chat(chat) => {
                 obj.insert(
@@ -176,6 +179,7 @@ pub fn tool_invocation_summary(validated: &ValidatedToolInvocation) -> Value {
         "requested_by": invocation.requested_by,
         "tool_id": invocation.tool_id,
         "operation_id": invocation.operation_id,
+        "persona_id": invocation.persona_id,
         "input_payload": invocation.input_payload,
         "sandbox_requirements": sandbox_value,
         "policy_scope": policy_scope_value,

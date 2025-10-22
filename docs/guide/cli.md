@@ -3,7 +3,7 @@ title: CLI Guide
 ---
 
 # CLI Guide
-Updated: 2025-10-16
+Updated: 2025-10-22
 Type: How‑to
 
 Goal-oriented tasks using the `arw-cli` binary. This guide shows common commands with copy‑pasteable examples and flags you’re likely to want.
@@ -19,12 +19,22 @@ Basics
   - `arw-cli` — prints version, calls hello, and shows effective paths
 - Ping
   - `arw-cli ping --base http://127.0.0.1:8091` — checks `/healthz` and `/about` and prints a JSON summary; `--admin-token` flag or `ARW_ADMIN_TOKEN` env adds Bearer
+- Smoke checks
+  - `arw-cli smoke triad --base-url https://hub.example --admin-token $ARW_ADMIN_TOKEN` — runs the action/state/events harness against an existing cluster (skip `--base-url` to launch a disposable local server). Persona tagging falls back to `SMOKE_TRIAD_PERSONA`/`TRIAD_SMOKE_PERSONA`/`ARW_PERSONA_ID`, and health probes pick up `TRIAD_SMOKE_AUTH_MODE` (`bearer`, `basic`, `header`) plus companion envs such as `TRIAD_SMOKE_HEALTHZ_BEARER`, `TRIAD_SMOKE_BASIC_USER`, and mutual-TLS files (`TRIAD_SMOKE_TLS_CERT`, `TRIAD_SMOKE_TLS_KEY`, `TRIAD_SMOKE_TLS_CA`).
+  - `arw-cli smoke context --base-url https://hub.example --admin-token $ARW_ADMIN_TOKEN` — reuses the same auth/env handling while exercising the context telemetry pipeline; persona defaults honor `SMOKE_CONTEXT_PERSONA` / `CONTEXT_SMOKE_PERSONA` / `ARW_PERSONA_ID`.
 - Paths
   - `arw-cli paths` — JSON of effective `stateDir/cacheDir/logsDir` etc.
   - `arw-cli paths --pretty` — pretty‑printed JSON
 - Tools
   - `arw-cli tools` — list registered tools (id/version/caps)
   - `arw-cli tools --pretty` — pretty JSON
+- Orchestrator training & catalog
+  - `arw-cli orchestrator catalog --status beta --category governor` — list mini-agents from `/orchestrator/mini_agents` with optional filters; add `--json --pretty` for raw output.
+  - `arw-cli orchestrator start "Improve summarisation" --persona-id persona.alpha --preset balanced --diversity 0.35 --project demo --topic empathy --follow` — launch a persona-tagged training run. The CLI merges overrides, applies validation to hint ranges, and (with `--follow`) polls `/state/orchestrator/jobs` until the job finishes.
+  - `arw-cli orchestrator start ... --data-json '{ "training": { "mode": "guided" } }'` or `--data-file overrides.json` — pre-seed the payload with structured overrides before flag-based tweaks.
+  - `arw-cli orchestrator jobs --limit 100` — show recent orchestrator runs with persona, progress, and training hints. Use `--json`/`--pretty` for machine parsing.
+  - Environment defaults: `ARW_ADMIN_TOKEN` provides admin access; `ARW_PERSONA_ID` fills `--persona-id` when omitted so CLI and launcher share the same persona selection.
+  - Prefer scripting? `just orchestrator-start "Improve summarisation" persona.alpha base=http://127.0.0.1:8091 preset=balanced` builds and runs the same command with `--follow` enabled (ensure `ARW_ADMIN_TOKEN` is exported). Pair with `just orchestrator-jobs json=true` to emit recent runs as pretty JSON.
 - HTTP fetch
   - `arw-cli http fetch https://example.com --wait-timeout-secs 45` — submits `net.http.get`, waits for completion, and prints status/headers plus a UTF-8 preview (decoded from the built-in `http.fetch` head capture). Requires an active `net:http` or `io:egress` lease.
   - `--header "User-Agent: MyBot/1.0"` (repeatable) adds request headers; `--method post --data '{"q":"search"}' --content-type application/json` sends a JSON body; `--preview-kb 128` enlarges the streamed preview head (1–1024 KB) per request; `--connector-id search-searxng` routes through the optional SearXNG metasearch proxy.

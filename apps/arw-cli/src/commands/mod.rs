@@ -1,21 +1,30 @@
-#![allow(unused_imports)]
-
 pub mod admin;
 pub mod capsule;
+pub mod context;
+pub mod events;
 pub mod gate;
 pub mod http;
+pub mod orchestrator;
 pub mod paths;
 pub mod runtime;
+pub mod screenshots;
 pub mod smoke;
+pub mod state;
 pub mod status;
 pub mod tools;
+pub mod util;
 
 pub use admin::AdminCmd;
 pub use capsule::CapCmd;
+pub use context::ContextCmd;
+pub use events::EventsCmd;
 pub use gate::GateCmd;
 pub use http::HttpCmd;
+pub use orchestrator::OrchestratorCmd;
 pub use paths::PathsArgs;
 pub use runtime::RuntimeCmd;
+pub use screenshots::ScreenshotsCmd;
 pub use smoke::SmokeCmd;
+pub use state::StateCmd;
 pub use status::{PingArgs, SpecCmd};
 pub use tools::{ToolsListArgs, ToolsSubcommand};

@@ -12,6 +12,7 @@ pub struct WorkingSetSpec {
     pub diversity_lambda: f32,
     pub min_score: f32,
     pub project: Option<String>,
+    pub persona_id: Option<String>,
     pub lane_bonus: f32,
     pub scorer: Option<String>,
     pub expand_query: bool,
@@ -45,6 +46,14 @@ impl WorkingSetSpec {
             self.min_score = default_min_score();
         }
         self.min_score = self.min_score.clamp(0.0, 1.0);
+        if let Some(id) = self.persona_id.as_mut() {
+            let trimmed = id.trim();
+            if trimmed.is_empty() {
+                self.persona_id = None;
+            } else {
+                *id = trimmed.to_string();
+            }
+        }
         if !self.lane_bonus.is_finite() {
             self.lane_bonus = default_lane_bonus();
         }
@@ -76,6 +85,7 @@ impl WorkingSetSpec {
         snapshot.insert("diversity_lambda".into(), json!(self.diversity_lambda));
         snapshot.insert("min_score".into(), json!(self.min_score));
         snapshot.insert("project".into(), json!(self.project));
+        snapshot.insert("persona".into(), json!(self.persona_id));
         snapshot.insert("lane_bonus".into(), json!(self.lane_bonus));
         snapshot.insert("scorer".into(), json!(self.scorer));
         snapshot.insert("expand_query".into(), json!(self.expand_query));

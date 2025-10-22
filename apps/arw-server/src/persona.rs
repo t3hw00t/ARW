@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashSet};
 use std::env;
 use std::sync::Arc;
 
@@ -10,6 +10,7 @@ use arw_kernel::{
 };
 use chrono::{SecondsFormat, Utc};
 use serde::Serialize;
+use serde_json::{json, Value};
 use tokio::sync::RwLock;
 
 #[derive(Clone)]
@@ -254,6 +255,333 @@ impl VibeMetricsStore {
 
         let mut guard = self.inner.write().await;
         guard.insert(persona_id.to_string(), state);
+    }
+}
+
+const PERSONA_BELIEF_SUMMARY_MAX: usize = 160;
+const PERSONA_BELIEF_LIMIT: usize = 16;
+
+#[derive(Clone, Copy)]
+struct BeliefParams<'a> {
+    persona_id: &'a str,
+    kind: &'a str,
+    slot: &'a str,
+    updated: &'a str,
+    confidence: f32,
+    max_entries: usize,
+}
+
+impl<'a> BeliefParams<'a> {
+    fn new(
+        persona_id: &'a str,
+        kind: &'a str,
+        slot: &'a str,
+        updated: &'a str,
+        confidence: f32,
+        max_entries: usize,
+    ) -> Self {
+        Self {
+            persona_id,
+            kind,
+            slot,
+            updated,
+            confidence,
+            max_entries,
+        }
+    }
+}
+
+struct BeliefBuilder<'a, 'b> {
+    params: BeliefParams<'a>,
+    out: &'b mut Vec<Value>,
+    seen: &'b mut HashSet<String>,
+    added: usize,
+}
+
+impl<'a, 'b> BeliefBuilder<'a, 'b> {
+    fn new(
+        params: BeliefParams<'a>,
+        out: &'b mut Vec<Value>,
+        seen: &'b mut HashSet<String>,
+    ) -> Self {
+        Self {
+            params,
+            out,
+            seen,
+            added: 0,
+        }
+    }
+
+    fn is_full(&self) -> bool {
+        self.added >= self.params.max_entries
+    }
+
+    fn push(&mut self, label: &str, raw_value: &Value) -> bool {
+        if self.is_full() {
+            return false;
+        }
+        let trimmed_label = label.trim();
+        if trimmed_label.is_empty() {
+            return false;
+        }
+        let slug = match slugify_label(trimmed_label) {
+            Some(slug) => slug,
+            None => return false,
+        };
+        let belief_id = format!(
+            "persona::{}::{}::{}",
+            self.params.persona_id, self.params.slot, slug
+        );
+        if !self.seen.insert(belief_id.clone()) {
+            return false;
+        }
+        let summary = truncate_summary(&value_summary(raw_value), PERSONA_BELIEF_SUMMARY_MAX);
+        let belief = json!({
+            "id": belief_id,
+            "persona_id": self.params.persona_id,
+            "lane": "worldview",
+            "slot": self.params.slot,
+            "kind": self.params.kind,
+            "label": trimmed_label,
+            "summary": summary,
+            "value": raw_value.clone(),
+            "confidence": self.params.confidence,
+            "weight": self.params.confidence,
+            "updated": self.params.updated,
+            "source": "persona",
+            "rationale": {
+                "type": self.params.kind,
+                "label": trimmed_label,
+            }
+        });
+        self.out.push(belief);
+        self.added += 1;
+        true
+    }
+}
+
+pub fn entry_world_beliefs(entry: &PersonaEntry) -> Vec<Value> {
+    let mut beliefs = Vec::new();
+    let updated = entry.updated.clone();
+    let base_confidence = entry
+        .calibration
+        .get("confidence")
+        .and_then(|v| v.as_f64())
+        .unwrap_or(0.62) as f32;
+
+    beliefs.push(json!({
+        "id": format!("persona::{}::profile", entry.id),
+        "persona_id": entry.id,
+        "lane": "worldview",
+        "slot": "persona_profile",
+        "kind": "persona_profile",
+        "name": entry.name,
+        "archetype": entry.archetype,
+        "traits": entry.traits,
+        "preferences": entry.preferences,
+        "worldview": entry.worldview,
+        "calibration": entry.calibration,
+        "confidence": base_confidence,
+        "weight": base_confidence,
+        "updated": updated,
+        "source": "persona",
+        "rationale": {
+            "type": "persona_profile",
+            "version": entry.version,
+        }
+    }));
+
+    let mut seen_ids: HashSet<String> =
+        HashSet::from_iter([format!("persona::{}::profile", entry.id)]);
+    let updated_ref = updated.as_str();
+    extract_beliefs_from_value(
+        &entry.traits,
+        BeliefParams::new(
+            entry.id.as_str(),
+            "persona_trait",
+            "persona_trait",
+            updated_ref,
+            (base_confidence * 0.9).clamp(0.05, 1.0),
+            PERSONA_BELIEF_LIMIT,
+        ),
+        &mut beliefs,
+        &mut seen_ids,
+    );
+    extract_beliefs_from_value(
+        &entry.preferences,
+        BeliefParams::new(
+            entry.id.as_str(),
+            "persona_preference",
+            "persona_preference",
+            updated_ref,
+            (base_confidence * 0.85).clamp(0.05, 1.0),
+            PERSONA_BELIEF_LIMIT,
+        ),
+        &mut beliefs,
+        &mut seen_ids,
+    );
+    extract_beliefs_from_value(
+        &entry.worldview,
+        BeliefParams::new(
+            entry.id.as_str(),
+            "persona_worldview",
+            "persona_worldview",
+            updated_ref,
+            base_confidence,
+            PERSONA_BELIEF_LIMIT,
+        ),
+        &mut beliefs,
+        &mut seen_ids,
+    );
+    beliefs
+}
+
+pub async fn load_world_beliefs(service: &PersonaService, persona_id: &str) -> Result<Vec<Value>> {
+    match service.get_entry(persona_id.to_string()).await? {
+        Some(entry) => Ok(entry_world_beliefs(&entry)),
+        None => Ok(Vec::new()),
+    }
+}
+
+pub fn merge_world_beliefs(base: &Arc<[Value]>, extras: Vec<Value>) -> Arc<[Value]> {
+    if extras.is_empty() {
+        return base.clone();
+    }
+    let mut merged: Vec<Value> = Vec::with_capacity(base.len() + extras.len());
+    let mut seen: HashSet<String> = HashSet::new();
+    for belief in base.iter() {
+        if let Some(id) = belief.get("id").and_then(|v| v.as_str()) {
+            seen.insert(id.to_string());
+        }
+        merged.push(belief.clone());
+    }
+    for belief in extras {
+        if let Some(id) = belief.get("id").and_then(|v| v.as_str()) {
+            if !seen.insert(id.to_string()) {
+                continue;
+            }
+        }
+        merged.push(belief);
+    }
+    Arc::from(merged)
+}
+
+fn extract_beliefs_from_value(
+    value: &Value,
+    params: BeliefParams<'_>,
+    out: &mut Vec<Value>,
+    seen: &mut HashSet<String>,
+) {
+    let mut builder = BeliefBuilder::new(params, out, seen);
+    match value {
+        Value::Object(map) => {
+            for (label, val) in map {
+                if builder.is_full() {
+                    break;
+                }
+                builder.push(label, val);
+            }
+        }
+        Value::Array(items) => {
+            for (idx, val) in items.iter().enumerate() {
+                if builder.is_full() {
+                    break;
+                }
+                let label = val
+                    .get("label")
+                    .and_then(|v| v.as_str())
+                    .or_else(|| val.get("name").and_then(|v| v.as_str()))
+                    .map(|s| s.to_string())
+                    .unwrap_or_else(|| format!("{} {}", params.slot.replace('_', " "), idx + 1));
+                builder.push(label.as_str(), val);
+            }
+        }
+        other => {
+            if !builder.is_full() {
+                let label = params.kind.replace('_', " ");
+                builder.push(&label, other);
+            }
+        }
+    }
+}
+
+fn value_summary(value: &Value) -> String {
+    match value {
+        Value::String(s) => s.clone(),
+        Value::Number(n) => n.to_string(),
+        Value::Bool(b) => b.to_string(),
+        Value::Null => "null".to_string(),
+        Value::Array(items) => {
+            if items.is_empty() {
+                "[]".to_string()
+            } else {
+                let mut parts: Vec<String> = Vec::new();
+                for item in items.iter().take(4) {
+                    parts.push(value_summary(item));
+                }
+                if items.len() > 4 {
+                    parts.push("…".into());
+                }
+                parts.join(", ")
+            }
+        }
+        Value::Object(map) => {
+            if map.is_empty() {
+                "{}".to_string()
+            } else {
+                let mut parts: Vec<String> = Vec::new();
+                for (idx, (key, val)) in map.iter().enumerate() {
+                    if idx >= 4 {
+                        parts.push("…".into());
+                        break;
+                    }
+                    parts.push(format!("{key}: {}", value_summary(val)));
+                }
+                parts.join(", ")
+            }
+        }
+    }
+}
+
+fn truncate_summary(input: &str, max_chars: usize) -> String {
+    if input.chars().count() <= max_chars {
+        return input.to_string();
+    }
+    let mut out = String::new();
+    for (idx, ch) in input.chars().enumerate() {
+        if idx >= max_chars {
+            out.push('…');
+            break;
+        }
+        out.push(ch);
+    }
+    if !out.ends_with('…') {
+        out.push('…');
+    }
+    out
+}
+
+fn slugify_label(label: &str) -> Option<String> {
+    let mut slug = String::new();
+    let mut prev_dash = false;
+    for ch in label.chars() {
+        if ch.is_ascii_alphanumeric() {
+            slug.push(ch.to_ascii_lowercase());
+            prev_dash = false;
+        } else if matches!(ch, '-' | '_' | ' ' | ':' | '/' | '.') {
+            if !prev_dash && !slug.is_empty() {
+                slug.push('-');
+                prev_dash = true;
+            }
+        } else {
+            prev_dash = false;
+        }
+    }
+    let slug = slug.trim_matches('-').to_string();
+    if slug.is_empty() {
+        None
+    } else {
+        Some(slug)
     }
 }
 

@@ -28,6 +28,7 @@ const SELECT_COLUMN_LIST: &[&str] = &[
     "updated",
     "agent_id",
     "project_id",
+    "persona_id",
     "text",
     "durability",
     "trust",
@@ -98,6 +99,7 @@ pub struct MemoryInsertArgs<'a> {
     pub prob: Option<f64>,
     pub agent_id: Option<&'a str>,
     pub project_id: Option<&'a str>,
+    pub persona_id: Option<&'a str>,
     pub text: Option<&'a str>,
     pub durability: Option<&'a str>,
     pub trust: Option<f64>,
@@ -127,6 +129,9 @@ impl<'a> MemoryInsertArgs<'a> {
         if let Some(project) = self.project_id {
             hasher.update(project.as_bytes());
         }
+        if let Some(persona) = self.persona_id {
+            hasher.update(persona.as_bytes());
+        }
         if let Some(text) = self.text {
             hasher.update(text.as_bytes());
         }
@@ -151,6 +156,7 @@ pub struct MemoryInsertOwned {
     pub prob: Option<f64>,
     pub agent_id: Option<String>,
     pub project_id: Option<String>,
+    pub persona_id: Option<String>,
     pub text: Option<String>,
     pub durability: Option<String>,
     pub trust: Option<f64>,
@@ -179,6 +185,7 @@ impl MemoryInsertOwned {
             prob: self.prob,
             agent_id: self.agent_id.as_deref(),
             project_id: self.project_id.as_deref(),
+            persona_id: self.persona_id.as_deref(),
             text: self.text.as_deref(),
             durability: self.durability.as_deref(),
             trust: self.trust,
@@ -281,6 +288,7 @@ impl<'c> MemoryStore<'c> {
               prob REAL,
               agent_id TEXT,
               project_id TEXT,
+              persona_id TEXT,
               text TEXT,
               durability TEXT,
               trust REAL,
@@ -300,6 +308,7 @@ impl<'c> MemoryStore<'c> {
             CREATE INDEX IF NOT EXISTS idx_mem_agent_project ON memory_records(agent_id, project_id, updated DESC);
             CREATE INDEX IF NOT EXISTS idx_mem_updated ON memory_records(updated DESC);
             CREATE INDEX IF NOT EXISTS idx_mem_lane_updated ON memory_records(lane, updated DESC);
+            CREATE INDEX IF NOT EXISTS idx_mem_persona_updated ON memory_records(persona_id, updated DESC);
 
             CREATE VIRTUAL TABLE IF NOT EXISTS memory_fts USING fts5(
               id UNINDEXED,
@@ -326,6 +335,7 @@ impl<'c> MemoryStore<'c> {
             "ALTER TABLE memory_records ADD COLUMN embed_hint TEXT",
             "ALTER TABLE memory_records ADD COLUMN agent_id TEXT",
             "ALTER TABLE memory_records ADD COLUMN project_id TEXT",
+            "ALTER TABLE memory_records ADD COLUMN persona_id TEXT",
             "ALTER TABLE memory_records ADD COLUMN text TEXT",
             "ALTER TABLE memory_records ADD COLUMN durability TEXT",
             "ALTER TABLE memory_records ADD COLUMN trust REAL",
@@ -338,6 +348,7 @@ impl<'c> MemoryStore<'c> {
             "ALTER TABLE memory_records ADD COLUMN extra TEXT",
             "CREATE INDEX IF NOT EXISTS idx_mem_updated ON memory_records(updated DESC)",
             "CREATE INDEX IF NOT EXISTS idx_mem_lane_updated ON memory_records(lane, updated DESC)",
+            "CREATE INDEX IF NOT EXISTS idx_mem_persona_updated ON memory_records(persona_id, updated DESC)",
         ] {
             let _ = conn.execute(ddl, []);
         }
@@ -374,8 +385,8 @@ impl<'c> MemoryStore<'c> {
         self.conn.execute(
             "INSERT OR REPLACE INTO memory_records(
                 id,lane,kind,key,value,tags,hash,embed,embed_blob,embed_hint,score,prob,
-                agent_id,project_id,text,durability,trust,privacy,ttl_s,keywords,entities,source,links,extra,created,updated
-            ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                agent_id,project_id,persona_id,text,durability,trust,privacy,ttl_s,keywords,entities,source,links,extra,created,updated
+            ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             params![
                 id,
                 args.lane,
@@ -391,6 +402,7 @@ impl<'c> MemoryStore<'c> {
                 args.prob,
                 args.agent_id,
                 args.project_id,
+                args.persona_id,
                 args.text,
                 args.durability,
                 args.trust,
@@ -458,6 +470,9 @@ impl<'c> MemoryStore<'c> {
         }
         if let Some(project) = args.project_id {
             map.insert("project_id".into(), json!(project));
+        }
+        if let Some(persona) = args.persona_id {
+            map.insert("persona_id".into(), json!(persona));
         }
         if let Some(text) = args.text {
             map.insert("text".into(), json!(text));
@@ -1232,40 +1247,43 @@ fn row_to_value_common(row: &rusqlite::Row<'_>) -> Result<Value> {
     if let Some(project) = row.get::<_, Option<String>>(15)? {
         map.insert("project_id".into(), json!(project));
     }
-    if let Some(text) = row.get::<_, Option<String>>(16)? {
+    if let Some(persona) = row.get::<_, Option<String>>(16)? {
+        map.insert("persona_id".into(), json!(persona));
+    }
+    if let Some(text) = row.get::<_, Option<String>>(17)? {
         map.insert("text".into(), json!(text));
     }
-    if let Some(durability) = row.get::<_, Option<String>>(17)? {
+    if let Some(durability) = row.get::<_, Option<String>>(18)? {
         map.insert("durability".into(), json!(durability));
     }
-    if let Some(trust) = row.get::<_, Option<f64>>(18)? {
+    if let Some(trust) = row.get::<_, Option<f64>>(19)? {
         map.insert("trust".into(), json!(trust));
     }
-    if let Some(privacy) = row.get::<_, Option<String>>(19)? {
+    if let Some(privacy) = row.get::<_, Option<String>>(20)? {
         map.insert("privacy".into(), json!(privacy));
     }
-    if let Some(ttl) = row.get::<_, Option<i64>>(20)? {
+    if let Some(ttl) = row.get::<_, Option<i64>>(21)? {
         map.insert("ttl_s".into(), json!(ttl));
     }
 
     let keywords_value = row
-        .get::<_, Option<String>>(21)?
+        .get::<_, Option<String>>(22)?
         .map(|s| split_list(&s))
         .unwrap_or_default();
     if !keywords_value.is_empty() {
         map.insert("keywords".into(), Value::Array(keywords_value));
     }
 
-    if let Some(entities) = parse_json_string(row.get::<_, Option<String>>(22)?) {
+    if let Some(entities) = parse_json_string(row.get::<_, Option<String>>(23)?) {
         map.insert("entities".into(), entities);
     }
-    if let Some(source) = parse_json_string(row.get::<_, Option<String>>(23)?) {
+    if let Some(source) = parse_json_string(row.get::<_, Option<String>>(24)?) {
         map.insert("source".into(), source);
     }
-    if let Some(links) = parse_json_string(row.get::<_, Option<String>>(24)?) {
+    if let Some(links) = parse_json_string(row.get::<_, Option<String>>(25)?) {
         map.insert("links".into(), links);
     }
-    if let Some(extra) = parse_json_string(row.get::<_, Option<String>>(25)?) {
+    if let Some(extra) = parse_json_string(row.get::<_, Option<String>>(26)?) {
         map.insert("extra".into(), extra);
     }
 
@@ -1376,6 +1394,7 @@ mod tests {
             prob: None,
             agent_id: None,
             project_id: None,
+            persona_id: None,
             text: None,
             durability: None,
             trust: None,
@@ -1407,6 +1426,7 @@ mod tests {
             prob: Some(0.8),
             agent_id: None,
             project_id: None,
+            persona_id: None,
             text: None,
             durability: None,
             trust: None,
@@ -1442,6 +1462,7 @@ mod tests {
             prob: None,
             agent_id: None,
             project_id: None,
+            persona_id: None,
             text: None,
             durability: None,
             trust: None,
@@ -1482,6 +1503,7 @@ mod tests {
             prob: None,
             agent_id: None,
             project_id: None,
+            persona_id: None,
             text: None,
             durability: None,
             trust: None,
@@ -1515,6 +1537,7 @@ mod tests {
             prob: None,
             agent_id: None,
             project_id: None,
+            persona_id: None,
             text: None,
             durability: None,
             trust: None,

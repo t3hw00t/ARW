@@ -467,6 +467,8 @@ pub struct ModularAgentMessage {
     pub intent: String,
     pub payload: Value,
     #[serde(default)]
+    pub persona_id: Option<String>,
+    #[serde(default)]
     pub context_refs: Vec<String>,
     #[serde(default)]
     pub evidence_ids: Vec<String>,
@@ -599,6 +601,8 @@ pub struct ModularToolInvocation {
     pub sandbox_requirements: SandboxRequirements,
     pub evidence_id: String,
     pub policy_scope: PolicyScope,
+    #[serde(default)]
+    pub persona_id: Option<String>,
     #[serde(default)]
     pub result: Option<InvocationResult>,
     #[serde(default)]

@@ -3061,6 +3061,7 @@ ARW.personaPanel = (() => {
       this.initialized = false;
       this._disposed = false;
       this.disabled = !this.root || !this.metrics || !this.history;
+      this._changeListeners = new Set();
       this._handleSelectChange = this.handleSelectChange.bind(this);
       this._handleRefresh = this.handleRefreshClick.bind(this);
       this._handleSave = this.handleSaveClick.bind(this);
@@ -3088,6 +3089,7 @@ ARW.personaPanel = (() => {
       if (this.refreshBtn) this.refreshBtn.removeEventListener('click', this._handleRefresh);
       if (this.saveBtn) this.saveBtn.removeEventListener('click', this._handleSave);
       if (this.applyAll) this.applyAll.removeEventListener('click', this._handleApplyAll);
+      if (this._changeListeners) this._changeListeners.clear();
     }
 
     setBusy(flag) {
@@ -3158,6 +3160,27 @@ ARW.personaPanel = (() => {
       this.setRetentionInfo(null);
     }
 
+    currentPersonaId() {
+      return this.selectedId;
+    }
+
+    onPersonaChange(handler) {
+      if (typeof handler !== 'function') return () => {};
+      this._changeListeners.add(handler);
+      return () => this._changeListeners.delete(handler);
+    }
+
+    _emitChange(entry) {
+      if (!this._changeListeners || this._changeListeners.size === 0) return;
+      for (const listener of Array.from(this._changeListeners)) {
+        try {
+          listener(this.selectedId, entry);
+        } catch (err) {
+          console.warn('persona change listener failed', err);
+        }
+      }
+    }
+
     async reload(options = {}) {
       if (this.disabled) return Promise.resolve();
       return this.loadList(options);
@@ -3182,12 +3205,13 @@ ARW.personaPanel = (() => {
         }
         if (!items.length) {
           this.selectedId = null;
-          this.showEmpty('No personas found. Enable ARW_PERSONA_ENABLE=1 and seed a persona to begin telemetry.');
-          this.clearDetails();
-          this.setBusy(true);
-          this.setStatus('');
-          return;
-        }
+        this.showEmpty('No personas found. Enable ARW_PERSONA_ENABLE=1 and seed a persona to begin telemetry.');
+        this.clearDetails();
+        this.setBusy(true);
+        this.setStatus('');
+        this._emitChange(null);
+        return;
+      }
         this.showEmpty('');
         const next = previousId && items.some((item) => item.id === previousId) ? previousId : items[0].id;
         if (this.select) this.select.value = next;
@@ -3228,6 +3252,7 @@ ARW.personaPanel = (() => {
       if (this.enable) this.enable.disabled = controlsDisabled;
       if (this.saveBtn) this.saveBtn.disabled = controlsDisabled;
       if (this.applyAll) this.applyAll.disabled = controlsDisabled || !this.items.length;
+      this._emitChange(entry);
     }
 
     async loadDetails(id, options = {}) {

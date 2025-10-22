@@ -29,6 +29,7 @@ Assistant quickstart → [Agent Onboarding](docs/ai/AGENT_ONBOARDING.md)
 - [Agent Onboarding](docs/ai/AGENT_ONBOARDING.md) - Workflow primer for assistants and new contributors.
 - [Quickstart](docs/guide/quickstart.md) - Run the unified server locally.
 - [Runtime Quickstart](docs/guide/runtime_quickstart.md) - Non-technical checklist for preparing managed runtimes (zero-auth mirrors + checksum validation).
+- [Orchestrator CLI](docs/guide/orchestrator_cli.md) - Catalog, launch, and monitor persona-aware training runs from the terminal.
 - [Repo Map](docs/ai/REPO_MAP.md) - Directory overview for retrieval and navigation.
 - [Documentation Home](docs/index.md) - Product overview, guides, and reference docs.
 

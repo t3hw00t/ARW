@@ -298,6 +298,8 @@ pub(crate) struct OrchestratorStartReq {
     #[serde(default)]
     #[allow(dead_code)]
     pub budget: Option<serde_json::Value>,
+    #[serde(default)]
+    pub persona_id: Option<String>,
 }
 
 /// Start a training job that results in a suggested Logic Unit (admin).
@@ -325,6 +327,27 @@ pub async fn orchestrator_start_training(
     }
     let goal = req.goal.clone();
     let data = req.data.clone();
+    let persona_req = req.persona_id.as_ref().and_then(|value| {
+        let trimmed = value.trim();
+        if trimmed.is_empty() {
+            None
+        } else {
+            Some(trimmed.to_string())
+        }
+    });
+    let persona_data = data
+        .as_ref()
+        .and_then(|value| value.get("persona_id").or_else(|| value.get("persona")))
+        .and_then(|v| v.as_str())
+        .and_then(|s| {
+            let trimmed = s.trim();
+            if trimmed.is_empty() {
+                None
+            } else {
+                Some(trimmed.to_string())
+            }
+        });
+    let persona_id = persona_req.or(persona_data);
 
     let parse_hint_number = |value: Option<&serde_json::Value>| -> Option<f64> {
         value.and_then(|v| match v {
@@ -348,9 +371,21 @@ pub async fn orchestrator_start_training(
 
     let mut training_meta_map = serde_json::Map::new();
     training_meta_map.insert("goal".into(), serde_json::Value::String(goal.clone()));
+    if let Some(persona) = persona_id.as_ref() {
+        training_meta_map.insert(
+            "persona_id".into(),
+            serde_json::Value::String(persona.clone()),
+        );
+    }
     let mut job_data_map = serde_json::Map::new();
     if let Some(ref raw) = data {
         job_data_map.insert("submitted".into(), raw.clone());
+    }
+    if let Some(persona) = persona_id.as_ref() {
+        job_data_map.insert(
+            "persona_id".into(),
+            serde_json::Value::String(persona.clone()),
+        );
     }
 
     let (preset_value, diversity_hint, recency_hint, compression_hint, mode_hint) = data
@@ -504,6 +539,7 @@ pub async fn orchestrator_start_training(
     let training_meta_for_hints = training_meta_map.clone();
     let goal_for_actions = goal.clone();
     let preset_for_actions = preset_value.clone();
+    let persona_for_actions = persona_id.clone();
     tokio::spawn(async move {
         let steps = 5;
         for stage in 1..=steps {
@@ -550,6 +586,12 @@ pub async fn orchestrator_start_training(
             hints_map.insert(
                 "training".into(),
                 serde_json::Value::Object(training_meta_for_hints.clone()),
+            );
+        }
+        if let Some(persona) = persona_for_actions.as_ref() {
+            hints_map.insert(
+                "persona_id".into(),
+                serde_json::Value::String(persona.clone()),
             );
         }
         let hints_value = serde_json::Value::Object(hints_map.clone());
@@ -601,7 +643,7 @@ pub async fn orchestrator_start_training(
             warn!(target: "arw::orchestrator", error = %err, "failed to insert modular lease");
         } else {
             let agent_action_id = Uuid::new_v4().to_string();
-            let modular_payload = json!({
+            let mut modular_payload = json!({
                 "agent_id": "orchestrator.trainer",
                 "turn_id": job_id_clone,
                 "intent": "orchestrator.summary",
@@ -622,6 +664,11 @@ pub async fn orchestrator_start_training(
                     "capabilities": ["modular:write"],
                 }
             });
+            if let Some(persona) = persona_for_actions.as_ref() {
+                if let serde_json::Value::Object(ref mut obj) = modular_payload {
+                    obj.insert("persona_id".into(), json!(persona));
+                }
+            }
             if let Err(err) = state2
                 .kernel()
                 .insert_action_async(
@@ -645,7 +692,7 @@ pub async fn orchestrator_start_training(
             }
 
             let tool_action_id = Uuid::new_v4().to_string();
-            let modular_tool_payload = json!({
+            let mut modular_tool_payload = json!({
                 "invocation_id": format!("invoke-{}", job_id_clone),
                 "requested_by": "orchestrator.trainer",
                 "tool_id": "training.job",
@@ -668,6 +715,11 @@ pub async fn orchestrator_start_training(
                 },
                 "evidence_id": lu_id,
             });
+            if let Some(persona) = persona_for_actions.as_ref() {
+                if let serde_json::Value::Object(ref mut obj) = modular_tool_payload {
+                    obj.insert("persona_id".into(), json!(persona));
+                }
+            }
             if let Err(err) = state2
                 .kernel()
                 .insert_action_async(

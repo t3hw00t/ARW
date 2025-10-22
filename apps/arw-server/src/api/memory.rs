@@ -519,6 +519,8 @@ pub struct MemoryApplyReq {
     #[serde(default)]
     pub project_id: Option<String>,
     #[serde(default)]
+    pub persona_id: Option<String>,
+    #[serde(default)]
     pub durability: Option<String>,
     #[serde(default)]
     pub trust: Option<f64>,
@@ -585,6 +587,7 @@ pub async fn admin_memory_apply(
         text: req.text,
         agent_id: req.agent_id,
         project_id: req.project_id,
+        persona_id: req.persona_id,
         durability: req.durability,
         trust: req.trust,
         privacy: req.privacy,

@@ -64,4 +64,32 @@ run_cli() {
   exit 1
 }
 
-run_cli "$@"
+persona_env="${SMOKE_CONTEXT_PERSONA:-${CONTEXT_SMOKE_PERSONA:-${ARW_PERSONA_ID:-}}}"
+extra_args=()
+base_env="${SMOKE_CONTEXT_BASE_URL:-${CONTEXT_SMOKE_BASE_URL:-${TRIAD_SMOKE_BASE_URL:-}}}"
+if [[ -n "$base_env" ]]; then
+  base_flag_present=0
+  for arg in "$@"; do
+    if [[ "$arg" == "--base-url" || "$arg" == --base-url=* ]]; then
+      base_flag_present=1
+      break
+    fi
+  done
+  if [[ $base_flag_present -eq 0 ]]; then
+    extra_args+=(--base-url "$base_env")
+  fi
+fi
+if [[ -n "$persona_env" ]]; then
+  persona_flag_present=0
+  for arg in "$@"; do
+    if [[ "$arg" == "--persona-id" || "$arg" == --persona-id=* ]]; then
+      persona_flag_present=1
+      break
+    fi
+  done
+  if [[ $persona_flag_present -eq 0 ]]; then
+    extra_args+=(--persona-id "$persona_env")
+  fi
+fi
+
+run_cli "${extra_args[@]}" "$@"
