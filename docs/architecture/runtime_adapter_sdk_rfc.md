@@ -3,7 +3,7 @@ title: Runtime Adapter SDK RFC (Draft)
 ---
 
 # Runtime Adapter SDK RFC (Draft)
-Updated: 2025-10-23
+Updated: 2025-10-22
 Status: Draft
 Type: Proposal
 
