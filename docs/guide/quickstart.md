@@ -4,7 +4,7 @@ title: Quickstart
 
 # Quickstart
 
-Updated: 2025-10-23
+Updated: 2025-10-24
 Type: Tutorial
 
 Run the unified ARW server locally in minutes. The architecture centres on the `/actions` → `/events` → `/state/*` triad; enable `ARW_DEBUG=1` to serve the browser debug panels.
@@ -113,7 +113,7 @@ The build helpers default to a headless profile that skips the Tauri launcher. A
 
 Prefer `make build` / `just build` when you want the same headless defaults in common automation. Use `make build-launcher` or `just build-launcher` to opt into compiling the desktop UI alongside the server.
 
-The helpers fall back to `cargo test --workspace --locked` when `cargo-nextest` is missing and explain how to install it for faster runs.
+The helpers fall back to `cargo test --workspace --locked -- --test-threads=1` when `cargo-nextest` is missing and explain how to install it for faster runs. Both paths pin test concurrency to a single thread so the shared kernel fixtures stay reliable.
 
 Need a lightweight docs lint while iterating? Run:
 

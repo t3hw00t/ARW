@@ -4,7 +4,7 @@ title: CI & Releases
 
 # CI & Releases
 
-Updated: 2025-10-16
+Updated: 2025-10-24
 Type: Reference
 
 ## Continuous Integration
@@ -64,7 +64,7 @@ cd Agent_Hub
 # 1) Build, lint, test
 cargo build --workspace --all-targets --locked
 cargo clippy --workspace --all-targets -- -D warnings
-cargo test --workspace
+cargo test --workspace -- --test-threads=1
 
 # 2) Supply-chain checks (advisories/licenses/sources/bans)
 cargo install cargo-deny --locked # once

@@ -1,3 +1,4 @@
+use std::cmp::Ordering;
 use std::fmt::Write as _;
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
@@ -251,6 +252,13 @@ fn summarize_coverage_section(out: &mut String, coverage: Option<&JsonValue>) {
             let _ = writeln!(out, "  Scope: {}", scope);
         }
 
+        if let Some(bias) = latest
+            .get("persona_bias")
+            .and_then(format_persona_bias_summary)
+        {
+            let _ = writeln!(out, "  Persona bias: {}", bias);
+        }
+
         if let Some(reasons) = latest.get("reasons").and_then(JsonValue::as_array) {
             let mut labels: Vec<String> = reasons
                 .iter()
@@ -376,6 +384,13 @@ fn summarize_recall_section(out: &mut String, recall: Option<&JsonValue>) {
             if at_risk { " · investigate" } else { "" }
         );
         let _ = writeln!(out, "  Status: {}", status);
+
+        if let Some(bias) = latest
+            .get("persona_bias")
+            .and_then(format_persona_bias_summary)
+        {
+            let _ = writeln!(out, "  Persona bias: {}", bias);
+        }
 
         if let Some(components) = latest.get("components").and_then(JsonValue::as_object) {
             if let Some(value) = components
@@ -524,8 +539,77 @@ fn summarize_working_set_section(out: &mut String, assembled: Option<&JsonValue>
                 }
             }
         }
+        if let Some(bias) = working
+            .get("persona_bias")
+            .or_else(|| obj.get("persona_bias"))
+            .and_then(format_persona_bias_summary)
+        {
+            let _ = writeln!(out, "  Persona bias: {}", bias);
+        }
     } else {
         let _ = writeln!(out, "  (working set summary unavailable)");
+    }
+}
+
+fn format_persona_bias_summary(bias: &JsonValue) -> Option<String> {
+    let obj = bias.as_object()?;
+    let mut sections: Vec<String> = Vec::new();
+    if let Some(lanes) = obj.get("lane_priorities").and_then(JsonValue::as_object) {
+        let mut entries: Vec<(String, f64)> = lanes
+            .iter()
+            .filter_map(|(lane, value)| value.as_f64().map(|weight| (lane.clone(), weight)))
+            .collect();
+        entries.retain(|(_, weight)| weight.is_finite() && weight.abs() >= f64::EPSILON);
+        if !entries.is_empty() {
+            entries.sort_by(|a, b| {
+                b.1.partial_cmp(&a.1)
+                    .unwrap_or(Ordering::Equal)
+                    .then_with(|| a.0.cmp(&b.0))
+            });
+            let formatted = entries
+                .into_iter()
+                .map(|(lane, weight)| format!("{}:{:+.2}", format_lane_label(&lane), weight))
+                .collect::<Vec<_>>()
+                .join(" ");
+            if !formatted.is_empty() {
+                sections.push(format!("lanes {}", formatted));
+            }
+        }
+    }
+    if let Some(slots) = obj.get("slot_overrides").and_then(JsonValue::as_object) {
+        let mut entries: Vec<(String, u64)> = slots
+            .iter()
+            .filter_map(|(slot, value)| value.as_u64().map(|limit| (slot.clone(), limit)))
+            .collect();
+        if !entries.is_empty() {
+            entries.sort_by(|a, b| a.0.cmp(&b.0));
+            let formatted = entries
+                .into_iter()
+                .map(|(slot, limit)| format!("{}≤{}", format_slot_name(&slot), limit))
+                .collect::<Vec<_>>()
+                .join(" ");
+            if !formatted.is_empty() {
+                sections.push(format!("slots {}", formatted));
+            }
+        }
+    }
+    if let Some(delta) = obj.get("min_score_delta").and_then(JsonValue::as_f64) {
+        if delta.is_finite() && delta.abs() >= f64::EPSILON {
+            sections.push(format!("min_score {:+.2}", delta));
+        }
+    }
+    if sections.is_empty() {
+        None
+    } else {
+        Some(sections.join(" · "))
+    }
+}
+
+fn format_lane_label(lane: &str) -> String {
+    if lane.trim() == "*" {
+        "any".to_string()
+    } else {
+        clean_text(&lane.replace(['_', '-'], " "))
     }
 }
 
@@ -604,17 +688,22 @@ mod tests {
                         "project": "alpha",
                         "query": "sprint review",
                         "reasons": ["slot_underfilled:seeds", "lane_gap"],
-                        "summary": {
-                            "slots": {
-                                "counts": {"seeds": 2, "drafts": 1},
-                                "budgets": {"seeds": 4}
-                            }
-                        }
-                    },
-                    "needs_more_ratio": 0.4,
-                    "recent": [1, 2, 3],
-                    "top_reasons": [
-                        {"reason": "slot_underfilled:seeds", "count": 3},
+                "summary": {
+                    "slots": {
+                        "counts": {"seeds": 2, "drafts": 1},
+                        "budgets": {"seeds": 4}
+                    }
+                },
+                "persona_bias": {
+                    "lane_priorities": {"semantic": 0.2, "episodic": 0.1},
+                    "slot_overrides": {"evidence": 3},
+                    "min_score_delta": 0.05
+                }
+            },
+            "needs_more_ratio": 0.4,
+            "recent": [1, 2, 3],
+            "top_reasons": [
+                {"reason": "slot_underfilled:seeds", "count": 3},
                         {"reason": "lane_gap", "count": 1}
                     ],
                     "top_slots": [
@@ -635,25 +724,30 @@ mod tests {
                             "slots": {"seeds": 0.7, "drafts": 0.2}
                         }
                     },
-                    "avg_score": 0.33,
-                    "at_risk_ratio": 0.4,
-                    "sampled": 5,
-                    "levels": [
-                        {"level": "high", "count": 2},
-                        {"level": "medium", "count": 3}
-                    ],
-                    "top_slots": [
-                        {"slot": "seeds", "avg_gap": 0.7, "max_gap": 0.9, "samples": 3}
-                    ]
+                "avg_score": 0.33,
+                "at_risk_ratio": 0.4,
+                "sampled": 5,
+                "levels": [
+                    {"level": "high", "count": 2},
+                    {"level": "medium", "count": 3}
+                ],
+                "top_slots": [
+                    {"slot": "seeds", "avg_gap": 0.7, "max_gap": 0.9, "samples": 3}
+                ]
+            },
+            "assembled": {
+                "project": "alpha",
+                "query": "sprint review",
+                "persona_bias": {
+                    "lane_priorities": {"semantic": 0.2, "episodic": 0.1},
+                    "slot_overrides": {"evidence": 3},
+                    "min_score_delta": 0.05
                 },
-                "assembled": {
-                    "project": "alpha",
-                    "query": "sprint review",
-                    "working_set": {
-                        "counts": {"items": 8, "seeds": 3, "expanded": 9},
-                        "final_spec": {
-                            "lanes": ["research", "analysis"],
-                            "slot_budgets": {"seeds": 4, "drafts": 2}
+                "working_set": {
+                    "counts": {"items": 8, "seeds": 3, "expanded": 9},
+                    "final_spec": {
+                        "lanes": ["research", "analysis"],
+                        "slot_budgets": {"seeds": 4, "drafts": 2}
                         }
                     }
                 }
@@ -667,6 +761,7 @@ mod tests {
         assert!(summary.contains("avg score"));
         assert!(summary.contains("Working set:"));
         assert!(summary.contains("Counts: items"));
+        assert!(summary.contains("Persona bias: lanes semantic:+0.20 episodic:+0.10"));
     }
 
     #[test]

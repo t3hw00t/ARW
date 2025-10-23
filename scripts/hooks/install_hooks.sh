@@ -54,10 +54,10 @@ else
 fi
 if command -v cargo-nextest >/dev/null 2>&1; then
   echo "[pre-commit] cargo nextest run"
-  cargo nextest run --workspace
+  cargo nextest run --workspace --test-threads=1
 else
   echo "[pre-commit] cargo test"
-  cargo test --workspace --locked
+  cargo test --workspace --locked -- --test-threads=1
 fi
 
 # Docs: always validate registry-generated docs are up-to-date when

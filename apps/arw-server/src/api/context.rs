@@ -63,6 +63,8 @@ pub(crate) struct AssembleReq {
     #[serde(default)]
     pub slot_budgets: Option<BTreeMap<String, usize>>,
     #[serde(default)]
+    pub lane_priorities: Option<BTreeMap<String, f32>>,
+    #[serde(default)]
     pub persona: Option<String>,
 }
 
@@ -340,6 +342,19 @@ fn build_context_response(params: ContextResponseInputs<'_>) -> Value {
     });
     working["iterations"] = Value::Array(iterations_meta);
     working["final_spec"] = final_spec.snapshot();
+    let mut persona_bias_snapshot: Option<Value> = None;
+    if let Some(working_obj) = working.as_object_mut() {
+        if let Some(iterations) = working_obj.get("iterations").and_then(Value::as_array) {
+            if let Some(found) = iterations
+                .iter()
+                .rev()
+                .find_map(|entry| entry.get("persona_bias").cloned())
+            {
+                working_obj.insert("persona_bias".into(), found.clone());
+                persona_bias_snapshot = Some(found);
+            }
+        }
+    }
     if include_sources || debug {
         working["seeds"] = json!(clone_shared_values(&seeds));
         working["expanded"] = json!(clone_shared_values(&expanded));
@@ -377,6 +392,9 @@ fn build_context_response(params: ContextResponseInputs<'_>) -> Value {
         }
         if let Some(preview) = preview {
             obj.insert("context_preview".into(), json!(preview));
+        }
+        if let Some(bias) = persona_bias_snapshot {
+            obj.insert("persona_bias".into(), bias);
         }
     }
 
@@ -461,6 +479,7 @@ mod context_response_tests {
             project: None,
             persona_id: None,
             lane_bonus: 0.0,
+            lane_priorities: BTreeMap::new(),
             scorer: Some("mmr".into()),
             expand_query: false,
             expand_query_top_k: 1,
@@ -479,6 +498,7 @@ mod context_response_tests {
             threshold_hits: 1,
             total_candidates: 2,
             lane_counts: BTreeMap::new(),
+            lane_priorities: BTreeMap::new(),
             slot_counts: BTreeMap::new(),
             slot_budgets: BTreeMap::new(),
             min_score: 0.2,
@@ -506,6 +526,7 @@ mod context_response_tests {
             max_iterations: None,
             corr_id: None,
             slot_budgets: None,
+            lane_priorities: None,
             persona: None,
         }
     }
@@ -626,6 +647,7 @@ fn build_spec(req: &AssembleReq) -> working_set::WorkingSetSpec {
         lane_bonus: req
             .lane_bonus
             .unwrap_or_else(working_set::default_lane_bonus),
+        lane_priorities: BTreeMap::new(),
         scorer: req.scorer.clone(),
         expand_query: req
             .expand_query
@@ -636,6 +658,7 @@ fn build_spec(req: &AssembleReq) -> working_set::WorkingSetSpec {
         slot_budgets: BTreeMap::new(),
     };
     spec.slot_budgets = req.slot_budgets.clone().unwrap_or_default();
+    spec.lane_priorities = req.lane_priorities.clone().unwrap_or_default();
     spec.normalize();
     spec
 }

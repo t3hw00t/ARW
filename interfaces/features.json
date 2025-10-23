@@ -1348,9 +1348,18 @@
         {
           "path": "apps/arw-server/src/api/context.rs"
         },
-        {
-          "path": "apps/arw-server/src/working_set.rs"
-        },
+    {
+      "path": "apps/arw-server/src/working_set/mod.rs"
+    },
+    {
+      "path": "apps/arw-server/src/working_set/builder.rs"
+    },
+    {
+      "path": "apps/arw-server/src/working_set/spec.rs"
+    },
+    {
+      "path": "apps/arw-server/src/working_set/models.rs"
+    },
         {
           "path": "apps/arw-server/src/coverage.rs"
         }
@@ -1417,9 +1426,18 @@
         {
           "path": "apps/arw-server/src/read_models.rs"
         },
-        {
-          "path": "apps/arw-server/src/working_set.rs"
-        },
+    {
+      "path": "apps/arw-server/src/memory_service.rs"
+    },
+    {
+      "path": "apps/arw-server/src/working_set/mod.rs"
+    },
+    {
+      "path": "apps/arw-server/src/working_set/builder.rs"
+    },
+    {
+      "path": "apps/arw-server/src/working_set/spec.rs"
+    },
         {
           "path": "apps/arw-server/src/api/memory.rs"
         }

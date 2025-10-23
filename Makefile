@@ -20,7 +20,7 @@ lint-events:
 	python3 scripts/lint_event_names.py
 
 test:
-	cargo test --workspace --locked
+	cargo test --workspace --locked -- --test-threads=1
 
 package:
 	bash scripts/package.sh --no-build

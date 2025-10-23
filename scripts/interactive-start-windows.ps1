@@ -253,8 +253,8 @@ function Build-TestMenu {
       '2' { Push-Location $root; cargo build --workspace --release --features nats; Pop-Location }
       '3' {
         Push-Location $root
-        try { cargo nextest --version *> $null; if ($LASTEXITCODE -eq 0) { cargo nextest run --workspace } else { cargo test --workspace } }
-        catch { cargo test --workspace }
+        try { cargo nextest --version *> $null; if ($LASTEXITCODE -eq 0) { cargo nextest run --workspace --test-threads=1 } else { cargo test --workspace -- --test-threads=1 } }
+        catch { cargo test --workspace -- --test-threads=1 }
         Pop-Location
       }
       '4' { & (Join-Path $PSScriptRoot 'docgen.ps1') }

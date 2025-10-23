@@ -1970,6 +1970,7 @@ async function refreshRuntimeBundles() {
   const elContextMetricsUpdated = document.getElementById('contextMetricsUpdated');
   const elContextCoverageStatus = document.getElementById('contextCoverageStatus');
   const elContextCoverageRatio = document.getElementById('contextCoverageRatio');
+  const elContextCoveragePersona = document.getElementById('contextCoveragePersona');
   const elContextCoverageReasons = document.getElementById('contextCoverageReasons');
   const elContextRecallAvg = document.getElementById('contextRecallAvg');
   const elContextRecallAtRisk = document.getElementById('contextRecallAtRisk');
@@ -1999,6 +2000,46 @@ async function refreshRuntimeBundles() {
     if (!trimmed) return 'unknown';
     const replaced = trimmed.replace(/[_-]/g, ' ').replace(/\s+/g, ' ').trim();
     return replaced || trimmed;
+  }
+  function formatLaneLabel(value) {
+    if (typeof value !== 'string') return 'lane';
+    const trimmed = value.trim();
+    if (!trimmed) return 'lane';
+    if (trimmed === '*') return 'any';
+    const replaced = trimmed.replace(/[_-]/g, ' ').replace(/\s+/g, ' ').trim();
+    return replaced || trimmed;
+  }
+  function formatPersonaBiasSummary(bias) {
+    if (!bias || typeof bias !== 'object') return '';
+    const parts = [];
+    const lanes = bias.lane_priorities && typeof bias.lane_priorities === 'object' ? bias.lane_priorities : null;
+    if (lanes) {
+      const entries = Object.entries(lanes)
+        .filter(([, weight]) => typeof weight === 'number' && Number.isFinite(weight) && Math.abs(weight) >= 0.001)
+        .sort((a, b) => {
+          const diff = Math.abs(b[1]) - Math.abs(a[1]);
+          return diff !== 0 ? (diff > 0 ? 1 : -1) : String(a[0]).localeCompare(String(b[0]));
+        })
+        .map(([lane, weight]) => `${formatLaneLabel(lane)}:${weight >= 0 ? '+' : ''}${weight.toFixed(2)}`);
+      if (entries.length) {
+        parts.push(`lanes ${entries.join(' ')}`);
+      }
+    }
+    const slots = bias.slot_overrides && typeof bias.slot_overrides === 'object' ? bias.slot_overrides : null;
+    if (slots) {
+      const entries = Object.entries(slots)
+        .filter(([, limit]) => Number.isFinite(Number(limit)) && Number(limit) > 0)
+        .map(([slot, limit]) => `${formatSlotLabel(slot)}≤${Number(limit)}`);
+      if (entries.length) {
+        entries.sort((a, b) => a.localeCompare(b));
+        parts.push(`slots ${entries.join(' ')}`);
+      }
+    }
+    if (typeof bias.min_score_delta === 'number' && Number.isFinite(bias.min_score_delta) && Math.abs(bias.min_score_delta) >= 0.001) {
+      const delta = bias.min_score_delta;
+      parts.push(`min score ${delta >= 0 ? '+' : ''}${delta.toFixed(2)}`);
+    }
+    return parts.join(' · ');
   }
   function renderMetricList(target, items, formatter, emptyLabel) {
     const node = typeof target === 'string' ? document.getElementById(target) : target;
@@ -2106,6 +2147,10 @@ async function refreshRuntimeBundles() {
     }
     if (elContextCoverageRatio) {
       elContextCoverageRatio.textContent = coverageRatio == null ? '—' : formatPercent(coverageRatio, 0);
+    }
+    if (elContextCoveragePersona) {
+      const personaSummary = formatPersonaBiasSummary(coverageLatest && coverageLatest.persona_bias);
+      elContextCoveragePersona.textContent = personaSummary || '—';
     }
     ARW.ui.updateRatioBar('contextCoverageRatioBar', coverageRatio, {
       preferLow: true,
@@ -2866,6 +2911,14 @@ async function refreshRuntimeBundles() {
       }
       if (typeof model.query === 'string' && model.query.trim()) {
         metaParts.push(`Query: ${truncateText(model.query.trim(), 160)}`);
+      }
+      const personaBiasRaw =
+        (working && typeof working === 'object' && working.persona_bias) ||
+        (model && typeof model === 'object' && model.persona_bias) ||
+        null;
+      const personaBiasText = formatPersonaBiasSummary(personaBiasRaw);
+      if (personaBiasText) {
+        metaParts.push(`Persona bias: ${personaBiasText}`);
       }
       elContextMeta.textContent = metaParts.length
         ? metaParts.join(' · ')

@@ -178,7 +178,7 @@ run_verify() {
   if ! cargo clippy "${clippy_args[@]}" -- -D warnings; then ok=1; fi
 
   if command -v cargo-nextest >/dev/null 2>&1; then
-    local nextest_args=(run --workspace)
+    local nextest_args=(run --workspace --test-threads=1)
     if [[ $include_launcher -ne 1 ]]; then
       nextest_args+=(--exclude arw-launcher)
     fi
@@ -190,7 +190,8 @@ run_verify() {
     if [[ $include_launcher -ne 1 ]]; then
       test_args+=(--exclude arw-launcher)
     fi
-    if ! cargo test "${test_args[@]}"; then ok=1; fi
+    local test_trailer=(-- --test-threads=1)
+    if ! cargo test "${test_args[@]}" "${test_trailer[@]}"; then ok=1; fi
   fi
 
   if [[ $skip_ui -eq 1 ]]; then
@@ -430,10 +431,10 @@ case "$command" in
     ;;
   test-fast)
     if command -v cargo-nextest >/dev/null 2>&1; then
-      cargo nextest run --workspace "$@"
+      cargo nextest run --workspace --test-threads=1 "$@"
     else
       echo "[dev] cargo-nextest not found; running cargo test --workspace --locked"
-      cargo test --workspace --locked "$@"
+      cargo test --workspace --locked "$@" -- --test-threads=1
     fi
     ;;
   docs)

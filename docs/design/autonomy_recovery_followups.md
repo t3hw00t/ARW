@@ -4,7 +4,7 @@ title: Autonomy Recovery Follow-ups
 
 # Autonomy Recovery Follow-ups
 
-Updated: 2025-10-09
+Updated: 2025-10-24
 Type: Implementation record
 Status: Completed
 
@@ -60,4 +60,4 @@ Operators still depend on a mostly manual rollback flow after the restructure. T
 - Extend integration tests to cover the new endpoints with admin auth and ensure events arrive on the bus.
 - Update `just autonomy-rollback` smoke to execute the new APIs end-to-end (with `--dry-run` verifying preview paths).
 - Add documentation updates in `docs/ops/trials/autonomy_rollback_playbook.md` once endpoints are implemented.
-- `cargo test --package arw-server` exercises the new API surfaces and regression coverage.
+- `cargo test --package arw-server -- --test-threads=1` exercises the new API surfaces and regression coverage.

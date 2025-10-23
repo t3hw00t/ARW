@@ -85,6 +85,7 @@ fn base_spec() -> WorkingSetSpec {
         project: None,
         persona_id: None,
         lane_bonus: f32::NAN,
+        lane_priorities: BTreeMap::new(),
         scorer: None,
         expand_query: default_expand_query(),
         expand_query_top_k: 0,
@@ -120,6 +121,7 @@ fn normalize_applies_defaults_when_missing() {
     assert_eq!(spec.expand_query_top_k, default_expand_query_top_k());
     assert!(spec.slot_budgets.is_empty());
     assert!(spec.persona_id.is_none());
+    assert!(spec.lane_priorities.is_empty());
 }
 
 #[test]
@@ -139,6 +141,11 @@ fn normalize_trims_and_clamps_inputs() {
         min_score: 0.2,
         project: Some("demo".into()),
         lane_bonus: 0.7,
+        lane_priorities: BTreeMap::from([
+            (" Semantic ".to_string(), 0.9),
+            ("*".to_string(), 2.5),
+            ("".to_string(), -0.3),
+        ]),
         scorer: Some("  CONFIDENCE  ".into()),
         expand_query: false,
         expand_query_top_k: 100,
@@ -159,6 +166,12 @@ fn normalize_trims_and_clamps_inputs() {
     assert_eq!(spec.slot_budgets.get("evidence"), Some(&256));
     assert!(!spec.slot_budgets.contains_key(""));
     assert_eq!(spec.persona_id.as_deref(), Some("persona-alpha"));
+    assert_eq!(
+        spec.lane_priorities.get("semantic"),
+        Some(&0.9f32.clamp(-1.0, 1.0))
+    );
+    assert_eq!(spec.lane_priorities.get("*"), Some(&1.0));
+    assert!(!spec.lane_priorities.contains_key(""));
 }
 
 #[test]
@@ -187,6 +200,58 @@ fn slot_budgets_parse_pair_list() {
     assert_eq!(spec.slot_budgets.get("instructions"), Some(&4));
     assert_eq!(spec.slot_budgets.get("evidence"), Some(&10));
     assert_eq!(spec.slot_budgets.get("policy"), Some(&2));
+}
+
+#[test]
+fn merge_lane_priorities_accumulates_and_clamps() {
+    let mut spec = base_spec();
+    spec.lane_priorities
+        .extend([("semantic".into(), 0.2), ("episodic".into(), 0.3)]);
+
+    let mut adjustments = BTreeMap::new();
+    adjustments.insert("semantic".into(), 0.9);
+    adjustments.insert(" procedural ".into(), -2.0); // should clamp
+    adjustments.insert("".into(), 0.5); // ignored
+
+    spec.merge_lane_priorities(&adjustments);
+
+    assert_eq!(spec.lane_priorities.get("semantic"), Some(&1.0));
+    assert_eq!(spec.lane_priorities.get("episodic"), Some(&0.3));
+    assert_eq!(spec.lane_priorities.get("procedural"), Some(&-1.0));
+    assert!(!spec.lane_priorities.contains_key(""));
+}
+
+#[test]
+fn merge_slot_budgets_takes_maximum() {
+    let mut spec = base_spec();
+    spec.slot_budgets
+        .extend([("evidence".into(), 2), ("notes".into(), 1)]);
+
+    let mut overrides = BTreeMap::new();
+    overrides.insert(" evidence ".into(), 5usize);
+    overrides.insert("notes".into(), 0usize); // ignored
+    overrides.insert("summary".into(), 3usize);
+
+    spec.merge_slot_budgets(&overrides);
+
+    assert_eq!(spec.slot_budgets.get("evidence"), Some(&5));
+    assert_eq!(spec.slot_budgets.get("notes"), Some(&1));
+    assert_eq!(spec.slot_budgets.get("summary"), Some(&3));
+}
+
+#[test]
+fn adjust_min_score_obeys_bounds() {
+    let mut spec = base_spec();
+    spec.min_score = 0.4;
+
+    spec.adjust_min_score(0.3);
+    assert!((spec.min_score - 0.7).abs() < f32::EPSILON);
+
+    spec.adjust_min_score(0.6);
+    assert!((spec.min_score - 1.0).abs() < f32::EPSILON);
+
+    spec.adjust_min_score(-2.0);
+    assert!((spec.min_score - 0.0).abs() < f32::EPSILON);
 }
 
 #[test]

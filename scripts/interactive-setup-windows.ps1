@@ -194,13 +194,13 @@ function Do-Build {
   Section 'Build (release)'
   if ($script:SetupDryRun) {
     Info '[dryrun] Would run: cargo build --workspace --release'
-    if ($RunTests) { Info '[dryrun] Would run: cargo nextest run --workspace' }
+    if ($RunTests) { Info '[dryrun] Would run: cargo nextest run --workspace --test-threads=1' }
   } else {
     Push-Location $root
     cargo build --workspace --release
     if ($RunTests) {
-      try { cargo nextest --version *> $null; if ($LASTEXITCODE -eq 0) { cargo nextest run --workspace } else { cargo test --workspace } }
-      catch { cargo test --workspace }
+      try { cargo nextest --version *> $null; if ($LASTEXITCODE -eq 0) { cargo nextest run --workspace --test-threads=1 } else { cargo test --workspace -- --test-threads=1 } }
+      catch { cargo test --workspace -- --test-threads=1 }
     }
     Pop-Location
   }

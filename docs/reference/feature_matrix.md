@@ -6,7 +6,7 @@ title: Feature Matrix
 
 # Feature Matrix
 
-Updated: 2025-10-16
+Updated: 2025-10-24
 Status: Stable
 Type: Reference
 
@@ -626,7 +626,10 @@ Hybrid retrieval with coverage loops, streaming diagnostics, and on-demand rehyd
   - triad_kernel
 - Single Sources of Truth:
   - [apps/arw-server/src/api/context.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-server/src/api/context.rs)
-  - [apps/arw-server/src/working_set.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-server/src/working_set.rs)
+  - [apps/arw-server/src/working_set/mod.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-server/src/working_set/mod.rs)
+  - [apps/arw-server/src/working_set/builder.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-server/src/working_set/builder.rs)
+  - [apps/arw-server/src/working_set/spec.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-server/src/working_set/spec.rs)
+  - [apps/arw-server/src/working_set/models.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-server/src/working_set/models.rs)
   - [apps/arw-server/src/coverage.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-server/src/coverage.rs)
 - HTTP:
   - `POST /context/assemble`
@@ -666,7 +669,10 @@ Memory overlay service backed by the canonical MAL store with hybrid retrieval, 
 - Single Sources of Truth:
   - [apps/arw-server/src/api/actions.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-server/src/api/actions.rs)
   - [apps/arw-server/src/read_models.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-server/src/read_models.rs)
-  - [apps/arw-server/src/working_set.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-server/src/working_set.rs)
+  - [apps/arw-server/src/memory_service.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-server/src/memory_service.rs)
+  - [apps/arw-server/src/working_set/mod.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-server/src/working_set/mod.rs)
+  - [apps/arw-server/src/working_set/builder.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-server/src/working_set/builder.rs)
+  - [apps/arw-server/src/working_set/spec.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-server/src/working_set/spec.rs)
   - [apps/arw-server/src/api/memory.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-server/src/api/memory.rs)
 - HTTP:
   - `POST /actions (memory.upsert)`

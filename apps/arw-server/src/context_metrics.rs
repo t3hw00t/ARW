@@ -597,6 +597,9 @@ fn sanitize_coverage_event(env: &arw_events::Envelope) -> Value {
             obj.insert(key.into(), value.clone());
         }
     }
+    if let Some(bias) = env.payload.get("persona_bias").cloned() {
+        obj.insert("persona_bias".into(), bias);
+    }
     if let Some(summary) = env.payload.get("summary") {
         obj.insert("summary".into(), summary.clone());
     }
@@ -647,6 +650,9 @@ fn sanitize_recall_risk_event(env: &arw_events::Envelope) -> Value {
     if let Some(query) = env.payload.get("query") {
         obj.insert("query".into(), query.clone());
     }
+    if let Some(bias) = env.payload.get("persona_bias").cloned() {
+        obj.insert("persona_bias".into(), bias);
+    }
     Value::Object(obj)
 }
 
@@ -656,6 +662,8 @@ pub(crate) fn sanitize_context_assembled(payload: &Value) -> Value {
         for key in [
             "query",
             "project",
+            "persona",
+            "persona_bias",
             "lanes",
             "limit",
             "expand_per_seed",
@@ -728,6 +736,9 @@ fn sanitize_iteration_summary_event(env: &arw_events::Envelope) -> Value {
     if let Some(summary) = payload.get("summary").cloned() {
         obj.insert("summary".into(), summary);
     }
+    if let Some(bias) = payload.get("persona_bias").cloned() {
+        obj.insert("persona_bias".into(), bias);
+    }
     if let Some(spec) = payload.get("spec").cloned() {
         obj.insert("spec".into(), spec);
     }
@@ -763,6 +774,9 @@ fn sanitize_working_set_completed_event(env: &arw_events::Envelope) -> Value {
     }
     if let Some(summary) = payload.get("summary").cloned() {
         obj.insert("summary".into(), summary);
+    }
+    if let Some(bias) = payload.get("persona_bias").cloned() {
+        obj.insert("persona_bias".into(), bias);
     }
     if let Some(diag) = payload.get("diagnostics").and_then(Value::as_object) {
         if let Some(counts) = diag.get("counts").cloned() {
@@ -824,7 +838,9 @@ fn sanitize_spec(spec: &Value) -> Value {
             "diversity_lambda",
             "min_score",
             "project",
+            "persona",
             "lane_bonus",
+            "lane_priorities",
             "scorer",
             "expand_query",
             "expand_query_top_k",

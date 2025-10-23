@@ -4,7 +4,7 @@ title: Context Scenario Harness
 
 # Context Scenario Harness
 
-Updated: 2025-10-09
+Updated: 2025-10-24
 Status: Preview
 Type: How-to
 
@@ -57,6 +57,7 @@ let base_spec = working_set::WorkingSetSpec {
     min_score: 0.5,
     project: Some("demo".into()),
     lane_bonus: 0.1,
+    lane_priorities: Default::default(),
     scorer: Some("mmr".into()),
     expand_query: false,
     expand_query_top_k: 4,

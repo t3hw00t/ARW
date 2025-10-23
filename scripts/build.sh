@@ -52,11 +52,11 @@ cargo "${cargo_args[@]}"
 if [[ $run_tests -eq 1 ]]; then
   if command -v cargo-nextest >/dev/null 2>&1; then
     echo "[build] Running tests (nextest)"
-    cargo nextest run --workspace --locked
+    cargo nextest run --workspace --locked --test-threads=1
   else
     echo "[build] cargo-nextest not found; falling back to cargo test."
     echo "[build] Install it with 'cargo install --locked cargo-nextest' for faster runs."
-    cargo test --workspace --locked
+    cargo test --workspace --locked -- --test-threads=1
   fi
 fi
 

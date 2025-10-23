@@ -1,5 +1,5 @@
 # Rapid Iteration Guardrails
-Updated: 2025-10-09
+Updated: 2025-10-24
 Type: Reference
 
 We operate with short iteration cycles and track the latest stable Rust toolchain (currently 1.90+). This page captures the lightweight guardrails that keep ARW broadly compatible across platforms while we move fast.
@@ -20,7 +20,7 @@ We operate with short iteration cycles and track the latest stable Rust toolchai
 - Format: `cargo fmt --all -- --check`
 - Lint: `cargo clippy --workspace --all-targets -- -D warnings`
 - Build: `cargo build --workspace --locked`
-- Test: `cargo test --workspace --locked`
+- Test: `cargo test --workspace --locked -- --test-threads=1`
 - Specs & docs: `just openapi-gen` and (`bash scripts/docgen.sh` / `powershell -ExecutionPolicy Bypass -File scripts\docgen.ps1`) followed by `mkdocs build --strict`
 
 ## Desktop Launcher Notes

@@ -6,7 +6,7 @@ title: Persona Telemetry
 
 > **Preview:** Persona telemetry is disabled unless `ARW_PERSONA_ENABLE=1` and a persona exists. Follow the [Persona Preview Quickstart](persona_quickstart.md) before enabling vibe feedback in live workspaces.
 
-Updated: 2025-10-22
+Updated: 2025-10-24
 Type: How-to
 
 Persona telemetry is opt-in. This guide explains how to enable vibe feedback loops, satisfy policy requirements, and inspect the live metrics exposed by `arw-server`.
@@ -52,6 +52,11 @@ Persona telemetry is opt-in. This guide explains how to enable vibe feedback loo
   | `metadata` | object | Additional structured metadata (sanitized server-side). |
 - Optional query `kind=vibe` tags the signal; omit to use the server default.
 - Payload can be a single object or an array of objects. The response echoes `{ "status": "accepted", "count": <samples> }`.
+- Lane/slot nudges (optional): set `signal` to steer context assembly briefly. Examples:
+  - `lane+:episodic` / `lane-:episodic` — reinforce or relax the episodic lane.
+  - `slot+:evidence` — ensure at least one evidence item lands next turn.
+  - `warmer` / `cooler` — apply a lightweight global positive/negative lane boost.
+  Signals compound with persona preferences and decay once new feedback arrives.
 
 ## Browse History
 - Endpoint: `GET /state/persona/{id}/vibe_history`

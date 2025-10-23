@@ -19,6 +19,75 @@ pub struct PersonaService {
     metrics: Arc<VibeMetricsStore>,
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use chrono::{SecondsFormat, Utc};
+    use serde_json::json;
+    use std::collections::BTreeMap;
+
+    fn make_entry() -> PersonaEntry {
+        PersonaEntry {
+            id: "persona.test".into(),
+            owner_kind: "workspace".into(),
+            owner_ref: "local".into(),
+            name: Some("Test".into()),
+            archetype: None,
+            traits: json!({}),
+            preferences: json!({
+                "context": {
+                    "lane_weights": { "semantic": 0.2 },
+                    "slot_budgets": { "evidence": 3 },
+                    "min_score_bias": 0.1
+                }
+            }),
+            worldview: json!({ "values": ["care"] }),
+            vibe_profile: json!({}),
+            calibration: json!({}),
+            updated: Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true),
+            version: 1,
+        }
+    }
+
+    #[test]
+    fn bias_respects_preferences_and_signals() {
+        let entry = make_entry();
+        let mut metrics = PersonaVibeMetricsSnapshot {
+            persona_id: entry.id.clone(),
+            total_feedback: 1,
+            signal_counts: BTreeMap::new(),
+            average_strength: Some(0.7),
+            last_signal: Some("lane+:episodic".into()),
+            last_strength: Some(0.7),
+            last_updated: None,
+            retain_max: 50,
+        };
+        metrics.signal_counts.insert("lane+:episodic".into(), 1);
+        let bias = compute_context_bias(&entry, &metrics);
+        assert_eq!(bias.slot_overrides.get("evidence"), Some(&3));
+        assert!(bias.lane_priorities.get("semantic").unwrap() >= &0.2);
+        assert!(bias.lane_priorities.contains_key("episodic"));
+        assert!(bias.min_score_delta > 0.09);
+    }
+
+    #[test]
+    fn bias_handles_generic_warmer_signal() {
+        let entry = make_entry();
+        let metrics = PersonaVibeMetricsSnapshot {
+            persona_id: entry.id.clone(),
+            total_feedback: 1,
+            signal_counts: BTreeMap::new(),
+            average_strength: Some(0.4),
+            last_signal: Some("warmer".into()),
+            last_strength: Some(0.4),
+            last_updated: None,
+            retain_max: 50,
+        };
+        let bias = compute_context_bias(&entry, &metrics);
+        assert!(bias.lane_priorities.get("*").unwrap() > &0.05);
+    }
+}
+
 impl PersonaService {
     pub fn new(kernel: Kernel) -> Arc<Self> {
         Arc::new(Self {
@@ -212,6 +281,201 @@ impl PersonaVibeMetricsSnapshot {
             last_updated: None,
             retain_max: vibe_sample_retain(),
         }
+    }
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct PersonaContextBias {
+    pub lane_priorities: BTreeMap<String, f32>,
+    pub slot_overrides: BTreeMap<String, usize>,
+    pub min_score_delta: f32,
+}
+
+impl PersonaContextBias {
+    pub fn is_empty(&self) -> bool {
+        self.lane_priorities.is_empty()
+            && self.slot_overrides.is_empty()
+            && self.min_score_delta.abs() < f32::EPSILON
+    }
+}
+
+pub fn compute_context_bias(
+    entry: &PersonaEntry,
+    metrics: &PersonaVibeMetricsSnapshot,
+) -> PersonaContextBias {
+    let mut bias = PersonaContextBias::default();
+
+    if let Some(prefs) = entry.preferences.as_object() {
+        if let Some(context) = prefs.get("context").and_then(|v| v.as_object()) {
+            if let Some(lanes) = context.get("lane_weights").and_then(|v| v.as_object()) {
+                for (lane, value) in lanes {
+                    if let Some(weight) = lane_weight_from_value(value) {
+                        let key = lane.trim().to_ascii_lowercase();
+                        if key.is_empty() {
+                            continue;
+                        }
+                        bias.lane_priorities.insert(key, weight.clamp(-1.0, 1.0));
+                    }
+                }
+            }
+            if let Some(slots) = context.get("slot_budgets").and_then(|v| v.as_object()) {
+                for (slot, value) in slots {
+                    if let Some(limit) = slot_limit_from_value(value) {
+                        let key = slot.trim().to_ascii_lowercase();
+                        if key.is_empty() || limit == 0 {
+                            continue;
+                        }
+                        bias.slot_overrides.insert(key, limit);
+                    }
+                }
+            }
+            if let Some(delta) = context.get("min_score_bias") {
+                if let Some(value) = numeric_from_value(delta) {
+                    let clamped = (value as f32).clamp(-0.5, 0.5);
+                    if clamped.abs() >= f32::EPSILON {
+                        bias.min_score_delta = clamped;
+                    }
+                }
+            }
+        }
+    }
+
+    if let Some(signal) = metrics.last_signal.as_deref() {
+        apply_vibe_signal(&mut bias, signal, metrics.last_strength);
+    }
+
+    bias
+}
+
+fn lane_weight_from_value(value: &Value) -> Option<f32> {
+    match value {
+        Value::Number(num) => num.as_f64().map(|v| v as f32),
+        Value::String(s) => s.trim().parse::<f32>().ok(),
+        Value::Bool(true) => Some(0.25),
+        Value::Bool(false) => Some(0.0),
+        _ => None,
+    }
+}
+
+fn slot_limit_from_value(value: &Value) -> Option<usize> {
+    match value {
+        Value::Number(num) => {
+            if let Some(v) = num.as_u64() {
+                Some(v as usize)
+            } else {
+                num.as_f64()
+                    .filter(|v| *v >= 0.0)
+                    .map(|v| v.round() as usize)
+            }
+        }
+        Value::String(s) => s.trim().parse::<usize>().ok(),
+        Value::Bool(true) => Some(1usize),
+        Value::Bool(false) => Some(0usize),
+        _ => None,
+    }
+    .filter(|v| *v > 0)
+}
+
+fn numeric_from_value(value: &Value) -> Option<f64> {
+    match value {
+        Value::Number(num) => num.as_f64(),
+        Value::String(s) => s.trim().parse::<f64>().ok(),
+        _ => None,
+    }
+}
+
+fn apply_vibe_signal(bias: &mut PersonaContextBias, signal: &str, strength: Option<f32>) {
+    let trimmed = signal.trim();
+    if trimmed.is_empty() {
+        return;
+    }
+    let normalized = trimmed.to_ascii_lowercase();
+    let strength = strength.unwrap_or(0.6).clamp(0.0, 1.0);
+    let lane_delta = |positive: bool| -> f32 {
+        let base = 0.05 + (strength * 0.25);
+        if positive {
+            base
+        } else {
+            -base
+        }
+    };
+    let slot_min = |s: f32| -> usize {
+        let value = (1.0 + s * 3.0).round() as i32;
+        value.max(1) as usize
+    };
+
+    let mut apply_lane = |lane: &str, delta: f32| {
+        if delta.abs() < f32::EPSILON {
+            return;
+        }
+        let key = lane.trim().to_ascii_lowercase();
+        if key.is_empty() {
+            return;
+        }
+        let entry = bias.lane_priorities.entry(key).or_insert(0.0);
+        *entry = (*entry + delta).clamp(-1.0, 1.0);
+    };
+
+    let mut apply_slot = |slot: &str, min_count: usize| {
+        if min_count == 0 {
+            return;
+        }
+        let key = slot.trim().to_ascii_lowercase();
+        if key.is_empty() {
+            return;
+        }
+        let entry = bias.slot_overrides.entry(key).or_insert(0);
+        if min_count > *entry {
+            *entry = min_count;
+        }
+    };
+
+    if let Some(rest) = normalized.strip_prefix("lane+:") {
+        apply_lane(rest, lane_delta(true));
+        return;
+    }
+    if let Some(rest) = normalized.strip_prefix("lane-:") {
+        apply_lane(rest, lane_delta(false));
+        return;
+    }
+    if let Some(rest) = normalized.strip_prefix("lane:") {
+        apply_lane(rest, lane_delta(true));
+        return;
+    }
+    if let Some(rest) = normalized.strip_prefix("slot+:") {
+        apply_slot(rest, slot_min(strength));
+        return;
+    }
+    if let Some(rest) = normalized.strip_prefix("slot:") {
+        apply_slot(rest, slot_min(strength));
+        return;
+    }
+    if let Some(rest) = normalized.strip_prefix("minscore+:") {
+        let delta = lane_delta(true);
+        bias.min_score_delta = (bias.min_score_delta + delta).clamp(-0.5, 0.5);
+        if !rest.trim().is_empty() {
+            apply_lane(rest, lane_delta(true) * 0.5);
+        }
+        return;
+    }
+    if let Some(rest) = normalized.strip_prefix("minscore-:") {
+        let delta = lane_delta(false);
+        bias.min_score_delta = (bias.min_score_delta + delta).clamp(-0.5, 0.5);
+        if !rest.trim().is_empty() {
+            apply_lane(rest, lane_delta(false) * 0.5);
+        }
+        return;
+    }
+
+    match normalized.as_str() {
+        "warmer" => apply_lane("*", lane_delta(true)),
+        "cooler" => apply_lane("*", lane_delta(false)),
+        "broader" => apply_slot("*", slot_min(strength + 0.1)),
+        "narrower" => {
+            let adjustment = lane_delta(false) * 0.5;
+            bias.min_score_delta = (bias.min_score_delta + adjustment).clamp(-0.5, 0.5);
+        }
+        _ => {}
     }
 }
 
@@ -436,10 +700,18 @@ pub fn entry_world_beliefs(entry: &PersonaEntry) -> Vec<Value> {
     beliefs
 }
 
-pub async fn load_world_beliefs(service: &PersonaService, persona_id: &str) -> Result<Vec<Value>> {
+pub async fn load_context_bundle(
+    service: &PersonaService,
+    persona_id: &str,
+) -> Result<(Vec<Value>, Option<PersonaContextBias>)> {
     match service.get_entry(persona_id.to_string()).await? {
-        Some(entry) => Ok(entry_world_beliefs(&entry)),
-        None => Ok(Vec::new()),
+        Some(entry) => {
+            let beliefs = entry_world_beliefs(&entry);
+            let metrics = service.vibe_metrics_snapshot(persona_id.to_string()).await;
+            let bias = compute_context_bias(&entry, &metrics);
+            Ok((beliefs, Some(bias)))
+        }
+        None => Ok((Vec::new(), None)),
     }
 }
 

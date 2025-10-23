@@ -285,9 +285,9 @@ if ($RunTests) {
     $useCargoTest = $true
   }
   if ($useCargoTest) {
-    & cargo test --workspace --locked
+    & cargo test --workspace --locked -- --test-threads=1
   } else {
-    & $nextest.Source run --workspace --locked
+  & $nextest.Source run --workspace --locked --test-threads=1
   }
   }
 }

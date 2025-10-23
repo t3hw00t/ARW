@@ -53,11 +53,11 @@ if (-not $NoTests) {
   $nextest = Get-Command cargo-nextest -ErrorAction SilentlyContinue
   if ($nextest) {
     Info 'Running tests (workspace via nextest)'
-    & $nextest.Source run --workspace --locked
+    & $nextest.Source run --workspace --locked --test-threads=1
   } else {
     Warn "cargo-nextest not found; falling back to 'cargo test --workspace --locked'."
     Warn "Install it with 'cargo install --locked cargo-nextest' for faster runs."
-    & cargo test --workspace --locked
+    & cargo test --workspace --locked -- --test-threads=1
   }
 }
 

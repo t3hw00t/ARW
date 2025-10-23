@@ -7,7 +7,7 @@ version=${1:-v0.1.0-beta}
 
 echo "[release] checking clippy/tests"
 cargo clippy -p arw-protocol -p arw-events -p arw-core -p arw-macros -p arw-cli -p arw-otel -p arw-server -p arw-connector --all-targets -- -D warnings
-cargo test --workspace --locked --exclude arw-tauri --exclude arw-launcher
+cargo test --workspace --locked --exclude arw-tauri --exclude arw-launcher -- --test-threads=1
 
 echo "[release] regenerating specs/docs"
 bash scripts/docgen.sh

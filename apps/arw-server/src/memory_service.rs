@@ -96,6 +96,7 @@ pub struct MemoryPackInput {
     pub project_id: Option<String>,
     pub persona_id: Option<String>,
     pub lane_bonus: Option<f32>,
+    pub lane_priorities: Option<BTreeMap<String, f32>>,
     pub scorer: Option<String>,
     pub expand_query: Option<bool>,
     pub expand_query_top_k: Option<usize>,
@@ -457,36 +458,54 @@ pub async fn pack_memory(state: &AppState, input: MemoryPackInput) -> Result<Mem
         project: input.project_id.clone(),
         persona_id: input.persona_id.clone(),
         lane_bonus: input.lane_bonus.unwrap_or(f32::NAN),
+        lane_priorities: input.lane_priorities.clone().unwrap_or_default(),
         scorer: input.scorer.clone(),
         expand_query: input.expand_query.unwrap_or(false),
         expand_query_top_k: input.expand_query_top_k.unwrap_or(0),
         slot_budgets: input.slot_budgets.unwrap_or_default(),
     };
-    spec.normalize();
-
     let state_clone = state.clone();
-    let spec_for_block = spec.clone();
     let (_, world_beliefs) = crate::state_observer::beliefs_snapshot().await;
-    let persona_context = if let Some(persona_id) = spec.persona_id.as_deref() {
+    let persona_lookup = spec
+        .persona_id
+        .as_ref()
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty())
+        .map(|s| s.to_string());
+    spec.persona_id = persona_lookup.clone();
+    let (persona_context, persona_bias) = if let Some(persona_id) = persona_lookup.as_deref() {
         if let Some(service) = state.persona() {
-            match persona::load_world_beliefs(&service, persona_id).await {
-                Ok(values) => values,
+            match persona::load_context_bundle(&service, persona_id).await {
+                Ok(result) => result,
                 Err(err) => {
                     warn!(
-                        target: "arw::persona",
+                        target = "arw::persona",
                         error = %err,
                         persona_id = %persona_id,
-                        "failed to load persona worldview"
+                        "failed to load persona state"
                     );
-                    Vec::new()
+                    (Vec::new(), None)
                 }
             }
         } else {
-            Vec::new()
+            (Vec::new(), None)
         }
     } else {
-        Vec::new()
+        (Vec::new(), None)
     };
+    if let Some(bias) = persona_bias.as_ref() {
+        if !bias.lane_priorities.is_empty() {
+            spec.merge_lane_priorities(&bias.lane_priorities);
+        }
+        if !bias.slot_overrides.is_empty() {
+            spec.merge_slot_budgets(&bias.slot_overrides);
+        }
+        if bias.min_score_delta.abs() >= f32::EPSILON {
+            spec.adjust_min_score(bias.min_score_delta);
+        }
+    }
+    spec.normalize();
+    let spec_for_block = spec.clone();
     let merged_beliefs = persona::merge_world_beliefs(&world_beliefs, persona_context);
     let working = tokio::task::spawn_blocking(move || {
         working_set::assemble(&state_clone, &spec_for_block, merged_beliefs)

@@ -234,7 +234,7 @@ if [[ $run_tests -eq 1 ]]; then
   else
     title "Run tests (workspace)"
     if command -v cargo-nextest >/dev/null 2>&1; then
-      (cd "$ROOT" && cargo nextest run --workspace --locked)
+      (cd "$ROOT" && cargo nextest run --workspace --locked --test-threads=1)
     else
       if command -v cargo >/dev/null 2>&1; then
         install_nextest=0
@@ -248,19 +248,19 @@ if [[ $run_tests -eq 1 ]]; then
         fi
         if [[ $install_nextest -eq 1 ]]; then
           info "Installing cargo-nextest (cargo install --locked cargo-nextest)"
-          if cargo install --locked cargo-nextest; then
-            (cd "$ROOT" && cargo nextest run --workspace --locked)
+        if cargo install --locked cargo-nextest; then
+            (cd "$ROOT" && cargo nextest run --workspace --locked --test-threads=1)
           else
             warn "cargo-nextest install failed; falling back to cargo test --workspace --locked."
-            (cd "$ROOT" && cargo test --workspace --locked)
+            (cd "$ROOT" && cargo test --workspace --locked -- --test-threads=1)
           fi
         else
           warn "Skipping cargo-nextest install; falling back to cargo test --workspace --locked."
-          (cd "$ROOT" && cargo test --workspace --locked)
+          (cd "$ROOT" && cargo test --workspace --locked -- --test-threads=1)
         fi
       else
         warn "cargo-nextest not found and cargo unavailable; running cargo test --workspace --locked."
-        (cd "$ROOT" && cargo test --workspace --locked)
+        (cd "$ROOT" && cargo test --workspace --locked -- --test-threads=1)
       fi
     fi
   fi

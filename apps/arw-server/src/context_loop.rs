@@ -217,28 +217,46 @@ async fn run_context_iteration(
     let bus = state.bus();
     let iteration_start = Instant::now();
     let corr_for_payload = corr_id.clone();
-    let spec_for_payload = spec.clone();
+    let mut spec = spec;
     let (_, world_beliefs) = crate::state_observer::beliefs_snapshot().await;
-    let persona_context = if let Some(persona_id) = spec.persona_id.as_deref() {
+    let persona_lookup = spec
+        .persona_id
+        .as_ref()
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty());
+    spec.persona_id = persona_lookup.clone();
+    let (persona_context, persona_bias) = if let Some(persona_id) = persona_lookup.as_deref() {
         if let Some(service) = state.persona() {
-            match persona::load_world_beliefs(&service, persona_id).await {
-                Ok(values) => values,
+            match persona::load_context_bundle(&service, persona_id).await {
+                Ok(result) => result,
                 Err(err) => {
                     warn!(
-                        target: "arw::persona",
+                        target = "arw::persona",
                         error = %err,
                         persona_id = %persona_id,
-                        "failed to load persona worldview"
+                        "failed to load persona state"
                     );
-                    Vec::new()
+                    (Vec::new(), None)
                 }
             }
         } else {
-            Vec::new()
+            (Vec::new(), None)
         }
     } else {
-        Vec::new()
+        (Vec::new(), None)
     };
+    if let Some(bias) = persona_bias.as_ref() {
+        if !bias.lane_priorities.is_empty() {
+            spec.merge_lane_priorities(&bias.lane_priorities);
+        }
+        if !bias.slot_overrides.is_empty() {
+            spec.merge_slot_budgets(&bias.slot_overrides);
+        }
+        if bias.min_score_delta.abs() >= f32::EPSILON {
+            spec.adjust_min_score(bias.min_score_delta);
+        }
+    }
+    let spec_for_payload = spec.clone();
     let merged_beliefs = persona::merge_world_beliefs(&world_beliefs, persona_context);
 
     let join = tokio::task::spawn_blocking({
@@ -295,7 +313,7 @@ async fn run_context_iteration(
                     iteration, &spec_used, &ws, &verdict,
                 ));
             }
-            let summary_payload = build_iteration_summary_payload(
+            let mut summary_payload = build_iteration_summary_payload(
                 iteration,
                 &spec_used,
                 &ws.summary,
@@ -304,6 +322,13 @@ async fn run_context_iteration(
                 next_spec_candidate.as_ref(),
                 duration_ms,
             );
+            if let Some(bias) = persona_bias.as_ref() {
+                if let Some(serialized) = serialize_persona_bias(bias) {
+                    if let Value::Object(ref mut obj) = summary_payload {
+                        obj.insert("persona_bias".into(), serialized);
+                    }
+                }
+            }
             let needs_more_label = if verdict.needs_more { "true" } else { "false" };
             histogram!(
                 "arw_context_iteration_duration_ms",
@@ -321,7 +346,7 @@ async fn run_context_iteration(
                 topics::TOPIC_WORKING_SET_ITERATION_SUMMARY,
                 &summary_payload,
             );
-            let coverage_payload = build_context_coverage_payload(
+            let mut coverage_payload = build_context_coverage_payload(
                 iteration,
                 &spec_used,
                 &ws.summary,
@@ -329,8 +354,15 @@ async fn run_context_iteration(
                 corr_id.as_ref(),
                 duration_ms,
             );
+            if let Some(bias) = persona_bias.as_ref() {
+                if let Some(serialized) = serialize_persona_bias(bias) {
+                    if let Value::Object(ref mut obj) = coverage_payload {
+                        obj.insert("persona_bias".into(), serialized);
+                    }
+                }
+            }
             bus.publish(topics::TOPIC_CONTEXT_COVERAGE, &coverage_payload);
-            let recall_event = build_context_recall_risk_payload(
+            let mut recall_event = build_context_recall_risk_payload(
                 iteration,
                 &spec_used,
                 &ws.summary,
@@ -338,6 +370,13 @@ async fn run_context_iteration(
                 corr_id.as_ref(),
                 duration_ms,
             );
+            if let Some(bias) = persona_bias.as_ref() {
+                if let Some(serialized) = serialize_persona_bias(bias) {
+                    if let Value::Object(ref mut obj) = recall_event.payload {
+                        obj.insert("persona_bias".into(), serialized);
+                    }
+                }
+            }
             histogram!(
                 "arw_context_recall_risk_score",
                 "level" => recall_event.level,
@@ -475,6 +514,7 @@ mod tests {
             project: None,
             persona_id: None,
             lane_bonus: 0.3,
+            lane_priorities: BTreeMap::new(),
             scorer: Some("mmrd".into()),
             expand_query: false,
             expand_query_top_k: 6,
@@ -510,6 +550,7 @@ mod tests {
             threshold_hits: 0,
             total_candidates: 9,
             lane_counts,
+            lane_priorities: BTreeMap::new(),
             slot_counts,
             slot_budgets: slot_budgets.clone(),
             min_score: 0.6,
@@ -570,6 +611,7 @@ mod tests {
             threshold_hits: 0,
             total_candidates: 5,
             lane_counts,
+            lane_priorities: BTreeMap::new(),
             slot_counts: slot_counts.clone(),
             slot_budgets: slot_budgets.clone(),
             min_score: 0.6,
@@ -625,6 +667,7 @@ mod tests {
             threshold_hits: 0,
             total_candidates: 11,
             lane_counts,
+            lane_priorities: BTreeMap::new(),
             slot_counts: BTreeMap::new(),
             slot_budgets: BTreeMap::new(),
             min_score: 0.6,
@@ -667,6 +710,7 @@ mod tests {
             project: None,
             persona_id: None,
             lane_bonus: crate::working_set::default_lane_bonus(),
+            lane_priorities: BTreeMap::new(),
             scorer: Some(crate::working_set::default_scorer()),
             expand_query: crate::working_set::default_expand_query(),
             expand_query_top_k: crate::working_set::default_expand_query_top_k(),
@@ -770,6 +814,35 @@ fn build_iteration_summary_payload(
     }
     payload.insert("duration_ms".into(), json!(duration_ms));
     Value::Object(payload)
+}
+
+fn serialize_persona_bias(bias: &persona::PersonaContextBias) -> Option<Value> {
+    if bias.is_empty() {
+        return None;
+    }
+    let mut obj = Map::new();
+    if !bias.lane_priorities.is_empty() {
+        let mut lanes = Map::new();
+        for (lane, weight) in bias.lane_priorities.iter() {
+            lanes.insert(lane.clone(), json!(weight));
+        }
+        obj.insert("lane_priorities".into(), Value::Object(lanes));
+    }
+    if !bias.slot_overrides.is_empty() {
+        let mut slots = Map::new();
+        for (slot, limit) in bias.slot_overrides.iter() {
+            slots.insert(slot.clone(), json!(limit));
+        }
+        obj.insert("slot_overrides".into(), Value::Object(slots));
+    }
+    if bias.min_score_delta.abs() >= f32::EPSILON {
+        obj.insert("min_score_delta".into(), json!(bias.min_score_delta));
+    }
+    if obj.is_empty() {
+        None
+    } else {
+        Some(Value::Object(obj))
+    }
 }
 
 fn build_context_coverage_payload(
@@ -1461,6 +1534,7 @@ pub mod harness {
                 project: Some("demo".into()),
                 persona_id: None,
                 lane_bonus: 0.1,
+                lane_priorities: BTreeMap::new(),
                 scorer: Some("mmr".into()),
                 expand_query: false,
                 expand_query_top_k: 4,
@@ -1481,6 +1555,7 @@ pub mod harness {
                 threshold_hits: 1,
                 total_candidates: selected + 2,
                 lane_counts: lanes,
+                lane_priorities: BTreeMap::new(),
                 slot_counts: BTreeMap::new(),
                 slot_budgets: BTreeMap::new(),
                 min_score: 0.4,

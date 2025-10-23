@@ -169,7 +169,7 @@ do_build() {
   (cd "$ROOT" && ic_cargo build --workspace --release)
   if [[ $RUN_TESTS -eq 1 ]]; then
     ic_section "Tests"
-    (cd "$ROOT" && ic_cargo nextest run --workspace) || true
+    (cd "$ROOT" && ic_cargo nextest run --workspace --test-threads=1) || true
   fi
 }
 

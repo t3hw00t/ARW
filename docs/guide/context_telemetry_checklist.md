@@ -3,7 +3,7 @@ title: Context Telemetry Checklist
 ---
 
 # Context Telemetry Checklist
-Updated: 2025-10-12
+Updated: 2025-10-24
 Type: How‑to
 
 Use this checklist whenever you touch the context assembly loop, coverage heuristics, or the dashboards that depend on them. It keeps the `context.coverage` and `context.recall.risk` streams healthy and ensures downstream read-models expose slot budgets and counts for UI meters.
@@ -18,7 +18,8 @@ Use this checklist whenever you touch the context assembly loop, coverage heuris
 
 - **Unit tests** — Run the focused assertions that guard the event payloads:
   ```bash
-  cargo test -p arw-server \
+  cargo test -p arw-server -- \
+    --test-threads=1 \
     context_loop::tests::recall_risk_payload_combines_gaps \
     context_loop::tests::coverage_payload_captures_slot_budgets_and_metadata
   ```

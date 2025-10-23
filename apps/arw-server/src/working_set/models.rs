@@ -28,6 +28,7 @@ pub struct WorkingSetSummary {
     pub threshold_hits: usize,
     pub total_candidates: usize,
     pub lane_counts: BTreeMap<String, usize>,
+    pub lane_priorities: BTreeMap<String, f32>,
     pub slot_counts: BTreeMap<String, usize>,
     pub slot_budgets: BTreeMap<String, usize>,
     pub min_score: f32,
@@ -50,6 +51,13 @@ impl WorkingSetSummary {
             lanes.insert(lane.clone(), json!(count));
         }
         obj.insert("lane_counts".into(), Value::Object(lanes));
+        if !self.lane_priorities.is_empty() {
+            let mut prefs = Map::new();
+            for (lane, weight) in self.lane_priorities.iter() {
+                prefs.insert(lane.clone(), json!(weight));
+            }
+            obj.insert("lane_priorities".into(), Value::Object(prefs));
+        }
         if !self.slot_counts.is_empty() || !self.slot_budgets.is_empty() {
             let mut slots = Map::new();
             if !self.slot_counts.is_empty() {

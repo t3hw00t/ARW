@@ -14,6 +14,7 @@ pub struct WorkingSetSpec {
     pub project: Option<String>,
     pub persona_id: Option<String>,
     pub lane_bonus: f32,
+    pub lane_priorities: BTreeMap<String, f32>,
     pub scorer: Option<String>,
     pub expand_query: bool,
     pub expand_query_top_k: usize,
@@ -70,6 +71,7 @@ impl WorkingSetSpec {
         }
         self.expand_query_top_k = self.expand_query_top_k.clamp(1, 32);
         self.normalize_slot_budgets();
+        self.normalize_lane_priorities();
     }
 
     pub fn scorer_label(&self) -> String {
@@ -87,6 +89,13 @@ impl WorkingSetSpec {
         snapshot.insert("project".into(), json!(self.project));
         snapshot.insert("persona".into(), json!(self.persona_id));
         snapshot.insert("lane_bonus".into(), json!(self.lane_bonus));
+        if !self.lane_priorities.is_empty() {
+            let mut lanes = Map::new();
+            for (lane, weight) in self.lane_priorities.iter() {
+                lanes.insert(lane.clone(), json!(weight));
+            }
+            snapshot.insert("lane_priorities".into(), Value::Object(lanes));
+        }
         snapshot.insert("scorer".into(), json!(self.scorer));
         snapshot.insert("expand_query".into(), json!(self.expand_query));
         snapshot.insert("expand_query_top_k".into(), json!(self.expand_query_top_k));
@@ -123,6 +132,31 @@ impl WorkingSetSpec {
         self.slot_budgets = normalized;
     }
 
+    fn normalize_lane_priorities(&mut self) {
+        if self.lane_priorities.is_empty() {
+            self.lane_priorities = default_lane_priorities();
+        }
+        if self.lane_priorities.is_empty() {
+            return;
+        }
+        let mut normalized = BTreeMap::new();
+        for (lane, value) in std::mem::take(&mut self.lane_priorities) {
+            let key = lane.trim().to_ascii_lowercase();
+            if key.is_empty() {
+                continue;
+            }
+            if !value.is_finite() {
+                continue;
+            }
+            let clamped = value.clamp(-1.0, 1.0);
+            if clamped.abs() < f32::EPSILON {
+                continue;
+            }
+            normalized.insert(key, clamped);
+        }
+        self.lane_priorities = normalized;
+    }
+
     pub fn slot_limit(&self, slot: &str) -> Option<usize> {
         if self.slot_budgets.is_empty() {
             return None;
@@ -132,6 +166,65 @@ impl WorkingSetSpec {
             .get(&key)
             .copied()
             .or_else(|| self.slot_budgets.get("*").copied())
+    }
+
+    pub fn lane_priority(&self, lane: &str) -> f32 {
+        if self.lane_priorities.is_empty() {
+            return 0.0;
+        }
+        let key = lane.trim().to_ascii_lowercase();
+        if key.is_empty() {
+            return 0.0;
+        }
+        self.lane_priorities
+            .get(&key)
+            .copied()
+            .or_else(|| self.lane_priorities.get("*").copied())
+            .unwrap_or(0.0)
+    }
+
+    pub fn merge_lane_priorities(&mut self, adjustments: &BTreeMap<String, f32>) {
+        if adjustments.is_empty() {
+            return;
+        }
+        for (lane, delta) in adjustments {
+            if !delta.is_finite() {
+                continue;
+            }
+            let trimmed = lane.trim().to_ascii_lowercase();
+            if trimmed.is_empty() {
+                continue;
+            }
+            let value = (*delta).clamp(-1.0, 1.0);
+            if value.abs() < f32::EPSILON {
+                continue;
+            }
+            let entry = self.lane_priorities.entry(trimmed).or_insert(0.0);
+            *entry = (*entry + value).clamp(-1.0, 1.0);
+        }
+    }
+
+    pub fn merge_slot_budgets(&mut self, overrides: &BTreeMap<String, usize>) {
+        if overrides.is_empty() {
+            return;
+        }
+        for (slot, limit) in overrides {
+            let key = slot.trim().to_ascii_lowercase();
+            if key.is_empty() {
+                continue;
+            }
+            let existing = self.slot_budgets.entry(key).or_insert(0);
+            if *limit > *existing {
+                *existing = *limit;
+            }
+        }
+    }
+
+    pub fn adjust_min_score(&mut self, delta: f32) {
+        if !delta.is_finite() || delta.abs() < f32::EPSILON {
+            return;
+        }
+        self.min_score = (self.min_score + delta).clamp(0.0, 1.0);
     }
 }
 
@@ -290,4 +383,56 @@ fn parse_slot_budget_value(value: Value) -> Option<usize> {
 
 fn normalize_slot_key(input: &str) -> String {
     input.trim().to_ascii_lowercase()
+}
+
+pub fn default_lane_priorities() -> BTreeMap<String, f32> {
+    let mut weights = BTreeMap::new();
+    let raw = match std::env::var("ARW_CONTEXT_LANE_PRIORITIES") {
+        Ok(raw) => raw,
+        Err(_) => return weights,
+    };
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return weights;
+    }
+    if trimmed.starts_with('{') {
+        if let Ok(Value::Object(map)) = serde_json::from_str::<Value>(trimmed) {
+            for (lane, value) in map {
+                if let Some(weight) = parse_lane_priority_value(value) {
+                    let key = normalize_slot_key(&lane);
+                    if !key.is_empty() {
+                        weights.insert(key, weight);
+                    }
+                }
+            }
+        }
+        return weights;
+    }
+    for part in trimmed.split(',') {
+        let mut iter = part.splitn(2, '=');
+        let key = iter.next().unwrap_or("").trim();
+        let value = iter.next().unwrap_or("").trim();
+        if key.is_empty() || value.is_empty() {
+            continue;
+        }
+        if let Ok(parsed) = value.parse::<f32>() {
+            let key = normalize_slot_key(key);
+            if !key.is_empty() && parsed.is_finite() {
+                weights.insert(key, parsed.clamp(-1.0, 1.0));
+            }
+        }
+    }
+    weights
+}
+
+fn parse_lane_priority_value(value: Value) -> Option<f32> {
+    match value {
+        Value::Number(num) => num.as_f64().map(|v| v as f32),
+        Value::String(s) => s.trim().parse::<f32>().ok(),
+        Value::Bool(true) => Some(0.25),
+        Value::Bool(false) => Some(0.0),
+        Value::Null => None,
+        Value::Array(_) | Value::Object(_) => None,
+    }
+    .map(|v| v.clamp(-1.0, 1.0))
 }

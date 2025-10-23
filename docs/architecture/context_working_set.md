@@ -3,7 +3,7 @@ title: Context Working Set (Never‑Out‑Of‑Context)
 ---
 
 # Context Working Set (Never‑Out‑Of‑Context)
-Updated: 2025-10-16
+Updated: 2025-10-24
 Type: Explanation
 
 Core idea
@@ -29,6 +29,7 @@ Context assembly (every turn)
 - Targeted retrieval: build a small set from semantic + world memories using relevance, recency, and diversity (MMR‑style) to avoid duplicates.
 - Token budgeter: fixed slots for instructions, plan, safety/policy, and evidence; leftover tokens go to nice-to-have context.
 - Slot-aware assembly: `/context/assemble` accepts `slot_budgets` (map of slot → max items). Selected items expose a normalized `slot` field—including the dedicated `story_thread` slot—and the response summarizes how many items landed in each slot so telemetry and UI can highlight gaps.
+- Lane priorities: `/context/assemble` also honours `lane_priorities` (lane → bonus weight). Values range from -1.0 to 1.0 and layer on top of the standard diversity bonus so personas or policies can gently tilt retrieval toward specific lanes without inflating the global limit. Seed defaults via `ARW_CONTEXT_LANE_PRIORITIES` using the same `{ "lane": weight }` JSON shape as slot budgets.
 - Always include pointers: emit stable IDs alongside excerpts so the agent/UI can rehydrate more by ID when needed.
 - Coverage-guided refinement: when `coverage.reasons` flag gaps (e.g., low lane diversity, weak scores, below target limit) the next iteration automatically widens lanes, increases expansion, or lowers thresholds before running. Dashboards see the proposed adjustments via the `next_spec` snapshot on each `working_set.iteration.summary` event.
 

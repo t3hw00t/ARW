@@ -534,7 +534,7 @@ impl CandidateScorer for MmrdScorer {
         let lane_bonus = candidate
             .lane
             .as_ref()
-            .map(|lane| lane_bonus(ctx.lane_counts, lane, ctx.spec.lane_bonus))
+            .map(|lane| lane_bonus(ctx.lane_counts, lane, ctx.spec))
             .unwrap_or(0.0);
         mmr_score(
             candidate,
@@ -559,7 +559,7 @@ impl CandidateScorer for ConfidenceScorer {
         let lane_bonus = candidate
             .lane
             .as_ref()
-            .map(|lane| lane_bonus(ctx.lane_counts, lane, ctx.spec.lane_bonus))
+            .map(|lane| lane_bonus(ctx.lane_counts, lane, ctx.spec))
             .unwrap_or(0.0);
         candidate.cscore + lane_bonus
     }
@@ -723,12 +723,12 @@ pub(super) fn select_candidates<O: WorkingSetObserver>(
     (selected, lane_counts, slot_counts)
 }
 
-fn lane_bonus(counts: &BTreeMap<String, usize>, lane: &str, bonus: f32) -> f32 {
+fn lane_bonus(counts: &BTreeMap<String, usize>, lane: &str, spec: &WorkingSetSpec) -> f32 {
+    let mut total = spec.lane_priority(lane);
     if counts.get(lane).copied().unwrap_or(0) == 0 {
-        bonus
-    } else {
-        0.0
+        total += spec.lane_bonus;
     }
+    total
 }
 
 fn mmr_score(candidate: &Candidate, selected: &[Candidate], lambda: f32, lane_bonus: f32) -> f32 {
@@ -1489,6 +1489,7 @@ impl WorkingSetSummary {
             threshold_hits: if has_above { hits } else { 0 },
             total_candidates,
             lane_counts: lane_counts.clone(),
+            lane_priorities: spec.lane_priorities.clone(),
             slot_counts: slot_counts.clone(),
             slot_budgets: spec.slot_budgets.clone(),
             min_score: spec.min_score,

@@ -205,13 +205,14 @@ function Invoke-Verify {
   $testArgs = $null
   $testStepName = $null
   if ($nextest) {
-    $testArgs = @('nextest','run','--workspace')
+    $testArgs = @('nextest','run','--workspace','--test-threads=1')
     if (-not $includeLauncher) { $testArgs += @('--exclude','arw-launcher') }
     $testStepName = "cargo $($testArgs -join ' ')"
   } else {
     Write-Warning 'cargo-nextest not found; falling back to cargo test --workspace --locked.'
     $testArgs = @('test','--workspace','--locked')
     if (-not $includeLauncher) { $testArgs += @('--exclude','arw-launcher') }
+    $testArgs += @('--','--test-threads=1')
     $testStepName = "cargo $($testArgs -join ' ')"
   }
   $results += Invoke-Step -Name $testStepName -Action {
@@ -572,7 +573,7 @@ switch ($commandKey) {
       Write-Warning 'cargo-nextest not found; falling back to cargo test --workspace --locked.'
       $cargo = Resolve-Tool @('cargo')
       if (-not $cargo) { throw 'cargo not found in PATH.' }
-      Invoke-Program -Executable $cargo -Arguments @('test','--workspace','--locked')
+      Invoke-Program -Executable $cargo -Arguments @('test','--workspace','--locked','--','--test-threads=1')
     }
   }
   'docs' {

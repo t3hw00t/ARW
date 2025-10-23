@@ -3,7 +3,7 @@ title: Persona Preview Quickstart
 ---
 
 # Persona Preview Quickstart
-Updated: 2025-10-22  
+Updated: 2025-10-24
 Type: Tutorial  
 Status: Preview
 
@@ -63,6 +63,12 @@ arw-cli admin persona seed \
   --archetype ally \
   --traits '{"tone":"warm","style":"supportive"}' \
   --worldview '{"mission":"Assist local projects with empathy"}' \
+  --preferences '{
+    "context": {
+      "lane_weights": {"episodic": 0.3, "procedural": 0.1},
+      "slot_budgets": {"evidence": 2}
+    }
+  }' \
   --base http://127.0.0.1:8091
 ```
 

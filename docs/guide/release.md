@@ -4,7 +4,7 @@ title: Release Guide
 
 # Release Guide
 
-Updated: 2025-10-23
+Updated: 2025-10-24
 Type: Runbook
 
 This runbook captures the end-to-end process for cutting an Agent Hub (ARW) release. It focuses on the unified `arw-server` surface, the CLI, docs, and portable bundles. Windows installers and other follow-on packaging inherit from these steps.
@@ -44,7 +44,7 @@ For targeted crates you can use the release script’s set:
 ```bash
 cargo clippy -p arw-protocol -p arw-events -p arw-core -p arw-macros \
   -p arw-cli -p arw-otel -p arw-server -p arw-connector --all-targets -- -D warnings
-cargo test --workspace --locked --exclude arw-tauri --exclude arw-launcher
+cargo test --workspace --locked --exclude arw-tauri --exclude arw-launcher -- --test-threads=1
 ```
 
 ## Docs & Specs Regeneration

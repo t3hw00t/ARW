@@ -68,7 +68,7 @@ test-server:
   RUST_TEST_THREADS=1 cargo test -p arw-server -- --nocapture
 
 test-fast:
-  if command -v cargo-nextest >/dev/null; then cargo nextest run --workspace; else cargo test --workspace --locked; fi
+  if command -v cargo-nextest >/dev/null; then cargo nextest run --workspace --test-threads=1; else cargo test --workspace --locked -- --test-threads=1; fi
 
 test-watch:
   cargo watch -x "test --workspace"

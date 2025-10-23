@@ -252,7 +252,7 @@ EOF
     case "$pick" in
       1) (cd "$ROOT" && ic_cargo build --workspace --release) ;;
       2) (cd "$ROOT" && ic_cargo build --workspace --release --features nats) ;;
-      3) (cd "$ROOT" && ic_cargo nextest run --workspace) || true ;;
+      3) (cd "$ROOT" && ic_cargo nextest run --workspace --test-threads=1) || true ;;
       4) bash "$DIR/docgen.sh" || ic_warn "docgen failed" ;;
       5) bash "$DIR/package.sh" || ic_warn "package failed" ;;
       0|'') break ;;
