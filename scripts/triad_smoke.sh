@@ -7,7 +7,11 @@ REPO_ROOT="$ROOT_DIR"
 source "$REPO_ROOT/scripts/lib/env_mode.sh"
 arw_env_init
 source "$SCRIPT_DIR/lib/smoke_timeout.sh"
-smoke_timeout::init "triad-smoke" 600 "TRIAD_SMOKE_TIMEOUT_SECS"
+DEFAULT_TRIAD_TIMEOUT=120
+if [[ -z "${TRIAD_SMOKE_TIMEOUT_SECS:-}" ]]; then
+  TRIAD_SMOKE_TIMEOUT_SECS="$DEFAULT_TRIAD_TIMEOUT"
+fi
+smoke_timeout::init "triad-smoke" "$DEFAULT_TRIAD_TIMEOUT" "TRIAD_SMOKE_TIMEOUT_SECS"
 
 is_truthy() {
   case "$(echo "${1:-}" | tr '[:upper:]' '[:lower:]')" in
@@ -53,6 +57,15 @@ else
     BUILD_PROFILE="release"
   fi
 fi
+
+PRESET_VALUE="${TRIAD_SMOKE_PERF_PRESET:-eco}"
+if [[ -n "${ARW_PERF_PRESET:-}" ]]; then
+  PRESET_VALUE="$ARW_PERF_PRESET"
+else
+  export ARW_PERF_PRESET="$PRESET_VALUE"
+fi
+echo "[triad-smoke] using ARW_PERF_PRESET=${PRESET_VALUE}"
+echo "[triad-smoke] timeout ${TRIAD_SMOKE_TIMEOUT_SECS}s"
 
 cleanup() {
   local status=$?
@@ -136,6 +149,7 @@ if [[ $START_SERVER -eq 1 ]]; then
   ARW_PORT="$PORT" \
   ARW_STATE_DIR="$STATE_DIR" \
   ARW_ADMIN_TOKEN="$ADMIN_TOKEN" \
+  ARW_PERF_PRESET="$PRESET_VALUE" \
   ARW_DEBUG=0 \
   "$SERVER_BIN" >"$LOG_FILE" 2>&1 &
   SERVER_PID=$!
@@ -170,6 +184,9 @@ else
   fi
 fi
 
+echo "[triad-smoke] healthz check passed for $BASE"
+
+echo "[triad-smoke] launching python harness"
 python3 - "$BASE" "$ADMIN_TOKEN" "$PERSONA_ID" <<'PY'
 import base64
 import json
@@ -344,5 +361,6 @@ if persona:
         f"triad-smoke OK — action {action_id} completed; persona {persona}; state + events healthy"
     )
 else:
-    print(f"triad-smoke OK — action {action_id} completed; state + events healthy")
+    print(f"triad-smoke OK - action {action_id} completed; state + events healthy")
 PY
+echo "[triad-smoke] python harness completed"

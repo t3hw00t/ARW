@@ -329,11 +329,12 @@ PY
       if ! "$py_bin" "$REPO_ROOT/scripts/ci_snappy_bench.py"; then ok=1; fi
     fi
 
-    echo "[verify] bash scripts/triad_smoke.sh"
+    local triad_timeout="${TRIAD_SMOKE_TIMEOUT_SECS:-90}"
+    echo "[verify] TRIAD_SMOKE_TIMEOUT_SECS=${triad_timeout} bash scripts/triad_smoke.sh"
     if [[ "${ARW_ENV_MODE:-}" == "windows-host" || "${ARW_ENV_MODE:-}" == "windows-wsl" ]]; then
       export RUNTIME_SMOKE_USE_RELEASE="${RUNTIME_SMOKE_USE_RELEASE:-1}"
     fi
-    if ! bash "$REPO_ROOT/scripts/triad_smoke.sh"; then ok=1; fi
+    if ! TRIAD_SMOKE_TIMEOUT_SECS="$triad_timeout" bash "$REPO_ROOT/scripts/triad_smoke.sh"; then ok=1; fi
 
     local ctx_py=""
     if command -v python3 >/dev/null 2>&1; then

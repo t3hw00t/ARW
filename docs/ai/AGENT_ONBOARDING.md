@@ -1,5 +1,5 @@
 # Agent Onboarding
-Updated: 2025-10-20
+Updated: 2025-10-23
 Type: Reference
 
 Microsummary: Fast orientation for assistants working in the ARW repo—where to look, what to run, and how to respond safely.
@@ -32,6 +32,8 @@ Microsummary: Fast orientation for assistants working in the ARW repo—where to
 - Python launcher: when instructions reference `python3`, prefer `py -3` or `python` on Windows and state which alias you used so reviewers can reproduce the command.
 - Build/test wrappers: prefer the platform helpers (`scripts\dev.ps1 build`, `scripts\dev.ps1 test`) or the `.bat`/`.cmd` shims that repositories ship (`& .\gradlew.bat test`, `& .\mvnw.cmd verify`, `npm.cmd test`). Quote paths with spaces (`& "C:\Program Files\Git\bin\bash.exe" -lc 'just verify'`) and keep the working directory explicit instead of relying on `cd`.
 - Line endings & execution policy: watch for CRLF/LF mismatches when calling shell scripts from Windows. Run `git config core.autocrlf false` (or use `.gitattributes`) to preserve LF-only files, and repair broken scripts with `dos2unix` or `Set-Content -NoNewline`. Unblock downloaded helpers via `Unblock-File` and, if PowerShell refuses to run repo scripts, temporarily relax the policy (`Set-ExecutionPolicy -Scope Process Bypass`) before re-enabling your stricter default.
+
+> **Windows host first:** Default to native PowerShell unless you intentionally move into WSL. When you return, run `scripts\env\switch.ps1 windows-host` so artefacts stay aligned with the host.
 
 ### WSL Notes
 - Clone the repo inside the Linux filesystem (`/home/<user>`). Running builds from `/mnt/c` keeps NTFS semantics and slows `cargo`.

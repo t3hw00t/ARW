@@ -3,7 +3,7 @@ title: Performance Presets
 ---
 
 # Performance Presets
-Updated: 2025-10-19
+Updated: 2025-10-23
 Type: How‑to
 
 ARW ships with built‑in performance presets to adapt resource usage to your machine without hand‑tuning dozens of knobs.
@@ -33,6 +33,7 @@ echo $ARW_PERF_PRESET_TIER
 - Shrinks the action/tool cache (`ARW_TOOLS_CACHE_TTL_SECS=300`, `ARW_TOOLS_CACHE_CAP=256`) so low-memory hosts avoid reclaim churn.
 - Leaves OpenTelemetry exporters disabled (`ARW_OTEL=0`, `ARW_OTEL_METRICS=0`) unless you opt back in explicitly.
 - Honors `ARW_PERSONA_VIBE_HISTORY_RETAIN` so persona telemetry history stays lean on eco hosts.
+- Guardrails such as `scripts/triad_smoke.sh` now default to the eco preset; override with `TRIAD_SMOKE_PERF_PRESET` or `ARW_PERF_PRESET` when you need other tiers during smoke runs.
 - Override any value manually when a workload needs more headroom; explicit env vars always win over preset defaults.
 
 ## What Presets Tune

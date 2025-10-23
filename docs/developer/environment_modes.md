@@ -4,7 +4,7 @@ title: Environment Modes
 
 # Environment Modes
 
-Updated: 2025-10-17
+Updated: 2025-10-23
 Type: Reference
 
 ## Overview
@@ -77,6 +77,8 @@ Run the suggested switch command and re-run your task.
 - Bootstrap via `bash scripts/setup.sh --yes`.
 
 ### Windows Host
+
+This is the default workspace for Windows contributors; switch to WSL only when you specifically need Linux-only tooling.
 
 - Use PowerShell as the primary interface (`pwsh -File scripts/dev.ps1 …`).
 - Git Bash is used internally to run a few cross‑platform shell helpers, but WSL is not required.

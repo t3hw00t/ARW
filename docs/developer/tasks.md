@@ -13,7 +13,6 @@ Type: Reference
 - [t-20251017-persona-telemetry] Empathy signal loop instrumentation — todo
 - [t-20251017-revenue-recipes] Revenue recipe gallery (MVP) — todo
 - [t-20251017-contribution-ledger] Contribution ledger MVP — todo
-- [t-20251022-task-sync] Task metadata sync automation — todo
 - [t-20251022-empathy-studio] Empathy feedback studio — todo
 - [t-20251022-agent-economy-pilot] Agent economy pilot pack — todo
 
@@ -27,3 +26,4 @@ Type: Reference
 
 ## Done
 - [t-20251017-automation-ops] Automation ops handbook — done
+- [t-20251022-task-sync] Task metadata sync automation — done

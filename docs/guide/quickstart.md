@@ -4,7 +4,7 @@ title: Quickstart
 
 # Quickstart
 
-Updated: 2025-10-22
+Updated: 2025-10-23
 Type: Tutorial
 
 Run the unified ARW server locally in minutes. The architecture centres on the `/actions` → `/events` → `/state/*` triad; enable `ARW_DEBUG=1` to serve the browser debug panels.
@@ -35,8 +35,8 @@ Need a single command that brings in Rust, Python, Node.js, jq, and ripgrep? Ins
 
 ## Select Your Environment
 
-- Run `bash scripts/env/switch.sh <mode>` from inside the platform you are working on (`linux`, `windows-host`, `windows-wsl`, `mac`).  
-  Example: `bash scripts/env/switch.sh windows-host`
+- Run `bash scripts/env/switch.sh <mode>` only when you are inside that shell (`linux`, `windows-wsl`, `mac`). On native Windows start with `scripts\env\switch.ps1 windows-host` and call the WSL variant only after you intentionally swap into the Linux environment.
+  Example: `scripts\env\switch.ps1 windows-host`
 - The helper updates `.arw-env`, flips `target/` and `.venv/` to the right copies for that platform, and refuses to run if you launch it from the wrong environment.
 - When you move between Windows host and WSL, run the switch command on each side before rebuilding or running tests to prevent cross-platform binaries from colliding.
 - For a deeper walkthrough (including toolchain notes per mode) see [Developer › Environment Modes](../developer/environment_modes.md).
