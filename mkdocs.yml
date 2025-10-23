@@ -53,6 +53,7 @@ nav:
       - Quickstart: guide/quickstart.md
       - Runtime Quickstart (Non-Technical): guide/runtime_quickstart.md
       - Shortcuts: guide/shortcuts.md
+      - Universal Access Starter Kit: guide/universal_access_kit.md
   - How‑to:
       - Docker: guide/docker.md
       - Deployment & Isolation: guide/deployment.md
@@ -281,3 +282,4 @@ nav:
       - Roadmap: ROADMAP.md
       - Interface Roadmap: INTERFACE_ROADMAP.md
       - Backlog: BACKLOG.md
+      - Goal <-> Roadmap <-> Tasks: GOAL_ROADMAP_CROSSWALK.md

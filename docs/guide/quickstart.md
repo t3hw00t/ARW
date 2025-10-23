@@ -32,6 +32,7 @@ Need a single command that brings in Rust, Python, Node.js, jq, and ripgrep? Ins
 - Use `ARW_PERSONA_VIBE_HISTORY_RETAIN=<limit>` to clamp persona feedback history (default 50 samples) when disk space or memory is tight. This knob has no effect unless the persona preview (`ARW_PERSONA_ENABLE=1`) is active.
 - You can still raise individual knobs later (for example `ARW_HTTP_MAX_CONC`, `ARW_TOOLS_CACHE_CAP`) if a workload needs more throughput.
 - Clear the preset or set `ARW_PERF_PRESET=balanced` once you move to a machine with more cores or a dedicated GPU.
+- Prefer a bundled setup? Run `python scripts/universal_access_kit.py --force --zip` (or `just kit-universal`) to produce `dist/universal-access-kit` (docs, eco env, starter persona); see [Universal Access Starter Kit](universal_access_kit.md) for details.
 
 ## Select Your Environment
 
@@ -341,3 +342,5 @@ Generate the secret with any equivalent tool if `openssl` is unavailable.
 - Read the [Restructure Handbook](../RESTRUCTURE.md) for the canonical roadmap.
 - Explore [Context Recipes](context_recipes.md) and [Performance Presets](performance_presets.md) to tune retrieval speed and coverage.
 - Run `cargo run -p arw-server` during development for hot reloads and tracing; set `ARW_OTEL=1` (optionally combine with `ARW_OTEL_ENDPOINT=http://collector:4317`) to stream traces to your OTLP collector.
+
+

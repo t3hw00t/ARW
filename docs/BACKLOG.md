@@ -46,6 +46,7 @@ Managed Runtime Supervisor (Priority One)
 - [Kernel] Supply-chain readiness for bundled runtimes: sign binary manifests, document update cadence, and ship rollback checklist — done (manifest sign/verify CLI, signature audit helper, runtime bundle runbook published).
 - [Kernel] Bundle catalog & signatures: publish `configs/runtime/bundles.llama.json`, `bundles.vision.json`, and `bundles.audio.json` with signed hashes; pipeline to resolve bundle channel metadata — in_progress (preview catalogs + `/state/runtime/bundles` read-model shipping with catalog + installation summaries; signer registry + trust enforcement landed, artifact publishing pipeline next) (Expert Alignment Plan §1A).
 - [Kernel] Universal runtime adapter SDK: ship a trait + manifest kit so community runtimes (local or remote) can register with `RuntimeRegistry`, with linting, docs, and sample adapters (llama.cpp, vLLM, REST proxy) — in_progress (manifest schema + CLI lint landed; adapter scaffolding next) (Expert Alignment Plan §1B).
+- [Kernel] Runtime adapter gallery & smoke harness [t-20251023-adapter-gallery] - todo (curated signed manifests, sample adapters, and validation harness to make third-party runtimes plug-and-play).
 - [Kernel] Runtime bundle CLI: ship `arw-cli runtime bundles list/install/import` to manage downloads, offline imports, and rollbacks — done (list, install/import, and rollback helpers shipped) (Expert Alignment Plan §1A/§1D).
 - [Kernel] Supervisor bundle resolver: integrate bundle registry with `RuntimeSupervisor`, enforce preset mapping + accelerator detection, and expose bundle info via `/state/runtimes` — in_progress (bundle inventory exposed; supervisor now auto-registers staged bundles while preset/channel signing work continues) (Expert Alignment Plan §1B).
 - [Pack: Collaboration][Kernel] Launcher runtime wizard: guided install + consent flow with keyboard parity, hardware probe recommendations, and health toasts — plan (Expert Alignment Plan §1C).
@@ -109,21 +110,25 @@ Persona & Empathy (High Priority)
 - [Pack: Persona][Pack: Research] Worldview bridge: stream episodic/semantic memories into persona worldview facets with review dashboards, drift alerts, and consent-respecting diffs — in_progress (kernel ingest hooks merged; launcher calibration panel in design).
 - [Pack: Persona][Pack: Collaboration] Empathy signal loop: instrument tone/pacing/sentiment telemetry (opt-in), expose vibe feedback controls in Chat/Launcher, ensure accessibility parity — todo
 - [Pack: Persona][Pack: Collaboration] Empathy feedback studio: Launcher workbench that visualizes vibe history, annotates “why I chose this” responses, and guides reflective prompts while the preview flag is on — plan
-- [Pack: Persona] Narrative toolkit: journaling + reflection prompts tied to self-model changes; ship configurable growth checkpoints — todo
+- [Pack: Persona][Pack: Collaboration] Persona reflection loop integration [t-20251023-reflection-loop] - todo (guided reflection prompts, persona diffs, and vibe metrics feeding context assembly).
 - [Pack: Persona] Inclusive research sprint: run moderated studies across personas, publish empathy design language and heuristics — plan
 
+<a id="autonomous-economy--federation"></a>
 Autonomous Economy & Federation
 - [Pack: Collaboration] Revenue recipe gallery: curate signed automation templates (research gigs, monitoring) with compliance guardrails and earning metadata — todo
 - [Pack: Collaboration][Pack: Federation] Agent economy pilot pack: bundle revenue recipes, consent checklist, contribution ledger MVP, and `/state/cluster/ledger` exports for early operators — plan
+- [Pack: Collaboration][Pack: Federation] Cooperative policy forum & settlement simulator [t-20251023-coop-forum] - todo (debate lane plus what-if payout simulator ahead of live federation).
 - [Kernel][Pack: Federation] Contribution ledger MVP: extend `/state/cluster` with per-task payouts, exports, and audit trails — todo
 - [Pack: Federation] Payout connector pilot: optional Stripe test-mode + manual invoice flows with policy leases and ledger reconciliation — plan
 - [Pack: Federation][Pack: Research] Cooperative scaling kit: deployment scripts + evaluation harness presets for revenue agents operating across nodes — plan
 - [Docs] Automation ops handbook: unattended-agent safety checklist, alerting defaults, legal considerations for solo operators - done
 
+<a id="universal-access--sustainability"></a>
 Universal Access & Sustainability
 - [Kernel] Eco runtime preset: optimize for CPU-only laptops, shrink default caches, document low-spec verification path — in_progress (preset caps worker count, trims telemetry defaults, and awaits low-spec smoke coverage + docs update).
+- [Docs][Kernel] Universal access starter kit [t-20251023-access-starter-kit] - todo (offline docs bundle, eco defaults, starter personas, and validation checklist).
 - [Pack: Persona][Docs] Community persona bundles: publish sharable persona/worldview seeds with consent guidelines and remix policy — plan
-- [Ops] Community distribution: mirror bundle artifacts + docs for offline installs; publish sustainability plan for free releases — plan
+- [Ops][Docs] Community distribution mirrors [t-20251023-community-distribution] - todo (mirror automation, signature checks, and offline guidance).
 - [Docs] Skills & monetization ladder: guided learning path from first agent to revenue deployment, integrate with onboarding guides — plan
 
 Kernel & Triad (NOW)

@@ -567,6 +567,13 @@ docs-deprecations:
 docs-release-notes base="origin/main":
   BASE_REF={{base}} python3 scripts/generate_interface_release_notes.py
 
+# Universal access kit
+kit-universal:
+  python3 scripts/universal_access_kit.py --force --zip || python scripts/universal_access_kit.py --force --zip
+
+kit-universal-check:
+  python3 scripts/universal_access_kit.py --check-only --zip || python scripts/universal_access_kit.py --check-only --zip
+
 # Design tokens
 tokens-sync:
   bash scripts/sync_tokens.sh

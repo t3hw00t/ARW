@@ -4,7 +4,7 @@ title: Release Guide
 
 # Release Guide
 
-Updated: 2025-10-17
+Updated: 2025-10-23
 Type: Runbook
 
 This runbook captures the end-to-end process for cutting an Agent Hub (ARW) release. It focuses on the unified `arw-server` surface, the CLI, docs, and portable bundles. Windows installers and other follow-on packaging inherit from these steps.
@@ -64,6 +64,11 @@ just docs-check
 Re-run `git status` afterwards to confirm only expected files changed.
 
 ## Portable Bundles & Artifacts
+
+### Universal Access Starter Kit
+- Run `just kit-universal` to regenerate `dist/universal-access-kit/` and the accompanying zip.
+- Run `just kit-universal-check` (or `python scripts/universal_access_kit.py --check-only --zip`) to validate the contents before publishing.
+- Attach `dist/universal-access-kit.zip` to the GitHub release alongside other portable bundles so offline installs stay in sync.
 
 Create portable archives for each target architecture you support. For native builds on the host:
 

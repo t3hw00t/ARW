@@ -4,13 +4,14 @@ title: Roadmap
 
 # Roadmap
 
-Updated: 2025-10-22
+Updated: 2025-10-23
 Type: Reference
 
 See also: [Backlog](BACKLOG.md), [Interface Roadmap](INTERFACE_ROADMAP.md), and the [Expert Alignment Plan](architecture/expert_alignment_plan.md) for phased delivery details and success metrics.
 Roadmap highlights themes and timelines; Backlog tracks actionable items.
 
-## Priority One – Managed Runtime Supervisor
+<a id="priority-one--managed-runtime-supervisor"></a>
+## Priority One — Managed Runtime Supervisor
 
 Promote the managed runtime supervisor from blueprint to the primary kernel initiative. This work elevates local model orchestration to the same Class 1 footing as Model Steward so every install gets a stable, policy-aligned runtime stack.
 
@@ -21,7 +22,7 @@ Promote the managed runtime supervisor from blueprint to the primary kernel init
 - **Documentation & UX** — replace the llama.cpp blueprint with the finalized supervisor design, add operator runbooks, and surface profiles plus consent cues in Launcher. Keep docs, feature matrix, and roadmap checkpoints in sync as phases land.
 
 <a id="priority-two--modular-cognitive-stack--memory-orchestration"></a>
-## Priority Two – Modular Cognitive Stack & Memory Orchestration
+## Priority Two — Modular Cognitive Stack & Memory Orchestration
 
 Establish the multi-agent cognitive scaffold that keeps user-facing chat, memory, validation, and tooling specialists aligned under a single orchestrator.
 
@@ -31,7 +32,8 @@ Establish the multi-agent cognitive scaffold that keeps user-facing chat, memory
 - **Phase 3: Tooling & Planner** — [Kernel][Pack: Research] broker tool execution with sandbox requirements, retries, and audit trails; introduce an optional planner that can fan out to specialists while respecting lease scopes. Integrate telemetry with the Evaluation Harness for AB testing.
 - **Documentation & Telemetry** — Publish operator guides, UI affordances, and dashboard widgets for memory hit rate, validation catch rate, and compression health. Keep [Backlog](BACKLOG.md) and [Developer Tasks](developer/tasks.md) aligned as phases land.
 
-## Priority Three – Empathy & Persona Experience
+<a id="priority-three--empathy--persona-experience"></a>
+## Priority Three — Empathy & Persona Experience
 
 Translate the project vision of empathetic, personally managed agents into tangible system capabilities and interfaces.
 
@@ -41,7 +43,8 @@ Translate the project vision of empathetic, personally managed agents into tangi
 - **Phase 3: Narrative UX** — [Pack: Persona] ship journaling, reflection prompts, and “why I chose this” explainers grounded in the self-model; add configuration for multiple personas per workspace.
 - **Documentation & Studies** — Publish empathy design language, inclusive research findings, and developer APIs for custom persona plugins. Keep the preview helper (`arw-cli admin persona seed` / `just persona-seed`) and the [Persona Preview Quickstart](guide/persona_quickstart.md) updated as the feature evolves.
 
-## Priority Four – Autonomous Economy & Federation
+<a id="priority-four--autonomous-economy--federation"></a>
+## Priority Four — Autonomous Economy & Federation
 
 Combine federation, automation, and fair value mechanisms so individuals can deploy revenue-generating agents safely.
 
@@ -275,3 +278,4 @@ Connect federation primitives with fair value exchange so local-first agents can
 
 #### Long-Term (3–6 Months)
 - [Pack: Research][Future] Research-grade local stack: on-device accel (CPU/GPU/NPU), quantization, LoRA fine-tuning, model manifests, artifact signing/verification, SBOMs, dependency audits, and signed policy capsules with Sigstore that rely on the RPU trust store plus local timestamping (renegotiation on restart remains default).
+

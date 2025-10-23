@@ -4,7 +4,7 @@ title: Interface Roadmap
 
 # Interface Roadmap
 
-Updated: 2025-10-18
+Updated: 2025-10-23
 Type: Reference
 
 See also: [Roadmap](ROADMAP.md)
@@ -24,7 +24,8 @@ Interface milestones reuse the shared scope badges so interface contributors can
 
 Badges can be combined (for example, `[Pack: Collaboration][Future]`) to show both the optional pack and that the work sits beyond the active delivery window.
 
-## Short‑Term (0–3 Months)
+<a id="short-term-0-3-months"></a>
+## Short-Term (0-3 Months)
 - [Pack: Collaboration] Guided micro-tutorials for first-time features
 - [Pack: Collaboration] Micro-satisfaction elements (light animations, haptic feedback)
 - [Pack: Collaboration] Contextual launcher tray actions with recent commands

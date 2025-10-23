@@ -15,6 +15,11 @@ Type: Reference
 - [t-20251017-contribution-ledger] Contribution ledger MVP — todo
 - [t-20251022-empathy-studio] Empathy feedback studio — todo
 - [t-20251022-agent-economy-pilot] Agent economy pilot pack — todo
+- [t-20251023-adapter-gallery] Runtime adapter gallery & smoke harness — todo
+- [t-20251023-reflection-loop] Persona reflection loop integration — todo
+- [t-20251023-coop-forum] Cooperative policy forum & settlement simulator — todo
+- [t-20251023-access-starter-kit] Universal access starter kit — todo
+- [t-20251023-community-distribution] Community distribution mirrors — todo
 
 ## In Progress
 - [t-20251017-persona-core] Persona core schema & diff workflow — in_progress
