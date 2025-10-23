@@ -345,6 +345,67 @@ fn export_gating_schemas() -> Result<(), std::io::Error> {
 fn export_gating_keys() -> Result<(), std::io::Error> {
     use chrono::Utc;
 
+    fn ensure_updated_from_generated(markdown: &str) -> String {
+        let mut lines: Vec<String> = markdown
+            .replace("\r\n", "\n")
+            .split('\n')
+            .map(str::to_string)
+            .collect();
+        if let Some((generated_idx, generated_value)) = lines
+            .iter()
+            .enumerate()
+            .find_map(|(idx, line)| line.strip_prefix("Generated: ").map(|rest| (idx, rest)))
+        {
+            if let Some(date_part) = generated_value.split(' ').next().filter(|s| !s.is_empty()) {
+                let updated_line = format!("Updated: {}", date_part);
+                if let Some(existing_idx) =
+                    lines.iter().position(|line| line.starts_with("Updated: "))
+                {
+                    lines[existing_idx] = updated_line;
+                } else {
+                    lines.insert(generated_idx, updated_line);
+                }
+            }
+        }
+        let mut output = lines.join("\n");
+        if markdown.ends_with('\n') && !output.ends_with('\n') {
+            output.push('\n');
+        }
+        output
+    }
+
+    fn normalize_markdown_for_compare(content: &str) -> String {
+        let normalized_input = content.replace("\r\n", "\n");
+        let lines: Vec<String> = normalized_input
+            .lines()
+            .map(|line| {
+                if line.starts_with("Generated: ") {
+                    "Generated: <timestamp>".to_string()
+                } else if line.starts_with("Updated: ") {
+                    "Updated: <timestamp>".to_string()
+                } else {
+                    line.to_string()
+                }
+            })
+            .collect();
+        let mut joined = lines.join("\n");
+        if content.ends_with('\n') {
+            joined.push('\n');
+        }
+        joined
+    }
+
+    fn normalize_json_for_compare(content: &str) -> Option<serde_json::Value> {
+        let mut value: serde_json::Value = serde_json::from_str(content).ok()?;
+        if let serde_json::Value::Object(ref mut map) = value {
+            map.insert(
+                "generated".into(),
+                serde_json::Value::String("<timestamp>".into()),
+            );
+        }
+        Some(value)
+    }
+
     let keys_path = std::path::Path::new("docs/GATING_KEYS.md");
     std::fs::create_dir_all(
         keys_path
@@ -352,13 +413,35 @@ fn export_gating_keys() -> Result<(), std::io::Error> {
             .unwrap_or_else(|| std::path::Path::new(".")),
     )?;
     let generated_at = Utc::now().format("%Y-%m-%d %H:%M UTC").to_string();
-    let markdown = arw_core::gating_keys::render_markdown(&generated_at);
-    std::fs::write(keys_path, markdown)?;
+    let markdown =
+        ensure_updated_from_generated(&arw_core::gating_keys::render_markdown(&generated_at));
+
+    let should_update_markdown = match std::fs::read_to_string(keys_path) {
+        Ok(existing) => {
+            normalize_markdown_for_compare(&existing) != normalize_markdown_for_compare(&markdown)
+        }
+        Err(_) => true,
+    };
+    if should_update_markdown {
+        std::fs::write(keys_path, &markdown)?;
+    }
 
     let json_path = keys_path.with_extension("json");
     let json_payload = arw_core::gating_keys::render_json(Some(&generated_at));
-    let json_bytes = serde_json::to_vec_pretty(&json_payload).map_err(std::io::Error::other)?;
-    std::fs::write(json_path, json_bytes)
+    let json_text = serde_json::to_string_pretty(&json_payload).map_err(std::io::Error::other)?;
+
+    let should_update_json = match std::fs::read_to_string(&json_path) {
+        Ok(existing) => {
+            normalize_json_for_compare(&existing) != normalize_json_for_compare(&json_text)
+        }
+        Err(_) => true,
+    };
+
+    if should_update_json {
+        std::fs::write(json_path, json_text)?;
+    }
+
+    Ok(())
 }
 
 fn spawn_bus_forwarders(
