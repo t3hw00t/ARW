@@ -176,4 +176,54 @@ if sdu.git_status_has_changes(str(tmp_path)):
     & $script:pythonCmd.Path -c $code
     $LASTEXITCODE | Should -Be 0
   }
+
+  It 'uses Generated timestamp to drive Updated metadata and stays idempotent' {
+    $code = @'
+import pathlib, sys
+
+root = pathlib.Path.cwd()
+sys.path.insert(0, str(root / "scripts"))
+import stamp_docs_updated as sdu  # type: ignore
+
+tmp_path = root / "docs" / "__stamp_tmp_generated.md"
+if tmp_path.exists():
+    tmp_path.unlink()
+
+try:
+    tmp_path.write_text(
+        """---
+title: Temp Doc
+---
+
+# Temp Doc
+Generated: 2030-01-02 04:05 UTC
+Type: Reference
+""",
+        encoding="utf-8",
+    )
+
+    changed = sdu.process(str(tmp_path))
+    if not changed:
+        print("expected process() to insert Updated line", file=sys.stderr)
+        sys.exit(10)
+
+    lines = tmp_path.read_text(encoding='utf-8').splitlines()
+    expected = "Updated: 2030-01-02"
+    if expected not in lines:
+        print("updated line missing or incorrect: " + repr(lines), file=sys.stderr)
+        sys.exit(11)
+
+    # Running again should be a no-op
+    changed_again = sdu.process(str(tmp_path))
+    if changed_again:
+        print("process() should be idempotent when timestamps already aligned", file=sys.stderr)
+        sys.exit(12)
+finally:
+    if tmp_path.exists():
+        tmp_path.unlink()
+'@
+
+    & $script:pythonCmd.Path -c $code
+    $LASTEXITCODE | Should -Be 0
+  }
 }

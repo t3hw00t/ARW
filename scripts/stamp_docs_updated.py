@@ -57,6 +57,15 @@ SKIP_UPDATED = {
 }
 
 
+def extract_generated_metadata(lines: list[str]) -> tuple[int, str | None]:
+    for i, line in enumerate(lines[:80]):
+        if line.startswith('Generated:'):
+            value = line.split(':', 1)[1].strip()
+            date_part = value.split(' ', 1)[0] if value else ""
+            return i, date_part or None
+    return -1, None
+
+
 def process(path: str) -> bool:
     rel = os.path.relpath(path, ROOT).replace("\\", "/")
     if rel in SKIP_UPDATED:
@@ -68,36 +77,38 @@ def process(path: str) -> bool:
         return False
     lines = text.splitlines()
     idx = has_updated_or_generated(lines)
-    updated_date = git_last_date(path)
+    updated_idx = idx if idx >= 0 and lines[idx].startswith('Updated:') else -1
+    generated_idx, generated_date = extract_generated_metadata(lines)
+
+    if generated_date:
+        target_updated = generated_date
+    else:
+        target_updated = git_last_date(path)
 
     # If Updated exists and is different, refresh it in-place
-    if idx >= 0 and lines[idx].startswith('Updated:'):
-        cur = lines[idx].split(':', 1)[1].strip()
-        if cur != updated_date:
-            lines[idx] = f"Updated: {updated_date}"
+    if updated_idx >= 0:
+        cur = lines[updated_idx].split(':', 1)[1].strip()
+        if cur != target_updated:
+            lines[updated_idx] = f"Updated: {target_updated}"
             new_text = "\n".join(lines) + ("\n" if text.endswith('\n') else "")
             with open(path, 'w', encoding='utf-8') as f:
                 f.write(new_text)
             return True
         return False
 
-    # Otherwise, insert a new Updated: line after the first H1 if present,
-    # else after front-matter block if present, else at top.
-    insert_at = None
-    h1 = find_h1(lines)
-    if h1 >= 0:
-        insert_at = h1 + 1
+    # Otherwise, insert a new Updated: line. Prefer directly above Generated if present,
+    # else after the first H1, else after front-matter block, else at top.
+    if generated_idx >= 0:
+        insert_at = generated_idx
     else:
-        fm_end = find_front_matter_end(lines)
-        if fm_end >= 0:
-            insert_at = fm_end + 1
+        h1 = find_h1(lines)
+        if h1 >= 0:
+            insert_at = h1 + 1
         else:
-            insert_at = 0
+            fm_end = find_front_matter_end(lines)
+            insert_at = fm_end + 1 if fm_end >= 0 else 0
 
-    # Ensure a blank line before and after for readability
-    to_insert = [f"Updated: {updated_date}"]
-    # insert a blank line if following line isn't blank
-    new_lines = lines[:insert_at] + to_insert + lines[insert_at:]
+    new_lines = lines[:insert_at] + [f"Updated: {target_updated}"] + lines[insert_at:]
     new_text = "\n".join(new_lines) + ("\n" if text.endswith('\n') or not text else "")
     with open(path, 'w', encoding='utf-8') as f:
         f.write(new_text)
