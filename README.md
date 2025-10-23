@@ -30,6 +30,7 @@ Assistant quickstart → [Agent Onboarding](docs/ai/AGENT_ONBOARDING.md)
 - [Quickstart](docs/guide/quickstart.md) - Run the unified server locally.
 - [Runtime Quickstart](docs/guide/runtime_quickstart.md) - Non-technical checklist for preparing managed runtimes (zero-auth mirrors + checksum validation).
 - [Persona Preview Quickstart](docs/guide/persona_quickstart.md) - Enable the optional persona stack and seed your first preview persona safely.
+- [Universal Access Starter Kit](docs/guide/universal_access_kit.md) - Generate an offline-ready bundle (eco presets, docs, starter persona) for low-spec installs.
 - [Orchestrator CLI](docs/guide/orchestrator_cli.md) - Catalog, launch, and monitor persona-aware training runs from the terminal.
 - [Repo Map](docs/ai/REPO_MAP.md) - Directory overview for retrieval and navigation.
 - [Documentation Home](docs/index.md) - Product overview, guides, and reference docs.
@@ -85,3 +86,4 @@ Assistant quickstart → [Agent Onboarding](docs/ai/AGENT_ONBOARDING.md)
 - Issues and discussions live on GitHub.
 - Automation dashboards and task tracking sit under .arw/ (large generated files are excluded from releases).
 - For status badges, CI pipelines, and deployment artifacts, see the badges at the top of this README.
+

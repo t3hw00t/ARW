@@ -96,6 +96,14 @@ jobs:
       - name: Universal access kit smoke
         run: python3 scripts/universal_access_kit.py --force --zip
 
+      - name: Upload universal access kit artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: universal-access-kit
+          path: |
+            dist/universal-access-kit
+            dist/universal-access-kit.zip
+
       - name: Upload docs artifact (PR preview)
         if: ${{ github.event_name == 'pull_request' }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
