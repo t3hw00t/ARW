@@ -202,6 +202,8 @@ pub(crate) mod paths {
     pub const COMPRESS_MEMORY_BUILD_TREE: &str = "/v1/compress/memory/build_tree";
     pub const COMPRESS_MEMORY_CODEBOOK: &str = "/v1/compress/memory/codebook";
     pub const RUNTIME_KV_POLICY: &str = "/v1/runtime/kv_policy";
+    pub const RUN: &str = "/v1/run";
+    pub const PLAN: &str = "/v1/plan";
     pub const STATE_AUTONOMY_LANES: &str = "/state/autonomy/lanes";
     pub const STATE_AUTONOMY_LANE: &str = "/state/autonomy/lanes/{lane}";
     pub const STATE_CLUSTER: &str = "/state/cluster";
@@ -366,6 +368,12 @@ pub(crate) fn build_router() -> (Router<AppState>, Vec<String>, Vec<Value>) {
         api::metrics::metrics_prometheus,
         Some(Stability::Stable),
     );
+    builder.route_post(
+        paths::PLAN,
+        api::planning::plan,
+        Some(Stability::Experimental),
+    );
+    builder.route_post(paths::RUN, api::run::run, Some(Stability::Experimental));
     builder.route_post(
         paths::COMPRESS_PROMPT,
         api::compression::compress_prompt,

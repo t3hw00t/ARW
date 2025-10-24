@@ -321,6 +321,59 @@ fn render_prometheus(
     }
 
     out.push_str(
+        "# HELP arw_plan_requests_total Planner executions\n# TYPE arw_plan_requests_total counter\n",
+    );
+    write_metric_line(&mut out, "arw_plan_requests_total", &[], summary.plan.total);
+    out.push_str(
+        "# HELP arw_plan_guard_failures_total Planner guard assertion failures\n# TYPE arw_plan_guard_failures_total counter\n",
+    );
+    write_metric_line(
+        &mut out,
+        "arw_plan_guard_failures_total",
+        &[],
+        summary.plan.guard_failures,
+    );
+    if let Some(tokens) = summary.plan.last_target_tokens {
+        out.push_str(
+            "# HELP arw_plan_last_target_tokens Target token budget from last plan\n# TYPE arw_plan_last_target_tokens gauge\n",
+        );
+        write_metric_line(&mut out, "arw_plan_last_target_tokens", &[], tokens);
+    }
+    if let Some(engine) = &summary.plan.last_engine {
+        out.push_str(
+            "# HELP arw_plan_last_engine Annotates the last planner-selected engine\n# TYPE arw_plan_last_engine gauge\n",
+        );
+        write_metric_line(
+            &mut out,
+            "arw_plan_last_engine",
+            &[("engine", engine.clone())],
+            1,
+        );
+    }
+    out.push_str(
+        "# HELP arw_plan_mode_total Planner mode selections\n# TYPE arw_plan_mode_total counter\n",
+    );
+    for (mode, count) in summary.plan.mode_counts.iter() {
+        write_metric_line(
+            &mut out,
+            "arw_plan_mode_total",
+            &[("mode", mode.clone())],
+            *count,
+        );
+    }
+    out.push_str(
+        "# HELP arw_plan_kv_policy_total Planner KV policy selections\n# TYPE arw_plan_kv_policy_total counter\n",
+    );
+    for (policy, count) in summary.plan.kv_policy_counts.iter() {
+        write_metric_line(
+            &mut out,
+            "arw_plan_kv_policy_total",
+            &[("policy", policy.clone())],
+            *count,
+        );
+    }
+
+    out.push_str(
         "# HELP arw_egress_scope_lease_minted_total Scope lease mints per scope\n# TYPE arw_egress_scope_lease_minted_total counter\n",
     );
     out.push_str(

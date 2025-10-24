@@ -72,6 +72,8 @@ pub struct AboutResponse {
         crate::api::meta::about,
         crate::api::spec::spec_health,
         crate::api::metrics::metrics_prometheus,
+        crate::api::planning::plan,
+        crate::api::run::run,
         crate::api::state::state_models,
         crate::api::state::state_runtime_matrix,
         crate::api::state::state_route_stats,

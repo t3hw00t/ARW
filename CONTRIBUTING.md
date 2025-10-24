@@ -29,6 +29,11 @@ Prerequisites
 Build scripts default to a headless profile that skips the Tauri launcher. Pass `--with-launcher` / `-WithLauncher` (or export `ARW_BUILD_LAUNCHER=1`) when you specifically need the desktop UI and have the platform dependencies installed.
 The Makefile and Justfile mirror this behavior: `make build` / `just build` run headless by default, while `make build-launcher` or `just build-launcher` opt into compiling the desktop UI.
 
+## Test fixtures
+- Prefer `test_support::begin_state_env` (optionally paired with `build_state`) whenever a test needs `AppState`; this keeps `ARW_STATE_DIR` scoped and restores env vars automatically.
+- Reuse `test_support::contracts::*` helpers (for example `sample_persona`, `sample_policy_surface`, `sample_plan_request`) so schema-complete fixtures stay consistent across tests.
+- Route-level tests can mount the real handlers with `Router::with_state(...)` and drive them via `tower::ServiceExt::oneshot`; see the `/v1/run` test in `apps/arw-server/src/api/run.rs` for a reference pattern.
+
 Commands
 ```bash
 cargo fmt --all -- --check

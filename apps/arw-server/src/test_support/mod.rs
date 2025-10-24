@@ -7,6 +7,7 @@ use parking_lot::{Mutex, MutexGuard};
 
 static ENV_LOCK: Lazy<Mutex<()>> = Lazy::new(|| Mutex::new(()));
 
+pub(crate) mod contracts;
 pub(crate) mod env {
     use super::*;
 

@@ -28,6 +28,7 @@ arw-heuristics = { path = "../../crates/arw-heuristics", version = "0.2.0-dev" }
 arw-memory-core = { path = "../../crates/arw-memory-core", version = "0.2.0-dev" }
 arw-runtime = { path = "../../crates/arw-runtime", version = "0.2.0-dev" }
 arw-compress = { path = "../../crates/compress", version = "0.2.0-dev" }
+arw-contracts = { path = "../../crates/arw-contracts", version = "0.1.0" }
 uuid = { version = "1", features = ["v4"] }
 tokio-stream = { version = "0.1", features = ["sync"] }
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }

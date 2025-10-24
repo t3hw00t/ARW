@@ -13,6 +13,7 @@ members = [
   "crates/arw-memory-core",
   "crates/arw-runtime",
   "crates/arw-runtime-adapter",
+  "crates/arw-contracts",
   "apps/arw-cli",
   "crates/arw-otel",
   "apps/arw-server",

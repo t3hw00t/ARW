@@ -1,0 +1,190 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://arw.dev/schema/affect.json",
+  "title": "Affect Interface",
+  "type": "object",
+  "required": ["inputs", "outputs"],
+  "additionalProperties": false,
+  "properties": {
+    "inputs": {
+      "type": "object",
+      "description": "Signal channels the system may sense.",
+      "additionalProperties": false,
+      "properties": {
+        "text": {
+          "type": "boolean",
+          "description": "Enable textual sentiment analysis."
+        },
+        "prosody": {
+          "type": "string",
+          "enum": ["off", "on", "opt_in"]
+        },
+        "physiological": {
+          "type": "string",
+          "enum": ["off", "on"],
+          "default": "off"
+        },
+        "custom_channels": {
+          "type": "array",
+          "description": "Custom signal descriptors keyed by name.",
+          "items": {
+            "type": "object",
+            "required": ["name", "sampling_hz", "consent_required"],
+            "additionalProperties": false,
+            "properties": {
+              "name": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9_.-]{1,63}$"
+              },
+              "sampling_hz": {
+                "type": "number",
+                "minimum": 0.1,
+                "maximum": 48000.0
+              },
+              "consent_required": {
+                "type": "boolean"
+              },
+              "retention_seconds": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 86400
+              }
+            }
+          },
+          "maxItems": 16,
+          "uniqueItems": true
+        }
+      }
+    },
+    "detectors": {
+      "type": "array",
+      "description": "Algorithms used to derive affect state.",
+      "items": {
+        "type": "object",
+        "required": ["id", "kind", "version"],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "kind": {
+            "type": "string",
+            "enum": ["sentiment", "vibe", "prosody", "custom"]
+          },
+          "version": {
+            "type": "string",
+            "pattern": "^v?[0-9]+(\\.[0-9]+){0,2}$"
+          },
+          "confidence_threshold": {
+            "type": "number",
+            "minimum": 0.0,
+            "maximum": 1.0
+          },
+          "notes": {
+            "type": "string",
+            "maxLength": 2048
+          }
+        }
+      },
+      "maxItems": 32
+    },
+    "outputs": {
+      "type": "object",
+      "description": "How affect state is exposed to clients.",
+      "required": ["state_vector", "rationale"],
+      "additionalProperties": false,
+      "properties": {
+        "state_vector": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["dimension", "value"],
+            "additionalProperties": false,
+            "properties": {
+              "dimension": {
+                "type": "string",
+                "enum": ["valence", "arousal", "empathy", "trust", "curiosity", "custom"]
+              },
+              "value": {
+                "type": "number",
+                "minimum": -1.0,
+                "maximum": 1.0
+              },
+              "confidence": {
+                "type": "number",
+                "minimum": 0.0,
+                "maximum": 1.0
+              },
+              "detector": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              }
+            }
+          },
+          "maxItems": 16
+        },
+        "rationale": {
+          "type": "string",
+          "enum": ["none", "short", "detailed"]
+        },
+        "explanations": {
+          "type": "array",
+          "description": "Optional rationale snippets per change event.",
+          "items": {
+            "type": "object",
+            "required": ["timestamp", "summary"],
+            "additionalProperties": false,
+            "properties": {
+              "timestamp": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "summary": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 1024
+              },
+              "signals": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128
+                },
+                "maxItems": 8
+              }
+            }
+          },
+          "maxItems": 64
+        }
+      }
+    },
+    "guardrails": {
+      "type": "object",
+      "description": "Safety limits governing affect interpretation.",
+      "additionalProperties": false,
+      "properties": {
+        "consent_required": {
+          "type": "boolean",
+          "default": true
+        },
+        "redaction_policy": {
+          "type": "string",
+          "enum": ["strip", "mask", "hash"]
+        },
+        "retention_seconds": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 604800
+        },
+        "explainability_required": {
+          "type": "boolean",
+          "default": true
+        }
+      }
+    }
+  }
+}

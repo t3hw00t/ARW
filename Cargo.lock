@@ -418,6 +418,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "arw-contracts"
+version = "0.1.0"
+dependencies = [
+ "once_cell",
+ "regex",
+ "serde",
+ "serde_json",
+ "serde_with",
+ "thiserror 1.0.69",
+]
+
+[[package]]
 name = "arw-core"
 version = "0.2.0-dev"
 dependencies = [
@@ -610,6 +622,7 @@ version = "0.2.0-dev"
 dependencies = [
  "anyhow",
  "arw-compress",
+ "arw-contracts",
  "arw-core",
  "arw-events",
  "arw-heuristics",

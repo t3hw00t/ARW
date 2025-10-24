@@ -44,6 +44,8 @@ mod openapi;
 mod orchestrator_jobs;
 mod patch_guard;
 mod persona;
+mod planning;
+mod planning_executor;
 mod policy;
 mod project_snapshots;
 mod queue;

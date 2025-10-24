@@ -1,0 +1,218 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://arw.dev/schema/persona.json",
+  "title": "Persona Kernel",
+  "type": "object",
+  "required": ["id", "name", "disclose", "traits"],
+  "additionalProperties": false,
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Stable identifier for the persona kernel (UUID or slug).",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "name": {
+      "type": "string",
+      "description": "Human facing display name for the persona profile.",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "aliases": {
+      "type": "array",
+      "description": "Optional alternate names or nicknames.",
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "maxItems": 16,
+      "uniqueItems": true
+    },
+    "disclose": {
+      "type": "boolean",
+      "description": "Whether interactions must explicitly disclose simulated empathy."
+    },
+    "values": {
+      "type": "array",
+      "description": "Core value statements ranked by priority.",
+      "items": {
+        "type": "object",
+        "required": ["id", "statement"],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "statement": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2048
+          },
+          "priority": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 100
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64
+            },
+            "maxItems": 16,
+            "uniqueItems": true
+          }
+        }
+      },
+      "maxItems": 64
+    },
+    "traits": {
+      "type": "array",
+      "description": "Persistent trait descriptors with provenance and confidence.",
+      "items": {
+        "type": "object",
+        "required": ["id", "label", "confidence"],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "label": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "confidence": {
+            "type": "number",
+            "minimum": 0.0,
+            "maximum": 1.0
+          },
+          "provenance": {
+            "type": "array",
+            "description": "Supporting evidence pointers (hash references).",
+            "items": {
+              "type": "string",
+              "pattern": "^@[A-Za-z0-9:._-]{4,128}$"
+            },
+            "maxItems": 32,
+            "uniqueItems": true
+          },
+          "last_updated": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "maxItems": 128,
+      "minItems": 1,
+      "uniqueItems": true
+    },
+    "tone_bounds": {
+      "type": "object",
+      "description": "Allowable communication tone settings.",
+      "additionalProperties": false,
+      "properties": {
+        "politeness": {
+          "type": "string",
+          "enum": ["low", "neutral", "high"]
+        },
+        "formality": {
+          "type": "string",
+          "enum": ["casual", "neutral", "formal"]
+        },
+        "humor": {
+          "type": "string",
+          "enum": ["off", "light", "playful"]
+        },
+        "constraints": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "maxItems": 32,
+          "uniqueItems": true
+        }
+      }
+    },
+    "boundaries": {
+      "type": "object",
+      "description": "Interaction guardrails enforced by policy.",
+      "additionalProperties": false,
+      "properties": {
+        "topics_blocked": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "maxItems": 64,
+          "uniqueItems": true
+        },
+        "safe_words": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64
+          },
+          "maxItems": 16,
+          "uniqueItems": true
+        },
+        "disallowed_behaviors": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "maxItems": 64,
+          "uniqueItems": true
+        }
+      }
+    },
+    "attribution": {
+      "type": "object",
+      "description": "Origin tracking for compliance and audit.",
+      "additionalProperties": false,
+      "properties": {
+        "created_by": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "last_modified_by": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "last_modified_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "consent_tags": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64
+          },
+          "maxItems": 16,
+          "uniqueItems": true
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,175 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://arw.dev/schema/economy.json",
+  "title": "Autonomous Economy Envelope",
+  "type": "object",
+  "required": ["autonomy", "allowed_tools", "payout"],
+  "additionalProperties": false,
+  "properties": {
+    "autonomy": {
+      "type": "string",
+      "enum": ["human_in_the_loop", "guarded", "full"]
+    },
+    "allowed_tools": {
+      "type": "array",
+      "description": "Tool identifiers the agent may invoke.",
+      "items": {
+        "type": "object",
+        "required": ["id"],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "capabilities": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "maxItems": 16,
+            "uniqueItems": true
+          },
+          "limits_per_hour": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      },
+      "maxItems": 128,
+      "uniqueItems": true
+    },
+    "spending": {
+      "type": "object",
+      "description": "Budget limits and escalation requirements.",
+      "additionalProperties": false,
+      "properties": {
+        "currency": {
+          "type": "string",
+          "pattern": "^[A-Z]{3}$",
+          "default": "USD"
+        },
+        "soft_limit": {
+          "type": "number",
+          "minimum": 0.0
+        },
+        "hard_limit": {
+          "type": "number",
+          "minimum": 0.0
+        },
+        "require_human_approval_over": {
+          "type": "number",
+          "minimum": 0.0
+        }
+      }
+    },
+    "payout": {
+      "type": "object",
+      "description": "How revenue is distributed.",
+      "required": ["mode"],
+      "additionalProperties": false,
+      "properties": {
+        "mode": {
+          "type": "string",
+          "enum": ["none", "local_ledger", "external_adapter"]
+        },
+        "ledger": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "stakeholders": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["id", "share"],
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "share": {
+                "type": "number",
+                "minimum": 0.0,
+                "maximum": 1.0
+              },
+              "role": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              }
+            }
+          },
+          "maxItems": 64
+        },
+        "escrow": {
+          "type": "object",
+          "properties": {
+            "provider": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "release_policy": {
+              "type": "string",
+              "enum": ["manual", "milestone", "auto"]
+            }
+          },
+          "additionalProperties": false
+        }
+      }
+    },
+    "compliance": {
+      "type": "object",
+      "description": "Regulatory metadata for job execution.",
+      "additionalProperties": false,
+      "properties": {
+        "kyb_required": {
+          "type": "boolean"
+        },
+        "kyc_required": {
+          "type": "boolean"
+        },
+        "tax_responsibility": {
+          "type": "string",
+          "enum": ["operator", "user", "split"]
+        },
+        "jurisdictions": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 64
+          },
+          "maxItems": 16,
+          "uniqueItems": true
+        }
+      }
+    },
+    "audit": {
+      "type": "object",
+      "description": "Audit log preferences.",
+      "additionalProperties": false,
+      "properties": {
+        "log_actions": {
+          "type": "boolean",
+          "default": true
+        },
+        "retain_days": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 3650
+        },
+        "redact_pii": {
+          "type": "boolean",
+          "default": true
+        }
+      }
+    }
+  }
+}

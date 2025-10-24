@@ -168,6 +168,55 @@ impl CompressionPromptCounters {
     }
 }
 
+#[derive(Default)]
+struct PlanCounters {
+    total: u64,
+    last_target_tokens: Option<u32>,
+    last_engine: Option<String>,
+    mode_counts: BTreeMap<String, u64>,
+    kv_policy_counts: BTreeMap<String, u64>,
+    guard_failures: u64,
+}
+
+#[derive(Clone)]
+pub struct PlanMetricsSample {
+    pub target_tokens: u32,
+    pub engine: String,
+    pub applied_modes: Vec<String>,
+    pub kv_policy: Option<String>,
+    pub guard_failures: Option<u8>,
+}
+
+impl PlanCounters {
+    fn record(&mut self, sample: &PlanMetricsSample) {
+        self.total = self.total.saturating_add(1);
+        self.last_target_tokens = Some(sample.target_tokens);
+        self.last_engine = Some(sample.engine.clone());
+        for mode in &sample.applied_modes {
+            *self.mode_counts.entry(mode.clone()).or_default() += 1;
+        }
+        if let Some(policy) = &sample.kv_policy {
+            *self.kv_policy_counts.entry(policy.clone()).or_default() += 1;
+        }
+        if let Some(failures) = sample.guard_failures {
+            if failures > 0 {
+                self.guard_failures = self.guard_failures.saturating_add(failures as u64);
+            }
+        }
+    }
+
+    fn summary(&self) -> PlanSummary {
+        PlanSummary {
+            total: self.total,
+            last_target_tokens: self.last_target_tokens,
+            last_engine: self.last_engine.clone(),
+            mode_counts: self.mode_counts.clone(),
+            kv_policy_counts: self.kv_policy_counts.clone(),
+            guard_failures: self.guard_failures,
+        }
+    }
+}
+
 #[derive(Clone, Serialize, Default)]
 pub struct AutonomySummary {
     pub interrupts: BTreeMap<String, u64>,
@@ -241,6 +290,18 @@ pub struct CompressionPromptSummary {
 pub struct CompressionSummary {
     pub prompt: CompressionPromptSummary,
 }
+
+#[derive(Clone, Serialize, Default)]
+pub struct PlanSummary {
+    pub total: u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub last_target_tokens: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub last_engine: Option<String>,
+    pub mode_counts: BTreeMap<String, u64>,
+    pub kv_policy_counts: BTreeMap<String, u64>,
+    pub guard_failures: u64,
+}
 #[derive(Clone, Serialize)]
 pub struct MetricsSummary {
     pub events: EventsSummary,
@@ -255,6 +316,7 @@ pub struct MetricsSummary {
     pub egress: EgressSummary,
     pub persona: PersonaTelemetrySummary,
     pub compression: CompressionSummary,
+    pub plan: PlanSummary,
 }
 
 #[derive(Clone, Serialize, Default)]
@@ -735,6 +797,7 @@ pub struct Metrics {
     egress: Mutex<EgressCounters>,
     persona_telemetry: Mutex<PersonaTelemetryCounters>,
     compression_prompt: Mutex<CompressionPromptCounters>,
+    plan: Mutex<PlanCounters>,
     worker_configured: AtomicU64,
     worker_busy: AtomicU64,
     worker_started: AtomicU64,
@@ -781,6 +844,7 @@ impl Metrics {
             egress: Mutex::new(EgressCounters::default()),
             persona_telemetry: Mutex::new(PersonaTelemetryCounters::default()),
             compression_prompt: Mutex::new(CompressionPromptCounters::default()),
+            plan: Mutex::new(PlanCounters::default()),
             worker_configured: AtomicU64::new(0),
             worker_busy: AtomicU64::new(0),
             worker_started: AtomicU64::new(0),
@@ -863,6 +927,12 @@ impl Metrics {
         }
     }
 
+    pub fn record_plan_sample(&self, sample: PlanMetricsSample) {
+        if let Ok(mut counters) = self.plan.lock() {
+            counters.record(&sample);
+        }
+    }
+
     pub fn snapshot(&self) -> MetricsSummary {
         let events = self
             .events
@@ -926,6 +996,11 @@ impl Metrics {
                 prompt: counters.summary(),
             })
             .unwrap_or_default();
+        let plan = self
+            .plan
+            .lock()
+            .map(|counters| counters.summary())
+            .unwrap_or_default();
         MetricsSummary {
             events,
             routes,
@@ -939,6 +1014,7 @@ impl Metrics {
             egress,
             persona,
             compression,
+            plan,
         }
     }
 
@@ -1214,6 +1290,26 @@ mod tests {
         assert_eq!(summary.primary, 0);
         assert_eq!(summary.fallback, 1);
         assert_eq!(summary.avg_ratio, Some(0.9));
+    }
+
+    #[test]
+    fn plan_counters_record_snapshot() {
+        let metrics = Metrics::new();
+        metrics.record_plan_sample(PlanMetricsSample {
+            target_tokens: 1024,
+            engine: "llama.cpp".into(),
+            applied_modes: vec!["transclude".into(), "delta".into()],
+            kv_policy: Some("snapkv".into()),
+            guard_failures: Some(1),
+        });
+
+        let summary = metrics.snapshot();
+        assert_eq!(summary.plan.total, 1);
+        assert_eq!(summary.plan.last_target_tokens, Some(1024));
+        assert_eq!(summary.plan.last_engine.as_deref(), Some("llama.cpp"));
+        assert_eq!(summary.plan.mode_counts.get("transclude"), Some(&1u64));
+        assert_eq!(summary.plan.kv_policy_counts.get("snapkv"), Some(&1u64));
+        assert_eq!(summary.plan.guard_failures, 1);
     }
 
     #[test]

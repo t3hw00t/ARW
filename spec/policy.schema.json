@@ -1,0 +1,162 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://arw.dev/schema/policy.json",
+  "title": "Unified Policy Surface",
+  "type": "object",
+  "required": [
+    "compression",
+    "persona",
+    "worldview",
+    "affect",
+    "runtime",
+    "economy",
+    "security",
+    "metrics"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "compression": {
+      "type": "object",
+      "required": ["target_tokens", "modes"],
+      "additionalProperties": false,
+      "properties": {
+        "target_tokens": {
+          "type": "integer",
+          "minimum": 256,
+          "maximum": 32768
+        },
+        "modes": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["transclude", "delta", "sigil", "ocr", "graph", "claims"]
+          },
+          "minItems": 0,
+          "maxItems": 8,
+          "uniqueItems": true
+        },
+        "entropy_gate": {
+          "type": "number",
+          "minimum": 0.0,
+          "maximum": 1.0
+        },
+        "guards": {
+          "type": "object",
+          "required": ["enabled"],
+          "additionalProperties": false,
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "require_asserts": {
+              "type": "boolean"
+            },
+            "max_guard_failures": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 5
+            }
+          }
+        }
+      }
+    },
+    "persona": {
+      "$ref": "persona.schema.json"
+    },
+    "worldview": {
+      "$ref": "worldview.schema.json"
+    },
+    "affect": {
+      "$ref": "affect.schema.json"
+    },
+    "runtime": {
+      "type": "object",
+      "required": ["engine", "kv_policy", "speculative"],
+      "additionalProperties": false,
+      "properties": {
+        "engine": {
+          "type": "string",
+          "enum": ["llama.cpp", "ollama", "vllm", "tensorrt-llm", "remote"]
+        },
+        "kv_policy": {
+          "type": "string",
+          "enum": ["none", "anchors", "2bit", "snapkv", "cachegen"]
+        },
+        "speculative": {
+          "type": "boolean"
+        },
+        "max_batch": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 128
+        },
+        "context_tokens": {
+          "type": "integer",
+          "minimum": 512,
+          "maximum": 262144
+        },
+        "low_spec_profile": {
+          "type": "boolean"
+        }
+      }
+    },
+    "economy": {
+      "$ref": "economy.schema.json"
+    },
+    "security": {
+      "type": "object",
+      "required": ["consent_gate", "hash_algo", "remote_mode"],
+      "additionalProperties": false,
+      "properties": {
+        "consent_gate": {
+          "type": "boolean"
+        },
+        "hash_algo": {
+          "type": "string",
+          "enum": ["sha256", "blake3"]
+        },
+        "remote_mode": {
+          "type": "string",
+          "enum": ["pointers_only", "expand_remote", "forbid_remote"]
+        },
+        "pointer_depth_limit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 32
+        },
+        "pointer_fanout_limit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 512
+        },
+        "prompt_injection_wrappers": {
+          "type": "boolean"
+        }
+      }
+    },
+    "metrics": {
+      "type": "object",
+      "required": ["enabled"],
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "labels": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_.-]{1,63}$"
+          },
+          "maxItems": 16,
+          "uniqueItems": true
+        },
+        "sample_percent": {
+          "type": "number",
+          "minimum": 0.0,
+          "maximum": 1.0
+        }
+      }
+    }
+  }
+}

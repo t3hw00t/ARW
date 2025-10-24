@@ -1,0 +1,332 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://arw.dev/schema/memory.json",
+  "title": "Memory Overlays",
+  "type": "object",
+  "required": ["claims", "episodic", "skills"],
+  "additionalProperties": false,
+  "properties": {
+    "claims": {
+      "type": "array",
+      "description": "Structured factual memories optimized for retrieval.",
+      "items": {
+        "$ref": "#/$defs/claim_memory"
+      },
+      "maxItems": 16384
+    },
+    "episodic": {
+      "type": "array",
+      "description": "Chronological experiences with summaries and pointers.",
+      "items": {
+        "$ref": "#/$defs/episode"
+      },
+      "maxItems": 8192
+    },
+    "skills": {
+      "type": "array",
+      "description": "Reusable procedures or capabilities learned over time.",
+      "items": {
+        "$ref": "#/$defs/skill"
+      },
+      "maxItems": 1024
+    },
+    "raptor_tree": {
+      "type": "object",
+      "description": "Hierarchical summary tree for RAPTOR style retrieval.",
+      "required": ["fanout", "depth", "root"],
+      "additionalProperties": false,
+      "properties": {
+        "fanout": {
+          "type": "integer",
+          "minimum": 2,
+          "maximum": 64
+        },
+        "depth": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 8
+        },
+        "root": {
+          "$ref": "#/$defs/summary_node"
+        }
+      }
+    },
+    "pointers": {
+      "type": "array",
+      "description": "Transclusion references used for pointer expansion.",
+      "items": {
+        "$ref": "#/$defs/pointer"
+      },
+      "maxItems": 32768
+    },
+    "ocr_map": {
+      "type": "array",
+      "description": "OCR bundles with text layers for scanned documents.",
+      "items": {
+        "$ref": "#/$defs/ocr_bundle"
+      },
+      "maxItems": 4096
+    },
+    "metadata": {
+      "type": "object",
+      "description": "Global memory metadata for governance.",
+      "additionalProperties": false,
+      "properties": {
+        "consent_tags": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64
+          },
+          "maxItems": 32,
+          "uniqueItems": true
+        },
+        "retention_days": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 3650
+        },
+        "last_compacted_at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    }
+  },
+  "$defs": {
+    "pointer": {
+      "type": "object",
+      "required": ["pointer", "domain"],
+      "additionalProperties": false,
+      "properties": {
+        "pointer": {
+          "type": "string",
+          "pattern": "^<@([a-z]+):[A-Za-z0-9:_#.-]+>$"
+        },
+        "domain": {
+          "type": "string",
+          "enum": ["blob", "ocr", "sigil", "claim", "graph"]
+        },
+        "consent": {
+          "type": "string",
+          "enum": ["private", "shared", "public"]
+        },
+        "hash": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "bytes": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    },
+    "claim_memory": {
+      "type": "object",
+      "required": ["claim_id", "summary", "evidence"],
+      "additionalProperties": false,
+      "properties": {
+        "claim_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "summary": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4096
+        },
+        "evidence": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^@[A-Za-z0-9:._-]{4,128}$"
+          },
+          "minItems": 1,
+          "maxItems": 16
+        },
+        "priority": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "last_refreshed_at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    },
+    "episode": {
+      "type": "object",
+      "required": ["id", "timestamp", "summary"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "timestamp": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "summary": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4096
+        },
+        "reflections": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2048
+          },
+          "maxItems": 16
+        },
+        "attachments": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^@[A-Za-z0-9:._-]{4,128}$"
+          },
+          "maxItems": 16,
+          "uniqueItems": true
+        }
+      }
+    },
+    "skill": {
+      "type": "object",
+      "required": ["id", "name", "description"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "description": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4096
+        },
+        "version": {
+          "type": "string",
+          "pattern": "^v?[0-9]+(\\.[0-9]+){0,2}$"
+        },
+        "practice_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "success_rate": {
+          "type": "number",
+          "minimum": 0.0,
+          "maximum": 1.0
+        },
+        "last_practiced_at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    },
+    "summary_node": {
+      "type": "object",
+      "required": ["id", "summary", "level"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "level": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 8
+        },
+        "summary": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4096
+        },
+        "children": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/summary_node"
+          },
+          "maxItems": 64
+        },
+        "pointers": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^@[A-Za-z0-9:._-]{4,128}$"
+          },
+          "maxItems": 32
+        }
+      }
+    },
+    "ocr_bundle": {
+      "type": "object",
+      "required": ["id", "pages", "text_format", "mrc_ratio"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "pages": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["index", "text_pointer"],
+            "additionalProperties": false,
+            "properties": {
+              "index": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "text_pointer": {
+                "type": "string",
+                "pattern": "^<@ocr:[A-Za-z0-9#:_-]+>$"
+              },
+              "image_pointer": {
+                "type": "string",
+                "pattern": "^<@blob:[A-Za-z0-9:_-]+>$"
+              },
+              "cer": {
+                "type": "number",
+                "minimum": 0.0,
+                "maximum": 1.0
+              }
+            }
+          },
+          "maxItems": 2048
+        },
+        "text_format": {
+          "type": "string",
+          "enum": ["hocr", "alto"]
+        },
+        "mrc_ratio": {
+          "type": "number",
+          "minimum": 0.0,
+          "maximum": 1.0
+        },
+        "forbid_lossy_jbig2": {
+          "type": "boolean"
+        }
+      }
+    }
+  }
+}

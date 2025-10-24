@@ -8,8 +8,8 @@ use tokio::sync::Mutex;
 
 use crate::{
     autonomy, capsule_guard, chat, cluster, compression, context_capability, experiments, feedback,
-    governor, identity, metrics, models, persona, policy, queue, runtime, runtime_bundles,
-    runtime_supervisor, tool_cache, training,
+    governor, identity, metrics, models, persona, planning, policy, queue, runtime,
+    runtime_bundles, runtime_supervisor, tool_cache, training,
 };
 
 type SharedConfigState = Arc<Mutex<serde_json::Value>>;
@@ -47,6 +47,7 @@ pub(crate) struct AppState {
     identity: Arc<identity::IdentityRegistry>,
     capability: Arc<crate::capability::CapabilityService>,
     compression: Arc<compression::CompressionService>,
+    planner: Arc<planning::Planner>,
 }
 
 impl AppState {
@@ -82,6 +83,7 @@ impl AppState {
         identity: Arc<identity::IdentityRegistry>,
         capability: Arc<crate::capability::CapabilityService>,
         compression: Arc<compression::CompressionService>,
+        planner: Arc<planning::Planner>,
     ) -> Self {
         Self {
             bus,
@@ -114,6 +116,7 @@ impl AppState {
             identity,
             capability,
             compression,
+            planner,
         }
     }
 
@@ -206,6 +209,10 @@ impl AppState {
         self.compression.clone()
     }
 
+    pub fn planner(&self) -> Arc<planning::Planner> {
+        self.planner.clone()
+    }
+
     pub fn cluster(&self) -> Arc<cluster::ClusterRegistry> {
         self.cluster.clone()
     }
@@ -287,6 +294,7 @@ pub(crate) struct AppStateBuilder {
     persona: Option<Arc<persona::PersonaService>>,
     capability: Option<Arc<crate::capability::CapabilityService>>,
     compression: Option<Arc<compression::CompressionService>>,
+    planner: Option<Arc<planning::Planner>>,
 }
 
 impl AppState {
@@ -329,6 +337,7 @@ impl AppState {
             persona: None,
             capability: None,
             compression: None,
+            planner: None,
         }
     }
 }
@@ -486,6 +495,11 @@ impl AppStateBuilder {
         self
     }
 
+    pub(crate) fn with_planner(mut self, planner: Arc<planning::Planner>) -> Self {
+        self.planner = Some(planner);
+        self
+    }
+
     pub(crate) async fn build(self) -> AppState {
         let config_state = self
             .config_state
@@ -603,6 +617,10 @@ impl AppStateBuilder {
             None => identity::IdentityRegistry::new(self.bus.clone()).await,
         };
 
+        let planner = self
+            .planner
+            .unwrap_or_else(|| Arc::new(planning::Planner::new()));
+
         let persona_service = if self.persona_enabled {
             match self.persona {
                 Some(service) => Some(service),
@@ -643,6 +661,7 @@ impl AppStateBuilder {
             identity_registry,
             capability_service,
             compression_service,
+            planner,
         )
     }
 }
