@@ -19,7 +19,7 @@ Memory layers (each with its own budget + eviction)
 - Working memory (hot, tiny): current user turn, live plan, tool I/O stubs, and a few key “registers” (instructions, constraints, budgets, safety).
 - Episodic log (warm): compact summaries of past turns and actions with stable IDs that point back to full artifacts.
 - Semantic memory (warm): vector/graph/KV indexes over notes, files, web grabs, code, and “beliefs” (claims with provenance and confidence).
-- Procedural memory (warm): reusable flows/options (e.g., crawl→clean→index, triage→brief).
+- Procedural memory (warm): reusable flows/options (e.g., crawl->clean->index, triage->brief).
 - Story threads (warm): topic-weighted threads linking episodic summaries so long-running efforts stay recallable without replaying every turn.
 - Project world model (cool): small belief graph (entities, claims, constraints, open questions) with freshness and contradiction flags.
 - Cold artifacts: full docs, transcripts, results—content‑addressed and never forced into the prompt unless rehydrated.
@@ -28,17 +28,19 @@ Context assembly (every turn)
 - Plan first: start with a subgoal‑specific plan; choose the next small step.
 - Targeted retrieval: build a small set from semantic + world memories using relevance, recency, and diversity (MMR‑style) to avoid duplicates.
 - Token budgeter: fixed slots for instructions, plan, safety/policy, and evidence; leftover tokens go to nice-to-have context.
-- Slot-aware assembly: `/context/assemble` accepts `slot_budgets` (map of slot → max items). Selected items expose a normalized `slot` field—including the dedicated `story_thread` slot—and the response summarizes how many items landed in each slot so telemetry and UI can highlight gaps.
-- Lane priorities: `/context/assemble` also honours `lane_priorities` (lane → bonus weight). Values range from -1.0 to 1.0 and layer on top of the standard diversity bonus so personas or policies can gently tilt retrieval toward specific lanes without inflating the global limit. Seed defaults via `ARW_CONTEXT_LANE_PRIORITIES` using the same `{ "lane": weight }` JSON shape as slot budgets.
+- Slot-aware assembly: `/context/assemble` accepts `slot_budgets` (map of slot -> max items). Selected items expose a normalized `slot` field—including the dedicated `story_thread` slot—and the response summarizes how many items landed in each slot so telemetry and UI can highlight gaps.
+- Lane priorities: `/context/assemble` also honours `lane_priorities` (lane -> bonus weight). Values range from -1.0 to 1.0 and layer on top of the standard diversity bonus so personas or policies can gently tilt retrieval toward specific lanes without inflating the global limit. Seed defaults via `ARW_CONTEXT_LANE_PRIORITIES` using the same `{ "lane": weight }` JSON shape as slot budgets.
+- Persona feedback: persona vibe telemetry is aggregated across runs and reshapes `lane_priorities`/`slot_budgets` each turn, layering the latest feedback on top of stored preferences so empathy signals directly steer retrieval.
+- Capability tiers: the loop pulls a CapabilityService snapshot and applies lite/balanced/performance plans (limit ceilings, expansion defaults, iteration caps) so low-power hosts stay within safe budgets while workstation-class machines automatically widen the working set.
 - Always include pointers: emit stable IDs alongside excerpts so the agent/UI can rehydrate more by ID when needed.
 - Coverage-guided refinement: when `coverage.reasons` flag gaps (e.g., low lane diversity, weak scores, below target limit) the next iteration automatically widens lanes, increases expansion, or lowers thresholds before running. Dashboards see the proposed adjustments via the `next_spec` snapshot on each `working_set.iteration.summary` event.
 
 Compression cascade (history never bloats)
-- Extract → Abstract → Outline: turn long logs into key claims with sources, short rationales, then a skeletal outline that references artifacts.
+- Extract -> Abstract -> Outline: turn long logs into key claims with sources, short rationales, then a skeletal outline that references artifacts.
 - Rolling window: keep the last N raw tokens; summarize older chunks into the cascade; drop raw once linked from a summary.
 - Entity rollups: merge repeated facts by entity with counters (mention frequency), recency, and confidence.
 
-_Implementation status:_ `arw-server` ships a `context.cascade` background task that tails new episodes, waits for a brief cooldown, and writes the extract/abstract/outline bundle into the `episodic_summary` memory lane while forwarding topic hints to the `story_thread` lane. Each summary stores provenance (`sources.event_ids`) and the episode pointer so retrieval and rehydrate flows can jump back to the raw events. The launcher Training Park and Hub surfaces can now fetch these records without recomputing the cascade at render time.
+_Implementation status:_ `arw-server` ships a `context.cascade` background task that tails new episodes, waits for a brief cooldown, and writes the extract/abstract/outline bundle into the `episodic_summary` memory lane while forwarding topic hints to the `story_thread` lane. Each summary stores provenance (`sources.event_ids`) and the episode pointer so retrieval and rehydrate flows can jump back to the raw events. The launcher Training Park and Hub surfaces can now fetch these records without recomputing the cascade at render time. Capability-tier telemetry (`arw_capability_refresh_total` plus `working_set.iteration.summary.capability_tier`) keeps dashboards aware of which plan (lite/balanced/performance) shaped the current turn.
 
 Never‑out‑of‑context controls
 - Information‑gain gate: only admit a chunk if it reduces predicted error for the current subgoal (proxy: novelty × source reliability × task match).
@@ -64,7 +66,7 @@ When to use a long‑context model
 - Rare merge steps (e.g., final synthesis across many sources). Offload to bigger context only for that step, then distill back into summaries/beliefs to return to small prompts immediately.
 
 How this maps into ARW surfaces
-- Context Recipes: formalize the pipeline (layers → retrieval → budgeter → compression). See [Context Recipes](../guide/context_recipes.md).
+- Context Recipes: formalize the pipeline (layers -> retrieval -> budgeter -> compression). See [Context Recipes](../guide/context_recipes.md).
 - Training Park: dials for diversity, recency, compression aggressiveness; meters for recall risk and coverage.
 - Project Hub: What’s in context now panel + pointers to the artifacts used.
 - Logic Unit: Never-Out-Of-Context defaults ship as a built-in config-only unit so budgets, slot caps, diversity knobs, and rehydrate rules are seeded on boot. See [Logic Units](logic_units.md).
@@ -147,5 +149,5 @@ Implementation notes (ARW)
 - Long‑context: add an optional merge step in Recipes; distill back into beliefs/summaries after use.
 
 See also
-- Architecture → Budgets & Context, Memory Lifecycle, World Model
-- Guide → Context Recipes, Training Park
+- Architecture -> Budgets & Context, Memory Lifecycle, World Model
+- Guide -> Context Recipes, Training Park

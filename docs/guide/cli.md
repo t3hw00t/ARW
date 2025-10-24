@@ -3,7 +3,7 @@ title: CLI Guide
 ---
 
 # CLI Guide
-Updated: 2025-10-22
+Updated: 2025-10-24
 Type: How‑to
 
 Goal-oriented tasks using the `arw-cli` binary. This guide shows common commands with copy‑pasteable examples and flags you’re likely to want.
@@ -31,6 +31,7 @@ Basics
 - Orchestrator training & catalog  
   > Persona tagging is **preview-only**. Enable `ARW_PERSONA_ENABLE=1` and seed a persona per [Persona Preview Quickstart](persona_quickstart.md) before using `--persona-id` or `ARW_PERSONA_ID`.
   - `arw-cli admin persona seed --help` - bootstrap a persona entry locally without touching SQLite (preview helper; see Quickstart for examples).
+    - Prints a context preview after seeding, summarising lane priorities, slot minimums, and top feedback signals when telemetry data is available.
   - `just persona-seed id=persona.alpha telemetry=true scope=workspace` - wrapper around the preview helper that flips telemetry on and resolves the workspace id automatically.
   - `arw-cli orchestrator catalog --status beta --category governor` - list mini-agents from `/orchestrator/mini_agents` with optional filters; add `--json --pretty` for raw output.
   - `arw-cli orchestrator start "Improve summarisation" --persona-id persona.alpha --preset balanced --diversity 0.35 --project demo --topic empathy --follow` — launch a persona-tagged training run. The CLI merges overrides, applies validation to hint ranges, and (with `--follow`) polls `/state/orchestrator/jobs` until the job finishes.
@@ -90,10 +91,10 @@ Admin Tokens
   - Add `--print-token`/`--print-hash` when you need to surface the new values after persisting; defaults keep secrets in the file only.
 
 Screenshots
-- Backfill OCR sidecars for all captures (per language):
-  - `arw-cli screenshots backfill-ocr --lang eng`
-  - Add `--dry-run` to see which files would run, `--force` to recompute even when cached, `--limit 10` for spot checks.
-  - Uses `/admin/tools/run` so set `ARW_ADMIN_TOKEN` or pass `--admin-token`.
+- Backfill OCR sidecars with adaptive tiers:
+  - `arw-cli screenshots backfill-ocr --backend vision_compression --quality full --refresh-capabilities`
+  - Flags: `--lang eng`, `--prefer-low-power`, `--limit 10`, `--force`, `--dry-run`. Omit `--backend` to let detection choose; `legacy` stays available for CPU-only runs.
+  - Uses `/admin/tools/run`; export `ARW_ADMIN_TOKEN` or pass `--admin-token`.
 
 Specs
 - `arw-cli spec health --base http://127.0.0.1:8091 [--pretty]` — fetch `/spec/health` and print JSON (pretty-print with `--pretty`)

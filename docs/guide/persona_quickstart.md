@@ -130,7 +130,8 @@ Without telemetry consent, `/persona/{id}/feedback` returns `412 Precondition Re
 
 ## 6. Use the Persona in Workflows
 - Set `ARW_PERSONA_ID=persona.alpha` (or pass `--persona-id persona.alpha`) before running `arw-cli orchestrator start`, smoke tests, or Launcher preview panels to tag jobs with the persona.
-- Observe persona insights via `/state/persona/persona.alpha`, `/state/persona/persona.alpha/history`, and the Launcher Persona card (Preview) once the UI is enabled.
+- Observe persona insights via `/state/persona/persona.alpha`, `/state/persona/persona.alpha/history`, and the Launcher Persona card (Preview) once the UI is enabled. The persona detail view now surfaces `context_bias_preview` (lane/slot weights + min score delta) and `vibe_metrics_preview` (aggregated counts and average signal strengths) so you can audit how telemetry is steering retrieval.
+- With telemetry enabled, vibe feedback now compounds across runs: the context loop blends stored `lane_weights` with the aggregated signal averages (`signal_counts` + `signal_strength`) so repeated nudges steadily tilt retrieval and slot budgets until new feedback arrives.
 
 ## Preview Verification Checklist
 Run these optional sanity checks after seeding:
@@ -146,9 +147,19 @@ curl -s -H "Authorization: Bearer $ARW_ADMIN_TOKEN" \
 
 Both commands should report the preview persona id and show `enabled: true` with the configured scope when telemetry is on.
 
+## Launcher Spot Check
+
+- Start the launcher (`just launcher` or your platform shortcut) with `ARW_PERSONA_ENABLE=1` and an admin token configured.
+- Open **Persona → Telemetry**, pick the seeded persona, and confirm the **Context bias preview** lists lane priorities, slot overrides, and min-score deltas.
+- Verify the **Signal metrics** card shows total feedback, average strength, and per-signal rows with both `count` and `strength/weight` values; these are sourced from `/state/persona/{id}`.
+- Use the legend next to each signal to confirm the strongest recent feedback matches what `/metrics` publishes via `arw_persona_signal_strength_avg`; lane and slot charts should mirror `arw_persona_lane_priority` / `arw_persona_slot_override` for the selected persona.
+
 ## Preview Caveats
 - No migrations: deleting `state/kernel.sqlite` removes personas; keep backups if you iterate.
+- Signals decay automatically when telemetry is enabled. Tune `ARW_PERSONA_SIGNAL_HALFLIFE_SECS` (default 86,400s) or set it to `off`/`0` if you prefer no decay.
 - APIs may change: expect renames or schema tweaks while the empathy research concludes.
 - UI surfacing: Launcher hides persona panels until `ARW_PERSONA_ENABLE` is set and at least one persona exists.
 
 Report feedback in the Persona & Empathy backlog or via the empathy research issue tracker so we can graduate the feature safely.
+
+

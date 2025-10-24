@@ -221,25 +221,29 @@ function Invoke-Verify {
 
   if ($SkipUI.IsPresent) {
     $results += [pscustomobject]@{
-      Name    = 'node read_store.test.js'
+      Name    = 'launcher UI smoke tests'
       Status  = 'skipped'
       Message = 'launcher UI checks disabled (--fast/-SkipUI)'
     }
   } elseif (-not $includeLauncher) {
     $results += [pscustomobject]@{
-      Name    = 'node read_store.test.js'
+      Name    = 'launcher UI smoke tests'
       Status  = 'skipped'
       Message = 'headless default; pass -WithLauncher to include'
     }
   } elseif ($null -eq $node) {
     $results += [pscustomobject]@{
-      Name    = 'node read_store.test.js'
+      Name    = 'launcher UI smoke tests'
       Status  = 'skipped'
       Message = 'Node.js 18+ not found; install Node.js or pass -SkipUI/-Fast to suppress'
     }
   } else {
     $results += Invoke-Step -Name 'node read_store.test.js' -Action {
       $testPath = Join-Path $RepoRoot 'apps\arw-launcher\src-tauri\ui\read_store.test.js'
+      Invoke-Program -Executable $node -Arguments @($testPath)
+    }
+    $results += Invoke-Step -Name 'node persona_preview.test.js' -Action {
+      $testPath = Join-Path $RepoRoot 'apps\arw-launcher\src-tauri\ui\persona_preview.test.js'
       Invoke-Program -Executable $node -Arguments @($testPath)
     }
   }

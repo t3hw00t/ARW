@@ -413,7 +413,7 @@ pub async fn persona_feedback_submit(
             );
         }
 
-        metrics.record_persona_feedback(&id, item.signal.as_deref());
+        metrics.record_persona_feedback(&id, item.signal.as_deref(), item.strength);
 
         let payload = json!({
             "persona_id": id.clone(),
@@ -808,6 +808,11 @@ mod tests {
         let entry_json: serde_json::Value = serde_json::from_slice(&entry_body.to_bytes()).unwrap();
         assert_eq!(entry_json["name"], json!("Guide"));
         assert_eq!(entry_json["traits"]["tone"], json!("warm"));
+        assert!(entry_json["context_bias_preview"].is_object());
+        assert_eq!(
+            entry_json["vibe_metrics_preview"]["total_feedback"],
+            json!(0)
+        );
 
         // history present
         let history_resp = state_persona_history(
@@ -897,6 +902,27 @@ mod tests {
         assert_eq!(metrics_json["persona_id"], json!("persona-1"));
         assert_eq!(metrics_json["total_feedback"], json!(1));
         assert_eq!(metrics_json["retain_max"], json!(50));
+        let warmer_strength = metrics_json["signal_strength"]["warmer"]
+            .as_f64()
+            .expect("warmer strength present");
+        assert!((warmer_strength - 0.7).abs() <= 1e-6);
+
+        let persona_snapshot =
+            state_persona_get(State(state.clone()), Path("persona-1".to_string()))
+                .await
+                .into_response();
+        assert_eq!(persona_snapshot.status(), StatusCode::OK);
+        let persona_body = persona_snapshot.into_body().collect().await.unwrap();
+        let persona_json: serde_json::Value =
+            serde_json::from_slice(&persona_body.to_bytes()).unwrap();
+        assert_eq!(
+            persona_json["vibe_metrics_preview"]["total_feedback"],
+            json!(1)
+        );
+        let preview_strength = persona_json["vibe_metrics_preview"]["signal_strength"]["warmer"]
+            .as_f64()
+            .expect("preview warmer strength present");
+        assert!((preview_strength - 0.7).abs() <= 1e-6);
 
         let history_resp = state_persona_vibe_history(
             State(state.clone()),
@@ -989,6 +1015,12 @@ mod tests {
             serde_json::from_slice(&metrics_body.to_bytes()).unwrap();
         assert_eq!(metrics_json["total_feedback"], json!(2));
         assert_eq!(metrics_json["retain_max"], json!(50));
+        assert_eq!(metrics_json["signal_strength"]["warmer"], json!(0.6));
+        assert_eq!(metrics_json["signal_strength"]["cooler"], json!(0.2));
+        assert!(metrics_json["signal_weights"]["warmer"].as_f64().unwrap() > 0.0);
+        assert!(metrics_json["signal_weights"]["cooler"].as_f64().unwrap() > 0.0);
+        assert_eq!(metrics_json["signal_strength"]["warmer"], json!(0.6));
+        assert_eq!(metrics_json["signal_strength"]["cooler"], json!(0.2));
 
         let history_resp = state_persona_vibe_history(
             State(state.clone()),

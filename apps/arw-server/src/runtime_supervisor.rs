@@ -20,7 +20,10 @@ use tracing::{debug, error, info, warn};
 #[cfg(test)]
 use arw_runtime::RuntimeAccelerator;
 
-use crate::runtime::{RuntimeRegistry, RuntimeRestoreError};
+use crate::{
+    context_capability::{ContextCapabilityPlan, ContextCapabilityTier},
+    runtime::{RuntimeRegistry, RuntimeRestoreError},
+};
 
 static DEFAULT_HEALTH_INTERVAL_MS: Lazy<u64> = Lazy::new(|| {
     std::env::var("ARW_RUNTIME_HEALTH_INTERVAL_MS")
@@ -30,6 +33,25 @@ static DEFAULT_HEALTH_INTERVAL_MS: Lazy<u64> = Lazy::new(|| {
         .unwrap_or(5_000)
 });
 
+fn health_interval_override() -> Option<Duration> {
+    std::env::var("ARW_RUNTIME_HEALTH_INTERVAL_MS")
+        .ok()
+        .and_then(|value| value.trim().parse::<u64>().ok())
+        .filter(|value| *value >= 100)
+        .map(Duration::from_millis)
+}
+
+fn supervisor_options_for_plan(plan: &ContextCapabilityPlan) -> SupervisorOptions {
+    if let Some(override_interval) = health_interval_override() {
+        return SupervisorOptions {
+            health_interval: override_interval,
+        };
+    }
+    SupervisorOptions {
+        health_interval: plan.health_interval,
+    }
+}
+
 #[derive(Clone)]
 pub struct SupervisorOptions {
     pub health_interval: Duration,
@@ -37,8 +59,10 @@ pub struct SupervisorOptions {
 
 impl Default for SupervisorOptions {
     fn default() -> Self {
+        let interval = health_interval_override()
+            .unwrap_or_else(|| Duration::from_millis(*DEFAULT_HEALTH_INTERVAL_MS));
         Self {
-            health_interval: Duration::from_millis(*DEFAULT_HEALTH_INTERVAL_MS),
+            health_interval: interval,
         }
     }
 }
@@ -117,31 +141,72 @@ pub struct RuntimeSupervisor {
     registry: Arc<RuntimeRegistry>,
     bus: Bus,
     options: SupervisorOptions,
+    #[allow(dead_code)]
+    capability_tier: ContextCapabilityTier,
     adapters: RwLock<HashMap<String, Arc<dyn RuntimeAdapter>>>,
     definitions: RwLock<HashMap<String, ManagedRuntimeDefinition>>,
     active: RwLock<HashMap<String, ActiveRuntime>>,
 }
 
 impl RuntimeSupervisor {
+    #[allow(dead_code)]
     pub async fn new(registry: Arc<RuntimeRegistry>, bus: Bus) -> Arc<Self> {
-        Self::new_with_options(registry, bus, SupervisorOptions::default()).await
+        Self::new_with_options_and_tier(
+            registry,
+            bus,
+            SupervisorOptions::default(),
+            ContextCapabilityTier::Balanced,
+        )
+        .await
     }
 
+    pub async fn new_with_capability_plan(
+        registry: Arc<RuntimeRegistry>,
+        bus: Bus,
+        plan: ContextCapabilityPlan,
+    ) -> Arc<Self> {
+        let options = supervisor_options_for_plan(&plan);
+        info!(
+            target = "arw::runtime",
+            tier = plan.tier.as_str(),
+            health_interval_ms = options.health_interval.as_millis(),
+            "runtime supervisor adopting capability plan"
+        );
+        Self::new_with_options_and_tier(registry, bus, options, plan.tier).await
+    }
+
+    #[allow(dead_code)]
     pub async fn new_with_options(
         registry: Arc<RuntimeRegistry>,
         bus: Bus,
         options: SupervisorOptions,
     ) -> Arc<Self> {
+        Self::new_with_options_and_tier(registry, bus, options, ContextCapabilityTier::Balanced)
+            .await
+    }
+
+    async fn new_with_options_and_tier(
+        registry: Arc<RuntimeRegistry>,
+        bus: Bus,
+        options: SupervisorOptions,
+        tier: ContextCapabilityTier,
+    ) -> Arc<Self> {
         let supervisor = Arc::new(Self {
             registry: registry.clone(),
             bus,
             options,
+            capability_tier: tier,
             adapters: RwLock::new(HashMap::new()),
             definitions: RwLock::new(HashMap::new()),
             active: RwLock::new(HashMap::new()),
         });
         registry.attach_supervisor(&supervisor).await;
         supervisor
+    }
+
+    #[allow(dead_code)]
+    pub fn capability_tier(&self) -> ContextCapabilityTier {
+        self.capability_tier
     }
 
     pub async fn register_adapter(&self, adapter: Arc<dyn RuntimeAdapter>) {

@@ -1,5 +1,5 @@
 # Agent Onboarding
-Updated: 2025-10-23
+Updated: 2025-10-24
 Type: Reference
 
 Microsummary: Fast orientation for assistants working in the ARW repo—where to look, what to run, and how to respond safely.
@@ -43,7 +43,7 @@ Microsummary: Fast orientation for assistants working in the ARW repo—where to
 ## Tooling Checklist
 - Rust toolchain 1.90+ with `cargo`, `rustfmt`, `clippy`, and ideally `cargo-nextest`.
 - Python 3.11+ (or newer) on PATH; MkDocs + Material theme (`pip install mkdocs mkdocs-material`) for docs workflows.
-- Node.js 18+ (for launcher UI tests such as `apps/arw-launcher/src-tauri/ui/read_store.test.js`).
+- Node.js 18+ (for launcher UI tests such as `apps/arw-launcher/src-tauri/ui/read_store.test.js` and `apps/arw-launcher/src-tauri/ui/persona_preview.test.js`).
 - Command-line helpers: `jq` and `ripgrep` (`rg`) for scripts and guardrails.
 - Optional but helpful: Git Bash on Windows for `bash`-based tooling, `just`, and `make`.
 

@@ -52,9 +52,11 @@ Env vars:
 ## Grafana Dashboard
 
 An example Grafana dashboard is provided at `dashboards/grafana/arw-stability.json` with:
-- Safe‑mode active and minutes since last crash
+- Safe-mode active and minutes since last crash
 - Task restarts (window) by task name
 - Route p95 latency by path
 - Event publish rate and bus lagged events
+- Persona signal strength averages by persona and signal label (filter with the Persona/Signal selectors)
+- Persona rollups: overall average strength and feedback totals respect the same filters, the trend chart highlights how each persona/signal pair shifts over time, and dedicated lane/slot timelines surface the live retrieval adjustments.
 
 Import it in Grafana (Dashboards → Import) and select your Prometheus datasource.

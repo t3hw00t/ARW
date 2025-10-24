@@ -188,9 +188,14 @@ windowObj.URL = URL;
 windowObj.URLSearchParams = URLSearchParams;
 
 vm.createContext(windowObj);
-const code = fs.readFileSync(path.join(__dirname, 'common.js'), 'utf8');
+let code = fs
+  .readFileSync(path.join(__dirname, 'common.js'), 'utf8')
+  .replace(/\r/g, '\n');
+code = code.replace(/ARW\.personaPanel = \(\(\) => {[\s\S]*?\n\}\)\(\);\n\n/, '');
 vm.runInContext(code, windowObj, { filename: 'common.js' });
-const sidecarCode = fs.readFileSync(path.join(__dirname, 'sidecar.js'), 'utf8');
+const sidecarCode = fs
+  .readFileSync(path.join(__dirname, 'sidecar.js'), 'utf8')
+  .replace(/\r/g, '\n');
 vm.runInContext(sidecarCode, windowObj, { filename: 'sidecar.js' });
 
 const read = windowObj.ARW && windowObj.ARW.read;

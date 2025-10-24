@@ -49,9 +49,136 @@
       "title": "Bus Lagged Events",
       "gridPos": { "x": 12, "y": 12, "w": 12, "h": 8 },
       "targets": [ { "expr": "increase(arw_bus_lagged_total[5m])", "refId": "A" } ]
+    },
+    {
+      "type": "table",
+      "title": "Persona Signal Strength (Avg)",
+      "gridPos": { "x": 0, "y": 20, "w": 24, "h": 8 },
+      "targets": [
+        {
+          "expr": "arw_persona_signal_strength_avg{persona=~\"$persona\",signal=~\"$signal\"}",
+          "refId": "A",
+          "format": "table"
+        }
+      ],
+      "transformations": [
+        { "id": "labelsToFields", "options": { "mode": "columns" } },
+        { "id": "organize", "options": { "indexByName": { "Value": 2, "persona": 0, "signal": 1 } } }
+      ]
+    },
+    {
+      "type": "stat",
+      "title": "Persona Avg Strength (All Signals)",
+      "gridPos": { "x": 0, "y": 28, "w": 12, "h": 4 },
+      "targets": [
+        {
+          "expr": "avg(arw_persona_signal_strength_avg{persona=~\"$persona\",signal=~\"$signal\"})",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "reduceOptions": { "calcs": ["last"], "fields": "", "values": false },
+        "colorMode": "value",
+        "orientation": "horizontal"
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Persona Feedback Samples",
+      "gridPos": { "x": 12, "y": 28, "w": 12, "h": 4 },
+      "targets": [
+        {
+          "expr": "sum(arw_persona_feedback_total{persona=~\"$persona\"})",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "reduceOptions": { "calcs": ["last"], "fields": "", "values": false },
+        "colorMode": "value",
+        "orientation": "horizontal"
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Persona Signal Strength Trend",
+      "gridPos": { "x": 0, "y": 32, "w": 24, "h": 8 },
+      "targets": [
+        {
+          "expr": "arw_persona_signal_strength_avg{persona=~\"$persona\",signal=~\"$signal\"}",
+          "refId": "A",
+          "legendFormat": "{{persona}} · {{signal}}"
+        }
+      ],
+      "options": {
+        "legend": { "displayMode": "table", "placement": "bottom" },
+        "tooltip": { "mode": "multi" }
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Lane Priorities",
+      "gridPos": { "x": 0, "y": 40, "w": 24, "h": 8 },
+      "targets": [
+        {
+          "expr": "arw_persona_lane_priority{persona=~\"$persona\"}",
+          "refId": "A",
+          "legendFormat": "{{persona}} · {{lane}}"
+        }
+      ],
+      "options": {
+        "legend": { "displayMode": "table", "placement": "bottom" },
+        "tooltip": { "mode": "multi" }
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Slot Overrides",
+      "gridPos": { "x": 0, "y": 48, "w": 24, "h": 8 },
+      "targets": [
+        {
+          "expr": "arw_persona_slot_override{persona=~\"$persona\"}",
+          "refId": "A",
+          "legendFormat": "{{persona}} · {{slot}}"
+        }
+      ],
+      "options": {
+        "legend": { "displayMode": "table", "placement": "bottom" },
+        "tooltip": { "mode": "multi" }
+      }
     }
   ],
+  "templating": {
+    "list": [
+      {
+        "name": "persona",
+        "label": "Persona",
+        "type": "query",
+        "datasource": null,
+        "definition": "label_values(arw_persona_signal_strength_avg, persona)",
+        "refresh": 2,
+        "hide": 0,
+        "multi": true,
+        "includeAll": true,
+        "allValue": ".*",
+        "options": [],
+        "current": { "text": "All", "value": ".*", "selected": false }
+      },
+      {
+        "name": "signal",
+        "label": "Signal",
+        "type": "query",
+        "datasource": null,
+        "definition": "label_values(arw_persona_signal_strength_avg{persona=~\"$persona\"}, signal)",
+        "refresh": 2,
+        "hide": 0,
+        "multi": true,
+        "includeAll": true,
+        "allValue": ".*",
+        "options": [],
+        "current": { "text": "All", "value": ".*", "selected": false }
+      }
+    ]
+  },
   "version": 1,
   "schemaVersion": 37
 }
-

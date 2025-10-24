@@ -1,4 +1,4 @@
-use std::cmp::Reverse;
+use std::cmp::{Ordering, Reverse};
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fmt::Write as _;
 use std::fs::{create_dir_all, read_to_string};
@@ -1575,7 +1575,17 @@ fn cmd_admin_persona_seed(args: &AdminPersonaSeedArgs) -> Result<()> {
         })
         .with_context(|| format!("upserting persona {}", args.id))?;
 
-    output_persona_entry(&entry, args.json, args.pretty)?;
+    let preview = match fetch_persona_preview(base, &args.id, token.as_deref(), args.timeout) {
+        Ok(value) => value,
+        Err(err) => {
+            if !args.json {
+                eprintln!("warning: unable to fetch persona preview: {err}");
+            }
+            None
+        }
+    };
+
+    output_persona_entry(&entry, preview.as_ref(), args.json, args.pretty)?;
 
     if !args.json {
         println!(
@@ -1589,14 +1599,27 @@ fn cmd_admin_persona_seed(args: &AdminPersonaSeedArgs) -> Result<()> {
                 .unwrap_or_else(|| args.owner_kind.clone());
             println!("Telemetry enabled (scope: {scope})");
         }
+        if let Some(preview) = preview.as_ref() {
+            print_persona_preview(preview);
+        }
     }
 
     Ok(())
 }
 
-fn output_persona_entry(entry: &PersonaEntry, json: bool, pretty: bool) -> Result<()> {
+fn output_persona_entry(
+    entry: &PersonaEntry,
+    preview: Option<&JsonValue>,
+    json: bool,
+    pretty: bool,
+) -> Result<()> {
     if json {
-        let value = serde_json::to_value(entry)?;
+        let mut root = JsonMap::new();
+        root.insert("entry".into(), serde_json::to_value(entry)?);
+        if let Some(preview) = preview {
+            root.insert("preview".into(), preview.clone());
+        }
+        let value = JsonValue::Object(root);
         if pretty {
             println!("{}", serde_json::to_string_pretty(&value)?);
         } else {
@@ -1604,6 +1627,133 @@ fn output_persona_entry(entry: &PersonaEntry, json: bool, pretty: bool) -> Resul
         }
     }
     Ok(())
+}
+
+fn fetch_persona_preview(
+    base: &str,
+    persona_id: &str,
+    token: Option<&str>,
+    timeout: u64,
+) -> Result<Option<JsonValue>> {
+    let client = Client::builder()
+        .timeout(Duration::from_secs(timeout))
+        .build()
+        .context("building HTTP client")?;
+    let url = format!("{}/state/persona/{}", base, persona_id);
+    let mut req = client.get(&url);
+    req = with_admin_headers(req, token);
+    let resp = match req.send() {
+        Ok(resp) => resp,
+        Err(err) if err.is_timeout() || err.is_connect() => return Ok(None),
+        Err(err) => return Err(err).with_context(|| format!("requesting {}", url)),
+    };
+    if !resp.status().is_success() {
+        return Ok(None);
+    }
+    let value = resp
+        .json::<JsonValue>()
+        .context("parsing persona preview response")?;
+    Ok(Some(value))
+}
+
+fn print_persona_preview(preview: &JsonValue) {
+    if let Some(bias) = preview
+        .get("context_bias_preview")
+        .and_then(|v| v.as_object())
+    {
+        println!("Context bias preview:");
+        if let Some(lanes) = bias.get("lane_priorities").and_then(|v| v.as_object()) {
+            let mut entries: Vec<(&String, f32)> = lanes
+                .iter()
+                .filter_map(|(lane, value)| value.as_f64().map(|val| (lane, val as f32)))
+                .collect();
+            entries.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(Ordering::Equal));
+            if entries.is_empty() {
+                println!("  (no lane priorities detected)");
+            } else {
+                for (lane, weight) in entries.into_iter().take(5) {
+                    println!("  lane {:<16} {:+.2}", lane, weight);
+                }
+            }
+        }
+        if let Some(slots) = bias.get("slot_overrides").and_then(|v| v.as_object()) {
+            let mut overrides: Vec<(&String, usize)> = slots
+                .iter()
+                .filter_map(|(slot, value)| value.as_u64().map(|val| (slot, val as usize)))
+                .collect();
+            overrides.sort_by_key(|(_, limit)| Reverse(*limit));
+            if !overrides.is_empty() {
+                println!("  slot minimums:");
+                for (slot, limit) in overrides.into_iter().take(5) {
+                    println!("    {:<16} {}", slot, limit);
+                }
+            }
+        }
+        if let Some(delta) = bias.get("min_score_delta").and_then(|v| v.as_f64()) {
+            if delta.abs() > f64::EPSILON {
+                println!("  min_score_delta: {:+.2}", delta);
+            }
+        }
+    }
+
+    if let Some(metrics) = preview
+        .get("vibe_metrics_preview")
+        .and_then(|v| v.as_object())
+    {
+        println!("Vibe metrics preview:");
+        if let Some(total) = metrics.get("total_feedback").and_then(|v| v.as_u64()) {
+            println!("  total_feedback: {}", total);
+        }
+        if let Some(avg) = metrics.get("average_strength").and_then(|v| v.as_f64()) {
+            println!("  average_strength: {:.2}", avg);
+        }
+
+        let counts = metrics
+            .get("signal_counts")
+            .and_then(|v| v.as_object())
+            .cloned()
+            .unwrap_or_default();
+        let strengths = metrics
+            .get("signal_strength")
+            .and_then(|v| v.as_object())
+            .cloned()
+            .unwrap_or_default();
+        let weights = metrics
+            .get("signal_weights")
+            .and_then(|v| v.as_object())
+            .cloned()
+            .unwrap_or_default();
+
+        if !counts.is_empty() {
+            let mut signals: Vec<(String, f32, Option<f32>, u64)> = counts
+                .into_iter()
+                .filter_map(|(signal, count)| {
+                    count.as_u64().map(|c| {
+                        let weight = weights
+                            .get(&signal)
+                            .and_then(|v| v.as_f64())
+                            .unwrap_or(c as f64) as f32;
+                        let avg = strengths
+                            .get(&signal)
+                            .and_then(|v| v.as_f64())
+                            .map(|v| v as f32);
+                        (signal, weight, avg, c)
+                    })
+                })
+                .collect();
+            signals.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(Ordering::Equal));
+            println!("  top signals:");
+            for (signal, weight, avg, count) in signals.into_iter().take(5) {
+                match avg {
+                    Some(avg) => println!(
+                        "    {:<16} count={:<3} weight={:.2} avg_strength={:.2}",
+                        signal, count, weight, avg
+                    ),
+                    None => println!("    {:<16} count={:<3} weight={:.2}", signal, count, weight),
+                }
+            }
+        }
+    }
 }
 
 fn fetch_workspace_owner_ref(base: &str, token: Option<&str>, timeout: u64) -> Result<String> {

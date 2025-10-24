@@ -8,7 +8,8 @@ use arw_kernel::{
     PersonaProposal, PersonaProposalCreate, PersonaProposalStatusUpdate, PersonaVibeSample,
     PersonaVibeSampleCreate,
 };
-use chrono::{SecondsFormat, Utc};
+use chrono::{DateTime, SecondsFormat, Utc};
+use once_cell::sync::OnceCell;
 use serde::Serialize;
 use serde_json::{json, Value};
 use tokio::sync::RwLock;
@@ -56,6 +57,8 @@ mod tests {
             persona_id: entry.id.clone(),
             total_feedback: 1,
             signal_counts: BTreeMap::new(),
+            signal_strength: BTreeMap::new(),
+            signal_weights: BTreeMap::new(),
             average_strength: Some(0.7),
             last_signal: Some("lane+:episodic".into()),
             last_strength: Some(0.7),
@@ -77,6 +80,8 @@ mod tests {
             persona_id: entry.id.clone(),
             total_feedback: 1,
             signal_counts: BTreeMap::new(),
+            signal_strength: BTreeMap::new(),
+            signal_weights: BTreeMap::new(),
             average_strength: Some(0.4),
             last_signal: Some("warmer".into()),
             last_strength: Some(0.4),
@@ -85,6 +90,32 @@ mod tests {
         };
         let bias = compute_context_bias(&entry, &metrics);
         assert!(bias.lane_priorities.get("*").unwrap() > &0.05);
+    }
+
+    #[test]
+    fn bias_accumulates_signal_history() {
+        let entry = make_entry();
+        let mut counts = BTreeMap::new();
+        counts.insert("lane+:semantic".into(), 3);
+        counts.insert("slot+:evidence".into(), 2);
+        let mut strengths = BTreeMap::new();
+        strengths.insert("lane+:semantic".into(), 0.8);
+        strengths.insert("slot+:evidence".into(), 0.5);
+        let metrics = PersonaVibeMetricsSnapshot {
+            persona_id: entry.id.clone(),
+            total_feedback: 5,
+            signal_counts: counts,
+            signal_strength: strengths,
+            signal_weights: BTreeMap::new(),
+            average_strength: Some(0.6),
+            last_signal: Some("lane+:semantic".into()),
+            last_strength: Some(0.9),
+            last_updated: None,
+            retain_max: 50,
+        };
+        let bias = compute_context_bias(&entry, &metrics);
+        assert!(bias.lane_priorities.get("semantic").unwrap() > &0.25);
+        assert!(bias.slot_overrides.get("evidence").unwrap() >= &3);
     }
 }
 
@@ -262,6 +293,10 @@ pub struct PersonaVibeMetricsSnapshot {
     pub persona_id: String,
     pub total_feedback: u64,
     pub signal_counts: BTreeMap<String, u64>,
+    #[serde(skip_serializing_if = "BTreeMap::is_empty", default)]
+    pub signal_strength: BTreeMap<String, f32>,
+    #[serde(skip_serializing_if = "BTreeMap::is_empty", default)]
+    pub signal_weights: BTreeMap<String, f32>,
     pub average_strength: Option<f32>,
     pub last_signal: Option<String>,
     pub last_strength: Option<f32>,
@@ -275,6 +310,8 @@ impl PersonaVibeMetricsSnapshot {
             persona_id,
             total_feedback: 0,
             signal_counts: BTreeMap::new(),
+            signal_strength: BTreeMap::new(),
+            signal_weights: BTreeMap::new(),
             average_strength: None,
             last_signal: None,
             last_strength: None,
@@ -284,7 +321,7 @@ impl PersonaVibeMetricsSnapshot {
     }
 }
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, Serialize)]
 pub struct PersonaContextBias {
     pub lane_priorities: BTreeMap<String, f32>,
     pub slot_overrides: BTreeMap<String, usize>,
@@ -340,8 +377,44 @@ pub fn compute_context_bias(
         }
     }
 
+    let total_weight = if !metrics.signal_weights.is_empty() {
+        metrics
+            .signal_weights
+            .values()
+            .copied()
+            .sum::<f32>()
+            .max(0.0)
+    } else {
+        metrics.total_feedback as f32
+    };
+
+    if total_weight > 0.0 {
+        for (signal, count) in metrics.signal_counts.iter() {
+            if signal.trim().is_empty() || signal == "unspecified" {
+                continue;
+            }
+            let weight = metrics
+                .signal_weights
+                .get(signal)
+                .copied()
+                .unwrap_or(*count as f32)
+                .max(0.0);
+            if weight <= 0.0 {
+                continue;
+            }
+            let proportion = (weight / total_weight).clamp(0.05, 1.5);
+            let strength = metrics
+                .signal_strength
+                .get(signal)
+                .copied()
+                .or(metrics.average_strength)
+                .unwrap_or(0.6);
+            apply_vibe_signal(&mut bias, signal, Some(strength), proportion);
+        }
+    }
+
     if let Some(signal) = metrics.last_signal.as_deref() {
-        apply_vibe_signal(&mut bias, signal, metrics.last_strength);
+        apply_vibe_signal(&mut bias, signal, metrics.last_strength, 1.0);
     }
 
     bias
@@ -384,15 +457,21 @@ fn numeric_from_value(value: &Value) -> Option<f64> {
     }
 }
 
-fn apply_vibe_signal(bias: &mut PersonaContextBias, signal: &str, strength: Option<f32>) {
+fn apply_vibe_signal(
+    bias: &mut PersonaContextBias,
+    signal: &str,
+    strength: Option<f32>,
+    weight: f32,
+) {
     let trimmed = signal.trim();
     if trimmed.is_empty() {
         return;
     }
     let normalized = trimmed.to_ascii_lowercase();
     let strength = strength.unwrap_or(0.6).clamp(0.0, 1.0);
+    let intensity = weight.clamp(0.05, 3.0);
     let lane_delta = |positive: bool| -> f32 {
-        let base = 0.05 + (strength * 0.25);
+        let base = (0.05 + (strength * 0.25)) * intensity;
         if positive {
             base
         } else {
@@ -400,7 +479,7 @@ fn apply_vibe_signal(bias: &mut PersonaContextBias, signal: &str, strength: Opti
         }
     };
     let slot_min = |s: f32| -> usize {
-        let value = (1.0 + s * 3.0).round() as i32;
+        let value = ((1.0 + s * 3.0) * intensity).round() as i32;
         value.max(1) as usize
     };
 
@@ -857,42 +936,135 @@ fn slugify_label(label: &str) -> Option<String> {
     }
 }
 
+const DEFAULT_PERSONA_SIGNAL_HALFLIFE_SECS: f64 = 86_400.0;
+
+fn persona_signal_decay_half_life_secs() -> Option<f64> {
+    static HALF_LIFE: OnceCell<Option<f64>> = OnceCell::new();
+    *HALF_LIFE.get_or_init(|| match std::env::var("ARW_PERSONA_SIGNAL_HALFLIFE_SECS") {
+        Ok(raw) => {
+            let trimmed = raw.trim();
+            if trimmed.is_empty() {
+                Some(DEFAULT_PERSONA_SIGNAL_HALFLIFE_SECS)
+            } else {
+                let lowered = trimmed.to_ascii_lowercase();
+                if matches!(lowered.as_str(), "none" | "off" | "disable" | "disabled") {
+                    None
+                } else {
+                    trimmed.parse::<f64>().ok().filter(|value| *value > 0.0)
+                }
+            }
+        }
+        Err(_) => Some(DEFAULT_PERSONA_SIGNAL_HALFLIFE_SECS),
+    })
+}
+
+fn decay_factor(last: Option<DateTime<Utc>>, now: DateTime<Utc>, half_life_secs: f64) -> f64 {
+    if let Some(last) = last {
+        let elapsed = now.signed_duration_since(last).num_seconds().max(0) as f64;
+        if elapsed > 0.0 {
+            let exponent = -elapsed / half_life_secs;
+            2f64.powf(exponent)
+        } else {
+            1.0
+        }
+    } else {
+        1.0
+    }
+}
+
 #[derive(Default)]
 struct PersonaVibeMetricsState {
     total_feedback: u64,
     signal_counts: BTreeMap<String, u64>,
+    signal_strength: BTreeMap<String, SignalStrengthAggregate>,
     sum_strength: f64,
-    strength_samples: u64,
+    strength_samples: f64,
     last_signal: Option<String>,
     last_strength: Option<f32>,
     last_updated: Option<String>,
+    last_updated_dt: Option<DateTime<Utc>>,
+}
+
+#[derive(Default, Clone)]
+struct SignalStrengthAggregate {
+    sum: f64,
+    weight: f64,
+    last_updated: Option<DateTime<Utc>>,
+}
+
+impl SignalStrengthAggregate {
+    fn apply_decay(&mut self, now: DateTime<Utc>, half_life: f64) {
+        if let Some(last) = self.last_updated {
+            let factor = decay_factor(Some(last), now, half_life);
+            self.sum *= factor;
+            self.weight *= factor;
+        }
+    }
+
+    fn increment(&mut self, strength: Option<f32>) {
+        self.weight += 1.0;
+        if let Some(value) = strength {
+            self.sum += value as f64;
+        }
+    }
 }
 
 impl PersonaVibeMetricsState {
     fn record(&mut self, signal: Option<String>, strength: Option<f32>, timestamp: String) {
+        let timestamp_dt = DateTime::parse_from_rfc3339(&timestamp)
+            .ok()
+            .map(|dt| dt.with_timezone(&Utc));
+        let half_life = persona_signal_decay_half_life_secs();
+
+        if let (Some(now), Some(half_life)) = (timestamp_dt, half_life) {
+            let factor = decay_factor(self.last_updated_dt, now, half_life);
+            self.sum_strength *= factor;
+            self.strength_samples *= factor;
+            for aggregate in self.signal_strength.values_mut() {
+                aggregate.apply_decay(now, half_life);
+            }
+        }
+
         self.total_feedback = self.total_feedback.saturating_add(1);
         let key = signal.unwrap_or_else(|| "unspecified".to_string());
         *self.signal_counts.entry(key.clone()).or_default() += 1;
+        let entry = self.signal_strength.entry(key.clone()).or_default();
+        entry.increment(strength);
+        if let Some(now) = timestamp_dt {
+            entry.last_updated = Some(now);
+        }
+
         self.last_signal = Some(key);
         if let Some(s) = strength {
             self.sum_strength += s as f64;
-            self.strength_samples = self.strength_samples.saturating_add(1);
+            self.strength_samples += 1.0;
             self.last_strength = Some(s);
         }
         self.last_updated = Some(timestamp);
+        self.last_updated_dt = timestamp_dt;
     }
 
     fn snapshot(&self, persona_id: String) -> PersonaVibeMetricsSnapshot {
-        let average_strength = if self.strength_samples > 0 {
-            Some((self.sum_strength / self.strength_samples as f64) as f32)
+        let average_strength = if self.strength_samples > 0.0 {
+            Some((self.sum_strength / self.strength_samples) as f32)
         } else {
             None
         };
+        let mut signal_strength = BTreeMap::new();
+        let mut signal_weights = BTreeMap::new();
+        for (signal, aggregate) in self.signal_strength.iter() {
+            if aggregate.weight > 0.0 {
+                signal_strength.insert(signal.clone(), (aggregate.sum / aggregate.weight) as f32);
+                signal_weights.insert(signal.clone(), aggregate.weight as f32);
+            }
+        }
 
         PersonaVibeMetricsSnapshot {
             persona_id,
             total_feedback: self.total_feedback,
             signal_counts: self.signal_counts.clone(),
+            signal_strength,
+            signal_weights,
             average_strength,
             last_signal: self.last_signal.clone(),
             last_strength: self.last_strength,

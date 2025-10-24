@@ -1,5 +1,5 @@
 # CLI Reference
-Updated: 2025-10-22
+Updated: 2025-10-24
 Type: Reference
 
 Microsummary: Commands, subcommands, and flags for `arw-cli` with pointers to tutorials. Beta.
@@ -24,7 +24,7 @@ Commands (summary)
 - `arw-cli capsule preset adopt --id ID [--base URL] [--reason TEXT] [--show-status]` — adopt a server-managed preset via `/admin/policy/capsules/adopt`
 - `arw-cli capsule audit [--base URL] [--limit N] [--json {--pretty}]` — tail capsule adoption/teardown events through `/admin/policy/capsules/audit`
 - `arw-cli capsule trust list|add|remove|rotate [...]` — inspect and rotate trusted capsule issuers (writes `configs/trust_capsules.json`; `rotate` can trigger `/admin/rpu/reload`)
-- `arw-cli screenshots backfill-ocr [--lang <code>] [--force] [--dry-run]` — regenerate OCR sidecars via `/admin/tools/run`
+- `arw-cli screenshots backfill-ocr [--backend legacy|vision_compression] [--quality lite|balanced|full] [--lang <code>] [--prefer-low-power] [--refresh-capabilities] [--force] [--dry-run] [--limit N]` - regenerate OCR sidecars via `/admin/tools/run` with adaptive backend/quality selection
 - `arw-cli orchestrator catalog [--status STATUS] [--category CAT] [--json {--pretty}]` - inspect the mini-agent catalog served by `/orchestrator/mini_agents`
 - `arw-cli orchestrator start <goal> [--persona-id ID] [--preset NAME] [--diversity F] [--recency F] [--compression F] [--budget-tokens N] [--episodes N] [--project ID] [--topic TOPIC] [--data-json JSON | --data-file FILE] [--follow] [--json {--pretty}]` - launch persona-aware training runs and optionally tail progress via `/state/orchestrator/jobs`
 - `arw-cli orchestrator jobs [--limit N] [--json {--pretty}]` - list recent orchestrator jobs with persona tags, hints, and progress summaries

@@ -7,9 +7,9 @@ use serde_json::json;
 use tokio::sync::Mutex;
 
 use crate::{
-    autonomy, capsule_guard, chat, cluster, experiments, feedback, governor, identity, metrics,
-    models, persona, policy, queue, runtime, runtime_bundles, runtime_supervisor, tool_cache,
-    training,
+    autonomy, capsule_guard, chat, cluster, context_capability, experiments, feedback, governor,
+    identity, metrics, models, persona, policy, queue, runtime, runtime_bundles,
+    runtime_supervisor, tool_cache, training,
 };
 
 type SharedConfigState = Arc<Mutex<serde_json::Value>>;
@@ -45,6 +45,7 @@ pub(crate) struct AppState {
     runtime_bundles: Arc<runtime_bundles::RuntimeBundleStore>,
     logic_history: Arc<training::LogicUnitHistoryStore>,
     identity: Arc<identity::IdentityRegistry>,
+    capability: Arc<crate::capability::CapabilityService>,
 }
 
 impl AppState {
@@ -78,6 +79,7 @@ impl AppState {
         runtime_bundles: Arc<runtime_bundles::RuntimeBundleStore>,
         logic_history: Arc<training::LogicUnitHistoryStore>,
         identity: Arc<identity::IdentityRegistry>,
+        capability: Arc<crate::capability::CapabilityService>,
     ) -> Self {
         Self {
             bus,
@@ -108,6 +110,7 @@ impl AppState {
             runtime_bundles,
             logic_history,
             identity,
+            capability,
         }
     }
 
@@ -121,6 +124,10 @@ impl AppState {
 
     pub fn persona(&self) -> Option<Arc<persona::PersonaService>> {
         self.persona_service.clone()
+    }
+
+    pub fn capability(&self) -> Arc<crate::capability::CapabilityService> {
+        self.capability.clone()
     }
 
     pub fn kernel(&self) -> &Kernel {
@@ -271,6 +278,7 @@ pub(crate) struct AppStateBuilder {
     logic_history: Option<Arc<training::LogicUnitHistoryStore>>,
     identity: Option<Arc<identity::IdentityRegistry>>,
     persona: Option<Arc<persona::PersonaService>>,
+    capability: Option<Arc<crate::capability::CapabilityService>>,
 }
 
 impl AppState {
@@ -311,6 +319,7 @@ impl AppState {
             logic_history: None,
             identity: None,
             persona: None,
+            capability: None,
         }
     }
 }
@@ -452,6 +461,14 @@ impl AppStateBuilder {
         self
     }
 
+    pub(crate) fn with_capability_service(
+        mut self,
+        capability: Arc<crate::capability::CapabilityService>,
+    ) -> Self {
+        self.capability = Some(capability);
+        self
+    }
+
     pub(crate) async fn build(self) -> AppState {
         let config_state = self
             .config_state
@@ -535,12 +552,18 @@ impl AppStateBuilder {
                 Arc::new(runtime::RuntimeRegistry::with_storage(bus, path).await)
             }
         };
+        let capability_service = self
+            .capability
+            .unwrap_or_else(|| Arc::new(crate::capability::CapabilityService::new()));
+        let capability_profile = capability_service.maybe_refresh(false);
+        let capability_plan = context_capability::plan_for_profile(&capability_profile);
         let runtime_supervisor = match self.runtime_supervisor {
             Some(state) => state,
             None => {
-                runtime_supervisor::RuntimeSupervisor::new(
+                runtime_supervisor::RuntimeSupervisor::new_with_capability_plan(
                     runtime_registry.clone(),
                     self.bus.clone(),
+                    capability_plan.clone(),
                 )
                 .await
             }
@@ -598,6 +621,7 @@ impl AppStateBuilder {
             runtime_bundles_store,
             logic_history_store,
             identity_registry,
+            capability_service,
         )
     }
 }

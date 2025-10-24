@@ -3260,29 +3260,36 @@ ARW.personaPanel = (() => {
       const skipLoading = options && options.skipLoading;
       this.loadingDetails = id;
       if (!skipLoading) {
-        if (this.metrics) this.metrics.innerHTML = '<p class="dim">Loading telemetry…</p>';
-        if (this.history) this.history.innerHTML = '<li class="dim">Loading…</li>';
+        if (this.metrics) this.metrics.innerHTML = '<p class="dim">Loading telemetry.</p>';
+        if (this.history) this.history.innerHTML = '<li class="dim">Loading.</li>';
       }
+      let detail = null;
       try {
         const limit = this.historyLimit || 10;
-        const [metrics, history] = await Promise.all([
-          this.fetchJson(`/state/persona/${encodeURIComponent(id)}/vibe_metrics`),
-          this.fetchJson(`/state/persona/${encodeURIComponent(id)}/vibe_history?limit=${limit}`),
-        ]);
+        const detailPromise = this
+          .fetchJson(`/state/persona/${encodeURIComponent(id)}`)
+          .catch((err) => {
+            console.warn('persona detail fetch failed', err);
+            return null;
+          });
+        const metricsPromise = this.fetchJson(`/state/persona/${encodeURIComponent(id)}/vibe_metrics`);
+        const historyPromise = this.fetchJson(`/state/persona/${encodeURIComponent(id)}/vibe_history?limit=${limit}`);
+        detail = await detailPromise;
+        const [metrics, history] = await Promise.all([metricsPromise, historyPromise]);
         if (this.loadingDetails !== id) return;
         this.setStatus('');
-        this.renderMetrics(metrics);
+        this.renderMetrics(metrics, detail, null);
         this.renderHistory(history);
       } catch (err) {
         if (this.loadingDetails !== id) return;
         const message = String(err && err.message ? err.message : '');
         if (message.includes('HTTP 412')) {
-          this.renderMetrics(null, 'Telemetry disabled for this persona.');
+          this.renderMetrics(null, detail, 'Telemetry disabled for this persona (showing last recorded snapshot when available).');
           this.renderHistory(null, 'Enable telemetry to collect new feedback.');
           this.setStatus('Telemetry disabled for this persona', { clearAfter: 4000 });
         } else {
           console.warn('persona telemetry fetch failed', err);
-          this.renderMetrics(null, 'Telemetry unavailable.');
+          this.renderMetrics(null, detail, 'Telemetry unavailable.');
           this.renderHistory(null, 'Feedback history unavailable.');
           this.setStatus('Failed to load telemetry', { clearAfter: 4000 });
         }
@@ -3291,50 +3298,122 @@ ARW.personaPanel = (() => {
           this.loadingDetails = null;
         }
       }
-    }
-
-    renderMetrics(metrics, message) {
+    }\r\n\r\n    renderMetrics(metrics, detail, message) {
       if (!this.metrics) return;
+      const fragments = [];
       if (message) {
-        this.metrics.innerHTML = `<p class="dim">${escapeHtml(message)}</p>`;
-        this.updateHistoryMeta();
-        return;
+        fragments.push(`<p class="dim">${escapeHtml(message)}</p>`);
       }
-      if (!metrics || typeof metrics !== 'object') {
-        this.metrics.innerHTML = '<p class="dim">Telemetry unavailable.</p>';
-        this.updateHistoryMeta();
-        return;
-      }
-      this.setRetentionInfo(metrics.retain_max ?? metrics.retainMax ?? null);
-      const total = Number.isFinite(metrics.total_feedback) ? metrics.total_feedback : 0;
-      const avg = Number.isFinite(metrics.average_strength) ? metrics.average_strength.toFixed(2) : '—';
-      const lastSignal = metrics.last_signal || 'unspecified';
-      const lastStrength = Number.isFinite(metrics.last_strength) ? metrics.last_strength.toFixed(2) : null;
-      const lastUpdatedRel = formatRelative(metrics.last_updated);
-      const cards = [];
-      cards.push(`<div class="metric-card"><span class="metric-label">Total feedback</span><strong>${escapeHtml(total)}</strong></div>`);
-      cards.push(`<div class="metric-card"><span class="metric-label">Average strength</span><strong>${escapeHtml(avg)}</strong></div>`);
-      const metaBits = [];
-      if (lastStrength) metaBits.push(`strength ${escapeHtml(lastStrength)}`);
-      if (lastUpdatedRel) metaBits.push(lastUpdatedRel);
-      cards.push(`<div class="metric-card"><span class="metric-label">Last signal</span><strong>${escapeHtml(lastSignal)}</strong>${metaBits.length ? `<span class="dim">${escapeHtml(metaBits.join(' · '))}</span>` : ''}</div>`);
-      const counts = metrics.signal_counts || {};
-      const entries = Object.keys(counts || {})
-        .map((key) => ({ label: key && key.trim().length ? key : 'unspecified', value: counts[key] }))
-        .filter((entry) => Number.isFinite(entry.value))
-        .sort((a, b) => (b.value || 0) - (a.value || 0));
-      if (entries.length) {
-        const list = entries
-          .map((entry) => `<li><span>${escapeHtml(entry.label)}</span><strong>${escapeHtml(entry.value)}</strong></li>`)
-          .join('');
-        cards.push(`<div class="metric-card"><span class="metric-label">Signals</span><ul class="metric-list">${list}</ul></div>`);
-      }
-      this.metrics.innerHTML = cards.join('');
-      const relMeta = formatRelative(metrics.last_updated);
-      this.updateHistoryMeta(relMeta ? `Updated ${relMeta}` : '');
-    }
+      const previewMetrics = detail && typeof detail === 'object' && detail.vibe_metrics_preview && typeof detail.vibe_metrics_preview === 'object'
+        ? detail.vibe_metrics_preview
+        : null;
+      const source = metrics && typeof metrics === 'object' ? metrics : previewMetrics;
+      const biasPreview = detail && typeof detail === 'object' && detail.context_bias_preview && typeof detail.context_bias_preview === 'object'
+        ? detail.context_bias_preview
+        : null;
 
-    renderHistory(historyData, message) {
+      if (source) {
+        const retainMax = source.retain_max ?? source.retainMax ?? null;
+        this.setRetentionInfo(retainMax);
+        const totalRaw = Number(source.total_feedback ?? source.totalFeedback);
+        const total = Number.isFinite(totalRaw) ? totalRaw : 0;
+        const avgRaw = Number(source.average_strength ?? source.averageStrength);
+        const avg = Number.isFinite(avgRaw) ? avgRaw.toFixed(2) : '-';
+        const lastSignal = (source.last_signal ?? source.lastSignal ?? 'unspecified') || 'unspecified';
+        const lastStrengthRaw = Number(source.last_strength ?? source.lastStrength);
+        const lastStrength = Number.isFinite(lastStrengthRaw) ? lastStrengthRaw.toFixed(2) : null;
+        const lastUpdated = source.last_updated ?? source.lastUpdated ?? null;
+        const lastUpdatedRel = formatRelative(lastUpdated);
+
+        fragments.push(`<div class="metric-card"><span class="metric-label">Total feedback</span><strong>${escapeHtml(total)}</strong></div>`);
+        fragments.push(`<div class="metric-card"><span class="metric-label">Average strength</span><strong>${escapeHtml(avg)}</strong></div>`);
+        const metaBits = [];
+        if (lastStrength) metaBits.push(`strength ${escapeHtml(lastStrength)}`);
+        if (lastUpdatedRel) metaBits.push(lastUpdatedRel);
+        fragments.push(`<div class="metric-card"><span class="metric-label">Last signal</span><strong>${escapeHtml(lastSignal)}</strong>${metaBits.length ? `<span class="dim">${escapeHtml(metaBits.join(' · '))}</span>` : ''}</div>`);
+
+        const countMap = source.signal_counts && typeof source.signal_counts === 'object' ? source.signal_counts : {};
+        const strengthMap = source.signal_strength && typeof source.signal_strength === 'object' ? source.signal_strength : {};
+        const weightMap = source.signal_weights && typeof source.signal_weights === 'object' ? source.signal_weights : {};
+        const signalEntries = Object.keys(countMap)
+          .map((key) => {
+            const label = key && key.trim().length ? key : 'unspecified';
+            const countVal = Number(countMap[key]);
+            const weightVal = Number(weightMap[key]);
+            const avgVal = Number(strengthMap[key]);
+            return {
+              label,
+              count: Number.isFinite(countVal) ? countVal : 0,
+              weight: Number.isFinite(weightVal) ? weightVal : null,
+              avg: Number.isFinite(avgVal) ? avgVal : null,
+            };
+          })
+          .filter((entry) => Number.isFinite(entry.count))
+          .sort((a, b) => {
+            const aScore = Number.isFinite(a.weight) ? a.weight : a.count;
+            const bScore = Number.isFinite(b.weight) ? b.weight : b.count;
+            return bScore - aScore;
+          });
+        if (signalEntries.length) {
+          const list = signalEntries.slice(0, 8)
+            .map((entry) => {
+              const extras = [];
+              if (Number.isFinite(entry.avg)) extras.push(`avg ${entry.avg.toFixed(2)}`);
+              if (Number.isFinite(entry.weight) && entry.weight !== entry.count) extras.push(`w ${entry.weight.toFixed(2)}`);
+              const extrasHtml = extras.length ? `<div class="metric-sub">${escapeHtml(extras.join(' · '))}</div>` : '';
+              return `<li><div class="metric-row"><span>${escapeHtml(entry.label)}</span><strong>${escapeHtml(entry.count)}</strong></div>${extrasHtml}</li>`;
+            })
+            .join('');
+          fragments.push(`<div class="metric-card"><span class="metric-label">Signals</span><ul class="metric-list">${list}</ul></div>`);
+        }
+
+        const relMeta = formatRelative(lastUpdated);
+        this.updateHistoryMeta(relMeta ? `Updated ${relMeta}` : '');
+      } else {
+        this.setRetentionInfo(null);
+        this.updateHistoryMeta('');
+      }
+
+      if (biasPreview) {
+        const sections = [];
+        const lanes = biasPreview.lane_priorities && typeof biasPreview.lane_priorities === 'object' ? biasPreview.lane_priorities : {};
+        const laneEntries = Object.keys(lanes)
+          .map((lane) => ({ lane, value: Number(lanes[lane]) }))
+          .filter((entry) => Number.isFinite(entry.value))
+          .sort((a, b) => Math.abs(b.value) - Math.abs(a.value));
+        if (laneEntries.length) {
+          const laneHtml = laneEntries.slice(0, 6)
+            .map((entry) => `<li><div class="metric-row"><span>${escapeHtml(entry.lane)}</span><span class="dim">${entry.value >= 0 ? '+' : ''}${entry.value.toFixed(2)}</span></div></li>`)
+            .join('');
+          sections.push(`<div class="metric-section"><div class="metric-subtitle">Lane priorities</div><ul class="metric-list">${laneHtml}</ul></div>`);
+        }
+        const slots = biasPreview.slot_overrides && typeof biasPreview.slot_overrides === 'object' ? biasPreview.slot_overrides : {};
+        const slotEntries = Object.keys(slots)
+          .map((slot) => ({ slot, limit: Number(slots[slot]) }))
+          .filter((entry) => Number.isFinite(entry.limit) && entry.limit > 0)
+          .sort((a, b) => b.limit - a.limit);
+        if (slotEntries.length) {
+          const slotHtml = slotEntries.slice(0, 6)
+            .map((entry) => `<li><div class="metric-row"><span>${escapeHtml(entry.slot)}</span><span class="dim">≥ ${entry.limit}</span></div></li>`)
+            .join('');
+          sections.push(`<div class="metric-section"><div class="metric-subtitle">Slot minimums</div><ul class="metric-list">${slotHtml}</ul></div>`);
+        }
+        const minScore = Number(biasPreview.min_score_delta ?? biasPreview.minScoreDelta);
+        if (Number.isFinite(minScore) && Math.abs(minScore) > Number.EPSILON) {
+          sections.push(`<div class="metric-sub">Min score delta: ${minScore >= 0 ? '+' : ''}${minScore.toFixed(2)}</div>`);
+        }
+        if (!sections.length) {
+          sections.push('<div class="metric-sub">No context adjustments recorded yet.</div>');
+        }
+        fragments.push(`<div class="metric-card metric-card-preview"><span class="metric-label">Context bias</span>${sections.join('')}</div>`);
+      }
+
+      if (!source && !biasPreview && fragments.length === 0) {
+        fragments.push('<p class="dim">Telemetry unavailable.</p>');
+      }
+
+      this.metrics.innerHTML = fragments.join('');
+    }    renderHistory(historyData, message) {
       if (!this.history) return;
       if (message) {
         this.history.innerHTML = `<li class="dim">${escapeHtml(message)}</li>`;
@@ -3570,3 +3649,11 @@ ARW.personaPanel = (() => {
     },
   };
 })();
+
+
+
+
+
+
+
+

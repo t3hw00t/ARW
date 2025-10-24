@@ -12,7 +12,7 @@ use utoipa::IntoParams;
 
 use crate::{
     api::persona::{ensure_persona_telemetry, resolve_vibe_telemetry_scope},
-    persona::PersonaVibeMetricsSnapshot,
+    persona::{compute_context_bias, PersonaVibeMetricsSnapshot},
     responses, AppState,
 };
 
@@ -134,6 +134,11 @@ pub async fn state_persona_get(
 
     match service.get_entry(id.clone()).await {
         Ok(Some(entry)) => {
+            let metrics_snapshot = service.vibe_metrics_snapshot(id.clone()).await;
+            let bias = compute_context_bias(&entry, &metrics_snapshot);
+            state
+                .metrics()
+                .record_persona_bias(&id, &bias.lane_priorities, &bias.slot_overrides);
             let pending = match service
                 .list_proposals(Some(id.clone()), Some("pending".to_string()), 50)
                 .await
@@ -169,6 +174,24 @@ pub async fn state_persona_get(
             if let Some(obj) = value.as_object_mut() {
                 obj.insert("pending_proposals".into(), json!(pending));
                 obj.insert("approvals_required".into(), json!(approvals_required));
+                obj.insert(
+                    "context_bias_preview".into(),
+                    serde_json::to_value(&bias).unwrap_or_else(|_| json!({})),
+                );
+                obj.insert(
+                    "vibe_metrics_preview".into(),
+                    json!({
+                        "total_feedback": metrics_snapshot.total_feedback,
+                        "signal_counts": metrics_snapshot.signal_counts,
+                        "signal_strength": metrics_snapshot.signal_strength,
+                        "signal_weights": metrics_snapshot.signal_weights,
+                        "average_strength": metrics_snapshot.average_strength,
+                        "last_signal": metrics_snapshot.last_signal,
+                        "last_strength": metrics_snapshot.last_strength,
+                        "last_updated": metrics_snapshot.last_updated,
+                        "retain_max": metrics_snapshot.retain_max,
+                    }),
+                );
             }
             Json(value).into_response()
         }

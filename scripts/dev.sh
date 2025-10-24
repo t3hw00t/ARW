@@ -202,11 +202,15 @@ run_verify() {
     if command -v node >/dev/null 2>&1; then
       echo "[verify] node apps/arw-launcher/src-tauri/ui/read_store.test.js"
       if ! node "$REPO_ROOT/apps/arw-launcher/src-tauri/ui/read_store.test.js"; then ok=1; fi
+      echo "[verify] node apps/arw-launcher/src-tauri/ui/persona_preview.test.js"
+      if ! node "$REPO_ROOT/apps/arw-launcher/src-tauri/ui/persona_preview.test.js"; then ok=1; fi
     else
       local node_fallback="/c/Program Files/nodejs/node.exe"
       if [[ -x "$node_fallback" ]]; then
         echo "[verify] node fallback apps/arw-launcher/src-tauri/ui/read_store.test.js"
         if ! "$node_fallback" "$REPO_ROOT/apps/arw-launcher/src-tauri/ui/read_store.test.js"; then ok=1; fi
+        echo "[verify] node fallback apps/arw-launcher/src-tauri/ui/persona_preview.test.js"
+        if ! "$node_fallback" "$REPO_ROOT/apps/arw-launcher/src-tauri/ui/persona_preview.test.js"; then ok=1; fi
       else
         echo "[verify] launcher UI smoke skipped (Node.js 18+ not found; install Node.js or pass --skip-ui/--fast to suppress this notice)"
       fi

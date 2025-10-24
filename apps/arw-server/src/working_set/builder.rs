@@ -10,9 +10,13 @@ use metrics::{counter, histogram};
 use rustc_hash::{FxHashMap, FxHashSet};
 use serde_json::{json, Map, Value};
 
-use crate::{util, AppState};
+use crate::{
+    context_capability::{self, ContextCapabilityPlan, PlanApplicationHints},
+    util, AppState,
+};
 
 use super::{
+    default_expand_per_seed, default_limit,
     models::{WorkingSet, WorkingSetObserver, WorkingSetSummary},
     spec::WorkingSetSpec,
     SharedValue, DEFAULT_WORLD_LANE, METRIC_WORLD_CANDIDATES, STREAM_EVENT_COMPLETED,
@@ -43,6 +47,8 @@ struct WorkingSetBuilder {
     spec: WorkingSetSpec,
     world_beliefs: Arc<[Value]>,
     kernel_session: KernelSession,
+    capability_plan: ContextCapabilityPlan,
+    plan_hints: PlanApplicationHints,
 }
 
 struct PendingExpansion {
@@ -54,15 +60,35 @@ struct PendingExpansion {
 impl WorkingSetBuilder {
     fn new(state: &AppState, spec: WorkingSetSpec, world_beliefs: Arc<[Value]>) -> Result<Self> {
         let kernel_session = state.kernel().session()?;
+        let capability_profile = state.capability().maybe_refresh(false);
+        let capability_plan = context_capability::plan_for_profile(&capability_profile);
+        counter!(
+            "arw_context_capability_plan_total",
+            "tier" => capability_plan.tier.as_str()
+        )
+        .increment(1);
+        let plan_hints = PlanApplicationHints {
+            apply_default_limit: spec.limit == 0 || spec.limit == default_limit(),
+            apply_default_expand: spec.expand_per_seed == 0
+                || spec.expand_per_seed == default_expand_per_seed(),
+        };
         Ok(Self {
             spec,
             world_beliefs,
             kernel_session,
+            capability_plan,
+            plan_hints,
         })
     }
 
     fn build<O: WorkingSetObserver>(&mut self, observer: &mut O) -> Result<WorkingSet> {
         self.spec.normalize();
+        context_capability::apply_plan_to_spec(
+            &mut self.spec,
+            &self.capability_plan,
+            self.plan_hints,
+        );
+        self.plan_hints = PlanApplicationHints::default();
         let spec = &self.spec;
         let scorer_label = spec.scorer_label();
         let scorer = resolve_scorer(Some(scorer_label.as_str()));
@@ -1080,7 +1106,11 @@ impl WorkingSetBuilder {
         fetch = fetch.saturating_mul(3);
         fetch = fetch.saturating_add(spec.expand_per_seed);
         let mut min_fetch = spec.limit.saturating_add(spec.expand_per_seed).max(10);
-        if let Some(cap) = fetch_cap_override() {
+        let mut cap = fetch_cap_override();
+        if cap.is_none() && self.capability_plan.fetch_cap > 0 {
+            cap = Some(self.capability_plan.fetch_cap);
+        }
+        if let Some(cap) = cap {
             fetch = fetch.min(cap);
             min_fetch = min_fetch.min(cap);
         }

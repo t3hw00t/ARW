@@ -159,6 +159,15 @@ fn render_prometheus(
     out.push_str(
         "# HELP arw_persona_feedback_signal_total Persona feedback samples accepted per persona and signal\n# TYPE arw_persona_feedback_signal_total counter\n",
     );
+    out.push_str(
+        "# HELP arw_persona_signal_strength_avg Average persona feedback strength per persona and signal\n# TYPE arw_persona_signal_strength_avg gauge\n",
+    );
+    out.push_str(
+        "# HELP arw_persona_lane_priority Persona lane priority bias per persona and lane\n# TYPE arw_persona_lane_priority gauge\n",
+    );
+    out.push_str(
+        "# HELP arw_persona_slot_override Persona slot override minimum per persona and slot\n# TYPE arw_persona_slot_override gauge\n",
+    );
     for (persona, stats) in summary.persona.by_persona.iter() {
         write_metric_line(
             &mut out,
@@ -172,6 +181,30 @@ fn render_prometheus(
                 "arw_persona_feedback_signal_total",
                 &[("persona", persona.clone()), ("signal", signal.clone())],
                 count,
+            );
+        }
+        for (signal, avg) in stats.signal_strength.iter() {
+            write_metric_line(
+                &mut out,
+                "arw_persona_signal_strength_avg",
+                &[("persona", persona.clone()), ("signal", signal.clone())],
+                f64::from(*avg),
+            );
+        }
+        for (lane, value) in stats.lane_priorities.iter() {
+            write_metric_line(
+                &mut out,
+                "arw_persona_lane_priority",
+                &[("persona", persona.clone()), ("lane", lane.clone())],
+                f64::from(*value),
+            );
+        }
+        for (slot, value) in stats.slot_overrides.iter() {
+            write_metric_line(
+                &mut out,
+                "arw_persona_slot_override",
+                &[("persona", persona.clone()), ("slot", slot.clone())],
+                *value as f64,
             );
         }
     }
@@ -567,10 +600,18 @@ mod tests {
 
     #[test]
     fn prometheus_export_includes_persona_metrics() {
+        use std::collections::BTreeMap;
+
         let metrics = crate::metrics::Metrics::new();
-        metrics.record_persona_feedback("persona-1", Some("warmer"));
-        metrics.record_persona_feedback("persona-1", Some("warmer"));
-        metrics.record_persona_feedback("persona-1", Some("cooler"));
+        metrics.record_persona_feedback("persona-1", Some("warmer"), Some(0.8));
+        metrics.record_persona_feedback("persona-1", Some("warmer"), Some(0.6));
+        metrics.record_persona_feedback("persona-1", Some("cooler"), Some(0.25));
+
+        let mut lanes = BTreeMap::new();
+        lanes.insert("semantic".to_string(), 0.2);
+        let mut slots = BTreeMap::new();
+        slots.insert("evidence".to_string(), 3usize);
+        metrics.record_persona_bias("persona-1", &lanes, &slots);
 
         let summary = metrics.snapshot();
         let bus = arw_events::BusStats {
@@ -589,6 +630,16 @@ mod tests {
         assert!(rendered.contains(
             "arw_persona_feedback_signal_total{persona=\"persona-1\",signal=\"cooler\"} 1"
         ));
+        assert!(rendered.contains(
+            "arw_persona_signal_strength_avg{persona=\"persona-1\",signal=\"warmer\"} 0.7"
+        ));
+        assert!(rendered.contains(
+            "arw_persona_signal_strength_avg{persona=\"persona-1\",signal=\"cooler\"} 0.25"
+        ));
+        assert!(rendered
+            .contains("arw_persona_lane_priority{persona=\"persona-1\",lane=\"semantic\"} 0.2"));
+        assert!(rendered
+            .contains("arw_persona_slot_override{persona=\"persona-1\",slot=\"evidence\"} 3"));
         assert!(rendered.contains("arw_persona_feedback_global_total 3"));
     }
 }

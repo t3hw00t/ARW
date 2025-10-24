@@ -80,6 +80,22 @@ bench-snappy *params:
 package:
   bash scripts/package.sh --no-build
 
+# OCR utilities
+ocr-backfill-full base='http://127.0.0.1:8091':
+  arw-cli screenshots backfill-ocr \
+    --backend vision_compression \
+    --quality full \
+    --refresh-capabilities \
+    --base {{base}}
+
+ocr-backfill-dry base='http://127.0.0.1:8091':
+  arw-cli screenshots backfill-ocr \
+    --backend vision_compression \
+    --quality full \
+    --refresh-capabilities \
+    --dry-run \
+    --base {{base}}
+
 docker-build:
   docker build -f apps/arw-server/Dockerfile -t arw-server:dev .
 
@@ -621,6 +637,7 @@ verify-manual:
   cargo clippy --workspace --all-targets -- -D warnings
   cargo test --workspace --locked
   node apps/arw-launcher/src-tauri/ui/read_store.test.js
+  node apps/arw-launcher/src-tauri/ui/persona_preview.test.js
   python3 scripts/check_operation_docs_sync.py
   python3 scripts/gen_topics_doc.py --check
   python3 scripts/lint_event_names.py

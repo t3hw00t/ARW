@@ -29,6 +29,18 @@ pub struct BackfillOcrArgs {
     /// Force OCR even if a cached sidecar exists
     #[arg(long)]
     pub force: bool,
+    /// Requested OCR backend (legacy or vision_compression)
+    #[arg(long)]
+    pub backend: Option<String>,
+    /// Requested quality tier (lite, balanced, or full)
+    #[arg(long)]
+    pub quality: Option<String>,
+    /// Prefer low-power execution mode when scheduling OCR
+    #[arg(long)]
+    pub prefer_low_power: bool,
+    /// Refresh capability profile before running OCR
+    #[arg(long)]
+    pub refresh_capabilities: bool,
     /// Only print the files that would be processed
     #[arg(long)]
     pub dry_run: bool,
@@ -146,6 +158,20 @@ fn cmd_backfill_ocr(args: &BackfillOcrArgs) -> Result<()> {
                 "lang": args.lang,
             }
         });
+        if let Some(input) = payload.get_mut("input") {
+            if let Some(ref backend) = args.backend {
+                input["backend"] = JsonValue::String(backend.clone());
+            }
+            if let Some(ref quality) = args.quality {
+                input["quality"] = JsonValue::String(quality.to_lowercase());
+            }
+            if args.prefer_low_power {
+                input["prefer_low_power"] = JsonValue::Bool(true);
+            }
+            if args.refresh_capabilities {
+                input["refresh_capabilities"] = JsonValue::Bool(true);
+            }
+        }
         if args.force {
             if let Some(input) = payload.get_mut("input") {
                 input["force"] = JsonValue::Bool(true);

@@ -4,7 +4,7 @@ title: Backlog
 
 # Backlog
 
-Updated: 2025-10-23
+Updated: 2025-10-25
 Type: Reference
 
 This backlog captures concrete work items and near-term priorities. The Roadmap focuses on higher‑level themes and time horizons; see About → Roadmap for strategic context.
@@ -35,9 +35,11 @@ Complexity Collapse (Cross-cutting)
 - [Kernel] Flows as DAG data executed by a single flow-runner; tools are schema-defined nodes — graduate existing flows to the unified runner and remove bespoke executors.
 - [Kernel] Unified retrieval pipeline and memory abstraction (vector/graph/kv/doc) with shared CRUD/stats and index hygiene — wire production hygiene dashboards and janitor tooling.
 - [Kernel] Capability/lease system with node-local egress proxy; remove per-tool allowlists — align policy manifests with lease scopes and document operator responses.
-- [Kernel] UI: shared right-sidecar, schema-generated forms, and global command palette — sustain accessibility audits and ensure new packs ship with parity.
-- [Kernel][Docs] Task metadata sync automation: treat `.arw/tasks.json` as source of truth, regenerate contributor-facing lists automatically, and add CI drift checks so docs never fall out of sync — todo
-- **Recently shipped:** Legacy feature migration (Phases A–E); Snappy Governor verification; Event Spine patch streaming; Phase A handoff (see `docs/RESTRUCTURE.md` and tasks `t-phase-a-01..03`).
+- [Kernel] UI: shared right-sidecar, schema-generated forms, and global command palette - sustain accessibility audits and ensure new packs ship with parity.
+- [Kernel][Docs] Task metadata sync automation: treat `.arw/tasks.json` as source of truth, regenerate contributor-facing lists automatically, and add CI drift checks so docs never fall out of sync - todo
+- [Kernel] [t-20251024-capability-service] Shared CapabilityService for hardware profiling across OCR, context, and runtime planners - done (CapabilityService feeds OCR/context/runtime, with capability-tier telemetry and shared health tuning)
+- [Kernel][Pack: Research] [t-20251024-compression-lite] Consumer-grade vision compression backend for adaptive OCR - todo
+- **Recently shipped:** Legacy feature migration (Phases A-E); Snappy Governor verification; Event Spine patch streaming; Phase A handoff (see `docs/RESTRUCTURE.md` and tasks `t-phase-a-01..03`); OCR low-power env alignment (`t-20251024-ocr-low-power-env`); screenshot pipeline docs refresh (`t-20251024-screenshot-docs`); CLI OCR flags documentation (`t-20251024-cli-ocr-help`); shared capability service (`t-20251024-capability-service`).
 
 Managed Runtime Supervisor (Priority One)
 - [Kernel] Runtime Matrix Phase 1: land health reasons, restart budgets, and accessible status strings; add CPU/GPU smoke tests exercising llama.cpp integration — done (real GPU smoke validated 2025-10-16 via run.Sz07bF in .smoke/runtime using the Windows CUDA helper; stub + simulated coverage remain wired in CI).
@@ -66,8 +68,9 @@ Never‑Out‑Of‑Context (High Priority)
 
 Modular Cognitive Stack (Kickoff)
 - [Kernel][Pack: Research] [t-202510060901-msc01] Agent contracts & orchestrator schema — done (typed envelopes validated, lifecycle state machine emits lease scopes + stages, docs/tests landed).
-- [Kernel][Pack: Research] [t-202510060903-msc02] Memory fabric wiring — done (short-term + episodic persistence with loss metrics and modular review queues shipped; hygiene + telemetry covered by tests).
-- [Kernel][Pack: Collaboration] [t-202510060906-msc03] Validation & tool guardrails — done (tool invocations enforce sandbox-derived capability leases, provenance lands in memory/read-models, and launcher/eval consumers receive enriched modular events).
+- [Kernel][Pack: Research] [t-202510060903-msc02] Memory fabric wiring - done (short-term + episodic persistence with loss metrics and modular review queues shipped; hygiene + telemetry covered by tests).
+- [Kernel][Pack: Collaboration] [t-202510060906-msc03] Validation & tool guardrails - done (tool invocations enforce sandbox-derived capability leases, provenance lands in memory/read-models, and launcher/eval consumers receive enriched modular events).
+- [Pack: Research][Docs] [t-20251024-knowledge-cards] Knowledge card compression prototype - todo
 
 UI Coherence
 - [Pack: Collaboration] Universal right‑sidecar across Hub/Chat/Training; subscribe once to `/events` — done (initial lanes)
@@ -107,17 +110,19 @@ Experience Outcomes
 
 Persona & Empathy (High Priority)
 - [Pack: Persona][Kernel] Persona core schema: add `/state/persona/{id}` read-models, diff-based proposals, and policy leases for approvals — in_progress (kernel schema + read/approve endpoints shipped behind `ARW_PERSONA_ENABLE`; preview seeding helpers `arw-cli admin persona seed` / `just persona-seed`; lease gating pending)
-- [Pack: Persona][Pack: Research] Worldview bridge: stream episodic/semantic memories into persona worldview facets with review dashboards, drift alerts, and consent-respecting diffs — in_progress (kernel ingest hooks merged; launcher calibration panel in design).
-- [Pack: Persona][Pack: Collaboration] Empathy signal loop: instrument tone/pacing/sentiment telemetry (opt-in), expose vibe feedback controls in Chat/Launcher, ensure accessibility parity — todo
+- [Pack: Persona][Pack: Research] Worldview bridge: stream episodic/semantic memories into persona worldview facets with review dashboards, drift alerts, and consent-respecting diffs - in_progress (kernel ingest hooks merged; launcher calibration panel in design).
+- [Pack: Persona][Pack: Collaboration] Empathy signal loop: instrument tone/pacing/sentiment telemetry (opt-in), expose vibe feedback controls in Chat/Launcher, ensure accessibility parity - todo
+- [Pack: Persona][Kernel] [t-20251024-context-persona-loop] Persona-aware context loop linking vibe metrics to retrieval budgets - in_progress (persona vibe telemetry now reweights lanes/slots via aggregated feedback)
 - [Pack: Persona][Pack: Collaboration] Empathy feedback studio: Launcher workbench that visualizes vibe history, annotates “why I chose this” responses, and guides reflective prompts while the preview flag is on — plan
 - [Pack: Persona][Pack: Collaboration] Persona reflection loop integration [t-20251023-reflection-loop] - todo (guided reflection prompts, persona diffs, and vibe metrics feeding context assembly).
 - [Pack: Persona] Inclusive research sprint: run moderated studies across personas, publish empathy design language and heuristics — plan
 
 <a id="autonomous-economy--federation"></a>
 Autonomous Economy & Federation
-- [Pack: Collaboration] Revenue recipe gallery: curate signed automation templates (research gigs, monitoring) with compliance guardrails and earning metadata — todo
-- [Pack: Collaboration][Pack: Federation] Agent economy pilot pack: bundle revenue recipes, consent checklist, contribution ledger MVP, and `/state/cluster/ledger` exports for early operators — plan
+- [Pack: Collaboration] Revenue recipe gallery: curate signed automation templates (research gigs, monitoring) with compliance guardrails and earning metadata - todo
+- [Pack: Collaboration][Pack: Federation] Agent economy pilot pack: bundle revenue recipes, consent checklist, contribution ledger MVP, and `/state/cluster/ledger` exports for early operators - plan
 - [Pack: Collaboration][Pack: Federation] Cooperative policy forum & settlement simulator [t-20251023-coop-forum] - todo (debate lane plus what-if payout simulator ahead of live federation).
+- [Kernel][Pack: Federation] [t-20251024-economy-meter] Shared economy contribution meter for pooled accelerator usage - todo
 - [Kernel][Pack: Federation] Contribution ledger MVP: extend `/state/cluster` with per-task payouts, exports, and audit trails — todo
 - [Pack: Federation] Payout connector pilot: optional Stripe test-mode + manual invoice flows with policy leases and ledger reconciliation — plan
 - [Pack: Federation][Pack: Research] Cooperative scaling kit: deployment scripts + evaluation harness presets for revenue agents operating across nodes — plan

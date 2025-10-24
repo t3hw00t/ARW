@@ -778,7 +778,36 @@ button.btn-small.ghost{ border-color:#d5dbe4 }
 .persona-metrics .metric-card strong {
   font-size: 1.4rem;
 }
-.persona-history-block {
+.persona-metrics .metric-card .metric-subtitle {
+  font-weight: 600;
+  font-size: 0.85rem;
+}
+
+.persona-metrics .metric-card .metric-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.persona-metrics .metric-card .metric-list {
+  list-style: none;
+  margin: 0;
+  padding-left: 0;
+}
+
+.persona-metrics .metric-card .metric-list li {
+  margin: 0.2rem 0;
+}
+
+.persona-metrics .metric-card .metric-sub {
+  font-size: 0.8rem;
+  color: var(--color-dim);
+}
+
+.persona-metrics .metric-card .metric-sub + .metric-sub {
+  margin-top: 0.25rem;
+}.persona-history-block {
   margin-top: 1rem;
 }
 .persona-hint {
@@ -817,3 +846,11 @@ button.btn-small.ghost{ border-color:#d5dbe4 }
   white-space: pre-wrap;
   word-break: break-word;
 }
+
+
+.persona-metrics .metric-card .metric-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+

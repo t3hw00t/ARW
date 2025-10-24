@@ -1,4 +1,7 @@
-use crate::{coverage, persona, working_set, AppState};
+use crate::{
+    context_capability::{self, PlanApplicationHints},
+    coverage, persona, working_set, AppState,
+};
 use metrics::{counter, gauge, histogram};
 use serde_json::{json, Map, Number, Value};
 use std::collections::HashSet;
@@ -120,11 +123,31 @@ where
     F: FnMut(ContextIterationEvent) -> Fut,
     Fut: Future<Output = ()> + Send,
 {
+    let capability_profile = state.capability().maybe_refresh(false);
+    let plan = Arc::new(context_capability::plan_for_profile(&capability_profile));
+    counter!(
+        "arw_context_capability_plan_total",
+        "tier" => plan.tier.as_str()
+    )
+    .increment(1);
+
+    let limit_default = base_spec.limit == 0 || base_spec.limit == working_set::default_limit();
+    let expand_default = base_spec.expand_per_seed == 0
+        || base_spec.expand_per_seed == working_set::default_expand_per_seed();
     let mut current_spec = base_spec.clone();
+    context_capability::apply_plan_to_spec(
+        &mut current_spec,
+        &plan,
+        PlanApplicationHints {
+            apply_default_limit: limit_default,
+            apply_default_expand: expand_default,
+        },
+    );
     let mut final_spec = current_spec.clone();
     let mut last_verdict = coverage::CoverageVerdict::satisfied();
     let mut final_working_set: Option<working_set::WorkingSet> = None;
     let mut error: Option<IterationError> = None;
+    let max_iterations = max_iterations.min(plan.max_iterations.max(1));
 
     for iteration in 0..max_iterations {
         let outcome = run_context_iteration(
@@ -134,6 +157,7 @@ where
             current_spec.clone(),
             corr_id.clone(),
             stream_sender.clone(),
+            Arc::clone(&plan),
         )
         .await;
 
@@ -159,6 +183,7 @@ where
                 if continue_loop {
                     if let Some(next_spec) = success.next_spec {
                         current_spec = next_spec;
+                        context_capability::clamp_spec_to_plan(&mut current_spec, &plan);
                     }
                 } else {
                     final_working_set = Some(success.working_set);
@@ -213,6 +238,7 @@ async fn run_context_iteration(
     spec: working_set::WorkingSetSpec,
     corr_id: Option<String>,
     stream_sender: Option<mpsc::Sender<working_set::WorkingSetStreamEvent>>,
+    plan: Arc<context_capability::ContextCapabilityPlan>,
 ) -> IterationOutcome {
     let bus = state.bus();
     let iteration_start = Instant::now();
@@ -245,6 +271,14 @@ async fn run_context_iteration(
     } else {
         (Vec::new(), None)
     };
+    if let (Some(persona_id), Some(bias)) = (persona_lookup.as_deref(), persona_bias.as_ref()) {
+        state.metrics().record_persona_bias(
+            persona_id,
+            &bias.lane_priorities,
+            &bias.slot_overrides,
+        );
+    }
+    context_capability::clamp_spec_to_plan(&mut spec, &plan);
     if let Some(bias) = persona_bias.as_ref() {
         if !bias.lane_priorities.is_empty() {
             spec.merge_lane_priorities(&bias.lane_priorities);
@@ -256,6 +290,7 @@ async fn run_context_iteration(
             spec.adjust_min_score(bias.min_score_delta);
         }
     }
+    context_capability::clamp_spec_to_plan(&mut spec, &plan);
     let spec_for_payload = spec.clone();
     let merged_beliefs = persona::merge_world_beliefs(&world_beliefs, persona_context);
 
@@ -322,6 +357,12 @@ async fn run_context_iteration(
                 next_spec_candidate.as_ref(),
                 duration_ms,
             );
+            if let Value::Object(ref mut obj) = summary_payload {
+                obj.insert(
+                    "capability_tier".into(),
+                    Value::String(plan.tier.as_str().to_string()),
+                );
+            }
             if let Some(bias) = persona_bias.as_ref() {
                 if let Some(serialized) = serialize_persona_bias(bias) {
                     if let Value::Object(ref mut obj) = summary_payload {
@@ -354,6 +395,12 @@ async fn run_context_iteration(
                 corr_id.as_ref(),
                 duration_ms,
             );
+            if let Value::Object(ref mut obj) = coverage_payload {
+                obj.insert(
+                    "capability_tier".into(),
+                    Value::String(plan.tier.as_str().to_string()),
+                );
+            }
             if let Some(bias) = persona_bias.as_ref() {
                 if let Some(serialized) = serialize_persona_bias(bias) {
                     if let Value::Object(ref mut obj) = coverage_payload {
@@ -370,6 +417,12 @@ async fn run_context_iteration(
                 corr_id.as_ref(),
                 duration_ms,
             );
+            if let Value::Object(ref mut obj) = recall_event.payload {
+                obj.insert(
+                    "capability_tier".into(),
+                    Value::String(plan.tier.as_str().to_string()),
+                );
+            }
             if let Some(bias) = persona_bias.as_ref() {
                 if let Some(serialized) = serialize_persona_bias(bias) {
                     if let Value::Object(ref mut obj) = recall_event.payload {

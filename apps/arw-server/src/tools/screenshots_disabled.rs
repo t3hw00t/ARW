@@ -12,7 +12,7 @@ pub(super) async fn annotate(_input: Value) -> Result<Value, ToolError> {
     ))
 }
 
-pub(super) async fn ocr(_input: Value) -> Result<Value, ToolError> {
+pub(super) async fn ocr(_state: &crate::AppState, _input: Value) -> Result<Value, ToolError> {
     Err(ToolError::Unsupported(
         "ui.screenshot.ocr requires arw-server/tool_screenshots feature".into(),
     ))

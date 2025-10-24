@@ -127,6 +127,12 @@ pub struct PersonaTelemetrySummary {
 pub struct PersonaTelemetryPersonaSummary {
     pub total: u64,
     pub by_signal: BTreeMap<String, u64>,
+    #[serde(skip_serializing_if = "BTreeMap::is_empty", default)]
+    pub signal_strength: BTreeMap<String, f32>,
+    #[serde(skip_serializing_if = "BTreeMap::is_empty", default)]
+    pub lane_priorities: BTreeMap<String, f32>,
+    #[serde(skip_serializing_if = "BTreeMap::is_empty", default)]
+    pub slot_overrides: BTreeMap<String, u64>,
 }
 
 #[derive(Clone, Serialize)]
@@ -346,10 +352,14 @@ struct PersonaTelemetryCounters {
 struct PersonaTelemetryPersonaCounters {
     total: u64,
     by_signal: BTreeMap<String, u64>,
+    strength_sum: BTreeMap<String, f64>,
+    strength_count: BTreeMap<String, u64>,
+    lane_priorities: BTreeMap<String, f32>,
+    slot_overrides: BTreeMap<String, u64>,
 }
 
 impl PersonaTelemetryCounters {
-    fn record(&mut self, persona_id: &str, signal: &str) {
+    fn record(&mut self, persona_id: &str, signal: &str, strength: Option<f32>) {
         let entry = self.by_persona.entry(persona_id.to_string()).or_default();
         entry.total = entry.total.saturating_add(1);
         let label = if signal.is_empty() {
@@ -357,18 +367,51 @@ impl PersonaTelemetryCounters {
         } else {
             signal.to_string()
         };
-        *entry.by_signal.entry(label).or_default() += 1;
+        *entry.by_signal.entry(label.clone()).or_default() += 1;
+        if let Some(value) = strength {
+            let clamped = value.clamp(0.0, 1.0) as f64;
+            *entry.strength_sum.entry(label.clone()).or_default() += clamped;
+            *entry.strength_count.entry(label.clone()).or_default() += 1;
+        }
         self.total = self.total.saturating_add(1);
+    }
+
+    fn record_bias(
+        &mut self,
+        persona_id: &str,
+        lanes: &BTreeMap<String, f32>,
+        slots: &BTreeMap<String, usize>,
+    ) {
+        let entry = self.by_persona.entry(persona_id.to_string()).or_default();
+        entry.lane_priorities = lanes
+            .iter()
+            .map(|(lane, value)| (lane.clone(), (*value).clamp(-1.0, 1.0)))
+            .collect();
+        entry.slot_overrides = slots
+            .iter()
+            .map(|(slot, count)| (slot.clone(), *count as u64))
+            .collect();
     }
 
     fn summary(&self) -> PersonaTelemetrySummary {
         let mut by_persona = BTreeMap::new();
         for (persona, counters) in &self.by_persona {
+            let mut signal_strength = BTreeMap::new();
+            for (signal, sum) in counters.strength_sum.iter() {
+                if let Some(count) = counters.strength_count.get(signal) {
+                    if *count > 0 {
+                        signal_strength.insert(signal.clone(), (*sum / *count as f64) as f32);
+                    }
+                }
+            }
             by_persona.insert(
                 persona.clone(),
                 PersonaTelemetryPersonaSummary {
                     total: counters.total,
                     by_signal: counters.by_signal.clone(),
+                    signal_strength,
+                    lane_priorities: counters.lane_priorities.clone(),
+                    slot_overrides: counters.slot_overrides.clone(),
                 },
             );
         }
@@ -668,10 +711,26 @@ impl Metrics {
         }
     }
 
-    pub fn record_persona_feedback(&self, persona_id: &str, signal: Option<&str>) {
+    pub fn record_persona_feedback(
+        &self,
+        persona_id: &str,
+        signal: Option<&str>,
+        strength: Option<f32>,
+    ) {
         let label = signal.filter(|s| !s.is_empty()).unwrap_or("unspecified");
         if let Ok(mut counters) = self.persona_telemetry.lock() {
-            counters.record(persona_id, label);
+            counters.record(persona_id, label, strength);
+        }
+    }
+
+    pub fn record_persona_bias(
+        &self,
+        persona_id: &str,
+        lanes: &BTreeMap<String, f32>,
+        slots: &BTreeMap<String, usize>,
+    ) {
+        if let Ok(mut counters) = self.persona_telemetry.lock() {
+            counters.record_bias(persona_id, lanes, slots);
         }
     }
 
