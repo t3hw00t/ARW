@@ -219,6 +219,108 @@ fn render_prometheus(
     );
 
     out.push_str(
+        "# HELP arw_compression_prompt_requests_total Prompt compression attempts
+# TYPE arw_compression_prompt_requests_total counter
+",
+    );
+    write_metric_line(
+        &mut out,
+        "arw_compression_prompt_requests_total",
+        &[],
+        summary.compression.prompt.requests,
+    );
+    out.push_str(
+        "# HELP arw_compression_prompt_success_total Prompt compression successes
+# TYPE arw_compression_prompt_success_total counter
+",
+    );
+    write_metric_line(
+        &mut out,
+        "arw_compression_prompt_success_total",
+        &[],
+        summary.compression.prompt.successes,
+    );
+    out.push_str(
+        "# HELP arw_compression_prompt_errors_total Prompt compression errors
+# TYPE arw_compression_prompt_errors_total counter
+",
+    );
+    write_metric_line(
+        &mut out,
+        "arw_compression_prompt_errors_total",
+        &[],
+        summary.compression.prompt.errors,
+    );
+    out.push_str(
+        "# HELP arw_compression_prompt_primary_total Prompt compression primary path successes
+# TYPE arw_compression_prompt_primary_total counter
+",
+    );
+    write_metric_line(
+        &mut out,
+        "arw_compression_prompt_primary_total",
+        &[],
+        summary.compression.prompt.primary,
+    );
+    out.push_str(
+        "# HELP arw_compression_prompt_fallback_total Prompt compression fallback successes
+# TYPE arw_compression_prompt_fallback_total counter
+",
+    );
+    write_metric_line(
+        &mut out,
+        "arw_compression_prompt_fallback_total",
+        &[],
+        summary.compression.prompt.fallback,
+    );
+    if let Some(avg) = summary.compression.prompt.avg_latency_ms {
+        out.push_str(
+            "# HELP arw_compression_prompt_avg_latency_ms Average prompt compression latency (ms)\\n# TYPE arw_compression_prompt_avg_latency_ms gauge\\n",
+        );
+        write_metric_line(&mut out, "arw_compression_prompt_avg_latency_ms", &[], avg);
+    }
+    if let Some(avg) = summary.compression.prompt.avg_ratio {
+        out.push_str(
+            "# HELP arw_compression_prompt_avg_ratio Average prompt compression ratio
+# TYPE arw_compression_prompt_avg_ratio gauge
+",
+        );
+        write_metric_line(&mut out, "arw_compression_prompt_avg_ratio", &[], avg);
+    }
+    if let Some(avg) = summary.compression.prompt.avg_pre_chars {
+        out.push_str(
+            "# HELP arw_compression_prompt_avg_pre_chars Average input characters before compression
+# TYPE arw_compression_prompt_avg_pre_chars gauge
+",
+        );
+        write_metric_line(&mut out, "arw_compression_prompt_avg_pre_chars", &[], avg);
+    }
+    if let Some(avg) = summary.compression.prompt.avg_post_chars {
+        out.push_str(
+            "# HELP arw_compression_prompt_avg_post_chars Average output characters after compression
+# TYPE arw_compression_prompt_avg_post_chars gauge
+",
+        );
+        write_metric_line(&mut out, "arw_compression_prompt_avg_post_chars", &[], avg);
+    }
+    if let Some(avg) = summary.compression.prompt.avg_pre_bytes {
+        out.push_str(
+            "# HELP arw_compression_prompt_avg_pre_bytes Average bytes before compression
+# TYPE arw_compression_prompt_avg_pre_bytes gauge
+",
+        );
+        write_metric_line(&mut out, "arw_compression_prompt_avg_pre_bytes", &[], avg);
+    }
+    if let Some(avg) = summary.compression.prompt.avg_post_bytes {
+        out.push_str(
+            "# HELP arw_compression_prompt_avg_post_bytes Average bytes after compression
+# TYPE arw_compression_prompt_avg_post_bytes gauge
+",
+        );
+        write_metric_line(&mut out, "arw_compression_prompt_avg_post_bytes", &[], avg);
+    }
+
+    out.push_str(
         "# HELP arw_egress_scope_lease_minted_total Scope lease mints per scope\n# TYPE arw_egress_scope_lease_minted_total counter\n",
     );
     out.push_str(

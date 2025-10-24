@@ -4,7 +4,7 @@ title: Backlog
 
 # Backlog
 
-Updated: 2025-10-25
+Updated: 2025-10-24
 Type: Reference
 
 This backlog captures concrete work items and near-term priorities. The Roadmap focuses on higher‑level themes and time horizons; see About → Roadmap for strategic context.
@@ -34,10 +34,11 @@ Complexity Collapse (Cross-cutting)
 - [Kernel] Documented event taxonomy; views/read-models subscribe to the event stream — keep taxonomy registry in sync with Event Spine patches and launcher consumers.
 - [Kernel] Flows as DAG data executed by a single flow-runner; tools are schema-defined nodes — graduate existing flows to the unified runner and remove bespoke executors.
 - [Kernel] Unified retrieval pipeline and memory abstraction (vector/graph/kv/doc) with shared CRUD/stats and index hygiene — wire production hygiene dashboards and janitor tooling.
-- [Kernel] Capability/lease system with node-local egress proxy; remove per-tool allowlists — align policy manifests with lease scopes and document operator responses.
+- [Kernel] Capability/lease system with node-local egress proxy; remove per-tool allowlists - align policy manifests with lease scopes and document operator responses.
 - [Kernel] UI: shared right-sidecar, schema-generated forms, and global command palette - sustain accessibility audits and ensure new packs ship with parity.
 - [Kernel][Docs] Task metadata sync automation: treat `.arw/tasks.json` as source of truth, regenerate contributor-facing lists automatically, and add CI drift checks so docs never fall out of sync - todo
 - [Kernel] [t-20251024-capability-service] Shared CapabilityService for hardware profiling across OCR, context, and runtime planners - done (CapabilityService feeds OCR/context/runtime, with capability-tier telemetry and shared health tuning)
+- [Kernel][Observability] Prompt compression telemetry surfaced via `arw_compression_prompt_*` Prometheus metrics and aggregated in `/metrics` - done (requests/success/error counters plus latency/ratio/byte averages for `/v1/compress/prompt`)
 - [Kernel][Pack: Research] [t-20251024-compression-lite] Consumer-grade vision compression backend for adaptive OCR - todo
 - **Recently shipped:** Legacy feature migration (Phases A-E); Snappy Governor verification; Event Spine patch streaming; Phase A handoff (see `docs/RESTRUCTURE.md` and tasks `t-phase-a-01..03`); OCR low-power env alignment (`t-20251024-ocr-low-power-env`); screenshot pipeline docs refresh (`t-20251024-screenshot-docs`); CLI OCR flags documentation (`t-20251024-cli-ocr-help`); shared capability service (`t-20251024-capability-service`).
 

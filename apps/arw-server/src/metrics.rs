@@ -87,6 +87,87 @@ pub struct RouteHistogramBucket {
     pub count: u64,
 }
 
+#[derive(Default)]
+struct CompressionPromptCounters {
+    requests: u64,
+    successes: u64,
+    errors: u64,
+    primary: u64,
+    fallback: u64,
+    sum_latency_ms: f64,
+    sum_ratio: f64,
+    sum_pre_chars: f64,
+    sum_post_chars: f64,
+    sum_pre_bytes: f64,
+    sum_post_bytes: f64,
+}
+
+pub struct CompressionPromptSample {
+    pub latency_ms: f64,
+    pub ratio: f64,
+    pub pre_chars: u64,
+    pub post_chars: u64,
+    pub pre_bytes: u64,
+    pub post_bytes: u64,
+    pub fallback: bool,
+}
+
+impl CompressionPromptCounters {
+    fn record_success(&mut self, sample: &CompressionPromptSample) {
+        self.requests = self.requests.saturating_add(1);
+        self.successes = self.successes.saturating_add(1);
+        if sample.fallback {
+            self.fallback = self.fallback.saturating_add(1);
+        } else {
+            self.primary = self.primary.saturating_add(1);
+        }
+        self.sum_latency_ms += sample.latency_ms;
+        self.sum_ratio += sample.ratio;
+        self.sum_pre_chars += sample.pre_chars as f64;
+        self.sum_post_chars += sample.post_chars as f64;
+        self.sum_pre_bytes += sample.pre_bytes as f64;
+        self.sum_post_bytes += sample.post_bytes as f64;
+    }
+
+    fn record_error(&mut self) {
+        self.requests = self.requests.saturating_add(1);
+        self.errors = self.errors.saturating_add(1);
+    }
+
+    fn summary(&self) -> CompressionPromptSummary {
+        if self.successes == 0 {
+            return CompressionPromptSummary {
+                requests: self.requests,
+                successes: self.successes,
+                errors: self.errors,
+                primary: self.primary,
+                fallback: self.fallback,
+                avg_latency_ms: None,
+                avg_ratio: None,
+                avg_pre_chars: None,
+                avg_post_chars: None,
+                avg_pre_bytes: None,
+                avg_post_bytes: None,
+            };
+        }
+        let successes = self.successes as f64;
+        let avg = |sum: f64| Some(sum / successes);
+        CompressionPromptSummary {
+            requests: self.requests,
+            successes: self.successes,
+            errors: self.errors,
+            primary: self.primary,
+            fallback: self.fallback,
+            avg_latency_ms: avg(self.sum_latency_ms),
+            avg_ratio: avg(self.sum_ratio),
+            avg_pre_chars: avg(self.sum_pre_chars),
+            avg_post_chars: avg(self.sum_post_chars),
+            avg_pre_bytes: avg(self.sum_pre_bytes),
+            avg_post_bytes: avg(self.sum_post_bytes),
+        }
+    }
+}
+
 #[derive(Clone, Serialize, Default)]
 pub struct AutonomySummary {
     pub interrupts: BTreeMap<String, u64>,
@@ -135,6 +216,31 @@ pub struct PersonaTelemetryPersonaSummary {
     pub slot_overrides: BTreeMap<String, u64>,
 }
 
+#[derive(Clone, Serialize, Default)]
+pub struct CompressionPromptSummary {
+    pub requests: u64,
+    pub successes: u64,
+    pub errors: u64,
+    pub primary: u64,
+    pub fallback: u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub avg_latency_ms: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub avg_ratio: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub avg_pre_chars: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub avg_post_chars: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub avg_pre_bytes: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub avg_post_bytes: Option<f64>,
+}
+
+#[derive(Clone, Serialize, Default)]
+pub struct CompressionSummary {
+    pub prompt: CompressionPromptSummary,
+}
 #[derive(Clone, Serialize)]
 pub struct MetricsSummary {
     pub events: EventsSummary,
@@ -148,6 +254,7 @@ pub struct MetricsSummary {
     pub worker: WorkerSummary,
     pub egress: EgressSummary,
     pub persona: PersonaTelemetrySummary,
+    pub compression: CompressionSummary,
 }
 
 #[derive(Clone, Serialize, Default)]
@@ -278,10 +385,18 @@ struct TaskStat {
     restarts_window: u64,
 }
 
-#[derive(Default)]
 struct MemoryGcCounters {
     expired: AtomicU64,
     evicted: AtomicU64,
+}
+
+impl Default for MemoryGcCounters {
+    fn default() -> Self {
+        Self {
+            expired: AtomicU64::new(0),
+            evicted: AtomicU64::new(0),
+        }
+    }
 }
 
 impl MemoryGcCounters {
@@ -619,6 +734,7 @@ pub struct Metrics {
     modular: Mutex<ModularCounters>,
     egress: Mutex<EgressCounters>,
     persona_telemetry: Mutex<PersonaTelemetryCounters>,
+    compression_prompt: Mutex<CompressionPromptCounters>,
     worker_configured: AtomicU64,
     worker_busy: AtomicU64,
     worker_started: AtomicU64,
@@ -664,6 +780,7 @@ impl Metrics {
             modular: Mutex::new(ModularCounters::default()),
             egress: Mutex::new(EgressCounters::default()),
             persona_telemetry: Mutex::new(PersonaTelemetryCounters::default()),
+            compression_prompt: Mutex::new(CompressionPromptCounters::default()),
             worker_configured: AtomicU64::new(0),
             worker_busy: AtomicU64::new(0),
             worker_started: AtomicU64::new(0),
@@ -734,6 +851,18 @@ impl Metrics {
         }
     }
 
+    pub fn record_prompt_compression_success(&self, sample: CompressionPromptSample) {
+        if let Ok(mut counters) = self.compression_prompt.lock() {
+            counters.record_success(&sample);
+        }
+    }
+
+    pub fn record_prompt_compression_error(&self) {
+        if let Ok(mut counters) = self.compression_prompt.lock() {
+            counters.record_error();
+        }
+    }
+
     pub fn snapshot(&self) -> MetricsSummary {
         let events = self
             .events
@@ -790,6 +919,13 @@ impl Metrics {
             .lock()
             .map(|counters| counters.summary())
             .unwrap_or_default();
+        let compression = self
+            .compression_prompt
+            .lock()
+            .map(|counters| CompressionSummary {
+                prompt: counters.summary(),
+            })
+            .unwrap_or_default();
         MetricsSummary {
             events,
             routes,
@@ -802,6 +938,7 @@ impl Metrics {
             worker,
             egress,
             persona,
+            compression,
         }
     }
 
@@ -1026,6 +1163,58 @@ pub async fn track_http(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn compression_prompt_counters_success_snapshot() {
+        let mut counters = CompressionPromptCounters::default();
+        let sample = CompressionPromptSample {
+            latency_ms: 40.0,
+            ratio: 0.55,
+            pre_chars: 200,
+            post_chars: 110,
+            pre_bytes: 600,
+            post_bytes: 330,
+            fallback: false,
+        };
+        counters.record_success(&sample);
+        let summary = counters.summary();
+
+        assert_eq!(summary.requests, 1);
+        assert_eq!(summary.successes, 1);
+        assert_eq!(summary.errors, 0);
+        assert_eq!(summary.primary, 1);
+        assert_eq!(summary.fallback, 0);
+        assert_eq!(summary.avg_latency_ms, Some(40.0));
+        assert_eq!(summary.avg_ratio, Some(0.55));
+        assert_eq!(summary.avg_pre_chars, Some(200.0));
+        assert_eq!(summary.avg_post_chars, Some(110.0));
+        assert_eq!(summary.avg_pre_bytes, Some(600.0));
+        assert_eq!(summary.avg_post_bytes, Some(330.0));
+    }
+
+    #[test]
+    fn compression_prompt_counters_errors_and_fallbacks() {
+        let mut counters = CompressionPromptCounters::default();
+        counters.record_success(&CompressionPromptSample {
+            latency_ms: 10.0,
+            ratio: 0.9,
+            pre_chars: 180,
+            post_chars: 162,
+            pre_bytes: 512,
+            post_bytes: 460,
+            fallback: true,
+        });
+        counters.record_error();
+        counters.record_error();
+
+        let summary = counters.summary();
+        assert_eq!(summary.requests, 3); // 1 success + 2 errors
+        assert_eq!(summary.successes, 1);
+        assert_eq!(summary.errors, 2);
+        assert_eq!(summary.primary, 0);
+        assert_eq!(summary.fallback, 1);
+        assert_eq!(summary.avg_ratio, Some(0.9));
+    }
 
     #[test]
     fn route_summary_carries_histogram() {

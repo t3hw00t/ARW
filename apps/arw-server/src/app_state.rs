@@ -7,8 +7,8 @@ use serde_json::json;
 use tokio::sync::Mutex;
 
 use crate::{
-    autonomy, capsule_guard, chat, cluster, context_capability, experiments, feedback, governor,
-    identity, metrics, models, persona, policy, queue, runtime, runtime_bundles,
+    autonomy, capsule_guard, chat, cluster, compression, context_capability, experiments, feedback,
+    governor, identity, metrics, models, persona, policy, queue, runtime, runtime_bundles,
     runtime_supervisor, tool_cache, training,
 };
 
@@ -46,6 +46,7 @@ pub(crate) struct AppState {
     logic_history: Arc<training::LogicUnitHistoryStore>,
     identity: Arc<identity::IdentityRegistry>,
     capability: Arc<crate::capability::CapabilityService>,
+    compression: Arc<compression::CompressionService>,
 }
 
 impl AppState {
@@ -80,6 +81,7 @@ impl AppState {
         logic_history: Arc<training::LogicUnitHistoryStore>,
         identity: Arc<identity::IdentityRegistry>,
         capability: Arc<crate::capability::CapabilityService>,
+        compression: Arc<compression::CompressionService>,
     ) -> Self {
         Self {
             bus,
@@ -111,6 +113,7 @@ impl AppState {
             logic_history,
             identity,
             capability,
+            compression,
         }
     }
 
@@ -199,6 +202,10 @@ impl AppState {
         self.feedback.clone()
     }
 
+    pub fn compression(&self) -> Arc<compression::CompressionService> {
+        self.compression.clone()
+    }
+
     pub fn cluster(&self) -> Arc<cluster::ClusterRegistry> {
         self.cluster.clone()
     }
@@ -279,6 +286,7 @@ pub(crate) struct AppStateBuilder {
     identity: Option<Arc<identity::IdentityRegistry>>,
     persona: Option<Arc<persona::PersonaService>>,
     capability: Option<Arc<crate::capability::CapabilityService>>,
+    compression: Option<Arc<compression::CompressionService>>,
 }
 
 impl AppState {
@@ -320,6 +328,7 @@ impl AppState {
             identity: None,
             persona: None,
             capability: None,
+            compression: None,
         }
     }
 }
@@ -469,6 +478,14 @@ impl AppStateBuilder {
         self
     }
 
+    pub(crate) fn with_compression(
+        mut self,
+        compression: Arc<compression::CompressionService>,
+    ) -> Self {
+        self.compression = Some(compression);
+        self
+    }
+
     pub(crate) async fn build(self) -> AppState {
         let config_state = self
             .config_state
@@ -557,6 +574,9 @@ impl AppStateBuilder {
             .unwrap_or_else(|| Arc::new(crate::capability::CapabilityService::new()));
         let capability_profile = capability_service.maybe_refresh(false);
         let capability_plan = context_capability::plan_for_profile(&capability_profile);
+        let compression_service = self
+            .compression
+            .unwrap_or_else(|| Arc::new(compression::CompressionService::initialise()));
         let runtime_supervisor = match self.runtime_supervisor {
             Some(state) => state,
             None => {
@@ -622,6 +642,7 @@ impl AppStateBuilder {
             logic_history_store,
             identity_registry,
             capability_service,
+            compression_service,
         )
     }
 }

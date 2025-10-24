@@ -1,6 +1,6 @@
 # ARW Server Operations Guide
 
-Updated: 2025-10-16
+Updated: 2025-10-24
 Type: Explanation
 
 This document summarizes the operational knobs and endpoints added for stability, crash recovery, and observability.
@@ -29,10 +29,14 @@ All critical background loops run under a supervisor. If a loop panics, it is re
 
 ## Metrics (Prometheus)
 
-- `GET /metrics` — Prometheus exposition. New stability signals:
+- `GET /metrics` - Prometheus exposition. New stability signals:
   - `arw_safe_mode_active` (gauge 0/1)
   - `arw_safe_mode_until_ms` (gauge)
   - `arw_last_crash_ms` (gauge)
+  - Prompt compression telemetry:
+    - `arw_compression_prompt_requests_total` / `..._success_total` / `..._errors_total` (counters)
+    - `arw_compression_prompt_primary_total` / `..._fallback_total` (counters to gauge backend vs fallback usage)
+    - `arw_compression_prompt_avg_latency_ms`, `..._avg_ratio`, `..._avg_pre_chars`, `..._avg_post_chars`, `..._avg_pre_bytes`, `..._avg_post_bytes` (gauges; averaged across successful calls)
 
 ## HTTP Client Harmonization
 

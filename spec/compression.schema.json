@@ -1,0 +1,96 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "CompressionPolicy",
+  "type": "object",
+  "description": "Service-wide compression policy controlling prompt, long-term memory, and runtime KV cache adapters.",
+  "properties": {
+    "prompt": {
+      "type": "object",
+      "description": "Prompt compression defaults.",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable prompt compression when a compatible backend is available."
+        },
+        "method": {
+          "type": "string",
+          "enum": ["llm-lingua", "noop"],
+          "default": "llm-lingua",
+          "description": "Preferred prompt compressor."
+        },
+        "mode": {
+          "type": "string",
+          "enum": ["extractive", "abstractive"],
+          "description": "Preferred compression mode (overrides request hints when supplied)."
+        },
+        "ratio": {
+          "type": "number",
+          "minimum": 0.0,
+          "maximum": 1.0,
+          "description": "Target compression ratio when target_tokens is not set."
+        },
+        "target_tokens": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Absolute output token cap for prompt compression."
+        }
+      },
+      "additionalProperties": false
+    },
+    "memory": {
+      "type": "object",
+      "description": "Memory overlay compression defaults.",
+      "properties": {
+        "method": {
+          "type": "string",
+          "enum": ["raptor", "raptor+pq", "semantic_hash", "pq", "none"],
+          "default": "raptor+pq",
+          "description": "Preferred memory compaction strategy."
+        },
+        "fanout": {
+          "type": "integer",
+          "minimum": 2,
+          "description": "Branching factor for RAPTOR-style memory trees."
+        },
+        "depth": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Maximum depth for RAPTOR memory hierarchies."
+        },
+        "code_bits": {
+          "type": "integer",
+          "enum": [32, 64],
+          "description": "Codebook width (in bits) for semantic hashing or product quantisation."
+        }
+      },
+      "additionalProperties": false
+    },
+    "kv": {
+      "type": "object",
+      "description": "Runtime KV cache compression policy.",
+      "properties": {
+        "method": {
+          "type": "string",
+          "enum": ["snapkv", "kivi2bit", "cachegen", "none"],
+          "default": "none",
+          "description": "KV cache compression adapter to activate."
+        },
+        "ratio": {
+          "type": "number",
+          "minimum": 0.0,
+          "maximum": 1.0,
+          "description": "Compression ratio target for ratio-based adapters (SnapKV, CacheGen)."
+        },
+        "bits": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 8,
+          "description": "Bit-width for quantisation-based adapters (e.g., Kivi 2-bit)."
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

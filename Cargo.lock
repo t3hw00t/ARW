@@ -391,6 +391,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "arw-compress"
+version = "0.2.0-dev"
+dependencies = [
+ "anyhow",
+ "bytes",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.17",
+ "tracing",
+]
+
+[[package]]
 name = "arw-connector"
 version = "0.2.0-dev"
 dependencies = [
@@ -597,6 +609,7 @@ name = "arw-server"
 version = "0.2.0-dev"
 dependencies = [
  "anyhow",
+ "arw-compress",
  "arw-core",
  "arw-events",
  "arw-heuristics",

@@ -12,6 +12,7 @@ mod capability;
 mod capsule_guard;
 mod chat;
 mod cluster;
+mod compression;
 pub mod config;
 mod config_watcher;
 mod context_capability;

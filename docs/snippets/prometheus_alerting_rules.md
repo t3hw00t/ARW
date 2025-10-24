@@ -4,7 +4,7 @@ title: Prometheus Alerting Rules — ARW
 
 # Prometheus Alerting Rules — ARW
 
-Updated: 2025-10-09
+Updated: 2025-10-24
 Type: How‑to
 
 Example alerting rules for common resource conditions. Tune thresholds and durations to your environment. GPU alerts depend on the GPU telemetry pack; if the `arw_gpu_*` metrics are absent, drop or postpone those rules.
@@ -60,6 +60,32 @@ groups:
           description: |
             Cascade last processed an episode {{ $value | printf "%.0f" }} ms ago. Inspect the
             context.cascade task, recent episode volume, and logs on the ARW server.
+
+      # Prompt compression backend failing (errors / requests > 20% for 10m)
+      - alert: ARWPromptCompressionErrorRateHigh
+        expr: rate(arw_compression_prompt_errors_total[5m])
+              / clamp_min(rate(arw_compression_prompt_requests_total[5m]), 1e-6) > 0.20
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Prompt compression error rate high (> 20% for 10m)"
+          description: |
+            Prompt compression backend error ratio is {{ printf "%.2f" $value }}. Inspect llmlingua
+            subprocess logs and recent prompt payloads; disable compression if quality is impacted.
+
+      # Prompt compression fallback ratio high (primary unavailable for >50% of successes)
+      - alert: ARWPromptCompressionFallbackSpike
+        expr: rate(arw_compression_prompt_fallback_total[5m])
+              / clamp_min(rate(arw_compression_prompt_success_total[5m]), 1e-6) > 0.5
+        for: 15m
+        labels:
+          severity: info
+        annotations:
+          summary: "Prompt compression fallback ratio elevated (> 50% for 15m)"
+          description: |
+            Primary compressor is frequently unavailable. Check llmlingua availability and system load;
+            consider scaling capacity or temporarily disabling compression.
 
 ```
 

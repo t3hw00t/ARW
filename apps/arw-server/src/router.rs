@@ -198,6 +198,10 @@ pub(crate) mod paths {
     pub const STATE_SERVICE_HEALTH: &str = "/state/service_health";
     pub const STATE_SERVICE_STATUS: &str = "/state/service_status";
     pub const STATE_GUARDRAILS_METRICS: &str = "/state/guardrails_metrics";
+    pub const COMPRESS_PROMPT: &str = "/v1/compress/prompt";
+    pub const COMPRESS_MEMORY_BUILD_TREE: &str = "/v1/compress/memory/build_tree";
+    pub const COMPRESS_MEMORY_CODEBOOK: &str = "/v1/compress/memory/codebook";
+    pub const RUNTIME_KV_POLICY: &str = "/v1/runtime/kv_policy";
     pub const STATE_AUTONOMY_LANES: &str = "/state/autonomy/lanes";
     pub const STATE_AUTONOMY_LANE: &str = "/state/autonomy/lanes/{lane}";
     pub const STATE_CLUSTER: &str = "/state/cluster";
@@ -361,6 +365,21 @@ pub(crate) fn build_router() -> (Router<AppState>, Vec<String>, Vec<Value>) {
         paths::METRICS,
         api::metrics::metrics_prometheus,
         Some(Stability::Stable),
+    );
+    builder.route_post(
+        paths::COMPRESS_PROMPT,
+        api::compression::compress_prompt,
+        Some(Stability::Experimental),
+    );
+    builder.route_post(
+        paths::COMPRESS_MEMORY_BUILD_TREE,
+        api::compression::compress_memory_build_tree,
+        Some(Stability::Experimental),
+    );
+    builder.route_post(
+        paths::COMPRESS_MEMORY_CODEBOOK,
+        api::compression::compress_memory_codebook,
+        Some(Stability::Experimental),
     );
     register_admin_ui_routes(&mut builder);
     register_admin_ops_routes(&mut builder);
@@ -756,6 +775,11 @@ pub(crate) fn build_router() -> (Router<AppState>, Vec<String>, Vec<Value>) {
     builder.route_get(
         paths::STATE_RUNTIME_SUPERVISOR,
         api::state::state_runtime_supervisor,
+        Some(Stability::Experimental),
+    );
+    builder.route_put(
+        paths::RUNTIME_KV_POLICY,
+        api::runtime::runtime_kv_policy_apply,
         Some(Stability::Experimental),
     );
     builder.route_get(
