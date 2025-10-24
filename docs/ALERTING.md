@@ -1,6 +1,6 @@
 # ARW Server Alerting Quickstart
 
-Updated: 2025-10-16
+Updated: 2025-10-24
 Type: Explanation
 
 This guide shows how to wire the server's stability signals into monitoring and alerting.
