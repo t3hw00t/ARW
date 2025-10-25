@@ -680,7 +680,3 @@ fn interval_from_env() -> Duration {
         .unwrap_or(DEFAULT_INTERVAL_SECS);
     Duration::from_secs(secs)
 }
-
-
-
-

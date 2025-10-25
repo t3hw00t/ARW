@@ -614,4 +614,3 @@ mod tests {
             .any(|entry| entry.currency.as_deref() == Some("requests")));
     }
 }
-
