@@ -31,6 +31,9 @@ Badges can be combined (for example, `[Pack: Collaboration][Future]`) to show bo
 - [Pack: Collaboration] Contextual launcher tray actions with recent commands
 - [Pack: Collaboration] Inline doc hints and contextual tooltips
 - [Pack: Collaboration] Command palette/quick-action menu in the launcher
+- [Pack: Collaboration][Pack: Persona] Companion Hub consolidation with role-aware tabs and accessibility audits (`t-20251027-companion-hub-foundation`)
+- [Pack: Persona][Pack: Collaboration] Conversational daily brief surfacing empathy/memory/autonomy/economy highlights (`t-20251027-daily-brief`)
+- [Pack: Collaboration][Pack: Persona] Memory quality snapshots wired to `/state/memory/recent` plus autonomy lane/budget dashboarding while economy ledgers incubate
 - [Pack: Persona][Pack: Collaboration] Vibe feedback controls in Chat/Launcher (sentiment dial, confirmation style toggle) with opt-in telemetry
 - [Pack: Persona] Persona card surface showing worldview traits, empathy tone, recent growth checkpoints
 - [Pack: Collaboration] Chat/Hub provenance panes showing validation outcomes, memory evidence, and tool audit trails (Modular Cognitive Stack phase 2)
@@ -47,6 +50,7 @@ Badges can be combined (for example, `[Pack: Collaboration][Future]`) to show bo
 - [Pack: Collaboration] Live linting for macros and one-click tool sandboxing
 - [Pack: Collaboration] Integrated monitoring/analytics modules
 - [Pack: Collaboration] Voice/terminal parity for key commands
+- [Pack: Collaboration][Docs] Offline/TUI mini dashboard aligned with Companion Hub summaries (`t-20251027-mini-dashboard`)
 - [Pack: Collaboration][Future] Planner orchestration dashboards with agent lineage timelines (Modular Cognitive Stack phase 3)
 - [Pack: Persona] Empathy signal visualizer (timeline of tone/pacing), with coaching prompts for agents and users
 - [Pack: Persona][Pack: Collaboration] Persona switching workflow with diff preview and sandboxed rehearsal mode

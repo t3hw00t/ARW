@@ -30,6 +30,7 @@ Establish the multi-agent cognitive scaffold that keeps user-facing chat, memory
 - **Phase 1: Memory Fabric Integration** — [Kernel][Pack: Research] connect recall/compression agents to the Memory Abstraction Layer with short-term buffers, episodic logs, and compression tiers instrumented for loss metrics. Ship hygiene jobs, retention policies, and provenance metadata surfaced in `/state/memory`.
 - **Phase 2: Validation & Governance** — [Kernel][Pack: Collaboration] wire the Validation Agent into the orchestrator loop, enforce privacy/PII scrubbing before durable storage, and expose provenance trails in UI and `/state/episodes`. Expand guardrail policies to cover tool outputs and prompt-injection detection.
 - **Phase 3: Tooling & Planner** — [Kernel][Pack: Research] broker tool execution with sandbox requirements, retries, and audit trails; introduce an optional planner that can fan out to specialists while respecting lease scopes. Integrate telemetry with the Evaluation Harness for AB testing.
+- **Phase 4: Memory Quality Signals** — [Pack: Research][Pack: Persona] add contradiction/freshness drift metrics, world-model audits, and Training Park alerts so memory self-improvement issues surface quickly (`t-20251027-memory-quality-signals`).
 - **Documentation & Telemetry** — Publish operator guides, UI affordances, and dashboard widgets for memory hit rate, validation catch rate, and compression health. Keep [Backlog](BACKLOG.md) and [Developer Tasks](developer/tasks.md) aligned as phases land.
 
 <a id="priority-three--empathy--persona-experience"></a>
@@ -41,6 +42,7 @@ Translate the project vision of empathetic, personally managed agents into tangi
 - **Phase 1: Worldview & Memory Bridge** — [Pack: Persona][Pack: Research] connect persona traits to the memory overlay so episodic, semantic, and preference memories inform worldview growth with guardrails.
 - **Phase 2: Empathy Signals & Feedback** — [Pack: Persona][Pack: Collaboration] instrument tone/pacing sentiment loops (opt-in), expose vibe dashboards in Launcher/Chat, and add adaptive response controls with accessibility parity.
 - **Phase 3: Narrative UX** — [Pack: Persona] ship journaling, reflection prompts, and “why I chose this” explainers grounded in the self-model; add configuration for multiple personas per workspace.
+- **Phase 4: Companion Hub & Briefs** — [Pack: Persona][Pack: Collaboration] consolidate launcher surfaces into the Companion Hub with role-aware tabs and conversational daily briefs that surface empathy/memory/autonomy/economy updates (`t-20251027-companion-hub-foundation`, `t-20251027-daily-brief`).
 - **Documentation & Studies** — Publish empathy design language, inclusive research findings, and developer APIs for custom persona plugins. Keep the preview helper (`arw-cli admin persona seed` / `just persona-seed`) and the [Persona Preview Quickstart](guide/persona_quickstart.md) updated as the feature evolves.
 
 <a id="priority-four--autonomous-economy--federation"></a>
@@ -52,6 +54,7 @@ Combine federation, automation, and fair value mechanisms so individuals can dep
 - **Phase 1: Contribution Ledger** — [Kernel][Pack: Federation] extend cluster metrics with per-task payouts, add `/state/cluster/ledger` endpoints, and export CSV/JSON statements.
 - **Phase 2: Payout & Settlement Hooks** — [Pack: Federation] integrate optional payout connectors (manual invoicing, Stripe test mode) with policy-gated leases and audit trails.
 - **Phase 3: Cooperative Scaling** — [Pack: Federation][Pack: Research] formalize multi-node revenue pools, fairness policies, and remote supervision dashboards.
+- **Phase 4: Economy Insights & Playbooks** — [Pack: Collaboration][Pack: Federation][Docs] expose `/state/economy/*` dashboards inside the Companion Hub and publish the autonomous economy operator handbook (`t-20251027-economy-ledger-ui`, `t-20251027-economy-handbook`).
 - **Operator Playbook** — Document unattended-agent safety, alerting defaults, legal considerations, and community best practices for earnings scenarios.
 
 ## Scope Badges

@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>ARW Projects</title>
+    <title>ARW Companion Hub</title>
     <link rel="stylesheet" href="tokens.css" />
     <link rel="stylesheet" href="ui-kit.css" />
     <link rel="stylesheet" href="common.css" />
@@ -18,8 +18,8 @@
       <header class="hub-toolbar">
         <div class="toolbar-primary">
           <div class="title-block">
-            <strong>Projects</strong>
-            <p>Stay in sync with files, context, and run artifacts for every project.</p>
+            <strong>Companion Hub</strong>
+            <p>Navigate projects, personas, memory, automations, economy signals, and system health from one place.</p>
           </div>
           <div class="connection-block">
             <label>Port: <input id="port" type="number" min="1" max="65535" value="8091"></label>
@@ -52,11 +52,12 @@
           <span id="sseStat" class="dim" role="status" aria-live="polite">SSE: off</span>
         </div>
       </header>
-      <p class="section-lead hub-intro">Pick or create a project to hydrate every panel. Files, notes, context, and diagnostics stay in step as you work.</p>
+      <p class="section-lead hub-intro">Use the tabs below to jump between daily signals, project work, personas, memory, automations, the economy deck, and system health. Select a project to hydrate detailed panels.</p>
       <ul class="hub-quickstart">
-        <li>Select a project in the Files panel to load its notes, runs, and context.</li>
-        <li>Use Notes to capture decisions or next steps—autosave keeps updates in place.</li>
-        <li>Refresh Runtimes or Context while you diagnose cascades or drift.</li>
+        <li>Start in Daily Brief to see runtime, event stream, and persona pulse at a glance.</li>
+        <li>Select a project in the Projects tab to load notes, runs, comparisons, and context.</li>
+        <li>Visit Personas to review vibe metrics and telemetry scopes before enabling empathy signals.</li>
+        <li>Check Automations and System tabs for autonomy lanes, guardrails, and runtime coverage.</li>
         <li data-mode="expert-only">Need more signal? Keep the Events window open in Expert mode to pair live telemetry with these panels.</li>
       </ul>
       <div id="baseCallout" class="hero-callout" role="alert" hidden>
@@ -67,7 +68,7 @@
         </span>
         <button id="btn-base-callout" class="ghost mini" type="button" aria-label="Open network hardening guide">Network guide</button>
       </div>
-      <section class="card hub-empty" id="hubOnboarding" hidden aria-live="polite">
+      <section class="card hub-empty" id="hubOnboarding" data-hub-panel="today" hidden aria-live="polite">
         <div class="hub-empty-head">
           <h2>Bring a project online</h2>
           <p>Create a project to sync files, notes, context, and runs across every workspace without leaving your machine.</p>
@@ -92,8 +93,41 @@
         </div>
       </section>
       <div class="layout" id="hubLayout">
-        <main class="grid cols-2" id="main">
-          <section class="card" id="files" role="region" aria-labelledby="filesTitle">
+        <nav class="hub-tabs" role="tablist" aria-label="Companion Hub sections">
+          <button type="button" class="hub-tab" id="hubTabToday" data-hub-tab="today" role="tab" aria-selected="true" aria-controls="hubPanelHost" tabindex="0">Today</button>
+          <button type="button" class="hub-tab" id="hubTabProjects" data-hub-tab="projects" role="tab" aria-selected="false" aria-controls="hubPanelHost" tabindex="-1">Projects</button>
+          <button type="button" class="hub-tab" id="hubTabPersonas" data-hub-tab="personas" role="tab" aria-selected="false" aria-controls="hubPanelHost" tabindex="-1">Personas</button>
+          <button type="button" class="hub-tab" id="hubTabMemory" data-hub-tab="memory" role="tab" aria-selected="false" aria-controls="hubPanelHost" tabindex="-1">Memory</button>
+          <button type="button" class="hub-tab" id="hubTabAutomations" data-hub-tab="automations" role="tab" aria-selected="false" aria-controls="hubPanelHost" tabindex="-1">Automations</button>
+          <button type="button" class="hub-tab" id="hubTabEconomy" data-hub-tab="economy" role="tab" aria-selected="false" aria-controls="hubPanelHost" tabindex="-1">Economy</button>
+          <button type="button" class="hub-tab" id="hubTabSystem" data-hub-tab="system" role="tab" aria-selected="false" aria-controls="hubPanelHost" tabindex="-1">System</button>
+        </nav>
+        <main class="grid cols-2" id="hubPanelHost" role="tabpanel" aria-labelledby="hubTabToday">
+          <section class="card" id="todaySummary" role="region" aria-labelledby="todaySummaryTitle" data-hub-panel="today">
+            <h3 id="todaySummaryTitle">Daily Brief (preview)</h3>
+            <p class="section-lead">Quick pulse on runtimes, event streams, and persona feedback; switch tabs for the full view.</p>
+            <dl class="today-summary" aria-live="polite">
+              <div>
+                <dt>Runtime</dt>
+                <dd id="todaySummaryRuntime" class="dim">Loading…</dd>
+              </div>
+              <div>
+                <dt>Events</dt>
+                <dd id="todaySummarySSE" class="dim">Listening for updates…</dd>
+              </div>
+              <div>
+                <dt>Persona</dt>
+                <dd id="todaySummaryPersona" class="dim">Persona telemetry idle</dd>
+              </div>
+            </dl>
+            <div class="today-actions">
+              <button type="button" class="ghost mini" data-hub-jump="projects">Open Projects</button>
+              <button type="button" class="ghost mini" data-hub-jump="personas">Review persona signals</button>
+              <button type="button" class="ghost mini" data-hub-jump="automations">Check autonomy lanes</button>
+            </div>
+            <p class="dim today-note">Automated daily briefs will post through the companion once the scheduler lands (<code>t-20251027-daily-brief</code>).</p>
+          </section>
+          <section class="card" id="files" role="region" aria-labelledby="filesTitle" data-hub-panel="projects" hidden>
             <h3 id="filesTitle">Files</h3>
             <p class="section-lead">Browse the project tree, preview files, and copy paths in a click.</p>
             <div class="row">
@@ -115,7 +149,7 @@
             <div id="treeMeta" class="tree-meta" role="status" aria-live="polite" style="display:none"></div>
             <div class="dim" style="margin-top:6px">Hint: Click folders to navigate; click files to preview or copy.</div>
           </section>
-          <section class="card" id="notes" role="region" aria-labelledby="notesTitle">
+          <section class="card" id="notes" role="region" aria-labelledby="notesTitle" data-hub-panel="projects" hidden>
             <h3 id="notesTitle">Notes</h3>
             <p class="section-lead">Keep lightweight context or next actions alongside the project.</p>
             <div class="row"><span class="key">project</span> <code id="curProj">–</code></div>
@@ -123,8 +157,8 @@
             <div id="notesMeta" class="notes-meta" role="status" aria-live="polite" style="display:none"></div>
             <div class="row"><button id="btnSaveNotes" class="primary">Save Notes</button> <button id="btnReloadNotes" class="ghost">Reload</button> <label class="key"><input type="checkbox" id="notesAutosave" checked aria-label="Enable notes autosave"> autosave</label> <span id="notesStat" role="status" aria-live="polite" class="dim"></span></div>
           </section>
-          <section class="card" id="agents" role="region" aria-labelledby="agentsTitle">
-            <h3 id="agentsTitle">Agents</h3>
+          <section class="card" id="agents" role="region" aria-labelledby="agentsTitle" data-hub-panel="automations" hidden>
+            <h3 id="agentsTitle">Automations &amp; Lanes</h3>
             <p class="section-lead">Inspect orchestrator roles and switch scopes to debug distributed runs.</p>
             <div class="row">
               <label class="key">role</label>
@@ -140,7 +174,7 @@
             </div>
             <pre id="agentState" class="mono" style="max-height:200px; overflow:auto">{}</pre>
           </section>
-          <section class="card" id="runtime" role="region" aria-labelledby="runtimeTitle">
+          <section class="card" id="runtime" role="region" aria-labelledby="runtimeTitle" data-hub-panel="system" hidden>
             <h3 id="runtimeTitle">Runtimes <span class="dim" style="font-weight:400">(Managed)</span></h3>
             <p class="section-lead">Monitor managed runtimes, restart budgets, and accelerator coverage.</p>
             <div class="row" role="toolbar" aria-label="Runtime controls">
@@ -189,7 +223,7 @@
               <div id="runtimeBundles"></div>
             </div>
           </section>
-          <section class="card" id="context" role="region" aria-labelledby="contextTitle">
+          <section class="card" id="context" role="region" aria-labelledby="contextTitle" data-hub-panel="memory" hidden>
             <h3 id="contextTitle">What's in Context Now</h3>
             <p class="section-lead">Understand the assembled prompt context, cascade summaries, and recall risk.</p>
             <p class="metric-help">Run a cascade or orchestrated episode to refresh these signals. Coverage nudges help spot gaps before recall risk climbs.</p>
@@ -221,6 +255,30 @@
                 <ul id="contextRecallTop" class="metric-list"></ul>
               </div>
             </div>
+            <div id="memoryQuality" class="memory-quality" aria-live="polite">
+              <h4>Memory quality signals</h4>
+              <p class="metric-help">Pulled from <code>/state/memory/recent</code> to highlight stale lanes, review queues, and blocked memories.</p>
+              <div class="memory-quality-grid">
+                <div class="metric-block">
+                  <h5 class="metric-subhead">Lane coverage</h5>
+                  <ul id="memoryLaneList" class="metric-list"></ul>
+                </div>
+                <div class="metric-block">
+                  <h5 class="metric-subhead">Freshness</h5>
+                  <p class="metric-inline"><span class="metric-label">Newest:</span><span id="memoryFreshNewest">—</span></p>
+                  <p class="metric-inline"><span class="metric-label">Oldest:</span><span id="memoryFreshOldest">—</span></p>
+                  <p class="metric-inline"><span class="metric-label">Stale lanes:</span><span id="memoryStaleLanes">—</span></p>
+                </div>
+                <div class="metric-block">
+                  <h5 class="metric-subhead">Review queue</h5>
+                  <p class="metric-inline"><span class="metric-label">Pending human review:</span><span id="memoryReviewPending">—</span></p>
+                  <p class="metric-inline"><span class="metric-label">Blocked:</span><span id="memoryReviewBlocked">—</span></p>
+                  <p class="metric-inline"><span class="metric-label">Contradictions flagged:</span><span id="memoryContradictions">—</span></p>
+                  <ul id="memoryIssueList" class="metric-list"></ul>
+                </div>
+              </div>
+              <span id="memoryQualityUpdated" class="dim" role="status" aria-live="polite"></span>
+            </div>
             <span id="contextMetricsUpdated" class="dim" role="status" aria-live="polite"></span>
             <div id="contextItems" class="context-items" role="list" aria-label="Assembled context items">
               <div class="context-empty">No context assembled yet.</div>
@@ -238,7 +296,7 @@
               <pre id="contextRehydrateOut" class="cmp-code" aria-live="polite"></pre>
             </div>
           </section>
-          <section class="card" id="runs" role="region" aria-labelledby="runsTitle">
+          <section class="card" id="runs" role="region" aria-labelledby="runsTitle" data-hub-panel="projects" hidden>
             <h3 id="runsTitle">Runs</h3>
             <p class="section-lead">Filter recent orchestrations, compare snapshots, and inspect artifacts.</p>
             <div class="row">
@@ -278,7 +336,7 @@
               </table>
             </div>
           </section>
-          <section class="card" id="compare" role="region" aria-labelledby="compareTitle">
+          <section class="card" id="compare" role="region" aria-labelledby="compareTitle" data-hub-panel="projects" hidden>
             <h3 id="compareTitle">Compare</h3>
             <p class="section-lead">Pin two outputs and diff them across text, images, or tabular data.</p>
             <div class="cmp-tabs" role="tablist" aria-label="Compare views">
@@ -328,7 +386,33 @@
               <div id="csvOut" class="cmp-code" style="padding:0"></div>
             </div>
           </section>
-          <section class="card" id="personas" role="region" aria-labelledby="personasTitle">
+          <section class="card" id="economy" role="region" aria-labelledby="economyTitle" data-hub-panel="economy" hidden>
+            <h3 id="economyTitle">Economy Overview</h3>
+            <p class="section-lead">Track autonomy lane health, budgets, and attention signals while revenue metrics land.</p>
+            <div id="economyContent" class="economy-grid" aria-live="polite">
+              <div class="metric-block">
+                <h4 class="metric-subhead">Lane status</h4>
+                <ul id="economyLaneList" class="metric-list"></ul>
+              </div>
+              <div class="metric-block">
+                <h4 class="metric-subhead">Budgets remaining</h4>
+                <ul id="economyBudgetList" class="metric-list"></ul>
+              </div>
+              <div class="metric-block">
+                <h4 class="metric-subhead">Attention & alerts</h4>
+                <p id="economyAttention" class="metric-inline">Awaiting data…</p>
+                <ul id="economyAlerts" class="metric-list"></ul>
+              </div>
+            </div>
+            <p id="economyEmpty" class="dim" role="status" aria-live="polite" hidden>No autonomy lanes reported.</p>
+            <p class="dim economy-note">Economy ledgers (<code>/state/economy/*</code>) arrive with <code>t-20251027-economy-ledger-ui</code>. Until then this view reflects autonomy lanes and budgets.</p>
+            <div class="row economy-actions">
+              <button id="economyDocs" class="ghost mini" type="button">Open roadmap</button>
+              <button id="economyBacklog" class="ghost mini" type="button">View tasks</button>
+            </div>
+            <span id="economyUpdated" class="dim" role="status" aria-live="polite"></span>
+          </section>
+          <section class="card" id="personas" role="region" aria-labelledby="personasTitle" data-hub-panel="personas" hidden>
             <h3 id="personasTitle">Personas</h3>
             <p class="section-lead">Opt into telemetry and keep an eye on vibe feedback without leaving the launcher. Retention defaults to 50 samples via <code>ARW_PERSONA_VIBE_HISTORY_RETAIN</code>.</p>
             <div class="row persona-controls">

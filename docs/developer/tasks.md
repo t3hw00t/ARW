@@ -6,7 +6,7 @@ title: Tasks Status
 
 <!-- GENERATED FILE: scripts/docgen_core.py; do not edit by hand -->
 
-Updated: 2025-10-24
+Updated: 2025-10-25
 Type: Reference
 
 ## To Do
@@ -23,6 +23,12 @@ Type: Reference
 - [t-20251024-compression-lite] Consumer-grade vision compression backend - todo
 - [t-20251024-knowledge-cards] Knowledge card compression - todo
 - [t-20251024-economy-meter] Shared economy contribution meter - todo
+- [t-20251027-companion-hub-foundation] Companion Hub foundation & navigation rework — todo
+- [t-20251027-daily-brief] Conversational daily brief publisher — todo
+- [t-20251027-memory-quality-signals] Memory drift & quality telemetry — todo
+- [t-20251027-economy-ledger-ui] Economy ledger read-model & UI surfacing — todo
+- [t-20251027-mini-dashboard] Offline/TUI status dashboard — todo
+- [t-20251027-economy-handbook] Autonomous economy operator handbook — todo
 
 ## In Progress
 - [t-20251017-persona-core] Persona core schema & diff workflow - in_progress

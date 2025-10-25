@@ -40,6 +40,8 @@ Complexity Collapse (Cross-cutting)
 - [Kernel] [t-20251024-capability-service] Shared CapabilityService for hardware profiling across OCR, context, and runtime planners - done (CapabilityService feeds OCR/context/runtime, with capability-tier telemetry and shared health tuning)
 - [Kernel][Observability] Prompt compression telemetry surfaced via `arw_compression_prompt_*` Prometheus metrics and aggregated in `/metrics` - done (requests/success/error counters plus latency/ratio/byte averages for `/v1/compress/prompt`)
 - [Kernel][Pack: Research] [t-20251024-compression-lite] Consumer-grade vision compression backend for adaptive OCR - todo
+- [Pack: Collaboration][Pack: Persona] [t-20251027-companion-hub-foundation] Companion Hub navigation, accessible layout, and integrated persona/memory/autonomy/economy tiles - todo
+- [Pack: Persona][Pack: Collaboration] [t-20251027-daily-brief] Conversational daily brief service delivering empathy, memory, autonomy, and economy updates with approval hooks - todo
 - **Recently shipped:** Legacy feature migration (Phases A-E); Snappy Governor verification; Event Spine patch streaming; Phase A handoff (see `docs/RESTRUCTURE.md` and tasks `t-phase-a-01..03`); OCR low-power env alignment (`t-20251024-ocr-low-power-env`); screenshot pipeline docs refresh (`t-20251024-screenshot-docs`); CLI OCR flags documentation (`t-20251024-cli-ocr-help`); shared capability service (`t-20251024-capability-service`).
 
 Managed Runtime Supervisor (Priority One)
@@ -72,6 +74,7 @@ Modular Cognitive Stack (Kickoff)
 - [Kernel][Pack: Research] [t-202510060903-msc02] Memory fabric wiring - done (short-term + episodic persistence with loss metrics and modular review queues shipped; hygiene + telemetry covered by tests).
 - [Kernel][Pack: Collaboration] [t-202510060906-msc03] Validation & tool guardrails - done (tool invocations enforce sandbox-derived capability leases, provenance lands in memory/read-models, and launcher/eval consumers receive enriched modular events).
 - [Pack: Research][Docs] [t-20251024-knowledge-cards] Knowledge card compression prototype - todo
+- [Pack: Research][Pack: Persona] [t-20251027-memory-quality-signals] Memory contradiction/freshness drift telemetry exposed via `/state/memory/*`, Prometheus, and Training Park alerts - todo
 
 UI Coherence
 - [Pack: Collaboration] Universal right‑sidecar across Hub/Chat/Training; subscribe once to `/events` — done (initial lanes)
@@ -125,9 +128,11 @@ Autonomous Economy & Federation
 - [Pack: Collaboration][Pack: Federation] Cooperative policy forum & settlement simulator [t-20251023-coop-forum] - todo (debate lane plus what-if payout simulator ahead of live federation).
 - [Kernel][Pack: Federation] [t-20251024-economy-meter] Shared economy contribution meter for pooled accelerator usage - todo
 - [Kernel][Pack: Federation] Contribution ledger MVP: extend `/state/cluster` with per-task payouts, exports, and audit trails — todo
+- [Pack: Collaboration][Pack: Federation] [t-20251027-economy-ledger-ui] Economy `/state/economy/*` read-models and Companion Hub tiles for jobs, revenue, payouts, and compliance posture - todo
 - [Pack: Federation] Payout connector pilot: optional Stripe test-mode + manual invoice flows with policy leases and ledger reconciliation — plan
 - [Pack: Federation][Pack: Research] Cooperative scaling kit: deployment scripts + evaluation harness presets for revenue agents operating across nodes — plan
 - [Docs] Automation ops handbook: unattended-agent safety checklist, alerting defaults, legal considerations for solo operators - done
+- [Docs][Pack: Federation] [t-20251027-economy-handbook] Autonomous economy operator handbook (compliance, settlements, cooperative scaling) - todo
 
 <a id="universal-access--sustainability"></a>
 Universal Access & Sustainability
@@ -136,6 +141,7 @@ Universal Access & Sustainability
 - [Pack: Persona][Docs] Community persona bundles: publish sharable persona/worldview seeds with consent guidelines and remix policy — plan
 - [Ops][Docs] Community distribution mirrors [t-20251023-community-distribution] - todo (mirror automation, signature checks, and offline guidance).
 - [Docs] Skills & monetization ladder: guided learning path from first agent to revenue deployment, integrate with onboarding guides — plan
+- [Pack: Collaboration][Docs] [t-20251027-mini-dashboard] Offline/TUI status dashboard bundled with the universal access kit - todo
 
 Kernel & Triad (NOW)
 - [Kernel] [t-250915090001-kern01] Add `arw-kernel` crate with SQLite/WAL schema (events, artifacts, actions) and CAS helpers — done

@@ -52,6 +52,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   } catch {
     hubPrefs = {};
   }
+  let activeTab = typeof hubPrefs.lastTab === 'string' ? hubPrefs.lastTab : 'today';
   let meta = updateBaseMeta();
   let port = ARW.getPortFromInput('port') || meta.port || 8091;
   const ensureLane = (list, lane, opts = {}) => {
@@ -80,6 +81,26 @@ document.addEventListener('DOMContentLoaded', async () => {
   let sidecarSource = 'initial';
   let personaPanel = null;
   let sc = null;
+  const MEMORY_STALE_THRESHOLD_MS = 6 * 60 * 60 * 1000;
+  const MEMORY_REFRESH_MS = 3 * 60 * 1000;
+  const ECONOMY_REFRESH_MS = 60 * 1000;
+  let memoryRecentAbort = null;
+  let memoryRecentModel = null;
+  let economyAbort = null;
+  let economyModel = null;
+  let lastEconomyRefresh = 0;
+  let memoryRefreshTimer = null;
+  let economyRefreshTimer = null;
+  const tabButtons = Array.from(document.querySelectorAll('[data-hub-tab]'));
+  const panelItems = Array.from(document.querySelectorAll('[data-hub-panel]'));
+  const panelHost = document.getElementById('hubPanelHost');
+  const tabOrder = tabButtons.map((btn) => btn.dataset.hubTab);
+  const normalizeTab = (value) => (value && tabOrder.includes(value) ? value : 'today');
+  activeTab = normalizeTab(activeTab);
+  panelItems.forEach((node) => node.setAttribute('aria-hidden', node.hidden ? 'true' : 'false'));
+  const hubLayout = document.getElementById('hubLayout');
+  const hubOnboarding = document.getElementById('hubOnboarding');
+  let isFirstRun = false;
   const mountSidecar = (lanes, options = {}) => {
     const profile = Array.isArray(lanes) && lanes.length ? Array.from(new Set(lanes)) : lanesForMode(activeMode);
     const force = options.force === true;
@@ -114,6 +135,33 @@ document.addEventListener('DOMContentLoaded', async () => {
   const elRuntimeHardwareHint = document.getElementById('runtimeHardwareHint');
   const elRuntimeHints = document.getElementById('runtimeHints');
   const elRuntimeAnnounce = document.getElementById('runtimeAnnounce');
+  const elSummaryRuntime = document.getElementById('todaySummaryRuntime');
+  const elSummarySse = document.getElementById('todaySummarySSE');
+  const elSummaryPersona = document.getElementById('todaySummaryPersona');
+  const jumpButtons = document.querySelectorAll('[data-hub-jump]');
+  const economyDocs = document.getElementById('economyDocs');
+  const economyBacklog = document.getElementById('economyBacklog');
+  const elSseStat = document.getElementById('sseStat');
+  const elPersonaStatus = document.getElementById('personaStatus');
+  const elPersonaMetrics = document.getElementById('personaMetrics');
+  const elPersonaHistory = document.getElementById('personaHistory');
+  const elMemoryLaneList = document.getElementById('memoryLaneList');
+  const elMemoryFreshNewest = document.getElementById('memoryFreshNewest');
+  const elMemoryFreshOldest = document.getElementById('memoryFreshOldest');
+  const elMemoryStaleLanes = document.getElementById('memoryStaleLanes');
+  const elMemoryReviewPending = document.getElementById('memoryReviewPending');
+  const elMemoryReviewBlocked = document.getElementById('memoryReviewBlocked');
+  const elMemoryContradictions = document.getElementById('memoryContradictions');
+  const elMemoryIssueList = document.getElementById('memoryIssueList');
+  const elMemoryQualityUpdated = document.getElementById('memoryQualityUpdated');
+  const elMemoryQuality = document.getElementById('memoryQuality');
+  const elEconomyContent = document.getElementById('economyContent');
+  const elEconomyLaneList = document.getElementById('economyLaneList');
+  const elEconomyBudgetList = document.getElementById('economyBudgetList');
+  const elEconomyAttention = document.getElementById('economyAttention');
+  const elEconomyAlerts = document.getElementById('economyAlerts');
+  const elEconomyEmpty = document.getElementById('economyEmpty');
+  const elEconomyUpdated = document.getElementById('economyUpdated');
   if (elRuntimeFocusBtn && elRuntimeTable) {
     elRuntimeFocusBtn.setAttribute('aria-label', 'Focus runtime table');
     elRuntimeFocusBtn.addEventListener('click', () => {
@@ -167,6 +215,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     elRuntimeBadge.textContent = text;
     elRuntimeBadge.title = hint || text;
     elRuntimeBadge.setAttribute('aria-label', hint ? `${text}. ${hint}` : text);
+    if (elSummaryRuntime) {
+      const summaryHint = hint ? `${text} — ${hint}` : text;
+      elSummaryRuntime.textContent = summaryHint || 'Runtime status pending';
+    }
   }
 
   function setRuntimeStat(text, sticky = false) {
@@ -197,10 +249,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     element.textContent = message || '';
     element.title = message || '';
     element.classList.remove('warn');
-  if (tone === 'warn') {
-    element.classList.add('warn');
+    if (tone === 'warn') {
+      element.classList.add('warn');
+    }
   }
-}
 
   function parseBoolean(value) {
     if (value === true) return true;
@@ -1876,10 +1928,27 @@ async function refreshRuntimeBundles() {
       refreshContextSnapshot(),
       refreshContextCascade({ quiet: true }),
       refreshContextMetrics(),
+      refreshMemoryRecent({ quiet: true }),
+      refreshAutonomyLanes({ force: true }),
       personaPanel && typeof personaPanel.reload === 'function' ? personaPanel.reload({ preserveSelection: true }) : Promise.resolve(),
     ]);
+    startMemoryRefreshLoop();
+    startEconomyRefreshLoop();
   };
   ARW.sse.indicator('sseStat', { prefix: 'SSE' });
+  if (elSseStat && elSummarySse) {
+    const updateSseSummary = () => {
+      const txt = (elSseStat.textContent || '').trim();
+      elSummarySse.textContent = txt || 'Listening for updates…';
+    };
+    updateSseSummary();
+    const sseObserver = new MutationObserver(updateSseSummary);
+    try {
+      sseObserver.observe(elSseStat, { childList: true, characterData: true, subtree: true });
+    } catch (err) {
+      console.warn('sse summary observer failed', err);
+    }
+  }
   ARW.sse.connect(base, { replay: 25 });
   personaPanel = ARW.personaPanel.attach({
     root: document.getElementById('personas'),
@@ -1900,10 +1969,53 @@ async function refreshRuntimeBundles() {
   if (personaPanel && typeof personaPanel.init === 'function') {
     await personaPanel.init();
   }
+  const updatePersonaSummary = () => {
+    if (!elSummaryPersona) return;
+    const statusText = (elPersonaStatus?.textContent || '').trim();
+    if (statusText) {
+      elSummaryPersona.textContent = statusText;
+      return;
+    }
+    const historyFirst = elPersonaHistory?.querySelector('li');
+    if (historyFirst) {
+      elSummaryPersona.textContent = historyFirst.textContent.trim();
+      return;
+    }
+    elSummaryPersona.textContent = 'Persona telemetry idle';
+  };
+  updatePersonaSummary();
+  if (elPersonaStatus) {
+    const statusObserver = new MutationObserver(updatePersonaSummary);
+    try {
+      statusObserver.observe(elPersonaStatus, { childList: true, characterData: true, subtree: true });
+    } catch (err) {
+      console.warn('persona status observer failed', err);
+    }
+  }
+  if (elPersonaMetrics) {
+    const metricsObserver = new MutationObserver(updatePersonaSummary);
+    try {
+      metricsObserver.observe(elPersonaMetrics, { childList: true, characterData: true, subtree: true });
+    } catch (err) {
+      console.warn('persona metrics observer failed', err);
+    }
+  }
+  if (elPersonaHistory) {
+    const historyObserver = new MutationObserver(updatePersonaSummary);
+    try {
+      historyObserver.observe(elPersonaHistory, { childList: true, characterData: true, subtree: true });
+    } catch (err) {
+      console.warn('persona history observer failed', err);
+    }
+  }
   await refreshRuntimeSupervisor();
   await refreshRuntimeMatrix();
   await refreshRuntimeBundles();
   await refreshContextMetrics();
+  await refreshMemoryRecent({ quiet: true });
+  await refreshAutonomyLanes({ force: true });
+  startMemoryRefreshLoop();
+  startEconomyRefreshLoop();
   if (elRuntimeRefreshBtn) {
     elRuntimeRefreshBtn.addEventListener('click', async () => {
       try {
@@ -2404,6 +2516,23 @@ async function refreshRuntimeBundles() {
     if (!iso) return '–';
     const rel = formatRelativeIso(iso);
     return rel ? `${iso} (${rel})` : iso;
+  }
+  function formatRelativeFromMs(ms) {
+    if (!Number.isFinite(ms) || ms <= 0) return '–';
+    return formatRelativeIso(new Date(ms).toISOString()) || '–';
+  }
+  function formatSecondsShort(seconds){
+    const n = Number(seconds);
+    if (!Number.isFinite(n) || n < 0) return null;
+    if (n < 60) return `${Math.round(n)}s`;
+    if (n < 3600) return `${Math.round(n / 60)}m`;
+    if (n < 86400) return `${Math.round(n / 3600)}h`;
+    return `${Math.round(n / 86400)}d`;
+  }
+  function formatCurrencyFromCents(cents){
+    const value = Number(cents);
+    if (!Number.isFinite(value)) return null;
+    return `$${(value / 100).toFixed(2)}`;
   }
   function summarizeList(values, fallback = '–'){
     const seen = Array.from(new Set((values || []).filter(Boolean)));
@@ -3264,6 +3393,358 @@ async function refreshRuntimeBundles() {
       else elContextRehydrateWrap.classList.remove('active');
     }
   }
+
+  async function refreshMemoryRecent(options = {}) {
+    const { quiet = false } = options;
+    try {
+      if (memoryRecentAbort) {
+        try { memoryRecentAbort.abort(); } catch {}
+      }
+      const controller = new AbortController();
+      memoryRecentAbort = controller;
+      await fetchReadModel(
+        'memory_recent',
+        '/state/memory/recent?limit=200',
+        {
+          signal: controller.signal,
+          transform(raw) {
+            if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
+              const snapshot = { ...raw };
+              snapshot.items = Array.isArray(raw.items) ? raw.items : [];
+              snapshot.summary = raw.summary && typeof raw.summary === 'object'
+                ? raw.summary
+                : { lanes: {}, modular: { recent: [], pending_human_review: 0, blocked: 0 } };
+              return snapshot;
+            }
+            return { items: [], summary: { lanes: {}, modular: { recent: [], pending_human_review: 0, blocked: 0 } } };
+          },
+        },
+      );
+    } catch (err) {
+      if (!(err && err.name === 'AbortError')) {
+        if (!quiet) console.warn('memory recent fetch failed', err);
+      }
+    } finally {
+      if (memoryRecentAbort && memoryRecentAbort.signal.aborted) {
+        // no-op
+      }
+      memoryRecentAbort = null;
+    }
+  }
+
+  function applyMemorySummary(model) {
+    memoryRecentModel = model && typeof model === 'object' ? model : null;
+    if (!elMemoryQuality) return;
+    const items = Array.isArray(memoryRecentModel?.items) ? memoryRecentModel.items : [];
+    const summary = memoryRecentModel?.summary && typeof memoryRecentModel.summary === 'object'
+      ? memoryRecentModel.summary
+      : {};
+    const lanes = summary.lanes && typeof summary.lanes === 'object' ? summary.lanes : {};
+    const modular = summary.modular && typeof summary.modular === 'object' ? summary.modular : {};
+    const now = Date.now();
+    const laneEntries = Object.entries(lanes).sort((a, b) => Number(b[1]) - Number(a[1]));
+
+    if (elMemoryLaneList) {
+      elMemoryLaneList.innerHTML = '';
+      if (laneEntries.length) {
+        for (const [lane, count] of laneEntries) {
+          const li = document.createElement('li');
+          li.textContent = `${lane}: ${count}`;
+          elMemoryLaneList.appendChild(li);
+        }
+      } else {
+        const li = document.createElement('li');
+        li.textContent = 'No recent memory entries.';
+        elMemoryLaneList.appendChild(li);
+      }
+    }
+
+    let newestMs = null;
+    let oldestMs = null;
+    const laneFreshness = new Map();
+    let contradictionCount = 0;
+    const issueNotes = [];
+
+    for (const item of items) {
+      const lane = typeof item?.lane === 'string' ? item.lane : 'unknown';
+      const value = item?.value && typeof item.value === 'object' ? item.value : {};
+      let createdMs = Number(value.created_ms ?? item?.created_ms);
+      if (!Number.isFinite(createdMs)) {
+        const createdIso = typeof value.created === 'string' ? value.created : typeof item?.created === 'string' ? item.created : null;
+        if (createdIso) {
+          const dt = new Date(createdIso);
+          if (!Number.isNaN(dt.getTime())) {
+            createdMs = dt.getTime();
+          }
+        }
+      }
+      if (Number.isFinite(createdMs)) {
+        if (newestMs === null || createdMs > newestMs) newestMs = createdMs;
+        if (oldestMs === null || createdMs < oldestMs) oldestMs = createdMs;
+        const currentLaneFresh = laneFreshness.get(lane) || 0;
+        if (createdMs > currentLaneFresh) {
+          laneFreshness.set(lane, createdMs);
+        }
+      }
+
+      const lifecycle = value.lifecycle && typeof value.lifecycle === 'object' ? value.lifecycle : {};
+      const stage = typeof lifecycle.stage === 'string' ? lifecycle.stage.toLowerCase() : '';
+      const validationGateRaw = lifecycle.validation_gate ?? value.validation_gate;
+      const validationGate = typeof validationGateRaw === 'string' ? validationGateRaw.toLowerCase() : '';
+      const reason = typeof lifecycle.reason === 'string' ? lifecycle.reason : '';
+
+      const isContradiction = validationGate.includes('contradict');
+      const isBlocked = stage === 'blocked' || stage === 'rejected';
+      if (isContradiction) {
+        contradictionCount += 1;
+      }
+      if ((isContradiction || isBlocked) && issueNotes.length < 6) {
+        const note = isContradiction
+          ? `${lane}: ${validationGate || 'contradiction flag'}`
+          : `${lane}: ${reason || 'blocked by guardrails'}`;
+        issueNotes.push(note);
+      }
+    }
+
+    if (elMemoryFreshNewest) {
+      elMemoryFreshNewest.textContent = newestMs ? formatRelativeFromMs(newestMs) : '—';
+      if (newestMs) {
+        elMemoryFreshNewest.title = new Date(newestMs).toISOString();
+      } else {
+        elMemoryFreshNewest.removeAttribute('title');
+      }
+    }
+    if (elMemoryFreshOldest) {
+      elMemoryFreshOldest.textContent = oldestMs ? formatRelativeFromMs(oldestMs) : '—';
+      if (oldestMs) {
+        elMemoryFreshOldest.title = new Date(oldestMs).toISOString();
+      } else {
+        elMemoryFreshOldest.removeAttribute('title');
+      }
+    }
+    if (elMemoryStaleLanes) {
+      const staleEntries = [];
+      laneFreshness.forEach((ms, lane) => {
+        if (Number.isFinite(ms) && now - ms > MEMORY_STALE_THRESHOLD_MS) {
+          staleEntries.push(`${lane} (${formatRelativeFromMs(ms)})`);
+        }
+      });
+      elMemoryStaleLanes.textContent = staleEntries.length ? staleEntries.join(', ') : 'None';
+    }
+    if (elMemoryReviewPending) {
+      const pending = Number(modular.pending_human_review ?? 0);
+      elMemoryReviewPending.textContent = Number.isFinite(pending) ? pending.toString() : '0';
+    }
+    if (elMemoryReviewBlocked) {
+      const blocked = Number(modular.blocked ?? 0);
+      elMemoryReviewBlocked.textContent = Number.isFinite(blocked) ? blocked.toString() : '0';
+    }
+    if (elMemoryContradictions) {
+      elMemoryContradictions.textContent = contradictionCount.toString();
+    }
+    if (elMemoryIssueList) {
+      elMemoryIssueList.innerHTML = '';
+      if (issueNotes.length) {
+        for (const note of issueNotes) {
+          const li = document.createElement('li');
+          li.textContent = note;
+          elMemoryIssueList.appendChild(li);
+        }
+      } else {
+        const li = document.createElement('li');
+        li.textContent = 'No blocked memories or contradictions detected.';
+        elMemoryIssueList.appendChild(li);
+      }
+    }
+    if (elMemoryQualityUpdated) {
+      const generatedIso = typeof memoryRecentModel?.generated === 'string' ? memoryRecentModel.generated : null;
+      elMemoryQualityUpdated.textContent = generatedIso ? `Updated ${formatRelativeIso(generatedIso)}` : '';
+    }
+    if (elMemoryQuality) {
+      elMemoryQuality.hidden = false;
+    }
+  }
+
+  async function refreshAutonomyLanes(options = {}) {
+    const { force = false } = options;
+    const now = Date.now();
+    if (!force && now - lastEconomyRefresh < ECONOMY_REFRESH_MS) {
+      return economyModel;
+    }
+    if (economyAbort) {
+      try { economyAbort.abort(); } catch {}
+    }
+    const controller = new AbortController();
+    economyAbort = controller;
+    try {
+      const data = await fetchJson('/state/autonomy/lanes', { signal: controller.signal });
+      if (data && typeof data === 'object') {
+        economyModel = data;
+        renderEconomySnapshot(data);
+        lastEconomyRefresh = Date.now();
+      }
+    } catch (err) {
+      if (!(err && err.name === 'AbortError')) {
+        console.warn('autonomy lanes fetch failed', err);
+        if (economyModel) {
+          renderEconomySnapshot(economyModel);
+        } else {
+          renderEconomySnapshot(null, { error: true });
+        }
+      }
+    } finally {
+      economyAbort = null;
+    }
+    return economyModel;
+  }
+
+  function renderEconomySnapshot(model, options = {}) {
+    const hasError = options.error === true;
+    const lanes = Array.isArray(model?.lanes) ? model.lanes : [];
+    if (elEconomyContent) {
+      elEconomyContent.hidden = !(lanes.length > 0 && !hasError);
+    }
+    if (elEconomyEmpty) {
+      const shouldShowEmpty = hasError ? lanes.length === 0 : lanes.length === 0;
+      elEconomyEmpty.hidden = !shouldShowEmpty;
+      elEconomyEmpty.textContent = hasError
+        ? 'Unable to load autonomy lanes.'
+        : 'No autonomy lanes reported.';
+    }
+    if (hasError) {
+      if (elEconomyAttention) {
+        elEconomyAttention.textContent = 'Autonomy data unavailable.';
+      }
+      if (elEconomyAlerts) {
+        elEconomyAlerts.innerHTML = '';
+      }
+      if (elEconomyLaneList) {
+        elEconomyLaneList.innerHTML = '';
+      }
+      if (elEconomyBudgetList) {
+        elEconomyBudgetList.innerHTML = '';
+      }
+      if (elEconomyUpdated) {
+        elEconomyUpdated.textContent = '';
+      }
+      return;
+    }
+
+    if (elEconomyLaneList) {
+      elEconomyLaneList.innerHTML = '';
+      if (lanes.length) {
+        for (const lane of lanes) {
+          const mode = typeof lane.mode === 'string' ? lane.mode : (lane.mode && lane.mode.slug) ? lane.mode.slug : 'unknown';
+          const active = Number(lane.active_jobs ?? 0);
+          const queued = Number(lane.queued_jobs ?? 0);
+          const li = document.createElement('li');
+          li.textContent = `${lane.lane_id || 'lane'}: ${mode} · ${active} active · ${queued} queued`;
+          elEconomyLaneList.appendChild(li);
+        }
+      } else {
+        const li = document.createElement('li');
+        li.textContent = 'No autonomy lanes configured.';
+        elEconomyLaneList.appendChild(li);
+      }
+    }
+
+    if (elEconomyBudgetList) {
+      elEconomyBudgetList.innerHTML = '';
+      for (const lane of lanes) {
+        const budgets = lane.budgets && typeof lane.budgets === 'object' ? lane.budgets : {};
+        const wall = formatSecondsShort(Number(budgets.wall_clock_remaining_secs));
+        const tokens = Number.isFinite(Number(budgets.tokens_remaining)) ? Number(budgets.tokens_remaining).toLocaleString() : null;
+        const spend = formatCurrencyFromCents(budgets.spend_remaining_cents);
+        const parts = [];
+        if (wall) parts.push(`${wall} wall`);
+        if (tokens) parts.push(`${tokens} tokens`);
+        if (spend) parts.push(`${spend} spend`);
+        const li = document.createElement('li');
+        li.textContent = `${lane.lane_id || 'lane'}: ${parts.length ? parts.join(' · ') : 'no budgets reported'}`;
+        elEconomyBudgetList.appendChild(li);
+      }
+      if (!lanes.length) {
+        const li = document.createElement('li');
+        li.textContent = 'Budgets will appear once an autonomy lane is configured.';
+        elEconomyBudgetList.appendChild(li);
+      }
+    }
+
+    const attentionNotes = [];
+    const alertEntries = [];
+    for (const lane of lanes) {
+      const mode = typeof lane.mode === 'string' ? lane.mode.toLowerCase() : String(lane.mode || '').toLowerCase();
+      if (mode === 'paused') {
+        attentionNotes.push(`${lane.lane_id || 'lane'} paused`);
+      }
+      const alerts = Array.isArray(lane.alerts) ? lane.alerts : [];
+      for (const alert of alerts) {
+        alertEntries.push(`${lane.lane_id || 'lane'}: ${alert}`);
+      }
+      if (lane.last_reason) {
+        alertEntries.push(`${lane.lane_id || 'lane'}: ${lane.last_reason}`);
+      }
+    }
+    if (elEconomyAttention) {
+      if (lanes.length === 0) {
+        elEconomyAttention.textContent = 'Configure an autonomy lane to start tracking revenue work.';
+      } else if (attentionNotes.length || alertEntries.length) {
+        const notes = [...attentionNotes];
+        if (alertEntries.length) {
+          notes.push(`${alertEntries.length} alert${alertEntries.length === 1 ? '' : 's'}`);
+        }
+        elEconomyAttention.textContent = notes.join(' · ');
+      } else {
+        elEconomyAttention.textContent = 'All lanes healthy.';
+      }
+    }
+    if (elEconomyAlerts) {
+      elEconomyAlerts.innerHTML = '';
+      if (alertEntries.length) {
+        for (const line of alertEntries.slice(0, 6)) {
+          const li = document.createElement('li');
+          li.textContent = line;
+          elEconomyAlerts.appendChild(li);
+        }
+      } else {
+        const li = document.createElement('li');
+        li.textContent = 'No alerts raised.';
+        elEconomyAlerts.appendChild(li);
+      }
+    }
+    if (elEconomyUpdated) {
+      const freshest = lanes.reduce((acc, lane) => {
+        const updated = Number(lane.updated_ms ?? 0);
+        if (!Number.isFinite(updated) || updated <= 0) return acc;
+        return updated > acc ? updated : acc;
+      }, 0);
+      elEconomyUpdated.textContent = freshest ? `Updated ${formatRelativeFromMs(freshest)}` : '';
+    }
+  }
+
+  function startMemoryRefreshLoop() {
+    if (memoryRefreshTimer) {
+      clearInterval(memoryRefreshTimer);
+      memoryRefreshTimer = null;
+    }
+    if (MEMORY_REFRESH_MS > 0) {
+      memoryRefreshTimer = setInterval(() => {
+        refreshMemoryRecent({ quiet: true });
+      }, MEMORY_REFRESH_MS);
+    }
+  }
+
+  function startEconomyRefreshLoop() {
+    if (economyRefreshTimer) {
+      clearInterval(economyRefreshTimer);
+      economyRefreshTimer = null;
+    }
+    if (ECONOMY_REFRESH_MS > 0) {
+      economyRefreshTimer = setInterval(() => {
+        refreshAutonomyLanes({ force: true });
+      }, ECONOMY_REFRESH_MS);
+    }
+  }
   clearContextPanel('Context preview will appear here after the next assembly.');
   if (btnContextRefresh) {
     btnContextRefresh.addEventListener('click', () => {
@@ -3385,6 +3866,7 @@ async function refreshRuntimeBundles() {
   const idRuntimeMatrixRead = ARW.read.subscribe('runtime_matrix', renderRuntimeMatrix);
   const idRuntimeBundlesRead = ARW.read.subscribe('runtime_bundles', renderRuntimeBundles);
   const idContextMetricsRead = ARW.read.subscribe('context_metrics', applyContextMetrics);
+  const idMemoryRecentRead = ARW.read.subscribe('memory_recent', applyMemorySummary);
   await refreshEpisodesSnapshot();
   // Throttle SSE-driven refresh on episode-related activity
   let _lastRunsAt = 0;
@@ -3409,6 +3891,20 @@ async function refreshRuntimeBundles() {
   ARW.sse.subscribe(
     (kind) => kind === 'runtime.health',
     () => refreshRuntimeMatrix()
+  );
+  const idMemoryRecentSse = ARW.sse.subscribe(
+    (kind, event) => {
+      if (kind === 'state.read.model.patch') {
+        const payload = event?.env?.payload || event?.payload;
+        return payload?.id === 'memory_recent';
+      }
+      return kind.startsWith('memory.');
+    },
+    () => refreshMemoryRecent({ quiet: true })
+  );
+  const idAutonomySse = ARW.sse.subscribe(
+    (kind) => kind.startsWith('autonomy.'),
+    () => refreshAutonomyLanes({ force: true })
   );
   ARW.sse.subscribe(
     (kind) => kind === 'context.assembled',
@@ -3565,6 +4061,89 @@ async function refreshRuntimeBundles() {
   const treeCache = new Map(); // path -> items
   let expanded = new Set(); // rel paths that are expanded (persisted)
   let searchExpanded = new Set(); // ephemeral expansions from filter
+  const focusTabByIndex = (currentIndex, delta) => {
+    if (!tabOrder.length) return;
+    const next = (currentIndex + delta + tabOrder.length) % tabOrder.length;
+    selectTab(tabOrder[next], { focus: true });
+  };
+  function selectTab(tab, { focus = false, persist = true } = {}) {
+    const desired = normalizeTab(tab);
+    activeTab = desired;
+    tabButtons.forEach((btn, idx) => {
+      const match = btn.dataset.hubTab === desired;
+      btn.setAttribute('aria-selected', match ? 'true' : 'false');
+      btn.tabIndex = match ? 0 : -1;
+      if (match && focus) {
+        requestAnimationFrame(() => btn.focus());
+      }
+    });
+    if (panelHost) {
+      const activeBtn = tabButtons.find((btn) => btn.dataset.hubTab === desired);
+      panelHost.setAttribute('aria-labelledby', activeBtn ? activeBtn.id : 'hubTabToday');
+    }
+    panelItems.forEach((node) => {
+      const matches = node.dataset.hubPanel === desired;
+      if (node === hubOnboarding) {
+        node.hidden = matches ? !isFirstRun : true;
+      } else {
+        node.hidden = !matches;
+      }
+      node.setAttribute('aria-hidden', matches ? 'false' : 'true');
+    });
+    if (persist) {
+      hubPrefs.lastTab = desired;
+      ARW.setPrefs('ui:hub', hubPrefs).catch(() => {});
+    }
+    if (desired === 'economy') {
+      refreshAutonomyLanes({ force: true });
+    } else if (desired === 'memory') {
+      refreshMemoryRecent({ quiet: true });
+    }
+  }
+  tabButtons.forEach((btn, idx) => {
+    btn.addEventListener('click', () => selectTab(btn.dataset.hubTab, { focus: true }));
+    btn.addEventListener('keydown', (event) => {
+      if (!tabOrder.length) return;
+      if (event.key === 'ArrowRight' || event.key === 'ArrowDown') {
+        event.preventDefault();
+        focusTabByIndex(idx, 1);
+      } else if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') {
+        event.preventDefault();
+        focusTabByIndex(idx, -1);
+      } else if (event.key === 'Home') {
+        event.preventDefault();
+        selectTab(tabOrder[0], { focus: true });
+      } else if (event.key === 'End') {
+        event.preventDefault();
+        selectTab(tabOrder[tabOrder.length - 1], { focus: true });
+      }
+    });
+  });
+  jumpButtons.forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const target = btn.dataset.hubJump;
+      selectTab(target, { focus: true });
+    });
+  });
+  if (economyDocs) {
+    economyDocs.addEventListener('click', async () => {
+      try {
+        await ARW.invoke('open_url', { url: 'https://t3hw00t.github.io/ARW/roadmap/#priority-four--autonomous-economy--federation' });
+      } catch (err) {
+        console.error(err);
+      }
+    });
+  }
+  if (economyBacklog) {
+    economyBacklog.addEventListener('click', async () => {
+      try {
+        await ARW.invoke('open_url', { url: 'https://t3hw00t.github.io/ARW/backlog/#autonomous-economy--federation' });
+      } catch (err) {
+        console.error(err);
+      }
+    });
+  }
+  selectTab(activeTab, { persist: false });
   const elProjSel = document.getElementById('projSel');
   const elProjName = document.getElementById('projName');
   const elProjTree = document.getElementById('projTree');
@@ -3576,11 +4155,8 @@ async function refreshRuntimeBundles() {
   const elProjPrefsBadge = document.getElementById('projPrefsBadge');
   const elFileFilter = document.getElementById('fileFilter');
   const elTreeMeta = document.getElementById('treeMeta');
-  const hubLayout = document.getElementById('hubLayout');
-  const hubOnboarding = document.getElementById('hubOnboarding');
   const btnOnboardCreate = document.getElementById('btnOnboardCreate');
   const btnOnboardDocs = document.getElementById('btnOnboardDocs');
-  let isFirstRun = false;
   function toggleFirstRun(state){
     isFirstRun = !!state;
     if (hubLayout) hubLayout.hidden = isFirstRun;
@@ -3593,6 +4169,7 @@ async function refreshRuntimeBundles() {
       clearContextPanel('Create or link a project to hydrate context.');
       clearCascadePanel('Create or link a project to view cascade summaries.');
     }
+    selectTab(activeTab, { persist: false });
   }
   if (btnOnboardCreate) {
     btnOnboardCreate.addEventListener('click', ()=>{
@@ -3605,6 +4182,7 @@ async function refreshRuntimeBundles() {
       if (elProjName) {
         requestAnimationFrame(()=> elProjName.focus());
       }
+      selectTab('projects', { focus: true });
     });
   }
   if (btnOnboardDocs) {
@@ -4481,7 +5059,7 @@ async function refreshRuntimeBundles() {
       const root = document.querySelector('.layout');
       if (tpl.focused){ root.classList.add('full'); } else { root.classList.remove('full'); }
       // Grid columns
-      const main = document.getElementById('main');
+      const main = document.getElementById('hubPanelHost');
       if (main && typeof tpl.grid === 'string'){
         main.classList.remove('cols-1','cols-2','cols-3');
         main.classList.add(tpl.grid);
@@ -4575,6 +5153,17 @@ async function refreshRuntimeBundles() {
     try { ARW.read.unsubscribe(idRuntimeMatrixRead); } catch {}
     try { ARW.read.unsubscribe(idRuntimeBundlesRead); } catch {}
     try { ARW.read.unsubscribe(idContextMetricsRead); } catch {}
+    try { ARW.read.unsubscribe(idMemoryRecentRead); } catch {}
+    try { ARW.sse.unsubscribe(idMemoryRecentSse); } catch {}
+    try { ARW.sse.unsubscribe(idAutonomySse); } catch {}
+    if (memoryRefreshTimer) {
+      clearInterval(memoryRefreshTimer);
+      memoryRefreshTimer = null;
+    }
+    if (economyRefreshTimer) {
+      clearInterval(economyRefreshTimer);
+      economyRefreshTimer = null;
+    }
   });
 
   // ---------- Artifacts rendering from run snapshot ----------

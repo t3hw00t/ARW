@@ -151,6 +151,108 @@
 .hub-quickstart li{
   line-height:1.5;
 }
+.hub-tabs{
+  display:flex;
+  flex-wrap:wrap;
+  gap: var(--sp1);
+  margin-bottom: var(--sp3);
+  border-bottom:1px solid var(--color-line);
+  padding-bottom: var(--sp1);
+}
+.hub-tab{
+  appearance:none;
+  border:none;
+  background:none;
+  font:inherit;
+  padding: var(--sp1) var(--sp2);
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+  cursor:pointer;
+  color: var(--color-muted);
+}
+.hub-tab[aria-selected="true"]{
+  background: linear-gradient(180deg,#ffffff,#eef2ff);
+  color: var(--color-ink);
+  font-weight:600;
+  box-shadow: inset 0 -2px 0 var(--color-accent);
+}
+.hub-tab:focus-visible{
+  outline:2px solid var(--color-accent);
+  outline-offset:2px;
+}
+.today-summary{
+  display:grid;
+  gap: var(--sp2);
+  margin: var(--sp2) 0;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+}
+.today-summary div{
+  display:flex;
+  flex-direction:column;
+  gap: 4px;
+}
+.today-summary dt{
+  font-weight:600;
+  color: var(--color-ink);
+}
+.today-summary dd{
+  margin:0;
+  color: var(--color-muted);
+}
+.today-actions{
+  display:flex;
+  flex-wrap:wrap;
+  gap: var(--sp1);
+  margin-bottom: var(--sp1);
+}
+.today-note{
+  margin:0;
+  font-size:0.85rem;
+  color: var(--color-muted);
+}
+.memory-quality{
+  margin-top: var(--sp3);
+  border:1px solid var(--color-line);
+  border-radius: var(--radius-lg);
+  padding: var(--sp3);
+  background: linear-gradient(180deg,#ffffff,#f8fafc);
+  display:flex;
+  flex-direction:column;
+  gap: var(--sp2);
+}
+.memory-quality-grid{
+  display:grid;
+  gap: var(--sp2);
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+.metric-subhead{
+  margin:0 0 var(--sp1);
+  font-size:0.95rem;
+  font-weight:600;
+  color: var(--color-ink);
+}
+.memory-quality .metric-inline{
+  display:block;
+  margin:4px 0;
+}
+.memory-quality .metric-list{
+  margin:0;
+  padding-left: var(--sp3);
+}
+.economy-grid{
+  display:grid;
+  gap: var(--sp2);
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  margin-bottom: var(--sp2);
+}
+.economy-note{
+  margin: var(--sp1) 0;
+  font-size:0.85rem;
+  color: var(--color-muted);
+}
+.economy-actions{
+  gap: var(--sp1);
+  flex-wrap:wrap;
+}
 .runtime-bundles{
   margin-top: var(--sp3);
   border:1px solid var(--color-line);

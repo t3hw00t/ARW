@@ -183,6 +183,7 @@ nav:
       - Restructure Handbook: RESTRUCTURE.md
       - Screenshot Capture Pipeline: architecture/screenshot_capture_pipeline.md
       - UI Architecture Options (ASCII): architecture/ui_architecture_options.md
+      - Companion Hub Roadmap: architecture/companion_hub_plan.md
       - Kernel (Journal + CAS): architecture/kernel.md
       - Self‑Model (Metacognition): architecture/self_model.md
       - Logic Units: architecture/logic_units.md
