@@ -4,7 +4,7 @@ title: Goal <-> Roadmap <-> Tasks
 
 # Goal <-> Roadmap <-> Tasks
 
-Updated: 2025-10-24
+Updated: 2025-10-25
 Type: Reference
 
 This crosswalk keeps the four ARW pillars in view by linking each goal to the roadmap themes and the concrete tasks now tracking delivery. Use it as the live hand-off between vision docs, planning boards, and day-to-day execution.

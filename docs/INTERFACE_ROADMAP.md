@@ -4,7 +4,7 @@ title: Interface Roadmap
 
 # Interface Roadmap
 
-Updated: 2025-10-23
+Updated: 2025-10-25
 Type: Reference
 
 See also: [Roadmap](ROADMAP.md)
