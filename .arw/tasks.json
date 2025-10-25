@@ -1,0 +1,531 @@
+{
+  "updated": "2025-10-25T05:00:00Z",
+  "tasks": [
+    {
+      "id": "t-20251017-persona-core",
+      "title": "Persona core schema & diff workflow",
+      "status": "in_progress",
+      "scope": [
+        "Pack: Persona",
+        "Kernel"
+      ],
+      "description": "Add `/state/persona/*` read-models, persona_entries/proposals tables, and diff approval workflow with policy leases.",
+      "references": [
+        "docs/architecture/persona_self_model_rfc.md",
+        "docs/BACKLOG.md#persona--empathy-high-priority"
+      ],
+      "acceptance": [
+        "Kernel schema includes persona tables (entries/proposals/history) for scoped personas.",
+        "GET `/state/persona` returns persona summary for seeded fixture.",
+        "persona.propose persona.approve actions emit events and enforce leases."
+      ]
+    },
+    {
+      "id": "t-20251017-persona-telemetry",
+      "title": "Empathy signal loop instrumentation",
+      "status": "todo",
+      "scope": [
+        "Pack: Persona",
+        "Pack: Collaboration"
+      ],
+      "description": "Implement vibe feedback actions and telemetry aggregation with opt-in consent, wiring Launcher/Chat controls to persona feedback APIs.",
+      "references": [
+        "docs/architecture/persona_self_model_rfc.md#telemetry--consent",
+        "docs/INTERFACE_ROADMAP.md#short-term-0-3-months"
+      ],
+      "acceptance": [
+        "Telemetry opt-in stored in persona preferences and enforced via policy scope.",
+        "Persona vibe metrics stream to `/state/persona/{id}/vibe_metrics` with sampled data.",
+        "Launcher prototype behind feature flag displays vibe controls with accessibility audit pass."
+      ]
+    },
+    {
+      "id": "t-20251017-revenue-recipes",
+      "title": "Revenue recipe gallery (MVP)",
+      "status": "todo",
+      "scope": [
+        "Pack: Collaboration"
+      ],
+      "description": "Publish signed automation recipes for earning scenarios, with compliance guardrails and earning metadata available via `/state/recipes/market`.",
+      "references": [
+        "docs/BACKLOG.md#autonomous-economy--federation",
+        "docs/ROADMAP.md#priority-four--autonomous-economy--federation"
+      ],
+      "acceptance": [
+        "At least three recipes ship with metadata: earnings_profile, risk_notes, policy_requirements.",
+        "Recipe install flow validates signatures and policy prerequisites.",
+        "Docs update describing revenue recipe usage and guardrails."
+      ]
+    },
+    {
+      "id": "t-20251017-contribution-ledger",
+      "title": "Contribution ledger MVP",
+      "status": "todo",
+      "scope": [
+        "Kernel",
+        "Pack: Federation"
+      ],
+      "description": "Extend `/state/cluster` to expose per-task payout metrics with CSV/JSON exports and ledger events.",
+      "references": [
+        "docs/ROADMAP.md#priority-four--autonomous-economy--federation",
+        "docs/BACKLOG.md#autonomous-economy--federation"
+      ],
+      "acceptance": [
+        "Ledger tables capture task_id, contributor_id, resource_units, payout_amount.",
+        "GET `/state/cluster/ledger` returns paginated entries with filters.",
+        "`arw-cli cluster ledger export` generates CSV with reconciliation totals."
+      ]
+    },
+    {
+      "id": "t-20251017-eco-preset",
+      "title": "Eco runtime preset",
+      "status": "in_progress",
+      "scope": [
+        "Kernel"
+      ],
+      "description": "Introduce `ARW_PERF_PRESET=eco` defaults optimized for CPU-only laptops, reducing cache sizes and optional services with updated docs.",
+      "references": [
+        "docs/BACKLOG.md#universal-access--sustainability",
+        "docs/ROADMAP.md#execution-streams-alignment"
+      ],
+      "acceptance": [
+        "Preset caps worker count, disables heavy telemetry, and documents toggles in quickstart.",
+        "Smoke tests pass on baseline CPU-only configuration with preset enabled.",
+        "Docs include eco preset guidance for low-spec hardware."
+      ]
+    },
+    {
+      "id": "t-20251017-automation-ops",
+      "title": "Automation ops handbook",
+      "status": "done",
+      "scope": [
+        "Docs",
+        "Pack: Federation"
+      ],
+      "description": "Create operator handbook covering unattended agent safeguards, alerting, and legal considerations for revenue agents.",
+      "references": [
+        "docs/BACKLOG.md#autonomous-economy--federation",
+        "docs/ROADMAP.md#autonomous-economy--federation-execution-stream"
+      ],
+      "acceptance": [
+        "Handbook published under `docs/ops/automation_ops.md` with checklist format.",
+        "Includes alerting defaults, escalation flow, compliance notes, and example runbooks.",
+        "Linked from docs/index.md and backlog item marked in progress."
+      ]
+    },
+    {
+      "id": "t-20251022-task-sync",
+      "title": "Task metadata sync automation",
+      "status": "done",
+      "scope": [
+        "Kernel",
+        "Docs"
+      ],
+      "description": "Treat `.arw/tasks.json` as the source of truth, regenerate developer task docs automatically, and gate CI on drift.",
+      "references": [
+        "docs/BACKLOG.md#now-weeks",
+        "docs/developer/tasks.md"
+      ],
+      "acceptance": [
+        "Script updates `docs/developer/tasks.md` from `.arw/tasks.json`.",
+        "CI check fails when generated docs are stale.",
+        "README or contributor guide documents the regeneration command."
+      ]
+    },
+    {
+      "id": "t-20251022-runtime-adapter-sdk",
+      "title": "Universal runtime adapter SDK",
+      "status": "in_progress",
+      "scope": [
+        "Kernel"
+      ],
+      "description": "Provide a trait, manifests, and tooling so community runtimes can register with `RuntimeRegistry`, backed by samples for llama.cpp, vLLM, and REST proxies.",
+      "references": [
+        "docs/BACKLOG.md#managed-runtime-supervisor-priority-one",
+        "docs/ROADMAP.md#priority-one--managed-runtime-supervisor"
+      ],
+      "acceptance": [
+        "Adapter trait + manifest schema published with rustdoc and Markdown overview.",
+        "Sample adapters (llama.cpp, vLLM, REST bridge) compile and pass smoke tests.",
+        "`arw-cli runtime adapters lint` validates manifests locally."
+      ]
+    },
+    {
+      "id": "t-20251022-worldview-bridge",
+      "title": "Worldview bridge calibration loop",
+      "status": "in_progress",
+      "scope": [
+        "Pack: Persona",
+        "Pack: Research"
+      ],
+      "description": "Surface episodic/semantic memory cues inside persona worldview facets with review dashboards, drift alerts, and consent gating.",
+      "references": [
+        "docs/BACKLOG.md#persona--empathy-high-priority",
+        "docs/architecture/context_working_set.md"
+      ],
+      "acceptance": [
+        "Persona worldview diffs stream to `/state/persona/{id}` with provenance pointers.",
+        "Launcher calibration panel lists pending worldview updates and supports approvals.",
+        "Drift alerts emit `persona.worldview.drift` events with consent checks enforced."
+      ]
+    },
+    {
+      "id": "t-20251022-empathy-studio",
+      "title": "Empathy feedback studio",
+      "status": "todo",
+      "scope": [
+        "Pack: Persona",
+        "Pack: Collaboration"
+      ],
+      "description": "Create a Launcher workbench that visualises vibe history, annotates \"why\" responses, and guides reflective prompts when the persona preview flag is enabled.",
+      "references": [
+        "docs/BACKLOG.md#persona--empathy-high-priority",
+        "docs/guide/persona_telemetry.md"
+      ],
+      "acceptance": [
+        "Launcher preview tab displays vibe metrics, annotations, and reflection prompts with keyboard parity.",
+        "Users can tag responses with feedback that writes to persona history and vibe metrics.",
+        "Docs updated with walkthrough and consent reminders."
+      ]
+    },
+    {
+      "id": "t-20251022-agent-economy-pilot",
+      "title": "Agent economy pilot pack",
+      "status": "todo",
+      "scope": [
+        "Pack: Collaboration",
+        "Pack: Federation"
+      ],
+      "description": "Bundle revenue recipes, consent checklist, contribution ledger MVP, and `/state/cluster/ledger` exports for early operators.",
+      "references": [
+        "docs/BACKLOG.md#autonomous-economy--federation",
+        "docs/ops/automation_ops.md"
+      ],
+      "acceptance": [
+        "Pilot pack publishes three signed recipes with consent checklists.",
+        "`/state/cluster/ledger` exposes contribution rolls consumable by Launcher and CLI.",
+        "`arw-cli cluster ledger export` ships with reconciliation template and docs."
+      ]
+    },
+    {
+      "id": "t-20251023-adapter-gallery",
+      "title": "Runtime adapter gallery & smoke harness",
+      "status": "todo",
+      "scope": [
+        "Kernel"
+      ],
+      "description": "Ship curated manifests, sample adapters, and a smoke harness so third-party runtime integrations become plug-and-play alongside the adapter SDK.",
+      "references": [
+        "docs/ROADMAP.md#priority-one--managed-runtime-supervisor",
+        "docs/index.md#why-its-different"
+      ],
+      "acceptance": [
+        "Publish at least three signed adapter manifests (llama.cpp, REST bridge, community host) with consent annotations and hardware notes.",
+        "Add a runtime adapter smoke harness that validates manifests and adapter health before promotion.",
+        "Guide documents adapter gallery usage, verification steps, and troubleshooting."
+      ]
+    },
+    {
+      "id": "t-20251023-reflection-loop",
+      "title": "Persona reflection loop integration",
+      "status": "todo",
+      "scope": [
+        "Pack: Persona",
+        "Pack: Collaboration"
+      ],
+      "description": "Link persona diffs, vibe metrics, and guided reflection prompts so empathetic growth feeds context assembly and launcher previews.",
+      "references": [
+        "docs/architecture/persona_self_model_rfc.md",
+        "docs/INTERFACE_ROADMAP.md#short-term-0-3-months"
+      ],
+      "acceptance": [
+        "Reflection prompts surface in the empathy studio with accessibility-parity controls and persona-scoped leases.",
+        "Accepted reflections update persona history and feed slot budgets in `/context/assemble` telemetry.",
+        "`persona.reflection.completed` events emit provenance for dashboards and audits."
+      ]
+    },
+    {
+      "id": "t-20251023-coop-forum",
+      "title": "Cooperative policy forum & settlement simulator",
+      "status": "todo",
+      "scope": [
+        "Pack: Federation",
+        "Pack: Collaboration"
+      ],
+      "description": "Deliver a policy debate lane and mock settlement simulator so stakeholders can review revenue rules before live federation payouts.",
+      "references": [
+        "docs/ROADMAP.md#priority-four--autonomous-economy--federation",
+        "docs/ops/automation_ops.md"
+      ],
+      "acceptance": [
+        "Forum workspace allows proposals, comments, and simulated votes tied to cluster roles.",
+        "Settlement simulator produces what-if payout ledgers without touching production tables.",
+        "Documentation outlines operator workflow and governance handoffs."
+      ]
+    },
+    {
+      "id": "t-20251023-access-starter-kit",
+      "title": "Universal access starter kit",
+      "status": "todo",
+      "scope": [
+        "Docs",
+        "Kernel"
+      ],
+      "description": "Bundle eco defaults, offline docs, starter personas, and hardware checks so new operators can run ARW fully offline on baseline laptops.",
+      "references": [
+        "docs/BACKLOG.md#universal-access--sustainability",
+        "docs/guide/quickstart.md#low-spec-laptops"
+      ],
+      "acceptance": [
+        "Starter kit script assembles offline docs bundle, eco config, and sample persona seeds in a single archive.",
+        "Quickstart docs add a \"Universal Access\" path with validation checklist.",
+        "Telemetry confirms kit installs emit `access.kit.installed` events for optional metrics."
+      ]
+    },
+    {
+      "id": "t-20251023-community-distribution",
+      "title": "Community distribution mirrors",
+      "status": "todo",
+      "scope": [
+        "Ops",
+        "Docs"
+      ],
+      "description": "Publish guidance and automation for community-run mirrors of runtime bundles and docs so offline installs stay current.",
+      "references": [
+        "docs/BACKLOG.md#universal-access--sustainability",
+        "docs/guide/offline_sync.md"
+      ],
+      "acceptance": [
+        "Mirror automation syncs bundles and docs to at least two community storage backends with signature verification.",
+        "`docs/guide/offline_sync.md` documents mirror bootstrapping and verification steps.",
+        "CI smoke ensures mirror manifests stay in sync with primary releases."
+      ]
+    },
+    {
+      "id": "t-20251024-ocr-low-power-env",
+      "title": "OCR low-power env alignment",
+      "status": "done",
+      "scope": [
+        "Kernel",
+        "Docs"
+      ],
+      "description": "Support ARW_OCR_PREFER_LOW_POWER overrides in capability planning and document the adaptive OCR low-power knobs.",
+      "references": [
+        "apps/arw-server/src/tools/ocr_support.rs",
+        "docs/reference/tools/ui_screenshot.md"
+      ],
+      "acceptance": [
+        "Capability planner recognises ARW_OCR_PREFER_LOW_POWER alongside existing low-power hints.",
+        "Docs enumerate the low-power overrides available for OCR tooling."
+      ]
+    },
+    {
+      "id": "t-20251024-screenshot-docs",
+      "title": "Screenshot pipeline docs refresh",
+      "status": "done",
+      "scope": [
+        "Docs"
+      ],
+      "description": "Update the screenshot architecture note to reflect the shipping adaptive OCR pipeline status.",
+      "references": [
+        "docs/architecture/screenshot_capture_pipeline.md"
+      ],
+      "acceptance": [
+        "Architecture doc status marked Enabled with current date."
+      ]
+    },
+    {
+      "id": "t-20251024-cli-ocr-help",
+      "title": "CLI OCR flags documentation",
+      "status": "done",
+      "scope": [
+        "Docs"
+      ],
+      "description": "Refresh CLI docs to describe backend, quality, low-power, and refresh flags for `arw-cli screenshots backfill-ocr`.",
+      "references": [
+        "docs/guide/cli.md",
+        "docs/reference/cli.md"
+      ],
+      "acceptance": [
+        "CLI guide highlights backend/quality/refresh-capabilities/low-power flags.",
+        "CLI reference updates the command synopsis with new options."
+      ]
+    },
+    {
+      "id": "t-20251024-capability-service",
+      "title": "Shared capability service",
+      "status": "done",
+      "scope": [
+        "Kernel"
+      ],
+      "description": "Promote hardware profiling into a shared CapabilityService so OCR, context assembly, and runtime scheduling reuse one cached detection pipeline.",
+      "references": [
+        "apps/arw-server/src/tools/ocr_support.rs",
+        "docs/architecture/context_working_set.md"
+      ],
+      "acceptance": [
+        "CapabilityService exposes cached profile via AppState and refresh API.",
+        "OCR, context loop, and runtime supervisor use the shared service instead of bespoke probes.",
+        "Metrics/logs emit per-refresh telemetry for capability detection."
+      ]
+    },
+    {
+      "id": "t-20251024-compression-lite",
+      "title": "Consumer-grade vision compression backend",
+      "status": "todo",
+      "scope": [
+        "Kernel",
+        "Pack: Research"
+      ],
+      "description": "Implement a built-in lightweight vision compression worker (\u22641B decoder or CPU offload) to keep the adaptive OCR pipeline viable on 4-8 GB devices.",
+      "references": [
+        "apps/arw-server/src/tools/screenshots.rs",
+        "docs/ops/deepseek_ocr_pipeline.md"
+      ],
+      "acceptance": [
+        "New backend fits within 8 GB VRAM or CPU-only mode and registers under `vision_compression`.",
+        "Capability planner selects the lite backend when the high-end endpoint is unavailable.",
+        "Benchmarks document latency/accuracy trade-offs against the DeepSeek reference."
+      ]
+    },
+    {
+      "id": "t-20251024-context-persona-loop",
+      "title": "Persona-aware context loop",
+      "status": "in_progress",
+      "scope": [
+        "Kernel",
+        "Pack: Persona"
+      ],
+      "description": "Feed persona vibe metrics into context assembly budgets so retrieval slots adapt based on empathy feedback and preferences.",
+      "references": [
+        "apps/arw-server/src/context_loop.rs",
+        "apps/arw-server/src/persona.rs"
+      ],
+      "acceptance": [
+        "Context loop consumes persona bias outputs produced from live vibe metrics.",
+        "Persona feedback updates lane/slot weights without server restart.",
+        "Telemetry surfaces persona-influenced context adjustments for debugging."
+      ]
+    },
+    {
+      "id": "t-20251024-knowledge-cards",
+      "title": "Knowledge card compression",
+      "status": "todo",
+      "scope": [
+        "Pack: Research",
+        "Docs"
+      ],
+      "description": "Prototype multimodal knowledge cards that store compressed glyph/diagram snapshots alongside text summaries for retrieval.",
+      "references": [
+        "docs/architecture/context_working_set.md",
+        "docs/architecture/runtime_adapter_sdk_rfc.md"
+      ],
+      "acceptance": [
+        "Memory overlay stores knowledge cards with glyph references and provenance.",
+        "Retrieval can request card previews and rehydrate to full text on demand.",
+        "Docs capture the compression format and fallback rules."
+      ]
+    },
+    {
+      "id": "t-20251024-economy-meter",
+      "title": "Shared economy contribution meter",
+      "status": "todo",
+      "scope": [
+        "Kernel",
+        "Pack: Federation"
+      ],
+      "description": "Instrument contribution metering for shared accelerator usage ahead of revenue ledger rollout.",
+      "references": [
+        "docs/architecture/cluster_federation.md",
+        "docs/ROADMAP.md#priority-four--autonomous-economy--federation"
+      ],
+      "acceptance": [
+        "Runtime supervisor reports accelerator usage to a contribution meter.",
+        "Meter surfaces `/state/cluster/contributions` with per-node totals.",
+        "Telemetry integrates with future revenue ledger for settlement."
+      ]
+    },
+    {
+      "id": "t-20251030-economy-ledger-core",
+      "title": "Economy ledger core surfaces",
+      "status": "todo",
+      "scope": [
+        "Kernel",
+        "Pack: Federation"
+      ],
+      "description": "Implement the economy ledger storage layer and expose `/state/economy/*` read-models with SSE updates for Companion Hub tiles.",
+      "references": [
+        "docs/BACKLOG.md#autonomous-economy--federation",
+        "docs/architecture/companion_hub_plan.md#economy-deck",
+        "docs/ROADMAP.md#priority-four--autonomous-economy--federation"
+      ],
+      "acceptance": [
+        "New ledger tables capture job_id, persona_id, stakeholder shares, payouts, currency, and status timestamps.",
+        "GET `/state/economy/ledger` returns latest entries, aggregate totals, and attention flags with pagination.",
+        "`economy.ledger.updated` events emit JSON Patch deltas so Launcher SSE clients refresh without polling."
+      ]
+    },
+    {
+      "id": "t-20251027-daily-brief",
+      "title": "Daily brief signals MVP",
+      "status": "in_progress",
+      "scope": [
+        "Pack: Persona",
+        "Pack: Collaboration"
+      ],
+      "description": "Publish a consolidated daily brief covering runtime, economy, memory, persona, and autonomy signals with attention hooks for launcher surfaces.",
+      "references": [
+        "docs/architecture/companion_hub_plan.md#daily-briefs",
+        "docs/BACKLOG.md#persona--empathy-high-priority",
+        "docs/INTERFACE_ROADMAP.md#short-term-0-3-months"
+      ],
+      "acceptance": [
+        "Server snapshot exposes runtime, economy, persona, memory, and autonomy sections plus attention alerts.",
+        "Launcher Daily Brief panel renders the expanded snapshot with accessible defaults and SSE refresh.",
+        "`brief.daily.published` events include the enriched payload and existing /state/briefs/daily consumes it."
+      ]
+    },
+    {
+      "id": "t-20251030-proactive-brief-engine",
+      "title": "Proactive daily brief engine",
+      "status": "todo",
+      "scope": [
+        "Kernel",
+        "Pack: Persona",
+        "Pack: Collaboration"
+      ],
+      "description": "Generate opt-in daily brief digests that blend persona vibe metrics, memory coverage, and economy signals, publishing them via `/events` and read-model snapshots.",
+      "references": [
+        "docs/BACKLOG.md#persona--empathy-high-priority",
+        "docs/architecture/companion_hub_plan.md#daily-briefs",
+        "docs/ROADMAP.md#priority-three--empathy--persona-experience"
+      ],
+      "acceptance": [
+        "Background job assembles a brief document referencing persona, memory, autonomy, and economy highlights with provenance pointers.",
+        "GET `/state/briefs/daily` exposes the latest digest per workspace and honors consent/lease checks.",
+        "`brief.daily.published` events carry brief metadata and allow Launcher to surface proactive notifications."
+      ]
+    },
+    {
+      "id": "t-20251030-coop-contracts",
+      "title": "Cooperative economy contract extensions",
+      "status": "todo",
+      "scope": [
+        "Kernel",
+        "Pack: Federation",
+        "Docs"
+      ],
+      "description": "Extend the economy contract schema and docs to cover cooperative revenue splits, escrow handling, and compliance envelopes for pooled agents.",
+      "references": [
+        "crates/arw-contracts/src/economy.rs",
+        "docs/ROADMAP.md#priority-four--autonomous-economy--federation",
+        "docs/ops/automation_ops.md"
+      ],
+      "acceptance": [
+        "Economy contract schema models cooperative groups with share validation, escrow policies, and jurisdiction notes.",
+        "Policy engine enforces cooperative contract caps via validation hooks with unit tests.",
+        "Docs describe cooperative contract setup, compliance expectations, and settlement workflows."
+      ]
+    }
+  ]
+}

@@ -7,9 +7,9 @@ use serde_json::json;
 use tokio::sync::Mutex;
 
 use crate::{
-    autonomy, capsule_guard, chat, cluster, compression, context_capability, experiments, feedback,
-    governor, identity, metrics, models, persona, planning, policy, queue, runtime,
-    runtime_bundles, runtime_supervisor, tool_cache, training,
+    autonomy, capsule_guard, chat, cluster, compression, context_capability, daily_brief, economy,
+    experiments, feedback, governor, identity, metrics, models, persona, planning, policy, queue,
+    runtime, runtime_bundles, runtime_supervisor, tool_cache, training,
 };
 
 type SharedConfigState = Arc<Mutex<serde_json::Value>>;
@@ -37,6 +37,8 @@ pub(crate) struct AppState {
     autonomy: Arc<autonomy::AutonomyRegistry>,
     feedback: Arc<feedback::FeedbackHub>,
     cluster: Arc<cluster::ClusterRegistry>,
+    daily_brief: Arc<daily_brief::DailyBriefService>,
+    economy: Arc<economy::EconomyLedger>,
     experiments: Arc<experiments::Experiments>,
     capsules: Arc<capsule_guard::CapsuleStore>,
     chat: Arc<chat::ChatState>,
@@ -73,6 +75,8 @@ impl AppState {
         autonomy: Arc<autonomy::AutonomyRegistry>,
         feedback: Arc<feedback::FeedbackHub>,
         cluster: Arc<cluster::ClusterRegistry>,
+        daily_brief: Arc<daily_brief::DailyBriefService>,
+        economy: Arc<economy::EconomyLedger>,
         experiments: Arc<experiments::Experiments>,
         capsules: Arc<capsule_guard::CapsuleStore>,
         chat: Arc<chat::ChatState>,
@@ -106,6 +110,8 @@ impl AppState {
             autonomy,
             feedback,
             cluster,
+            daily_brief,
+            economy,
             experiments,
             capsules,
             chat,
@@ -217,6 +223,14 @@ impl AppState {
         self.cluster.clone()
     }
 
+    pub fn daily_brief(&self) -> Arc<daily_brief::DailyBriefService> {
+        self.daily_brief.clone()
+    }
+
+    pub fn economy(&self) -> Arc<economy::EconomyLedger> {
+        self.economy.clone()
+    }
+
     pub fn experiments(&self) -> Arc<experiments::Experiments> {
         self.experiments.clone()
     }
@@ -283,6 +297,8 @@ pub(crate) struct AppStateBuilder {
     autonomy: Option<Arc<autonomy::AutonomyRegistry>>,
     feedback: Option<Arc<feedback::FeedbackHub>>,
     cluster: Option<Arc<cluster::ClusterRegistry>>,
+    daily_brief: Option<Arc<daily_brief::DailyBriefService>>,
+    economy: Option<Arc<economy::EconomyLedger>>,
     experiments: Option<Arc<experiments::Experiments>>,
     capsules: Option<Arc<capsule_guard::CapsuleStore>>,
     chat: Option<Arc<chat::ChatState>>,
@@ -326,6 +342,8 @@ impl AppState {
             autonomy: None,
             feedback: None,
             cluster: None,
+            daily_brief: None,
+            economy: None,
             experiments: None,
             capsules: None,
             chat: None,
@@ -427,6 +445,19 @@ impl AppStateBuilder {
 
     pub(crate) fn with_cluster(mut self, cluster: Arc<cluster::ClusterRegistry>) -> Self {
         self.cluster = Some(cluster);
+        self
+    }
+
+    pub(crate) fn with_daily_brief(
+        mut self,
+        daily_brief: Arc<daily_brief::DailyBriefService>,
+    ) -> Self {
+        self.daily_brief = Some(daily_brief);
+        self
+    }
+
+    pub(crate) fn with_economy(mut self, economy: Arc<economy::EconomyLedger>) -> Self {
+        self.economy = Some(economy);
         self
     }
 
@@ -563,6 +594,16 @@ impl AppStateBuilder {
         let cluster_state = self
             .cluster
             .unwrap_or_else(|| cluster::ClusterRegistry::new(self.bus.clone()));
+        let economy_ledger = match self.economy {
+            Some(ledger) => ledger,
+            None => {
+                let path = crate::util::state_dir().join("economy").join("ledger.json");
+                economy::EconomyLedger::with_state_path(self.bus.clone(), path).await
+            }
+        };
+        let daily_brief_service = self
+            .daily_brief
+            .unwrap_or_else(|| daily_brief::DailyBriefService::new(self.bus.clone()));
         let experiments_state = match self.experiments {
             Some(state) => state,
             None => experiments::Experiments::new(self.bus.clone(), governor_state.clone()).await,
@@ -651,6 +692,8 @@ impl AppStateBuilder {
             autonomy_registry.clone(),
             feedback_hub,
             cluster_state,
+            daily_brief_service,
+            economy_ledger,
             experiments_state,
             capsules_store,
             chat_state,

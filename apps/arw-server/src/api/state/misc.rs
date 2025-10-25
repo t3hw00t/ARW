@@ -189,6 +189,65 @@ pub async fn state_contributions(
     response
 }
 
+/// Economy ledger snapshot (jobs, payouts, attention flags).
+#[utoipa::path(
+    get,
+    path = "/state/economy/ledger",
+    tag = "State",
+    responses(
+        (status = 200, description = "Economy ledger snapshot", body = crate::economy::EconomyLedgerSnapshot),
+        (status = 401, description = "Unauthorized", body = serde_json::Value)
+    )
+)]
+pub async fn state_economy_ledger(
+    headers: HeaderMap,
+    State(state): State<AppState>,
+) -> impl IntoResponse {
+    if !admin_ok(&headers).await {
+        return (
+            StatusCode::UNAUTHORIZED,
+            Json(json!({"type":"about:blank","title":"Unauthorized","status":401})),
+        )
+            .into_response();
+    }
+    let snapshot = state.economy().snapshot().await;
+    let version = snapshot.version;
+    if let Some(resp) = http_utils::state_version_not_modified(&headers, "economy_ledger", version)
+    {
+        return resp;
+    }
+    let mut response = Json(snapshot).into_response();
+    http_utils::apply_state_version_headers(response.headers_mut(), "economy_ledger", version);
+    response
+}
+
+/// Daily brief snapshot.
+#[utoipa::path(
+    get,
+    path = "/state/briefs/daily",
+    tag = "State",
+    responses(
+        (status = 200, description = "Daily brief snapshot", body = serde_json::Value),
+        (status = 401, description = "Unauthorized", body = serde_json::Value)
+    )
+)]
+pub async fn state_daily_brief(
+    headers: HeaderMap,
+    State(state): State<AppState>,
+) -> impl IntoResponse {
+    if !admin_ok(&headers).await {
+        return (
+            StatusCode::UNAUTHORIZED,
+            Json(json!({"type":"about:blank","title":"Unauthorized","status":401})),
+        )
+            .into_response();
+    }
+    match state.daily_brief().latest().await {
+        Some(snapshot) => Json(snapshot).into_response(),
+        None => Json(json!({"status":"unavailable"})).into_response(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -235,6 +294,31 @@ mod tests {
             .await
             .into_response();
         assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    }
+
+    #[tokio::test]
+    async fn state_economy_ledger_requires_admin() {
+        let temp = tempdir().expect("tempdir");
+        let mut ctx = begin_state_env(temp.path());
+        let state = build_state(temp.path(), &mut ctx.env).await;
+        ctx.env.set("ARW_DEBUG", "0");
+        ctx.env.remove("ARW_ADMIN_TOKEN");
+        ctx.env.remove("ARW_ADMIN_TOKEN_SHA256");
+        let response = state_economy_ledger(HeaderMap::new(), State(state))
+            .await
+            .into_response();
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    }
+
+    #[tokio::test]
+    async fn state_economy_ledger_returns_snapshot() {
+        let temp = tempdir().expect("tempdir");
+        let mut ctx = begin_state_env(temp.path());
+        let state = build_state(temp.path(), &mut ctx.env).await;
+        let response = state_economy_ledger(HeaderMap::new(), State(state))
+            .await
+            .into_response();
+        assert_eq!(response.status(), StatusCode::OK);
     }
 
     #[tokio::test]
@@ -304,5 +388,34 @@ mod tests {
             .await
             .into_response();
         assert_eq!(response.status(), StatusCode::NOT_MODIFIED);
+    }
+
+    #[tokio::test]
+    async fn state_daily_brief_requires_admin() {
+        let temp = tempdir().expect("tempdir");
+        let mut ctx = begin_state_env(temp.path());
+        let state = build_state(temp.path(), &mut ctx.env).await;
+        ctx.env.set("ARW_DEBUG", "0");
+        let response = state_daily_brief(HeaderMap::new(), State(state))
+            .await
+            .into_response();
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    }
+
+    #[tokio::test]
+    async fn state_daily_brief_returns_placeholder() {
+        let temp = tempdir().expect("tempdir");
+        let mut ctx = begin_state_env(temp.path());
+        let state = build_state(temp.path(), &mut ctx.env).await;
+        ctx.env.set("ARW_ADMIN_TOKEN", "secret");
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            header::AUTHORIZATION,
+            header::HeaderValue::from_static("Bearer secret"),
+        );
+        let response = state_daily_brief(headers, State(state))
+            .await
+            .into_response();
+        assert_eq!(response.status(), StatusCode::OK);
     }
 }

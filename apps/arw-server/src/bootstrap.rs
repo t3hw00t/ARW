@@ -188,6 +188,13 @@ pub(crate) async fn build() -> BootstrapOutput {
         }
     }
 
+    if kernel_enabled && !smoke_mode {
+        background_tasks.push(crate::economy_sync::start(state.clone()));
+        background_tasks.push(crate::daily_brief::start(state.clone()));
+    } else if kernel_enabled {
+        background_tasks.push(crate::economy_sync::start(state.clone()));
+    }
+
     BootstrapOutput {
         router,
         state,

@@ -41,7 +41,8 @@ Complexity Collapse (Cross-cutting)
 - [Kernel][Observability] Prompt compression telemetry surfaced via `arw_compression_prompt_*` Prometheus metrics and aggregated in `/metrics` - done (requests/success/error counters plus latency/ratio/byte averages for `/v1/compress/prompt`)
 - [Kernel][Pack: Research] [t-20251024-compression-lite] Consumer-grade vision compression backend for adaptive OCR - todo
 - [Pack: Collaboration][Pack: Persona] [t-20251027-companion-hub-foundation] Companion Hub navigation, accessible layout, and integrated persona/memory/autonomy/economy tiles - todo
-- [Pack: Persona][Pack: Collaboration] [t-20251027-daily-brief] Conversational daily brief service delivering empathy, memory, autonomy, and economy updates with approval hooks - todo
+- [Pack: Persona][Pack: Collaboration] [t-20251027-daily-brief] Conversational daily brief service delivering empathy, memory, autonomy, and economy updates with approval hooks - in_progress (server snapshot + launcher wiring)
+- [Pack: Persona][Pack: Collaboration] [t-20251030-proactive-brief-engine] Proactive daily brief engine generating opt-in digests that blend persona vibe metrics, memory coverage, autonomy status, and economy signals via `/events` - todo
 - **Recently shipped:** Legacy feature migration (Phases A-E); Snappy Governor verification; Event Spine patch streaming; Phase A handoff (see `docs/RESTRUCTURE.md` and tasks `t-phase-a-01..03`); OCR low-power env alignment (`t-20251024-ocr-low-power-env`); screenshot pipeline docs refresh (`t-20251024-screenshot-docs`); CLI OCR flags documentation (`t-20251024-cli-ocr-help`); shared capability service (`t-20251024-capability-service`).
 
 Managed Runtime Supervisor (Priority One)
@@ -123,16 +124,18 @@ Persona & Empathy (High Priority)
 
 <a id="autonomous-economy--federation"></a>
 Autonomous Economy & Federation
-- [Pack: Collaboration] Revenue recipe gallery: curate signed automation templates (research gigs, monitoring) with compliance guardrails and earning metadata - todo
+- [Pack: Collaboration] Revenue recipe gallery [t-20251017-revenue-recipes]: curate signed automation templates (research gigs, monitoring) with compliance guardrails and earning metadata - todo
 - [Pack: Collaboration][Pack: Federation] Agent economy pilot pack: bundle revenue recipes, consent checklist, contribution ledger MVP, and `/state/cluster/ledger` exports for early operators - plan
 - [Pack: Collaboration][Pack: Federation] Cooperative policy forum & settlement simulator [t-20251023-coop-forum] - todo (debate lane plus what-if payout simulator ahead of live federation).
 - [Kernel][Pack: Federation] [t-20251024-economy-meter] Shared economy contribution meter for pooled accelerator usage - todo
-- [Kernel][Pack: Federation] Contribution ledger MVP: extend `/state/cluster` with per-task payouts, exports, and audit trails — todo
+- [Kernel][Pack: Federation] Contribution ledger MVP [t-20251017-contribution-ledger]: extend `/state/cluster` with per-task payouts, exports, and audit trails - todo
 - [Pack: Collaboration][Pack: Federation] [t-20251027-economy-ledger-ui] Economy `/state/economy/*` read-models and Companion Hub tiles for jobs, revenue, payouts, and compliance posture - todo
-- [Pack: Federation] Payout connector pilot: optional Stripe test-mode + manual invoice flows with policy leases and ledger reconciliation — plan
-- [Pack: Federation][Pack: Research] Cooperative scaling kit: deployment scripts + evaluation harness presets for revenue agents operating across nodes — plan
+- [Kernel][Pack: Federation] [t-20251030-economy-ledger-core] Economy ledger persistence, `/state/economy/ledger` read-models, and SSE updates feeding Companion Hub tiles - todo
+- [Pack: Federation] Payout connector pilot: optional Stripe test-mode + manual invoice flows with policy leases and ledger reconciliation - plan
+- [Pack: Federation][Pack: Research] Cooperative scaling kit: deployment scripts + evaluation harness presets for revenue agents operating across nodes - plan
 - [Docs] Automation ops handbook: unattended-agent safety checklist, alerting defaults, legal considerations for solo operators - done
 - [Docs][Pack: Federation] [t-20251027-economy-handbook] Autonomous economy operator handbook (compliance, settlements, cooperative scaling) - todo
+- [Kernel][Pack: Federation][Docs] [t-20251030-coop-contracts] Cooperative economy contract schema extensions and operator guidance for revenue splits, escrow, and compliance envelopes - todo
 
 <a id="universal-access--sustainability"></a>
 Universal Access & Sustainability

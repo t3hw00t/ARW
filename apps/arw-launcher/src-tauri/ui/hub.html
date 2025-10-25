@@ -109,15 +109,27 @@
             <dl class="today-summary" aria-live="polite">
               <div>
                 <dt>Runtime</dt>
-                <dd id="todaySummaryRuntime" class="dim">Loading…</dd>
+                <dd id="todaySummaryRuntime" class="dim">Loading.</dd>
+              </div>
+              <div>
+                <dt>Economy</dt>
+                <dd id="todaySummaryEconomy" class="dim">Ledger status pending.</dd>
+              </div>
+              <div>
+                <dt>Memory</dt>
+                <dd id="todaySummaryMemory" class="dim">Memory signals idle.</dd>
               </div>
               <div>
                 <dt>Events</dt>
-                <dd id="todaySummarySSE" class="dim">Listening for updates…</dd>
+                <dd id="todaySummarySSE" class="dim">Listening for updates.</dd>
               </div>
               <div>
                 <dt>Persona</dt>
-                <dd id="todaySummaryPersona" class="dim">Persona telemetry idle</dd>
+                <dd id="todaySummaryPersona" class="dim">No persona data yet.</dd>
+              </div>
+              <div>
+                <dt>Autonomy</dt>
+                <dd id="todaySummaryAutonomy" class="dim">Autonomy lanes idle.</dd>
               </div>
             </dl>
             <div class="today-actions">
@@ -125,7 +137,7 @@
               <button type="button" class="ghost mini" data-hub-jump="personas">Review persona signals</button>
               <button type="button" class="ghost mini" data-hub-jump="automations">Check autonomy lanes</button>
             </div>
-            <p class="dim today-note">Automated daily briefs will post through the companion once the scheduler lands (<code>t-20251027-daily-brief</code>).</p>
+            <p class="dim today-note" id="todaySummaryNote">Awaiting first daily brief update.</p>
           </section>
           <section class="card" id="files" role="region" aria-labelledby="filesTitle" data-hub-panel="projects" hidden>
             <h3 id="filesTitle">Files</h3>
@@ -404,8 +416,8 @@
                 <ul id="economyAlerts" class="metric-list"></ul>
               </div>
             </div>
-            <p id="economyEmpty" class="dim" role="status" aria-live="polite" hidden>No autonomy lanes reported.</p>
-            <p class="dim economy-note">Economy ledgers (<code>/state/economy/*</code>) arrive with <code>t-20251027-economy-ledger-ui</code>. Until then this view reflects autonomy lanes and budgets.</p>
+            <p id="economyEmpty" class="dim" role="status" aria-live="polite" hidden>No ledger entries yet.</p>
+            <p class="dim economy-note">Data refreshes automatically from <code>/state/economy/ledger</code>. Amounts reflect the latest contribution records.</p>
             <div class="row economy-actions">
               <button id="economyDocs" class="ghost mini" type="button">Open roadmap</button>
               <button id="economyBacklog" class="ghost mini" type="button">View tasks</button>
@@ -445,3 +457,4 @@
     </div>
   </body>
   </html>
+

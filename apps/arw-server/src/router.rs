@@ -151,6 +151,8 @@ pub(crate) mod paths {
     pub const STATE_ROUTE_STATS: &str = "/state/route_stats";
     pub const STATE_ACTIONS: &str = "/state/actions";
     pub const STATE_CONTRIBS: &str = "/state/contributions";
+    pub const STATE_ECONOMY_LEDGER: &str = "/state/economy/ledger";
+    pub const STATE_DAILY_BRIEF: &str = "/state/briefs/daily";
     pub const STATE_RESEARCH_WATCHER: &str = "/state/research_watcher";
     pub const STATE_STAGING_ACTIONS: &str = "/state/staging/actions";
     pub const STATE_TRAINING_TELEMETRY: &str = "/state/training/telemetry";
@@ -587,6 +589,16 @@ pub(crate) fn build_router() -> (Router<AppState>, Vec<String>, Vec<Value>) {
         paths::STATE_CONTRIBS,
         api::state::state_contributions,
         Some(Stability::Beta),
+    );
+    builder.route_get(
+        paths::STATE_ECONOMY_LEDGER,
+        api::state::state_economy_ledger,
+        Some(Stability::Experimental),
+    );
+    builder.route_get(
+        paths::STATE_DAILY_BRIEF,
+        api::state::state_daily_brief,
+        Some(Stability::Experimental),
     );
     builder.route_get(
         paths::STATE_RESEARCH_WATCHER,

@@ -88,6 +88,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   let memoryRecentModel = null;
   let economyAbort = null;
   let economyModel = null;
+  let dailyBriefModel = null;
   let lastEconomyRefresh = 0;
   let memoryRefreshTimer = null;
   let economyRefreshTimer = null;
@@ -136,8 +137,12 @@ document.addEventListener('DOMContentLoaded', async () => {
   const elRuntimeHints = document.getElementById('runtimeHints');
   const elRuntimeAnnounce = document.getElementById('runtimeAnnounce');
   const elSummaryRuntime = document.getElementById('todaySummaryRuntime');
+  const elSummaryEconomy = document.getElementById('todaySummaryEconomy');
+  const elSummaryMemory = document.getElementById('todaySummaryMemory');
   const elSummarySse = document.getElementById('todaySummarySSE');
   const elSummaryPersona = document.getElementById('todaySummaryPersona');
+  const elSummaryAutonomy = document.getElementById('todaySummaryAutonomy');
+  const elSummaryNote = document.getElementById('todaySummaryNote');
   const jumpButtons = document.querySelectorAll('[data-hub-jump]');
   const economyDocs = document.getElementById('economyDocs');
   const economyBacklog = document.getElementById('economyBacklog');
@@ -215,8 +220,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     elRuntimeBadge.textContent = text;
     elRuntimeBadge.title = hint || text;
     elRuntimeBadge.setAttribute('aria-label', hint ? `${text}. ${hint}` : text);
-    if (elSummaryRuntime) {
-      const summaryHint = hint ? `${text} — ${hint}` : text;
+    if (elSummaryRuntime && !dailyBriefModel) {
+      const summaryHint = hint ? `${text} - ${hint}` : text;
       elSummaryRuntime.textContent = summaryHint || 'Runtime status pending';
     }
   }
@@ -1929,7 +1934,8 @@ async function refreshRuntimeBundles() {
       refreshContextCascade({ quiet: true }),
       refreshContextMetrics(),
       refreshMemoryRecent({ quiet: true }),
-      refreshAutonomyLanes({ force: true }),
+      refreshDailyBrief({ force: true }),
+      refreshEconomyLedger({ force: true }),
       personaPanel && typeof personaPanel.reload === 'function' ? personaPanel.reload({ preserveSelection: true }) : Promise.resolve(),
     ]);
     startMemoryRefreshLoop();
@@ -2013,7 +2019,7 @@ async function refreshRuntimeBundles() {
   await refreshRuntimeBundles();
   await refreshContextMetrics();
   await refreshMemoryRecent({ quiet: true });
-  await refreshAutonomyLanes({ force: true });
+  await refreshEconomyLedger({ force: true });
   startMemoryRefreshLoop();
   startEconomyRefreshLoop();
   if (elRuntimeRefreshBtn) {
@@ -2466,6 +2472,37 @@ async function refreshRuntimeBundles() {
   const fetchJson = (path, init) => ARW.http.json(base, path, init);
   const fetchText = (path, init) => ARW.http.text(base, path, init);
   const fetchRaw = (path, init) => ARW.http.fetch(base, path, init);
+
+  function getHttpStatus(err) {
+    if (!err) return undefined;
+    if (typeof err.status === 'number') return err.status;
+    if (err.response && typeof err.response.status === 'number') return err.response.status;
+    if (err.cause && typeof err.cause.status === 'number') return err.cause.status;
+    return undefined;
+  }
+
+  function formatLedgerAmount(amount) {
+    if (typeof amount !== 'number' || Number.isNaN(amount)) {
+      return '';
+    }
+    const rounded = Math.round(amount * 100) / 100;
+    return rounded.toLocaleString(undefined, {
+      minimumFractionDigits: rounded % 1 === 0 ? 0 : 2,
+      maximumFractionDigits: 2,
+    });
+  }
+
+  function formatLedgerValue(amount, currency) {
+    const amountText = formatLedgerAmount(amount);
+    const normalizedCurrency = typeof currency === 'string' ? currency.trim() : '';
+    if (!amountText) {
+      return normalizedCurrency || 'n/a';
+    }
+    if (!normalizedCurrency || normalizedCurrency === 'unitless') {
+      return amountText;
+    }
+    return `${amountText} ${normalizedCurrency}`;
+  }
   function formatDuration(n){
     if (!Number.isFinite(n) || n < 0) return '–';
     if (n >= 1000) return `${(n/1000).toFixed(1)} s`;
@@ -3565,7 +3602,204 @@ async function refreshRuntimeBundles() {
     }
   }
 
-  async function refreshAutonomyLanes(options = {}) {
+  async function refreshDailyBrief(options = {}) {
+    const { force = false } = options;
+    if (!force && dailyBriefModel) {
+      renderDailyBrief(dailyBriefModel);
+      return dailyBriefModel;
+    }
+    let snapshot = null;
+    try {
+      const data = await fetchJson('/state/briefs/daily');
+      if (data && typeof data === 'object' && data.summary) {
+        snapshot = data;
+      }
+    } catch (err) {
+      if (!(err && err.name === 'AbortError')) {
+        console.warn('daily brief fetch failed', err);
+      }
+    }
+    dailyBriefModel = snapshot;
+    renderDailyBrief(snapshot);
+    return snapshot;
+  }
+
+  function renderDailyBrief(model) {
+    const bullet = ' \u2022 ';
+    const toPercent = (value) =>
+      typeof value === 'number' && Number.isFinite(value)
+        ? `${Math.round(value * 100)}%`
+        : null;
+    const plural = (count) => (count === 1 ? '' : 's');
+    if (model && typeof model === 'object') {
+      const summaryLine = typeof model.summary === 'string' ? model.summary : '';
+      if (elSummaryRuntime) {
+        const runtime = model.runtime && typeof model.runtime === 'object' ? model.runtime : null;
+        let runtimeText = '';
+        if (runtime) {
+          const total = Number(runtime.total ?? 0);
+          const ready =
+            Number(runtime.by_state?.Ready ?? runtime.by_state?.ready ?? 0);
+          if (total > 0) {
+            runtimeText = `Ready ${ready}/${total}`;
+          }
+          const runtimeAlert =
+            Array.isArray(runtime.alerts) && runtime.alerts.length ? runtime.alerts[0] : null;
+          if (runtimeAlert) {
+            runtimeText = runtimeText ? `${runtimeText}${bullet}${runtimeAlert}` : runtimeAlert;
+          }
+        }
+        if (!runtimeText && summaryLine) {
+          runtimeText = summaryLine;
+        }
+        elSummaryRuntime.textContent = runtimeText || 'Runtime status steady.';
+      }
+      if (elSummaryEconomy) {
+        const economy = model.economy && typeof model.economy === 'object' ? model.economy : null;
+        let economyText = 'Ledger status pending.';
+        if (economy) {
+          if (Array.isArray(economy.totals) && economy.totals.length) {
+            const primary = economy.totals[0] || {};
+            const currency = primary.currency || 'unitless';
+            const settled =
+              typeof primary.settled === 'number'
+                ? formatLedgerAmount(primary.settled)
+                : '0';
+            const pending =
+              typeof primary.pending === 'number'
+                ? formatLedgerAmount(primary.pending)
+                : '0';
+            economyText = `${currency} settled ${settled}, pending ${pending}`;
+          } else if (Array.isArray(economy.recent_entries) && economy.recent_entries.length === 0) {
+            economyText = 'No ledger activity yet.';
+          }
+        }
+        elSummaryEconomy.textContent = economyText;
+      }
+      if (elSummaryMemory) {
+        const memory = model.memory && typeof model.memory === 'object' ? model.memory : null;
+        let memoryText = 'Memory signals steady.';
+        if (memory) {
+          const parts = [];
+          const coverage = toPercent(memory.coverage_needs_more_ratio);
+          if (coverage) {
+            parts.push(`Coverage gaps ${coverage}`);
+          }
+          const recall = toPercent(memory.recall_risk_ratio);
+          if (recall) {
+            parts.push(`Recall risk ${recall}`);
+          }
+          const memoryAlert =
+            Array.isArray(memory.alerts) && memory.alerts.length ? memory.alerts[0] : null;
+          if (!parts.length && memoryAlert) {
+            parts.push(memoryAlert);
+          }
+          if (!parts.length && Array.isArray(memory.top_reasons) && memory.top_reasons.length) {
+            parts.push(memory.top_reasons[0]);
+          }
+          if (parts.length) {
+            memoryText = parts.join(bullet);
+          }
+        }
+        elSummaryMemory.textContent = memoryText;
+      }
+      if (elSummaryPersona) {
+        const persona = model.persona && typeof model.persona === 'object' ? model.persona : null;
+        let personaText = 'No persona data yet.';
+        if (persona) {
+          const parts = [];
+          const total = Number(persona.total ?? 0);
+          if (total > 0) {
+            parts.push(`${total} persona${plural(total)}`);
+          }
+          if (persona.approvals_pending > 0) {
+            parts.push(
+              `${persona.approvals_pending} approval${plural(
+                persona.approvals_pending
+              )} pending`
+            );
+          }
+          const vibe = toPercent(persona.vibe_average);
+          if (vibe) {
+            parts.push(`Vibe ${vibe}`);
+          }
+          const personaAlert =
+            Array.isArray(persona.alerts) && persona.alerts.length ? persona.alerts[0] : null;
+          if (personaAlert) {
+            parts.push(personaAlert);
+          }
+          if (parts.length) {
+            personaText = parts.join(bullet);
+          } else if (total === 0) {
+            personaText = 'No personas yet.';
+          }
+        }
+        elSummaryPersona.textContent = personaText;
+      }
+      if (elSummaryAutonomy) {
+        const autonomy =
+          model.autonomy && typeof model.autonomy === 'object' ? model.autonomy : null;
+        let autonomyText = 'Autonomy lanes idle.';
+        if (autonomy) {
+          const parts = [];
+          const total = Number(autonomy.lanes_total ?? 0);
+          const auto = Number(autonomy.lanes_autonomous ?? 0);
+          const paused = Number(autonomy.lanes_paused ?? 0);
+          if (total > 0) {
+            parts.push(`${auto}/${total} auto`);
+          }
+          if (paused > 0) {
+            parts.push(`${paused} paused`);
+          }
+          if (autonomy.active_jobs > 0) {
+            parts.push(
+              `${autonomy.active_jobs} active job${plural(
+                autonomy.active_jobs
+              )}`
+            );
+          }
+          const autonomyAlert =
+            Array.isArray(autonomy.alerts) && autonomy.alerts.length ? autonomy.alerts[0] : null;
+          if (autonomyAlert) {
+            parts.push(autonomyAlert);
+          }
+          if (parts.length) {
+            autonomyText = parts.join(bullet);
+          }
+        }
+        elSummaryAutonomy.textContent = autonomyText;
+      }
+      if (elSummaryNote) {
+        const timestamp =
+          typeof model.generated_at === 'string' ? formatRelativeIso(model.generated_at) : null;
+        const attention =
+          Array.isArray(model.attention) && model.attention.length ? model.attention[0] : null;
+        const base = timestamp ? `Updated ${timestamp}` : 'Updated moments ago';
+        elSummaryNote.textContent = attention ? `${base}${bullet}${attention}` : base;
+      }
+    } else {
+      if (elSummaryRuntime && !economyModel) {
+        elSummaryRuntime.textContent = 'Runtime status pending';
+      }
+      if (elSummaryEconomy) {
+        elSummaryEconomy.textContent = 'Ledger status pending.';
+      }
+      if (elSummaryMemory) {
+        elSummaryMemory.textContent = 'Memory signals idle.';
+      }
+      if (elSummaryPersona) {
+        elSummaryPersona.textContent = 'No persona data yet.';
+      }
+      if (elSummaryAutonomy) {
+        elSummaryAutonomy.textContent = 'Autonomy lanes idle.';
+      }
+      if (elSummaryNote) {
+        elSummaryNote.textContent = 'Awaiting first daily brief update.';
+      }
+    }
+  }
+
+  async function refreshEconomyLedger(options = {}) {
     const { force = false } = options;
     const now = Date.now();
     if (!force && now - lastEconomyRefresh < ECONOMY_REFRESH_MS) {
@@ -3576,29 +3810,185 @@ async function refreshRuntimeBundles() {
     }
     const controller = new AbortController();
     economyAbort = controller;
+    let snapshot = null;
+    let fetchError = null;
     try {
-      const data = await fetchJson('/state/autonomy/lanes', { signal: controller.signal });
+      const data = await fetchJson('/state/economy/ledger', { signal: controller.signal });
       if (data && typeof data === 'object') {
-        economyModel = data;
-        renderEconomySnapshot(data);
-        lastEconomyRefresh = Date.now();
+        snapshot = { ...data, __source: 'ledger' };
       }
     } catch (err) {
-      if (!(err && err.name === 'AbortError')) {
-        console.warn('autonomy lanes fetch failed', err);
-        if (economyModel) {
-          renderEconomySnapshot(economyModel);
-        } else {
-          renderEconomySnapshot(null, { error: true });
-        }
-      }
+      fetchError = err;
     } finally {
       economyAbort = null;
     }
+
+    if (!snapshot) {
+      const status = getHttpStatus(fetchError);
+      if (status !== undefined && status !== 404) {
+        console.warn('economy ledger fetch failed', fetchError);
+      }
+      try {
+        const lanes = await fetchJson('/state/autonomy/lanes');
+        if (lanes && typeof lanes === 'object') {
+          snapshot = { ...lanes, __source: 'lanes' };
+        }
+      } catch (fallbackErr) {
+        if (!(fallbackErr && fallbackErr.name === 'AbortError')) {
+          console.warn('autonomy lanes fallback failed', fallbackErr);
+        }
+      }
+    }
+
+    if (snapshot) {
+      economyModel = snapshot;
+      renderEconomySnapshot(snapshot);
+      lastEconomyRefresh = Date.now();
+    } else if (economyModel) {
+      renderEconomySnapshot(economyModel);
+    } else {
+      renderEconomySnapshot(null, { error: true });
+    }
+
     return economyModel;
   }
 
   function renderEconomySnapshot(model, options = {}) {
+    const source = model && typeof model === 'object' ? model.__source || (Array.isArray(model.entries) ? 'ledger' : null) : null;
+    if (source === 'ledger') {
+      renderEconomyLedgerView(model, options);
+    } else {
+      renderEconomyAutonomyView(model, options);
+    }
+  }
+
+  function renderEconomyLedgerView(model, options = {}) {
+    const hasError = options.error === true;
+    const totals = Array.isArray(model?.totals) ? model.totals : [];
+    const entries = Array.isArray(model?.entries) ? model.entries : [];
+    const attention = Array.isArray(model?.attention) ? model.attention : [];
+    if (elEconomyContent) {
+      elEconomyContent.hidden = !(hasError ? false : (totals.length > 0 || entries.length > 0));
+    }
+    if (elEconomyEmpty) {
+      const shouldShowEmpty = hasError ? false : totals.length === 0 && entries.length === 0;
+      elEconomyEmpty.hidden = !shouldShowEmpty;
+      elEconomyEmpty.textContent = hasError
+        ? 'Unable to load ledger data.'
+        : 'No ledger entries yet.';
+    }
+    if (hasError) {
+      if (elEconomyAttention) {
+        elEconomyAttention.textContent = 'Economy data unavailable.';
+      }
+      if (elEconomyAlerts) {
+        elEconomyAlerts.innerHTML = '';
+      }
+      if (elEconomyLaneList) {
+        elEconomyLaneList.innerHTML = '';
+      }
+      if (elEconomyBudgetList) {
+        elEconomyBudgetList.innerHTML = '';
+      }
+      if (elEconomyUpdated) {
+        elEconomyUpdated.textContent = '';
+      }
+      return;
+    }
+
+    if (elEconomyLaneList) {
+      elEconomyLaneList.innerHTML = '';
+      if (totals.length) {
+        for (const total of totals) {
+          const currency = total.currency || 'unitless';
+          const currencyLabel = currency && currency !== 'unitless' ? currency : 'Unitless';
+          const parts = [];
+          if (typeof total.settled === 'number') {
+            parts.push(`Settled ${formatLedgerAmount(total.settled)}`);
+          }
+          if (typeof total.pending === 'number') {
+            parts.push(`Pending ${formatLedgerAmount(total.pending)}`);
+          }
+          if (!parts.length) {
+            parts.push('No activity yet');
+          }
+          const li = document.createElement('li');
+          li.textContent = `${currencyLabel} — ${parts.join(' • ')}`;
+          elEconomyLaneList.appendChild(li);
+        }
+      } else {
+        const li = document.createElement('li');
+        li.textContent = 'No ledger totals recorded.';
+        elEconomyLaneList.appendChild(li);
+      }
+    }
+
+    if (elEconomyBudgetList) {
+      elEconomyBudgetList.innerHTML = '';
+      const latestEntries = [...entries]
+        .sort((a, b) => {
+          const aTime = Date.parse(a?.issued_at || '') || 0;
+          const bTime = Date.parse(b?.issued_at || '') || 0;
+          return bTime - aTime;
+        })
+        .slice(0, 6);
+      if (latestEntries.length) {
+        for (const entry of latestEntries) {
+          const li = document.createElement('li');
+          const currency = entry.currency || 'unitless';
+          const amount = entry.net_amount ?? entry.gross_amount;
+          const status = (entry.status || 'pending').toString();
+          const tagParts = [];
+          if (entry.job_id) {
+            tagParts.push(entry.job_id);
+          }
+          if (entry.contract_id) {
+            tagParts.push(entry.contract_id);
+          }
+          if (entry.persona_id) {
+            tagParts.push(entry.persona_id);
+          }
+          const tags = tagParts.length ? ` — ${tagParts.join(' • ')}` : '';
+          const issued = entry.issued_at ? ` (${formatRelativeIso(entry.issued_at)})` : '';
+          li.textContent = `${status.charAt(0).toUpperCase()}${status.slice(1)} — ${formatLedgerValue(amount, currency)}${tags}${issued}`;
+          if (entry.metadata && typeof entry.metadata === 'object') {
+            try {
+              li.title = JSON.stringify(entry.metadata, null, 2);
+            } catch {}
+          }
+          elEconomyBudgetList.appendChild(li);
+        }
+      } else {
+        const li = document.createElement('li');
+        li.textContent = 'New ledger entries will appear here.';
+        elEconomyBudgetList.appendChild(li);
+      }
+    }
+
+    if (elEconomyAttention) {
+      if (attention.length) {
+        elEconomyAttention.textContent = attention[0];
+      } else if (totals.length || entries.length) {
+        elEconomyAttention.textContent = 'Ledger healthy.';
+      } else {
+        elEconomyAttention.textContent = 'Awaiting first ledger entry.';
+      }
+    }
+    if (elEconomyAlerts) {
+      elEconomyAlerts.innerHTML = '';
+      for (const item of attention.slice(1)) {
+        const li = document.createElement('li');
+        li.textContent = item;
+        elEconomyAlerts.appendChild(li);
+      }
+    }
+    if (elEconomyUpdated) {
+      const generatedIso = typeof model?.generated === 'string' ? model.generated : null;
+      elEconomyUpdated.textContent = generatedIso ? `Updated ${formatRelativeIso(generatedIso)}` : '';
+    }
+  }
+
+  function renderEconomyAutonomyView(model, options = {}) {
     const hasError = options.error === true;
     const lanes = Array.isArray(model?.lanes) ? model.lanes : [];
     if (elEconomyContent) {
@@ -3741,7 +4131,7 @@ async function refreshRuntimeBundles() {
     }
     if (ECONOMY_REFRESH_MS > 0) {
       economyRefreshTimer = setInterval(() => {
-        refreshAutonomyLanes({ force: true });
+        refreshEconomyLedger({ force: true });
       }, ECONOMY_REFRESH_MS);
     }
   }
@@ -3902,9 +4292,13 @@ async function refreshRuntimeBundles() {
     },
     () => refreshMemoryRecent({ quiet: true })
   );
-  const idAutonomySse = ARW.sse.subscribe(
-    (kind) => kind.startsWith('autonomy.'),
-    () => refreshAutonomyLanes({ force: true })
+  const idEconomySse = ARW.sse.subscribe(
+    (kind) => kind === 'economy.ledger.updated' || kind.startsWith('autonomy.'),
+    () => refreshEconomyLedger({ force: true })
+  );
+  const idDailyBriefSse = ARW.sse.subscribe(
+    (kind) => kind === 'brief.daily.published',
+    () => refreshDailyBrief({ force: true })
   );
   ARW.sse.subscribe(
     (kind) => kind === 'context.assembled',
@@ -4095,7 +4489,7 @@ async function refreshRuntimeBundles() {
       ARW.setPrefs('ui:hub', hubPrefs).catch(() => {});
     }
     if (desired === 'economy') {
-      refreshAutonomyLanes({ force: true });
+      refreshEconomyLedger({ force: true });
     } else if (desired === 'memory') {
       refreshMemoryRecent({ quiet: true });
     }
@@ -5155,7 +5549,8 @@ async function refreshRuntimeBundles() {
     try { ARW.read.unsubscribe(idContextMetricsRead); } catch {}
     try { ARW.read.unsubscribe(idMemoryRecentRead); } catch {}
     try { ARW.sse.unsubscribe(idMemoryRecentSse); } catch {}
-    try { ARW.sse.unsubscribe(idAutonomySse); } catch {}
+    try { ARW.sse.unsubscribe(idEconomySse); } catch {}
+    try { ARW.sse.unsubscribe(idDailyBriefSse); } catch {}
     if (memoryRefreshTimer) {
       clearInterval(memoryRefreshTimer);
       memoryRefreshTimer = null;
@@ -5240,3 +5635,7 @@ async function refreshRuntimeBundles() {
     }
   }
   updateRunActionLabels('');
+
+
+
+
