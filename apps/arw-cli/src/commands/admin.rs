@@ -1,9 +1,8 @@
 use std::cmp::{Ordering, Reverse};
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
 use std::fmt::Write as _;
-use std::fs::{create_dir_all, read_to_string};
-use std::io;
-use std::io::Read;
+use std::fs::{create_dir_all, read_to_string, File};
+use std::io::{self, BufRead, Read};
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
@@ -75,6 +74,8 @@ pub(crate) enum AdminAutonomyCmd {
     Flush(AdminAutonomyFlushArgs),
     /// Update or clear lane budgets
     Budgets(AdminAutonomyBudgetsArgs),
+    /// Reset the engagement ledger for a lane
+    EngagementReset(AdminAutonomyEngagementArgs),
 }
 
 #[derive(Subcommand)]
@@ -552,6 +553,27 @@ pub(crate) struct AdminAutonomyBudgetsArgs {
 }
 
 #[derive(Args, Clone)]
+pub(crate) struct AdminAutonomyEngagementArgs {
+    #[command(flatten)]
+    base: AdminAutonomyBaseArgs,
+    /// Lane identifier
+    #[arg(long)]
+    lane: String,
+    /// Emit raw JSON
+    #[arg(long)]
+    json: bool,
+    /// Pretty-print JSON output (requires --json)
+    #[arg(long, requires = "json")]
+    pretty: bool,
+    /// Show recent audit entries after reset
+    #[arg(long)]
+    show_audit: bool,
+    /// Number of audit entries to display when --show-audit is set (default: 3)
+    #[arg(long, default_value_t = 3, requires = "show_audit")]
+    audit_entries: usize,
+}
+
+#[derive(Args, Clone)]
 pub(crate) struct AdminEgressScopesArgs {
     /// Base URL of the service (e.g., http://127.0.0.1:8091)
     #[arg(long, default_value = "http://127.0.0.1:8091")]
@@ -888,6 +910,7 @@ pub fn execute(cmd: AdminCmd) -> Result<()> {
             AdminAutonomyCmd::Stop(args) => cmd_admin_autonomy_stop(&args),
             AdminAutonomyCmd::Flush(args) => cmd_admin_autonomy_flush(&args),
             AdminAutonomyCmd::Budgets(args) => cmd_admin_autonomy_budgets(&args),
+            AdminAutonomyCmd::EngagementReset(args) => cmd_admin_autonomy_engagement_reset(&args),
         },
         AdminCmd::Persona { cmd } => match cmd {
             AdminPersonaCmd::Grant(args) => cmd_admin_persona_grant(&args),
@@ -1528,6 +1551,137 @@ fn cmd_admin_autonomy_budgets(args: &AdminAutonomyBudgetsArgs) -> Result<()> {
     Ok(())
 }
 
+fn cmd_admin_autonomy_engagement_reset(args: &AdminAutonomyEngagementArgs) -> Result<()> {
+    let token = resolve_admin_token(&args.base.admin_token);
+    let client = Client::builder()
+        .timeout(Duration::from_secs(args.base.timeout))
+        .build()
+        .context("building HTTP client")?;
+    let base = args.base.base_url();
+    let response = delete_autonomy_engagement(&client, base, token.as_deref(), &args.lane)
+        .with_context(|| format!("resetting engagement for lane '{}'", args.lane))?;
+
+    if args.json {
+        let value =
+            serde_json::to_value(&response).context("serializing engagement reset response")?;
+        if args.pretty {
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&value).unwrap_or_else(|_| value.to_string())
+            );
+        } else {
+            println!(
+                "{}",
+                serde_json::to_string(&value).unwrap_or_else(|_| value.to_string())
+            );
+        }
+        return Ok(());
+    }
+
+    println!("Lane '{}' engagement ledger reset.", response.lane);
+    println!("  Score      : {:.2}", response.score);
+    let stale_display = response
+        .stale_secs
+        .map(format_duration_secs)
+        .unwrap_or_else(|| "-".into());
+    println!("  Stale for  : {}", stale_display);
+    println!(
+        "  Attention  : {}",
+        response.attention.as_deref().unwrap_or("none")
+    );
+    if args.show_audit {
+        let tail = args.audit_entries.clamp(1, 20);
+        if let Err(err) = render_recent_engagement_audit(&args.lane, tail) {
+            eprintln!(
+                "warning: unable to read engagement audit log for lane '{}': {:#}",
+                args.lane, err
+            );
+        }
+    }
+    Ok(())
+}
+
+fn render_recent_engagement_audit(lane: &str, limit: usize) -> Result<()> {
+    let state_dir = effective_paths().state_dir;
+    let path = Path::new(&state_dir).join("audit.log");
+    if !path.exists() {
+        println!(
+            "Audit log not found at {} – skipping audit tail for lane '{}'.",
+            path.display(),
+            lane
+        );
+        return Ok(());
+    }
+
+    let file =
+        File::open(&path).with_context(|| format!("opening audit log at {}", path.display()))?;
+    let reader = io::BufReader::new(file);
+    let mut entries: VecDeque<JsonValue> = VecDeque::with_capacity(limit);
+
+    for line in reader.lines() {
+        let line = line.context("reading audit log line")?;
+        if line.trim().is_empty() {
+            continue;
+        }
+        let value: JsonValue = match serde_json::from_str(&line) {
+            Ok(val) => val,
+            Err(_) => continue,
+        };
+        if value.get("action").and_then(|v| v.as_str()) != Some("autonomy.engagement.reset") {
+            continue;
+        }
+        if value.pointer("/details/lane").and_then(|v| v.as_str()) != Some(lane) {
+            continue;
+        }
+        if entries.len() == limit {
+            entries.pop_front();
+        }
+        entries.push_back(value);
+    }
+
+    if entries.is_empty() {
+        println!(
+            "No engagement reset audit entries recorded yet for lane '{}'.",
+            lane
+        );
+        return Ok(());
+    }
+
+    println!("Recent engagement reset audits for lane '{}':", lane);
+    for entry in entries.iter().rev() {
+        let time_raw = entry.get("time").and_then(|v| v.as_str()).unwrap_or("-");
+        let time_display = DateTime::parse_from_rfc3339(time_raw)
+            .map(|ts| {
+                ts.with_timezone(&Local)
+                    .format("%Y-%m-%d %H:%M:%S")
+                    .to_string()
+            })
+            .unwrap_or_else(|_| time_raw.to_string());
+        let score = entry
+            .pointer("/details/score")
+            .and_then(|v| v.as_f64())
+            .map(|s| format!("{:.2}", s))
+            .unwrap_or_else(|| "n/a".into());
+        let stale_secs = entry
+            .pointer("/details/stale_secs")
+            .and_then(|v| v.as_u64());
+        let stale_display = stale_secs
+            .map(format_duration_secs)
+            .unwrap_or_else(|| "-".into());
+        let attention = entry
+            .pointer("/details/attention")
+            .and_then(|v| v.as_str())
+            .unwrap_or("none");
+
+        println!(
+            "  {} | score={} | stale={} | attention={}",
+            time_display, score, stale_display, attention
+        );
+    }
+
+    Ok(())
+}
+
 fn cmd_admin_persona_seed(args: &AdminPersonaSeedArgs) -> Result<()> {
     let token = resolve_admin_token(&args.admin_token);
     let base = args.base.trim_end_matches('/');
@@ -1928,6 +2082,10 @@ struct CliAutonomyLane {
     alerts: Vec<String>,
     #[serde(default)]
     last_budget_update_ms: Option<u64>,
+    #[serde(default)]
+    engagement_score: Option<f32>,
+    #[serde(default)]
+    engagement_stale_secs: Option<u64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1948,6 +2106,17 @@ struct CliAutonomyBudgetsEnvelope {
     snapshot: Option<CliAutonomyLane>,
     #[serde(default)]
     dry_run: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct CliAutonomyEngagementReset {
+    ok: bool,
+    lane: String,
+    score: f32,
+    #[serde(default)]
+    stale_secs: Option<u64>,
+    #[serde(default)]
+    attention: Option<String>,
 }
 
 fn fetch_autonomy_lanes(
@@ -2048,6 +2217,23 @@ fn post_autonomy_budgets(
     parse_admin_response(status, body, &url)
 }
 
+fn delete_autonomy_engagement(
+    client: &Client,
+    base: &str,
+    token: Option<&str>,
+    lane: &str,
+) -> Result<CliAutonomyEngagementReset> {
+    let url = format!("{}/admin/autonomy/{}/engagement", base, lane);
+    let mut req = client.delete(&url);
+    req = with_admin_headers(req, token);
+    let resp = req
+        .send()
+        .with_context(|| format!("resetting engagement via {}", url))?;
+    let status = resp.status();
+    let body = resp.text().context("reading engagement reset response")?;
+    parse_admin_response(status, body, &url)
+}
+
 fn parse_admin_response<T>(status: StatusCode, body: String, url: &str) -> Result<T>
 where
     T: DeserializeOwned,
@@ -2093,6 +2279,12 @@ fn render_autonomy_lane_list(lanes: &[CliAutonomyLane]) {
                 summary_parts.push(format!("budgets {}", text));
             }
         }
+        if let Some(score) = lane.engagement_score {
+            summary_parts.push(format!("eng {:.2}", score));
+        }
+        if let Some(stale) = lane.engagement_stale_secs {
+            summary_parts.push(format!("stale {}", format_duration_secs(stale)));
+        }
         let summary = if summary_parts.is_empty() {
             "-".to_string()
         } else {
@@ -2129,6 +2321,16 @@ fn render_autonomy_lane_detail(lane: &CliAutonomyLane) {
         lane.last_reason.as_deref().unwrap_or("-")
     );
     println!("Updated        : {}", format_timestamp_ms(lane.updated_ms));
+    if let Some(score) = lane.engagement_score {
+        println!("Engagement     : {:.2}", score);
+    } else {
+        println!("Engagement     : -");
+    }
+    if let Some(stale) = lane.engagement_stale_secs {
+        println!("Stale for      : {}", format_duration_secs(stale));
+    } else {
+        println!("Stale for      : -");
+    }
     if !lane.alerts.is_empty() {
         println!("Alerts         : {}", lane.alerts.join("; "));
     } else {
@@ -2170,6 +2372,34 @@ fn format_timestamp_ms(ms: Option<u64>) -> String {
     ms.and_then(|value| Local.timestamp_millis_opt(value as i64).single())
         .map(|dt| dt.format("%Y-%m-%d %H:%M:%S").to_string())
         .unwrap_or_else(|| "-".into())
+}
+
+fn format_duration_secs(secs: u64) -> String {
+    if secs == 0 {
+        return "0s".into();
+    }
+    let days = secs / 86_400;
+    let hours = (secs % 86_400) / 3_600;
+    let minutes = (secs % 3_600) / 60;
+    let seconds = secs % 60;
+    let mut parts = Vec::new();
+    if days > 0 {
+        parts.push(format!("{}d", days));
+    }
+    if hours > 0 {
+        parts.push(format!("{}h", hours));
+    }
+    if minutes > 0 {
+        parts.push(format!("{}m", minutes));
+    }
+    if seconds > 0 && parts.len() < 3 {
+        parts.push(format!("{}s", seconds));
+    }
+    if parts.is_empty() {
+        "0s".into()
+    } else {
+        parts.join(" ")
+    }
 }
 
 fn budgets_summary(budgets: &CliAutonomyBudgets) -> String {

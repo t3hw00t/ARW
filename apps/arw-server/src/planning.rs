@@ -109,6 +109,15 @@ fn enforce_pointer_limits(
             pointer_count, fanout_limit
         ));
     }
+    if policy.security.consent_gate {
+        for pointer in &memory.pointers {
+            if pointer.consent.is_none() {
+                return Err(PlannerError::Contract(ContractError::AssertionFailed(
+                    "pointer consent required when consent gate is enabled",
+                )));
+            }
+        }
+    }
     if depth_limit == 0 {
         return Err(PlannerError::Contract(ContractError::AssertionFailed(
             "pointer depth limit may not be zero",
@@ -309,6 +318,7 @@ mod tests {
         let planner = Planner::new();
         let mut policy = sample_policy();
         policy.security.pointer_fanout_limit = Some(1);
+        policy.security.consent_gate = false;
         let memory = MemoryOverlays {
             pointers: vec![
                 arw_contracts::PointerRecord {
@@ -340,5 +350,75 @@ mod tests {
             .planner_notes
             .iter()
             .any(|note| note.contains("pointer fan-out")));
+    }
+
+    #[test]
+    fn planner_rejects_pointer_without_consent_when_required() {
+        let planner = Planner::new();
+        let mut policy = sample_policy();
+        policy.security.consent_gate = true;
+        let memory = MemoryOverlays {
+            pointers: vec![arw_contracts::PointerRecord {
+                pointer:
+                    "<@blob:sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef>"
+                        .into(),
+                domain: arw_contracts::PointerDomain::Blob,
+                consent: None,
+                hash: None,
+                bytes: None,
+                created_at: None,
+            }],
+            ..Default::default()
+        };
+        let request = PlanRequest {
+            policy,
+            memory: Some(memory),
+        };
+
+        let err = planner.plan(request).expect_err("plan should fail");
+        match err {
+            PlannerError::Contract(ContractError::AssertionFailed(msg)) => {
+                assert!(
+                    msg.contains("consent"),
+                    "expected consent failure message, got {msg}"
+                );
+            }
+            unexpected => panic!("unexpected error: {unexpected:?}"),
+        }
+    }
+
+    #[test]
+    fn planner_allows_pointer_with_consent_when_required() {
+        let planner = Planner::new();
+        let mut policy = sample_policy();
+        policy.security.consent_gate = true;
+        let memory = MemoryOverlays {
+            pointers: vec![arw_contracts::PointerRecord {
+                pointer:
+                    "<@blob:sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef>"
+                        .into(),
+                domain: arw_contracts::PointerDomain::Blob,
+                consent: Some(arw_contracts::PointerConsent::Private),
+                hash: None,
+                bytes: None,
+                created_at: None,
+            }],
+            ..Default::default()
+        };
+        let request = PlanRequest {
+            policy,
+            memory: Some(memory),
+        };
+
+        let response = planner.plan(request).expect("plan should succeed");
+        assert!(
+            !response
+                .plan
+                .planner_notes
+                .iter()
+                .any(|note| note.contains("consent")),
+            "consent enforcement should not trigger when consent is present: {:?}",
+            response.plan.planner_notes
+        );
     }
 }

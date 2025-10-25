@@ -15,6 +15,9 @@ use utoipa::ToSchema;
 
 use crate::{metrics, responses};
 
+mod engagement;
+use engagement::{EngagementDecision, EngagementLedger};
+
 const ALERT_BUDGET_NEAR: &str = "Budgets nearing limit";
 const ALERT_BUDGET_EXHAUSTED: &str = "Budgets exhausted";
 const PERSIST_DEBOUNCE: Duration = Duration::from_millis(120);
@@ -114,6 +117,10 @@ pub struct AutonomyLaneSnapshot {
     pub alerts: Vec<String>,
     #[serde(default)]
     pub last_budget_update_ms: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub engagement_score: Option<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub engagement_stale_secs: Option<u64>,
 }
 
 impl AutonomyLaneSnapshot {
@@ -130,6 +137,8 @@ impl AutonomyLaneSnapshot {
             budgets: None,
             alerts: Vec::new(),
             last_budget_update_ms: None,
+            engagement_score: None,
+            engagement_stale_secs: None,
         }
     }
 }
@@ -148,6 +157,7 @@ pub struct AutonomyRegistry {
     interrupts: broadcast::Sender<AutonomySignal>,
     metrics: Arc<metrics::Metrics>,
     persist_tx: mpsc::Sender<()>,
+    engagement: Arc<EngagementLedger>,
 }
 
 impl AutonomyRegistry {
@@ -184,6 +194,7 @@ impl AutonomyRegistry {
             interrupts,
             metrics,
             persist_tx,
+            engagement: Arc::new(EngagementLedger::default()),
         });
         registry.spawn_persist_worker(persist_rx);
         registry
@@ -195,12 +206,19 @@ impl AutonomyRegistry {
             guard.values().cloned().collect::<Vec<_>>()
         };
         items.sort_by(|a, b| a.lane_id.cmp(&b.lane_id));
-        items
+        let mut enriched = Vec::with_capacity(items.len());
+        for lane in items {
+            enriched.push(self.apply_engagement_overlay(lane).await);
+        }
+        enriched
     }
 
     pub async fn lane(&self, lane_id: &str) -> Option<AutonomyLaneSnapshot> {
-        let guard = self.lanes.read().await;
-        guard.get(lane_id).cloned()
+        let snapshot = {
+            let guard = self.lanes.read().await;
+            guard.get(lane_id).cloned()
+        }?;
+        Some(self.apply_engagement_overlay(snapshot).await)
     }
 
     pub async fn is_any_paused(&self) -> bool {
@@ -214,6 +232,10 @@ impl AutonomyRegistry {
         self.interrupts.subscribe()
     }
 
+    pub fn engagement(&self) -> Arc<EngagementLedger> {
+        self.engagement.clone()
+    }
+
     pub async fn set_lane_mode(
         &self,
         lane_id: &str,
@@ -223,8 +245,49 @@ impl AutonomyRegistry {
     ) -> AutonomyLaneSnapshot {
         let operator_clone = operator.clone();
         let reason_clone = reason.clone();
-        let mode_clone = mode.clone();
+        let engagement_decision = self.engagement.decision_for_autonomy(lane_id).await;
+        let mut requested_mode = mode.clone();
+        let mut engagement_alert: Option<String> = None;
+        let mut allowed = true;
+
+        let engagement_score = match &engagement_decision {
+            EngagementDecision::Allow { score, .. } => Some(*score),
+            EngagementDecision::NeedsAttention { score, .. } => Some(*score),
+        };
+        let engagement_stale_secs = match &engagement_decision {
+            EngagementDecision::Allow { stale_for, .. } => stale_for.map(|d| d.as_secs()),
+            EngagementDecision::NeedsAttention { stale_for, .. } => stale_for.map(|d| d.as_secs()),
+        };
+
+        if matches!(requested_mode, AutonomyMode::Autonomous) {
+            if let EngagementDecision::NeedsAttention {
+                score,
+                reason: throttle_reason,
+                ..
+            } = &engagement_decision
+            {
+                allowed = false;
+                engagement_alert = Some(format!(
+                    "autonomy throttled (score {:.2}): {throttle_reason}",
+                    score
+                ));
+                requested_mode = AutonomyMode::Guided;
+                self.metrics.record_autonomy_interrupt("throttle");
+            }
+        }
+
+        if engagement_alert.is_none() {
+            if let EngagementDecision::NeedsAttention { reason, .. } = &engagement_decision {
+                engagement_alert = Some(format!("engagement attention required: {reason}"));
+            }
+        }
+
+        self.engagement
+            .record_mode_request(lane_id, mode.clone(), allowed)
+            .await;
+
         let previous_mode = self.lane(lane_id).await.map(|lane| lane.mode);
+        let mode_clone = requested_mode.clone();
         let snapshot = self
             .update_lane(lane_id, |lane| {
                 lane.mode = mode_clone.clone();
@@ -235,17 +298,23 @@ impl AutonomyRegistry {
                 });
                 lane.last_operator = operator_clone.clone();
                 lane.last_reason = reason_clone.clone();
+                if let Some(alert) = engagement_alert.clone() {
+                    lane.alerts.push(alert);
+                }
+                lane.engagement_score = engagement_score;
+                lane.engagement_stale_secs = engagement_stale_secs;
             })
             .await;
         self.schedule_persist().await;
+        let snapshot = self.apply_engagement_overlay(snapshot).await;
 
-        let topic = match mode {
+        let topic = match requested_mode {
             AutonomyMode::Paused => topics::TOPIC_AUTONOMY_RUN_PAUSED,
             AutonomyMode::Guided => topics::TOPIC_AUTONOMY_RUN_RESUMED,
             AutonomyMode::Autonomous => topics::TOPIC_AUTONOMY_RUN_STARTED,
         };
         self.publish_event(topic, &snapshot, operator, reason);
-        if matches!(mode, AutonomyMode::Paused) {
+        if matches!(requested_mode, AutonomyMode::Paused) {
             self.metrics.record_autonomy_interrupt("pause");
         }
         if previous_mode != Some(mode_clone.clone()) {
@@ -317,6 +386,7 @@ impl AutonomyRegistry {
             })
             .await;
         self.schedule_persist().await;
+        let snapshot = self.apply_engagement_overlay(snapshot).await;
 
         let scope_reason = match scope {
             FlushScope::All => Some("all".to_string()),
@@ -341,7 +411,6 @@ impl AutonomyRegistry {
         self.metrics
             .record_autonomy_interrupt(metric_reason_for_scope(scope));
         self.emit_signal(lane_id, AutonomySignalKind::Flush { scope });
-        self.schedule_persist().await;
         snapshot
     }
 
@@ -364,7 +433,7 @@ impl AutonomyRegistry {
             })
             .await;
         self.schedule_persist().await;
-        snapshot
+        self.apply_engagement_overlay(snapshot).await
     }
 
     #[allow(dead_code)]
@@ -385,7 +454,7 @@ impl AutonomyRegistry {
         self.schedule_persist().await;
 
         if snapshot.budgets.is_none() {
-            return snapshot;
+            return self.apply_engagement_overlay(snapshot).await;
         }
 
         let BudgetFlags {
@@ -403,7 +472,7 @@ impl AutonomyRegistry {
                 None,
             );
         }
-        snapshot
+        self.apply_engagement_overlay(snapshot).await
     }
 
     async fn schedule_persist(&self) {
@@ -428,6 +497,23 @@ impl AutonomyRegistry {
         lane.updated_ms = Some(now_ms());
         Self::normalize_alerts(lane);
         lane.clone()
+    }
+
+    async fn apply_engagement_overlay(
+        &self,
+        mut lane: AutonomyLaneSnapshot,
+    ) -> AutonomyLaneSnapshot {
+        let engagement = self.engagement.snapshot(&lane.lane_id).await;
+        lane.engagement_score = Some(engagement.score);
+        lane.engagement_stale_secs = engagement.stale_for.map(|d| d.as_secs());
+        if let Some(reason) = engagement.pending_reason {
+            if !reason.is_empty() && !lane.alerts.iter().any(|alert| alert.contains(&reason)) {
+                lane.alerts
+                    .push(format!("engagement attention required: {reason}"));
+            }
+        }
+        Self::normalize_alerts(&mut lane);
+        lane
     }
 
     async fn persist_snapshot(&self) -> Result<(), std::io::Error> {
@@ -701,5 +787,38 @@ mod tests {
             summary.autonomy.interrupts.get("stop_flush_inflight"),
             Some(&1)
         );
+    }
+
+    #[tokio::test]
+    async fn autonomous_request_throttled_when_attention_needed() {
+        test_support::init_tracing();
+        let dir = tempdir().unwrap();
+        let _ctx = test_support::begin_state_env(dir.path());
+        let bus = Bus::new(8);
+        let metrics = Arc::new(metrics::Metrics::default());
+        let registry = AutonomyRegistry::new(bus, metrics.clone()).await;
+
+        registry
+            .engagement()
+            .flag_attention("lane-1", "awaiting confirmation")
+            .await;
+
+        let snapshot = registry
+            .set_lane_mode("lane-1", AutonomyMode::Autonomous, None, None)
+            .await;
+
+        assert_eq!(snapshot.mode, AutonomyMode::Guided);
+        assert!(snapshot.engagement_score.is_some());
+        assert!(
+            snapshot
+                .alerts
+                .iter()
+                .any(|alert| alert.contains("autonomy throttled")),
+            "missing throttled alert in {:?}",
+            snapshot.alerts
+        );
+
+        let summary = metrics.snapshot();
+        assert_eq!(summary.autonomy.interrupts.get("throttle"), Some(&1));
     }
 }

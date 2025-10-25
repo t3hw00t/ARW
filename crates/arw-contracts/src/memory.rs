@@ -66,7 +66,17 @@ pub struct PointerRecord {
 
 impl Validate for PointerRecord {
     fn validate(&self) -> Result<(), ContractError> {
-        Pointer::parse(&self.pointer)?;
+        let parsed = Pointer::parse(&self.pointer)?;
+        if parsed.raw != self.pointer {
+            return Err(ContractError::InvalidPointer(
+                "pointer token must be canonical".into(),
+            ));
+        }
+        if parsed.domain != self.domain {
+            return Err(ContractError::InvalidPointer(
+                "pointer domain mismatch".into(),
+            ));
+        }
         Ok(())
     }
 }

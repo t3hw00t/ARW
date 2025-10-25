@@ -10,7 +10,7 @@ usage() {
 Usage: scripts/maintenance.sh [options] [tasks...]
 
 Without arguments the script runs the default maintenance cycle:
-  clean, prune-logs, prune-tokens, docs, cargo-check, audit-summary
+  clean, prune-logs, prune-tokens, docs, cargo-check, audit-summary, pointer-migrate
 
 Tasks:
   clean           Remove build artifacts, dist/, site/, launcher cache, tmp
@@ -22,24 +22,31 @@ Tasks:
   format          Invoke cargo fmt && npm/just lint hooks if available
   hooks           Reinstall git hooks (scripts/hooks/install_hooks.sh)
   vacuum          Vacuum sqlite journals/state (apps/arw-server/state)
+  pointer-migrate Canonicalise pointer tokens in the state directory (uses scripts/migrate_pointer_tokens.py)
   help            Show this help
 
 Options:
   --dry-run       Show actions without executing destructive commands
   --keep-logs N   Retain N days of logs (default: 7)
+  --state-dir DIR Override the state directory (default: apps/arw-server/state)
+  --pointer-consent LEVEL Default consent to apply when missing (private|shared|public; default private)
 USAGE
 }
 
 DRY_RUN=0
 KEEP_LOGS_DAYS=7
+STATE_DIR_OVERRIDE=""
+POINTER_CONSENT="private"
 TASKS=()
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --dry-run) DRY_RUN=1; shift ;;
     --keep-logs) KEEP_LOGS_DAYS="${2:-}"; shift 2 ;;
+    --state-dir) STATE_DIR_OVERRIDE="${2:-}"; shift 2 ;;
+    --pointer-consent) POINTER_CONSENT="${2:-}"; shift 2 ;;
     -h|--help) usage; exit 0 ;;
-    clean|prune-logs|prune-tokens|docs|cargo-check|audit-summary|format|hooks|vacuum|help)
+    clean|prune-logs|prune-tokens|docs|cargo-check|audit-summary|format|hooks|vacuum|pointer-migrate|help)
       TASKS+=("$1"); shift ;;
     *)
       echo "Unknown option/task: $1" >&2
@@ -48,7 +55,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 if [[ ${#TASKS[@]} -eq 0 ]]; then
-  TASKS=(clean prune-logs prune-tokens docs cargo-check audit-summary)
+  TASKS=(clean prune-logs prune-tokens docs cargo-check audit-summary pointer-migrate)
 fi
 
 run() {
@@ -152,7 +159,7 @@ task_hooks() {
 }
 
 task_vacuum() {
-  local state_dir="$REPO_ROOT/apps/arw-server/state"
+  local state_dir="${STATE_DIR_OVERRIDE:-$REPO_ROOT/apps/arw-server/state}"
   if [[ -d "$state_dir" ]]; then
     find "$state_dir" -type f -name '*.sqlite' -print0 | while IFS= read -r -d '' db; do
       if command -v sqlite3 >/dev/null 2>&1; then
@@ -163,6 +170,30 @@ task_vacuum() {
         fi
       fi
     done
+  fi
+}
+
+task_pointer_migrate() {
+  local state_dir="${STATE_DIR_OVERRIDE:-$REPO_ROOT/apps/arw-server/state}"
+  if [[ ! -d "$state_dir" ]]; then
+    echo "[maintenance] pointer-migrate: state dir $state_dir not found; skipping"
+    return 0
+  fi
+  if ! command -v python3 >/dev/null 2>&1; then
+    echo "[maintenance] python3 missing; skipping pointer-migrate"
+    return 0
+  fi
+  local cmd=(python3 "$SCRIPT_DIR/migrate_pointer_tokens.py" --state-dir "$state_dir" --default-consent "$POINTER_CONSENT")
+  if [[ $DRY_RUN -eq 1 ]]; then
+    cmd+=(--dry-run)
+    echo "[maintenance] dry-run: ${cmd[*]}"
+    if ! "${cmd[@]}"; then
+      echo "[maintenance] pointer-migrate dry-run failed; ensure state is accessible" >&2
+    fi
+  else
+    if ! run "${cmd[@]}"; then
+      echo "[maintenance] pointer-migrate failed; the state directory may be locked (stop the server first)" >&2
+    fi
   fi
 }
 
@@ -177,6 +208,7 @@ for task in "${TASKS[@]}"; do
     format) task_format ;;
     hooks) task_hooks ;;
     vacuum) task_vacuum ;;
+    pointer-migrate) task_pointer_migrate ;;
     help) usage ;;
     *) echo "[maintenance] unknown task $task" ;;
   esac

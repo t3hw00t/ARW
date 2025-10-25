@@ -7,6 +7,8 @@ use axum::Json;
 use chrono::{SecondsFormat, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
+use tokio::fs as afs;
+use tokio::io::AsyncWriteExt;
 use tracing::warn;
 use utoipa::{IntoParams, ToSchema};
 
@@ -59,6 +61,17 @@ pub struct AutonomyBudgetsResponse {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub snapshot: Option<AutonomyLaneSnapshot>,
     pub dry_run: bool,
+}
+
+#[derive(Serialize, Deserialize, ToSchema)]
+pub struct AutonomyEngagementResetResponse {
+    pub ok: bool,
+    pub lane: String,
+    pub score: f32,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub stale_secs: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub attention: Option<String>,
 }
 
 #[utoipa::path(
@@ -295,6 +308,48 @@ pub async fn autonomy_budgets_update(
     .into_response()
 }
 
+#[utoipa::path(
+    delete,
+    path = "/admin/autonomy/{lane}/engagement",
+    tag = "Admin/Autonomy",
+    responses((status = 200, description = "Engagement reset", body = AutonomyEngagementResetResponse))
+)]
+pub async fn autonomy_engagement_reset(
+    headers: HeaderMap,
+    Path(lane_id): Path<String>,
+    State(state): State<AppState>,
+) -> impl IntoResponse {
+    if let Err(resp) = responses::require_admin(&headers).await {
+        return *resp;
+    }
+
+    let lane = lane_id.clone();
+    let ledger = state.autonomy().engagement();
+    ledger.reset(&lane).await;
+    let snapshot = ledger.snapshot(&lane).await;
+    let stale_secs = snapshot.stale_for.map(|d| d.as_secs());
+    let attention = snapshot.pending_reason.clone();
+
+    if let Err(err) =
+        append_engagement_reset_audit(&lane, snapshot.score, stale_secs, attention.as_deref()).await
+    {
+        warn!(
+            ?err,
+            lane = %lane,
+            "failed to append engagement reset audit entry"
+        );
+    }
+
+    Json(AutonomyEngagementResetResponse {
+        ok: true,
+        lane,
+        score: snapshot.score,
+        stale_secs,
+        attention,
+    })
+    .into_response()
+}
+
 fn budgets_value(budgets: &Option<AutonomyBudgets>) -> Value {
     match budgets {
         Some(b) => json!({
@@ -320,6 +375,130 @@ async fn predicted_snapshot(
     let millis = Utc::now().timestamp_millis();
     snapshot.last_budget_update_ms = Some(if millis < 0 { 0 } else { millis as u64 });
     snapshot
+}
+
+async fn append_engagement_reset_audit(
+    lane: &str,
+    score: f32,
+    stale_secs: Option<u64>,
+    attention: Option<&str>,
+) -> std::io::Result<()> {
+    let timestamp = Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true);
+    let entry = json!({
+        "time": timestamp,
+        "action": "autonomy.engagement.reset",
+        "details": {
+            "lane": lane,
+            "score": score,
+            "stale_secs": stale_secs,
+            "attention": attention,
+        }
+    });
+    let line = serde_json::to_string(&entry).unwrap_or_else(|_| "{}".to_string()) + "\n";
+    let path = crate::util::state_dir().join("audit.log");
+    if let Some(parent) = path.parent() {
+        let _ = afs::create_dir_all(parent).await;
+    }
+    let mut file = afs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&path)
+        .await?;
+    file.write_all(line.as_bytes()).await
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::test_support::{begin_state_env, build_state};
+    use axum::{
+        body::{to_bytes, Body},
+        http::{Request, StatusCode},
+        routing::delete,
+        Router,
+    };
+    use serde_json::Value;
+    use tempfile::tempdir;
+    use tower::ServiceExt;
+
+    #[tokio::test]
+    async fn engagement_reset_logs_audit_and_resets_ledger() {
+        crate::test_support::init_tracing();
+        let temp = tempdir().expect("tempdir");
+        let mut ctx = begin_state_env(temp.path());
+        let state = build_state(temp.path(), &mut ctx.env).await;
+
+        let lane = "lane-alpha";
+        let ledger = state.autonomy().engagement();
+        ledger
+            .record_rejection(lane, 0.6, "needs confirmation")
+            .await;
+        ledger.flag_attention(lane, "awaiting operator").await;
+
+        let router = Router::new()
+            .route(
+                "/admin/autonomy/{lane}/engagement",
+                delete(super::autonomy_engagement_reset),
+            )
+            .with_state(state.clone());
+
+        let request = Request::delete("/admin/autonomy/lane-alpha/engagement")
+            .body(Body::empty())
+            .expect("request");
+        let response = router.oneshot(request).await.expect("response");
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let body_bytes = to_bytes(response.into_body(), 1024 * 1024)
+            .await
+            .expect("body bytes");
+        let payload: AutonomyEngagementResetResponse =
+            serde_json::from_slice(&body_bytes).expect("deserialize engagement reset response");
+
+        assert!(payload.ok);
+        assert_eq!(payload.lane, lane);
+        assert!(
+            payload.attention.is_none(),
+            "attention should clear after reset"
+        );
+        assert!(
+            (payload.score - 0.8).abs() < 1e-6,
+            "score should reset near 0.8"
+        );
+
+        let snapshot = state.autonomy().engagement().snapshot(lane).await;
+        assert!(snapshot.pending_reason.is_none());
+        assert!(
+            (snapshot.score - payload.score).abs() < 1e-6,
+            "snapshot score mismatch with payload"
+        );
+
+        let audit_path = temp.path().join("audit.log");
+        let audit_raw = tokio::fs::read_to_string(&audit_path)
+            .await
+            .expect("read engagement audit log");
+        let last = audit_raw
+            .lines()
+            .last()
+            .expect("at least one audit entry present");
+        let value: Value = serde_json::from_str(last).expect("parse audit JSON");
+
+        assert_eq!(
+            value.get("action").and_then(|v| v.as_str()),
+            Some("autonomy.engagement.reset")
+        );
+        assert_eq!(
+            value.pointer("/details/lane").and_then(|v| v.as_str()),
+            Some(lane)
+        );
+        let score = value
+            .pointer("/details/score")
+            .and_then(|v| v.as_f64())
+            .expect("score field present");
+        assert!(
+            (score - payload.score as f64).abs() < 1e-6,
+            "audit score mismatched payload"
+        );
+    }
 }
 
 async fn persist_lane_budget(state: &AppState, lane: &str, budgets: &Option<AutonomyBudgets>) {

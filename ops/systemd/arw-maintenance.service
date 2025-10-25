@@ -1,0 +1,12 @@
+[Unit]
+Description=ARW maintenance sweep
+Wants=arw-server.service
+After=arw-server.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/arw
+# Stop the server to release sqlite locks before pointer migration
+ExecStart=/usr/bin/systemctl stop arw-server.service
+ExecStart=/opt/arw/scripts/maintenance.sh --state-dir /var/arw/state
+ExecStart=/usr/bin/systemctl start arw-server.service

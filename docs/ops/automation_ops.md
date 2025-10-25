@@ -4,7 +4,7 @@ title: Automation Ops Handbook
 
 # Automation Ops Handbook
 
-Updated: 2025-10-19
+Updated: 2025-10-25
 Type: Handbook
 
 This handbook equips operators to run autonomous or semi-autonomous revenue agents safely. It assumes you already run the unified server (`arw-server`), opt into federation packs, and guard access with leases and policy scopes. Use it alongside the technical runbooks under `docs/ops/`.
@@ -17,6 +17,7 @@ This handbook equips operators to run autonomous or semi-autonomous revenue agen
 - [ ] Stage automation recipes in a non-production state dir; verify signatures with `arw-cli recipes install --verify` and dry-run using the preview execution mode.
 - [ ] Confirm logging/telemetry destinations (SSE subscribers, syslog, SIEM) capture `persona.*`, `cluster.*`, `automation.*`, and egress ledger events.
 - [ ] Ensure operators and on-call rotation have access to escalation channels (chat, paging, or phone tree) with documented response targets.
+- [ ] Rehearse the engagement reset audit workflow: each on-call should run `arw-cli admin autonomy engagement-reset --lane <id> --show-audit` in staging and note where the state directory lives for future incident response.
 
 ## Operational Guardrails
 - **Consent gates**: automation must not ingest user data unless consent bundles (`configs/runtime/bundles*.json`) list matching `metadata.consent` scopes; re-run `scripts/validate_runtime_consent.py` after edits.
@@ -24,6 +25,36 @@ This handbook equips operators to run autonomous or semi-autonomous revenue agen
 - **Runtime isolation**: pin automations to the eco preset unless workloads justify higher tiers. `ARW_PERF_PRESET=eco` throttles concurrency, reduces cache pressure, and keeps CPU-only laptops within safe thermals.
 - **Egress policy**: enable the Guardrail Gateway (`ARW_EGRESS_PROXY_ENABLE=1`, `ARW_EGRESS_LEDGER_ENABLE=1`) to inspect outbound automation traffic and capture audit trails.
 - **Kill switch**: maintain a pre-approved `automation_shutdown` action (policy or runbook) that revokes leases, stops runtimes, and halts scheduled jobs.
+
+## Engagement Oversight
+- Autonomy lane snapshots now surface `engagement_score` and `engagement_stale_secs`; look for alerts containing `engagement attention required` to spot lanes that need human confirmation.
+- Reset a lane's confidence ledger after manual review with `DELETE /admin/autonomy/{lane}/engagement` (example: `curl -X DELETE http://127.0.0.1:8091/admin/autonomy/main/engagement -H "X-ARW-Admin: $ARW_ADMIN_TOKEN"`).
+- CLI shortcut: `arw-cli admin autonomy engagement-reset --lane main` (add `--json --pretty` for machine-readable output). Append `--show-audit` to tail the most recent reset entries (override with `--audit-entries <n>` if you need more than the default three lines).
+- Planner guard failures and warning penalties increment `arw_autonomy_interrupts_total{reason="plan_guard_failures|plan_warnings"}` - wire Grafana/alerts to page when these spike so unattended autonomy does not escalate silently.
+  - Resets append JSONL entries to `state/audit.log` with the shape:
+    ```json
+    {"time":"2025-10-25T00:17:00.123Z","action":"autonomy.engagement.reset","details":{"lane":"main","score":0.8,"stale_secs":null,"attention":null}}
+    ```
+    Use the CLI helper above or `jq 'select(.action=="autonomy.engagement.reset")' state/audit.log` to review history during incidents.
+
+### Engagement reset verification drill
+
+Run the following in staging (or a dedicated rehearsal lane) so operators see the full workflow before an incident:
+
+```bash
+arw-cli admin autonomy engagement-reset \
+  --lane main \
+  --base http://127.0.0.1:8091 \
+  --show-audit --audit-entries 5
+```
+
+Confirm the command:
+
+1. Reports the refreshed score + stale duration.
+2. Prints the last few audit entries with local timestamps.
+3. Leaves a trace in the shared incident journal (paste the CLI output or a screenshot).
+
+Document the staging state directory path alongside the production path so responders can locate `state/audit.log` quickly when paged.
 
 ## Alerting Defaults
 - **Heartbeat gaps**: alert if automation personas stop producing `persona.feedback` or `automation.run.*` events for more than 2x the expected cadence.
@@ -53,6 +84,14 @@ This handbook equips operators to run autonomous or semi-autonomous revenue agen
 - [Trial Readiness Checklist](trial_readiness.md) - adapting trial facilitation steps for automation pilots.
 - [Systemd Overrides](systemd_overrides.md) - configuring watchdog timers, restart throttles, and sandboxing for unattended services.
 
+## Maintenance Tasks
+- Vacuum state stores monthly (or weekly for busy hubs): `scripts/maintenance.sh vacuum --state-dir <path>` on Linux, or `pwsh -File scripts\maintenance.ps1 vacuum -StateDir <path>` on Windows.
+- Canonicalise pointer tokens whenever you import historical data or upgrade from pre-0.2 hubs:
+  - `just pointer-migrate state=/path/to/state --dry-run` (review output).
+  - Stop the hub, rerun without `--dry-run`, then restart services.
+  - Use `--default-consent shared|public` if the workspace expects a different baseline.
+  - The default maintenance sweep (`scripts/maintenance.sh` / `scripts/maintenance.ps1`) now runs pointer migration; override paths with `--state-dir` or consent with `--pointer-consent`. Windows operators can call `ops/windows/invoke-maintenance.ps1` to wrap service stop/start.
+
 ## After-Action Checklist
 - [ ] Incident logged with timestamps, impact summary, and remediation owner.
 - [ ] Persona proposals updated (diff applied and history annotated).
@@ -65,3 +104,4 @@ This handbook equips operators to run autonomous or semi-autonomous revenue agen
 - Revenue recipe backlog (`docs/BACKLOG.md`)
 - Consent validation script (`scripts/validate_runtime_consent.py`)
 - Guardrail Gateway architecture (`docs/architecture/egress_firewall.md`)
+- Maintenance scheduling (`docs/ops/maintenance.md`)

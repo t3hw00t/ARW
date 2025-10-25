@@ -1,0 +1,96 @@
+{
+  "policy": {
+    "compression": {
+      "target_tokens": 2048,
+      "modes": ["transclude"],
+      "guards": {
+        "enabled": true,
+        "require_asserts": true
+      }
+    },
+    "persona": {
+      "id": "persona.tutorial",
+      "name": "Tutorial Persona",
+      "aliases": [],
+      "disclose": true,
+      "values": [
+        {
+          "id": "value.focus",
+          "statement": "Stay focused on the user's goals",
+          "priority": 50,
+          "tags": ["demo"]
+        }
+      ],
+      "traits": [
+        {
+          "id": "trait.curiosity",
+          "label": "curious",
+          "confidence": 0.8,
+          "provenance": []
+        }
+      ]
+    },
+    "worldview": {
+      "claims": [],
+      "relationships": [],
+      "refresh_days": 30,
+      "require_citations": false,
+      "notes": []
+    },
+    "affect": {
+      "inputs": {
+        "text": true,
+        "prosody": "off",
+        "custom_channels": []
+      },
+      "detectors": [],
+      "outputs": {
+        "state_vector": [
+          {
+            "dimension": "valence",
+            "value": 0.0,
+            "confidence": 0.9
+          }
+        ],
+        "rationale": "short",
+        "explanations": []
+      },
+      "guardrails": {
+        "consent_required": true,
+        "retention_seconds": 3600
+      }
+    },
+    "runtime": {
+      "engine": "llama.cpp",
+      "kv_policy": "snapkv",
+      "speculative": false,
+      "low_spec_profile": true
+    },
+    "economy": {
+      "autonomy": "guarded",
+      "allowed_tools": [
+        {
+          "id": "tool.search",
+          "capabilities": ["search"],
+          "limits_per_hour": 5
+        }
+      ],
+      "payout": {
+        "mode": "none",
+        "stakeholders": []
+      }
+    },
+    "security": {
+      "consent_gate": true,
+      "hash_algo": "sha256",
+      "remote_mode": "pointers_only",
+      "pointer_depth_limit": 8,
+      "pointer_fanout_limit": 128
+    },
+    "metrics": {
+      "enabled": true,
+      "labels": ["tenant"],
+      "sample_percent": 1.0
+    }
+  }
+}

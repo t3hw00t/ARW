@@ -68,6 +68,7 @@ The parser MUST reject pointers that do not match the allowed prefix list, excee
 3. Trim trailing whitespace outside of literal payloads.
 4. Lowercase pointer prefixes.
 5. Collapse repeated separators (`::`, `..`) into single instances; if any collapse changes semantics, reject.
+6. Tokens must already conform to this canonical form when submitted; the server lowercases prefixes automatically and rejects any pointer whose domain does not match the declared metadata.
 
 ## Safety Checklist
 
@@ -75,5 +76,6 @@ The parser MUST reject pointers that do not match the allowed prefix list, excee
 - Validate referenced hashes prior to expansion; mismatches must hard-fail.
 - Guard against pointer cycles by tracking visited identifiers.
 - Log `{pointer, actor, decision}` to the audit trail after expansion.
+- When `security.consent_gate` is enabled, every pointer referenced by a plan must carry explicit consent metadata (for example `private`, `shared`, or `public`).
 
 These rules are mirrored in `crates/arw-contracts::pointer` and validated at ingress. Any new pointer prefix requires updating the shared contract crate and this document. 

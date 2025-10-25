@@ -1,10 +1,30 @@
 {
   "__inputs": [],
   "__requires": [
-    { "type": "grafana", "id": "grafana", "name": "Grafana", "version": "9.0.0" },
-    { "type": "panel", "id": "stat", "name": "Stat", "version": "9.0.0" },
-    { "type": "panel", "id": "timeseries", "name": "Time series", "version": "9.0.0" },
-    { "type": "panel", "id": "table", "name": "Table", "version": "9.0.0" }
+    {
+      "type": "grafana",
+      "id": "grafana",
+      "name": "Grafana",
+      "version": "9.0.0"
+    },
+    {
+      "type": "panel",
+      "id": "stat",
+      "name": "Stat",
+      "version": "9.0.0"
+    },
+    {
+      "type": "panel",
+      "id": "timeseries",
+      "name": "Time series",
+      "version": "9.0.0"
+    },
+    {
+      "type": "panel",
+      "id": "table",
+      "name": "Table",
+      "version": "9.0.0"
+    }
   ],
   "title": "ARW Stability",
   "timezone": "browser",
@@ -13,47 +33,145 @@
     {
       "type": "stat",
       "title": "Safe Mode Active",
-      "gridPos": { "x": 0, "y": 0, "w": 6, "h": 4 },
-      "targets": [ { "expr": "arw_safe_mode_active", "refId": "A" } ],
-      "options": { "reduceOptions": { "calcs": ["last"], "fields": "", "values": false }, "colorMode": "value" }
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 6,
+        "h": 4
+      },
+      "targets": [
+        {
+          "expr": "arw_safe_mode_active",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "last"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value"
+      }
     },
     {
       "type": "stat",
       "title": "Minutes Since Last Crash",
-      "gridPos": { "x": 6, "y": 0, "w": 6, "h": 4 },
-      "targets": [ { "expr": "(time() * 1000 - arw_last_crash_ms) / 60000", "refId": "A" } ],
-      "options": { "reduceOptions": { "calcs": ["last"], "fields": "", "values": false } }
+      "gridPos": {
+        "x": 6,
+        "y": 0,
+        "w": 6,
+        "h": 4
+      },
+      "targets": [
+        {
+          "expr": "(time() * 1000 - arw_last_crash_ms) / 60000",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "last"
+          ],
+          "fields": "",
+          "values": false
+        }
+      }
     },
     {
       "type": "table",
       "title": "Task Restarts (Window)",
-      "gridPos": { "x": 12, "y": 0, "w": 12, "h": 8 },
-      "targets": [ { "expr": "arw_task_restarts_window", "refId": "A", "format": "table" } ],
-      "transformations": [ { "id": "seriesToColumns", "options": {"byField": "task"} } ]
+      "gridPos": {
+        "x": 12,
+        "y": 0,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "expr": "arw_task_restarts_window",
+          "refId": "A",
+          "format": "table"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "seriesToColumns",
+          "options": {
+            "byField": "task"
+          }
+        }
+      ]
     },
     {
       "type": "table",
       "title": "Route p95 (ms)",
-      "gridPos": { "x": 0, "y": 4, "w": 12, "h": 8 },
-      "targets": [ { "expr": "arw_route_p95_ms", "refId": "A", "format": "table" } ],
-      "transformations": [ { "id": "labelsToFields", "options": {"mode": "columns"} } ]
+      "gridPos": {
+        "x": 0,
+        "y": 4,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "expr": "arw_route_p95_ms",
+          "refId": "A",
+          "format": "table"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "labelsToFields",
+          "options": {
+            "mode": "columns"
+          }
+        }
+      ]
     },
     {
       "type": "timeseries",
       "title": "Event Publish Rate",
-      "gridPos": { "x": 0, "y": 12, "w": 12, "h": 8 },
-      "targets": [ { "expr": "rate(arw_bus_published_total[5m])", "refId": "A" } ]
+      "gridPos": {
+        "x": 0,
+        "y": 12,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "expr": "rate(arw_bus_published_total[5m])",
+          "refId": "A"
+        }
+      ]
     },
     {
       "type": "timeseries",
       "title": "Bus Lagged Events",
-      "gridPos": { "x": 12, "y": 12, "w": 12, "h": 8 },
-      "targets": [ { "expr": "increase(arw_bus_lagged_total[5m])", "refId": "A" } ]
+      "gridPos": {
+        "x": 12,
+        "y": 12,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "expr": "increase(arw_bus_lagged_total[5m])",
+          "refId": "A"
+        }
+      ]
     },
     {
       "type": "table",
       "title": "Persona Signal Strength (Avg)",
-      "gridPos": { "x": 0, "y": 20, "w": 24, "h": 8 },
+      "gridPos": {
+        "x": 0,
+        "y": 20,
+        "w": 24,
+        "h": 8
+      },
       "targets": [
         {
           "expr": "arw_persona_signal_strength_avg{persona=~\"$persona\",signal=~\"$signal\"}",
@@ -62,14 +180,33 @@
         }
       ],
       "transformations": [
-        { "id": "labelsToFields", "options": { "mode": "columns" } },
-        { "id": "organize", "options": { "indexByName": { "Value": 2, "persona": 0, "signal": 1 } } }
+        {
+          "id": "labelsToFields",
+          "options": {
+            "mode": "columns"
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "indexByName": {
+              "Value": 2,
+              "persona": 0,
+              "signal": 1
+            }
+          }
+        }
       ]
     },
     {
       "type": "stat",
       "title": "Persona Avg Strength (All Signals)",
-      "gridPos": { "x": 0, "y": 28, "w": 12, "h": 4 },
+      "gridPos": {
+        "x": 0,
+        "y": 28,
+        "w": 12,
+        "h": 4
+      },
       "targets": [
         {
           "expr": "avg(arw_persona_signal_strength_avg{persona=~\"$persona\",signal=~\"$signal\"})",
@@ -77,7 +214,13 @@
         }
       ],
       "options": {
-        "reduceOptions": { "calcs": ["last"], "fields": "", "values": false },
+        "reduceOptions": {
+          "calcs": [
+            "last"
+          ],
+          "fields": "",
+          "values": false
+        },
         "colorMode": "value",
         "orientation": "horizontal"
       }
@@ -85,7 +228,12 @@
     {
       "type": "stat",
       "title": "Persona Feedback Samples",
-      "gridPos": { "x": 12, "y": 28, "w": 12, "h": 4 },
+      "gridPos": {
+        "x": 12,
+        "y": 28,
+        "w": 12,
+        "h": 4
+      },
       "targets": [
         {
           "expr": "sum(arw_persona_feedback_total{persona=~\"$persona\"})",
@@ -93,7 +241,13 @@
         }
       ],
       "options": {
-        "reduceOptions": { "calcs": ["last"], "fields": "", "values": false },
+        "reduceOptions": {
+          "calcs": [
+            "last"
+          ],
+          "fields": "",
+          "values": false
+        },
         "colorMode": "value",
         "orientation": "horizontal"
       }
@@ -101,49 +255,333 @@
     {
       "type": "timeseries",
       "title": "Persona Signal Strength Trend",
-      "gridPos": { "x": 0, "y": 32, "w": 24, "h": 8 },
+      "gridPos": {
+        "x": 0,
+        "y": 32,
+        "w": 24,
+        "h": 8
+      },
       "targets": [
         {
           "expr": "arw_persona_signal_strength_avg{persona=~\"$persona\",signal=~\"$signal\"}",
           "refId": "A",
-          "legendFormat": "{{persona}} · {{signal}}"
+          "legendFormat": "{{persona}} \u00c2\u00b7 {{signal}}"
         }
       ],
       "options": {
-        "legend": { "displayMode": "table", "placement": "bottom" },
-        "tooltip": { "mode": "multi" }
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
       }
     },
     {
       "type": "timeseries",
       "title": "Lane Priorities",
-      "gridPos": { "x": 0, "y": 40, "w": 24, "h": 8 },
+      "gridPos": {
+        "x": 0,
+        "y": 40,
+        "w": 24,
+        "h": 8
+      },
       "targets": [
         {
           "expr": "arw_persona_lane_priority{persona=~\"$persona\"}",
           "refId": "A",
-          "legendFormat": "{{persona}} · {{lane}}"
+          "legendFormat": "{{persona}} \u00c2\u00b7 {{lane}}"
         }
       ],
       "options": {
-        "legend": { "displayMode": "table", "placement": "bottom" },
-        "tooltip": { "mode": "multi" }
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
       }
     },
     {
       "type": "timeseries",
       "title": "Slot Overrides",
-      "gridPos": { "x": 0, "y": 48, "w": 24, "h": 8 },
+      "gridPos": {
+        "x": 0,
+        "y": 48,
+        "w": 24,
+        "h": 8
+      },
       "targets": [
         {
           "expr": "arw_persona_slot_override{persona=~\"$persona\"}",
           "refId": "A",
-          "legendFormat": "{{persona}} · {{slot}}"
+          "legendFormat": "{{persona}} \u00c2\u00b7 {{slot}}"
         }
       ],
       "options": {
-        "legend": { "displayMode": "table", "placement": "bottom" },
-        "tooltip": { "mode": "multi" }
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Plan Requests (total)",
+      "gridPos": {
+        "x": 0,
+        "y": 56,
+        "w": 6,
+        "h": 4
+      },
+      "targets": [
+        {
+          "expr": "arw_plan_requests_total",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "last"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "orientation": "horizontal"
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Plan Guard Failures",
+      "gridPos": {
+        "x": 6,
+        "y": 56,
+        "w": 6,
+        "h": 4
+      },
+      "targets": [
+        {
+          "expr": "arw_plan_guard_failures_total",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "last"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "orientation": "horizontal"
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Plan-Driven Throttle Rate (15m)",
+      "description": "Sum of plan_guard_failures and plan_warnings interrupts over the last 15 minutes. Refer to ops/automation_ops.md#engagement-ledger for the response playbook and audit trails.",
+      "gridPos": {
+        "x": 0,
+        "y": 56,
+        "w": 12,
+        "h": 4
+      },
+      "targets": [
+        {
+          "expr": "sum(rate(arw_autonomy_interrupts_total{reason=~\"plan_guard_failures|plan_warnings\"}[15m]))",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "decimals": 2,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              },
+              {
+                "color": "orange",
+                "value": 1
+              },
+              {
+                "color": "red",
+                "value": 3
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "options": {
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "value"
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Last Plan Target Tokens",
+      "gridPos": {
+        "x": 12,
+        "y": 56,
+        "w": 6,
+        "h": 4
+      },
+      "targets": [
+        {
+          "expr": "arw_plan_last_target_tokens",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "last"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "orientation": "horizontal"
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Current Plan Engine",
+      "gridPos": {
+        "x": 18,
+        "y": 56,
+        "w": 6,
+        "h": 4
+      },
+      "targets": [
+        {
+          "expr": "arw_plan_last_engine",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "last"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "orientation": "horizontal",
+        "textMode": "value"
+      }
+    },
+    {
+      "type": "table",
+      "title": "Plan Mode Counts",
+      "gridPos": {
+        "x": 0,
+        "y": 60,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "expr": "arw_plan_mode_total",
+          "refId": "A",
+          "format": "table"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "labelsToFields",
+          "options": {
+            "mode": "columns"
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "indexByName": {
+              "mode": 0,
+              "Value": 2
+            }
+          }
+        }
+      ]
+    },
+    {
+      "type": "table",
+      "title": "KV Policy Selections",
+      "gridPos": {
+        "x": 12,
+        "y": 60,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "expr": "arw_plan_kv_policy_total",
+          "refId": "A",
+          "format": "table"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "labelsToFields",
+          "options": {
+            "mode": "columns"
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "indexByName": {
+              "kv_policy": 0,
+              "Value": 2
+            }
+          }
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Autonomy Interrupt Rates (plan)",
+      "description": "Plan-driven throttle interrupts by reason. Pair with ops/automation_ops.md#engagement-ledger and audit.log entries emitted by /admin/autonomy/{lane}/engagement resets.",
+      "gridPos": {
+        "x": 0,
+        "y": 68,
+        "w": 24,
+        "h": 8
+      },
+      "targets": [
+        {
+          "expr": "sum by (reason) (rate(arw_autonomy_interrupts_total{reason=~\"plan_guard_failures|plan_warnings\"}[15m]))",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
       }
     }
   ],
@@ -161,7 +599,11 @@
         "includeAll": true,
         "allValue": ".*",
         "options": [],
-        "current": { "text": "All", "value": ".*", "selected": false }
+        "current": {
+          "text": "All",
+          "value": ".*",
+          "selected": false
+        }
       },
       {
         "name": "signal",
@@ -175,10 +617,14 @@
         "includeAll": true,
         "allValue": ".*",
         "options": [],
-        "current": { "text": "All", "value": ".*", "selected": false }
+        "current": {
+          "text": "All",
+          "value": ".*",
+          "selected": false
+        }
       }
     ]
   },
-  "version": 1,
+  "version": 2,
   "schemaVersion": 37
 }

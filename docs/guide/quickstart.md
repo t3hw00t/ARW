@@ -4,7 +4,7 @@ title: Quickstart
 
 # Quickstart
 
-Updated: 2025-10-24
+Updated: 2025-10-25
 Type: Tutorial
 
 Run the unified ARW server locally in minutes. The architecture centres on the `/actions` → `/events` → `/state/*` triad; enable `ARW_DEBUG=1` to serve the browser debug panels.
@@ -277,6 +277,42 @@ curl -s -X POST http://127.0.0.1:8091/context/assemble \
 ```
 
 These flows emit structured `policy.*`, `working_set.*`, and `leases.*` events. Dashboards can follow along via `/events` or state views.
+
+## Planner & Runtime Configuration
+
+`/v1/plan` validates your policy surface (persona, worldview, affect, runtime, economy, security, metrics) and optional memory overlays before the run stage. The planner enforces canonical pointer tokens and, when `security.consent_gate` is enabled, rejects memory pointers that are missing consent metadata.
+
+```bash
+# Compose a minimal plan (policy + optional memory)
+curl -s -X POST http://127.0.0.1:8091/v1/plan \
+  -H 'content-type: application/json' \
+  -d @configs/examples/plan_request.json |
+  jq '{modes: .plan.applied_modes, target: .plan.target_tokens, kv: .plan.runtime.kv_policy}'
+
+# Plan and apply in one call
+curl -s -X POST http://127.0.0.1:8091/v1/run \
+  -H 'content-type: application/json' \
+  -d @configs/examples/plan_request.json |
+  jq '{kv_policy: .applied.kv_policy, notes: .applied.notes}'
+```
+
+Planner activity lands in `/metrics` (`arw_plan_requests_total`, `arw_plan_mode_total`, `arw_plan_kv_policy_total`, `arw_plan_guard_failures_total`, etc.) and the `/metrics` JSON snapshot so you can alert on guard failures or unexpected KV policy fallbacks. Use the same request body for both endpoints; `/v1/run` simply applies the planner output to the live compression runtime (KV cache policy today, additional knobs as they land).
+
+### Migrating legacy pointers
+
+Older hubs may contain mixed-case or whitespace pointer tokens inside the state store. Run the migration helper to canonicalise existing pointers and inject missing consent metadata:
+
+```bash
+# Review first
+just pointer-migrate state=/path/to/state --dry-run
+
+# Apply updates (requires sqlite3 Writable access; ensure the hub is stopped)
+just pointer-migrate state=/path/to/state
+```
+
+Set `ARW_STATE_DIR` to override the default location. The helper walks every `*.sqlite` file (including `memory_records`) and JSON config under `state/config`, normalising pointer prefixes to lowercase and adding `"consent": "private"` when absent. Use `--default-consent shared` or `--default-consent public` if your deployment relies on a different default.
+
+> Tip: `scripts/maintenance.sh` and `scripts/maintenance.ps1` include `pointer-migrate` in the default cycle; override the state directory or consent baseline with `--state-dir` / `--pointer-consent` (shell) or `-StateDir` / `-PointerConsent` (PowerShell). Windows operators can wrap the call with `ops/windows/invoke-maintenance.ps1` to stop/start the service automatically.
 
 ## Debug UI
 

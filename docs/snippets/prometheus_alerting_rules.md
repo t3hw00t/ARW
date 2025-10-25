@@ -4,7 +4,7 @@ title: Prometheus Alerting Rules — ARW
 
 # Prometheus Alerting Rules — ARW
 
-Updated: 2025-10-24
+Updated: 2025-10-25
 Type: How‑to
 
 Example alerting rules for common resource conditions. Tune thresholds and durations to your environment. GPU alerts depend on the GPU telemetry pack; if the `arw_gpu_*` metrics are absent, drop or postpone those rules.
@@ -86,6 +86,32 @@ groups:
           description: |
             Primary compressor is frequently unavailable. Check llmlingua availability and system load;
             consider scaling capacity or temporarily disabling compression.
+
+      # Planner guard failures exceeding 5% of plans for 10 minutes
+      - alert: ARWPlanGuardFailuresSpike
+        expr: rate(arw_plan_guard_failures_total[10m])
+              / clamp_min(rate(arw_plan_requests_total[10m]), 1e-6) > 0.05
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Planner guard failures elevated (> 5% for 10m)"
+          description: |
+            Planner guard failures are {{ printf "%.2f" $value }} of total plans. Inspect compression policies,
+            pointer consent metadata, or recent plan requests for malformed input.
+
+      # Planner-driven autonomy throttles spike (>3 interrupts in 15m)
+      - alert: ARWAutonomyPlanThrottleSpike
+        expr: sum(increase(arw_autonomy_interrupts_total{reason=~"plan_guard_failures|plan_warnings"}[15m])) > 3
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Autonomy throttles triggered by planner (>3 in 15m)"
+          description: |
+            Planner feedback is repeatedly forcing autonomy into guided mode ({{ printf "%.0f" $value }}
+            interrupts/15m). Review guard failures, the engagement ledger, and recent audit.log entries
+            from /admin/autonomy/{lane}/engagement resets.
 
 ```
 

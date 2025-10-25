@@ -16,6 +16,8 @@ target/
 target.*/
 cache/
 dist/
+ops/out/
+ops/out-*/
 .arw-data/
 .arw/
 %LOCALAPPDATA%/

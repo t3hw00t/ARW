@@ -427,6 +427,7 @@ dependencies = [
  "serde_json",
  "serde_with",
  "thiserror 1.0.69",
+ "unicode-normalization",
 ]
 
 [[package]]

@@ -1,0 +1,10 @@
+[Unit]
+Description=Weekly ARW maintenance sweep
+
+[Timer]
+OnCalendar=Sun *-*-* 03:00:00
+Persistent=true
+Unit=arw-maintenance.service
+
+[Install]
+WantedBy=timers.target

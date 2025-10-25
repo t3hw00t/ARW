@@ -250,6 +250,7 @@ pub(crate) mod paths {
     pub const ADMIN_AUTONOMY_LANE_RESUME: &str = "/admin/autonomy/{lane}/resume";
     pub const ADMIN_AUTONOMY_LANE_JOBS: &str = "/admin/autonomy/{lane}/jobs";
     pub const ADMIN_AUTONOMY_LANE_BUDGETS: &str = "/admin/autonomy/{lane}/budgets";
+    pub const ADMIN_AUTONOMY_LANE_ENGAGEMENT: &str = "/admin/autonomy/{lane}/engagement";
     pub const ADMIN_TOOLS: &str = "/admin/tools";
     pub const ADMIN_TOOLS_RUN: &str = "/admin/tools/run";
     pub const ADMIN_TOOLS_CACHE_STATS: &str = "/admin/tools/cache_stats";
@@ -1058,6 +1059,11 @@ fn register_admin_ops_routes(builder: &mut RouterBuilder) {
     builder.route_post(
         paths::ADMIN_AUTONOMY_LANE_BUDGETS,
         api::autonomy::autonomy_budgets_update,
+        Some(Stability::Experimental),
+    );
+    builder.route_delete(
+        paths::ADMIN_AUTONOMY_LANE_ENGAGEMENT,
+        api::autonomy::autonomy_engagement_reset,
         Some(Stability::Experimental),
     );
 }

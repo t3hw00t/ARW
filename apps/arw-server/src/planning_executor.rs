@@ -5,6 +5,10 @@ use tracing::warn;
 
 use crate::{metrics::PlanMetricsSample, planning::PlanResponse, AppState};
 
+const ENGAGEMENT_CONFIRMATION_BOOST: f32 = 0.2;
+const ENGAGEMENT_WARNING_PENALTY: f32 = 0.15;
+const ENGAGEMENT_GUARD_PENALTY_UNIT: f32 = 0.25;
+
 #[derive(Clone, Serialize, serde::Deserialize)]
 pub struct PlanApplicationReport {
     pub kv_policy: Option<String>,
@@ -45,6 +49,10 @@ impl PlanExecutor {
                 Some(label)
             }
         };
+
+        let guard_failures = plan.plan.guard_failures.unwrap_or(0);
+
+        adjust_engagement(state, plan, guard_failures, &warnings).await;
 
         state
             .metrics()
@@ -137,11 +145,50 @@ fn build_metrics_sample(plan: &PlanResponse, kv_policy: Option<&str>) -> PlanMet
     }
 }
 
+async fn adjust_engagement(
+    state: &AppState,
+    plan: &PlanResponse,
+    guard_failures: u8,
+    warnings: &[String],
+) {
+    let lane_id = plan.policy.persona.id.clone();
+    let engagement = state.autonomy().engagement();
+
+    if guard_failures > 0 {
+        let penalty = (guard_failures as f32 * ENGAGEMENT_GUARD_PENALTY_UNIT).min(1.0);
+        let reason = if guard_failures == 1 {
+            "planner guard failure detected".to_string()
+        } else {
+            format!("planner guard failures ({guard_failures})")
+        };
+        engagement.record_rejection(&lane_id, penalty, reason).await;
+        state
+            .metrics()
+            .record_autonomy_interrupt("plan_guard_failures");
+        return;
+    }
+
+    if !warnings.is_empty() {
+        let reason = format!("planner warnings: {}", warnings.join(" | "));
+        engagement
+            .record_rejection(&lane_id, ENGAGEMENT_WARNING_PENALTY, reason)
+            .await;
+        state.metrics().record_autonomy_interrupt("plan_warnings");
+        return;
+    }
+
+    engagement
+        .record_confirmation(&lane_id, ENGAGEMENT_CONFIRMATION_BOOST)
+        .await;
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test_support;
     use crate::test_support::contracts;
     use arw_contracts::{KvPolicy, PlanResult, PolicySurface};
+    use tempfile::tempdir;
 
     fn sample_policy() -> PolicySurface {
         contracts::sample_policy_surface()
@@ -229,5 +276,30 @@ mod tests {
         let sample = build_metrics_sample(&plan, None);
 
         assert!(sample.kv_policy.is_none());
+    }
+
+    #[tokio::test]
+    async fn guard_failures_penalize_engagement() {
+        test_support::init_tracing();
+        let dir = tempdir().unwrap();
+        let mut ctx = test_support::begin_state_env(dir.path());
+        let state = test_support::build_state(dir.path(), &mut ctx.env).await;
+
+        let plan = sample_plan_response();
+        let lane_id = plan.policy.persona.id.clone();
+
+        PlanExecutor::apply(&state, &plan).await;
+
+        let snapshot = state.autonomy().engagement().snapshot(&lane_id).await;
+        let reason = snapshot.pending_reason.unwrap_or_default();
+        assert!(
+            reason.contains("guard failure"),
+            "expected guard failure reason, got {reason}"
+        );
+        assert!(
+            snapshot.score < 0.8,
+            "expected score to drop below default, got {}",
+            snapshot.score
+        );
     }
 }

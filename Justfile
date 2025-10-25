@@ -76,6 +76,9 @@ test-watch:
 bench-snappy *params:
   cargo run -p snappy-bench -- {{params}}
 
+pointer-migrate state="state":
+  python3 scripts/migrate_pointer_tokens.py --state-dir {{state}}
+
 # Package
 package:
   bash scripts/package.sh --no-build
@@ -176,7 +179,11 @@ legacy-check:
   bash scripts/check_legacy_surface.sh
 
 ops-export out='ops/out':
-  bash scripts/export_ops_assets.sh --out '{{out}}'
+  if command -v python >/dev/null 2>&1; then \
+    python scripts/export_ops_assets.py --out '{{out}}'; \
+  else \
+    bash scripts/export_ops_assets.sh --out '{{out}}'; \
+  fi
 
 triad-smoke:
   bash scripts/triad_smoke.sh

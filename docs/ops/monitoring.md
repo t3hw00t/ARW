@@ -4,7 +4,7 @@ title: Monitoring & Alerts
 
 # Monitoring & Alerts
 
-Updated: 2025-10-24
+Updated: 2025-10-25
 Type: How‑to
 
 This note captures the minimal wiring needed to surface ARW metrics in Prometheus/Grafana and keep an eye on the legacy shut-down counter.
@@ -19,11 +19,15 @@ This note captures the minimal wiring needed to surface ARW metrics in Prometheu
      - /etc/prometheus/rules/arw-alerting-rules.yaml
    ```
 
-2. Copy the YAML code blocks from the snippets into your rule files (the fenced ` ```yaml ... ``` ` sections in each snippet). You can let `scripts/export_ops_assets.sh` collect the latest assets into a staging directory:
+2. Copy the YAML code blocks from the snippets into your rule files (the fenced ` ```yaml ... ``` ` sections in each snippet). You can let `scripts/export_ops_assets.sh` (or the cross-platform `python scripts/export_ops_assets.py`) collect the latest assets into a staging directory:
    ```bash
    just ops-export /etc/prometheus/rules
    # or run the script directly
    ./scripts/export_ops_assets.sh --out /etc/prometheus/rules
+   python scripts/export_ops_assets.py --out /etc/prometheus/rules
+   # create an archive for remote hosts
+   ./scripts/package_ops_assets.sh --dest dist/ops-assets.tar.gz
+   python scripts/package_ops_assets.py --archive dist/ops-assets.zip
    # or set ARW_EXPORT_OUTDIR for alternative locations
    ```
    If you prefer a manual extraction, the following helper works too:
@@ -33,12 +37,40 @@ This note captures the minimal wiring needed to surface ARW metrics in Prometheu
    awk '/```yaml/{flag=1;next}/```/{flag=0}flag' docs/snippets/prometheus_alerting_rules.md > /etc/prometheus/rules/arw-alerting-rules.yaml
    ```
 
-   The alert rules include legacy/stability signals (`ARWLegacyCapsuleHeadersSeen`, `ARWContextCascadeStale`) and prompt compression health checks (`ARWPromptCompressionErrorRateHigh`, `ARWPromptCompressionFallbackSpike`) so you can react quickly if llmlingua degrades or the fallback path takes over.
+   The alert rules include legacy/stability signals (`ARWLegacyCapsuleHeadersSeen`, `ARWContextCascadeStale`), prompt compression health checks (`ARWPromptCompressionErrorRateHigh`, `ARWPromptCompressionFallbackSpike`), and planner guardrails (`ARWPlanGuardFailuresSpike`, `ARWAutonomyPlanThrottleSpike`) so you can react quickly when llmlingua degrades or planner feedback begins throttling autonomy lanes.
 
 3. Reload Prometheus:
    ```bash
    curl -X POST http://127.0.0.1:9090/-/reload
    ```
+
+### Fast-path script (optional)
+
+The helper script `scripts/apply_ops_assets.py` automates copying the rule files, importing the Grafana JSON, and triggering reload endpoints. Supply a rules directory and (optionally) the reload URLs and Grafana credentials:
+
+```powershell
+# Windows PowerShell example
+python scripts\apply_ops_assets.py `
+  --archive dist\ops-assets.zip `
+  --rules-dir C:\prometheus\rules `
+  --prometheus-reload http://127.0.0.1:9090/-/reload `
+  --alertmanager-reload http://127.0.0.1:9093/-/reload `
+  --grafana-url https://grafana.local `
+  --grafana-api-key $Env:GRAFANA_API_KEY
+```
+
+```bash
+# Linux/macOS example
+python scripts/apply_ops_assets.py \
+  --archive dist/ops-assets.zip \
+  --rules-dir /etc/prometheus/rules \
+  --prometheus-reload http://127.0.0.1:9090/-/reload \
+  --alertmanager-reload http://127.0.0.1:9093/-/reload \
+  --grafana-url https://grafana.local \
+  --grafana-api-key "$GRAFANA_API_KEY"
+```
+
+Set `ARW_OPS_ARCHIVE` if the archive lives elsewhere, and pass `--grafana-folder <id>` when importing into a non-root folder.
 
 ## Alertmanager
 
@@ -72,6 +104,21 @@ Import the “Quick Panels” snippet into a dashboard so the legacy counters ar
 1. Grafana → Dashboards → Import → paste the JSON from `docs/snippets/grafana_quick_panels.md`.
 2. Select your Prometheus datasource when prompted (`DS_PROMETHEUS`).
 3. Pin the stat panel (“Legacy Capsule Headers (15m)”) to the migration dashboard.
+
+### Planner Coverage Panel
+
+The unified planner publishes a small family of counters and gauges. Mirror the new dashboard additions with Prometheus queries:
+
+- Total requests: `arw_plan_requests_total`
+- Guard failures: `arw_plan_guard_failures_total`
+- Plan-driven throttle rate (stat): `sum(rate(arw_autonomy_interrupts_total{reason=~"plan_guard_failures|plan_warnings"}[15m]))`
+- Last target tokens: `arw_plan_last_target_tokens`
+- Mode breakdown: `arw_plan_mode_total`
+- KV policy selections: `arw_plan_kv_policy_total`
+- Last engine label: `arw_plan_last_engine`
+- Autonomy throttles triggered by planning: `rate(arw_autonomy_interrupts_total{reason="plan_guard_failures"}[15m])` and `rate(arw_autonomy_interrupts_total{reason="plan_warnings"}[15m])`
+
+Keep a stat panel on `arw_plan_guard_failures_total` and the new "Plan-Driven Throttle Rate" stat so the on-call can tell at a glance when engagement is being throttled; wire alerts to `ARWPlanGuardFailuresSpike` and `ARWAutonomyPlanThrottleSpike` for paging.
 
 ### Snappy Latency Budget Panel
 

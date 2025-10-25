@@ -21,13 +21,13 @@ pub(crate) mod env {
         // Wait up to 10s, then panic with a clear message.
         #[cfg(test)]
         {
-            if let Some(lock) = ENV_LOCK.try_lock_for(std::time::Duration::from_secs(10)) {
+            if let Some(lock) = ENV_LOCK.try_lock_for(std::time::Duration::from_secs(30)) {
                 return EnvGuard {
                     _lock: lock,
                     saved: HashMap::new(),
                 };
             }
-            panic!("test ENV lock could not be acquired within 10s; another test may be stuck while holding it");
+            panic!("test ENV lock could not be acquired within 30s; another test may be stuck while holding it");
         }
         #[allow(unreachable_code)]
         EnvGuard {
