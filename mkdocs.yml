@@ -167,6 +167,7 @@ nav:
       - Tools:
           - UI Screenshot Tools: reference/tools/ui_screenshot.md
           - Project Notes Tools: reference/tools/project_notes.md
+          - Adapters Smoke Viewer: reference/tools/adapters_smoke_viewer.md
       - Schemas:
           - API and Schema: API_AND_SCHEMA.md
           - Egress Schemas: api/egress_schemas.md

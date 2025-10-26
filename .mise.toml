@@ -85,6 +85,10 @@ run = "bash -lc 'ARW_MOCK_ADAPTER_PORT=${PORT:-8081} cargo run -p arw-mock-adapt
 description = "Build + start mock server; run smoke with health; stop server"
 run = "bash -lc 'set -euo pipefail; ARW_MOCK_ADAPTER_PORT=${PORT:-8081} ADAPTER_SMOKE_OUT=${OUT:-} bash scripts/adapter_smoke_oneshot.sh'"
 
+[tasks."adapters:smoke:docs"]
+description = "Generate docs/static/adapters-smoke.json and stop server"
+run = "bash -lc 'set -euo pipefail; ARW_MOCK_ADAPTER_PORT=${PORT:-8081} ADAPTER_SMOKE_OUT=${OUT:-docs/static/adapters-smoke.json} bash scripts/adapter_smoke_oneshot.sh'"
+
 [tasks."adapters:sign"]
 description = "Sign a manifest with an RSA private key"
 run = "bash -lc 'set -euo pipefail; manifest=${MANIFEST:?set MANIFEST}; key=${KEY:?set KEY}; bash scripts/adapters_sign.sh "$manifest" "$key"'"
