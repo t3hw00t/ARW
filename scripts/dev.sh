@@ -217,6 +217,26 @@ run_verify() {
     fi
   fi
 
+  # TypeScript client build (optional; skips in --fast)
+  if [[ $fast -eq 1 ]]; then
+    echo "[verify] skipping TypeScript client build (--fast)"
+  else
+    if command -v node >/dev/null 2>&1 && command -v npm >/dev/null 2>&1; then
+      echo "[verify] building TypeScript client (clients/typescript)"
+      pushd "$REPO_ROOT/clients/typescript" >/dev/null || true
+      # Prefer clean, fall back to install when lock is absent
+      if [[ -f package-lock.json ]]; then
+        if ! npm ci --no-audit --no-fund; then ok=1; fi
+      else
+        if ! npm install --no-audit --no-fund; then ok=1; fi
+      fi
+      if ! npm run build; then ok=1; fi
+      popd >/dev/null || true
+    else
+      echo "[verify] TypeScript client build skipped (Node.js/npm not found)"
+    fi
+  fi
+
   # Optional: adapters lint (opt-in via env)
   if [[ "${ARW_VERIFY_INCLUDE_ADAPTERS:-}" =~ ^(1|true|yes)$ ]]; then
     echo "[verify] adapters lint (ARW_VERIFY_INCLUDE_ADAPTERS=1)"

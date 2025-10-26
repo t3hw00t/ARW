@@ -4,7 +4,7 @@ title: Companion Hub Roadmap
 
 # Companion Hub Roadmap
 
-Updated: 2025-10-25
+Updated: 2025-10-26
 Type: Explanation
 
 ## Purpose
@@ -39,10 +39,10 @@ Consolidate every user-facing surface into a role-aware Companion Hub so ARW fee
 - Ops toggle links directly to `/admin/debug`, Grafana panels, and CLI helpers while keeping the active context visible.
 - Serialize view state in URL hashes for deep links and hand-off between roles.
 
-### Phase 3 — Quality & Economy Insights
+### Phase 3 - Quality & Economy Insights
 
 - Memory quality indicators: contradiction rate, freshness decay, worldview drift, guardrail rejects.
-- Economy deck: `/state/economy/*` read-model with jobs, revenue, payouts, compliance posture, and per-project attribution.
+- Economy deck: `/state/economy/*` read-model with jobs, revenue, payouts, compliance posture, and per-project attribution. See How-to → Economy Ledger for endpoint, pagination, and SSE id details.
 - Approval inbox: collate guardrail pauses, persona proposals, economy approvals, and connector consent renewals.
 - Lightweight offline dashboard: HTML/TUI mini-hub that mirrors top-level summaries for universal access deployments.
 

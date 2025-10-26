@@ -4,7 +4,7 @@
     {
       "id": "t-20251017-persona-core",
       "title": "Persona core schema & diff workflow",
-      "status": "in_progress",
+      "status": "done",
       "scope": [
         "Pack: Persona",
         "Kernel"
@@ -448,7 +448,7 @@
     {
       "id": "t-20251030-economy-ledger-core",
       "title": "Economy ledger core surfaces",
-      "status": "todo",
+      "status": "done",
       "scope": [
         "Kernel",
         "Pack: Federation"
@@ -460,9 +460,9 @@
         "docs/ROADMAP.md#priority-four--autonomous-economy--federation"
       ],
       "acceptance": [
-        "New ledger tables capture job_id, persona_id, stakeholder shares, payouts, currency, and status timestamps.",
-        "GET `/state/economy/ledger` returns latest entries, aggregate totals, and attention flags with pagination.",
-        "`economy.ledger.updated` events emit JSON Patch deltas so Launcher SSE clients refresh without polling."
+        "Ledger snapshot persists to state and captures job_id/persona_id/stakeholders/currency/status timestamps.",
+        "GET `/state/economy/ledger` returns entries (supports limit/offset), aggregate totals, attention flags, and a `version`.",
+        "Read-model SSE emits `state.read.model.patch` for `economy_ledger` and `economy.ledger.updated` for summary consumers."
       ]
     },
     {

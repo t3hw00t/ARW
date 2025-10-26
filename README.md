@@ -50,7 +50,8 @@ Assistant quickstart → [Agent Onboarding](docs/ai/AGENT_ONBOARDING.md)
 ## Build & Test
 - Native Windows flow: run `scripts\dev.ps1` from PowerShell; switch to WSL only when you need Linux-only tooling.
 - Unified helper: `scripts/dev.{sh,ps1}` wraps the common workflow (e.g., `scripts/dev.ps1 build`, `scripts/dev.ps1 verify`).
-- Guardrail sweep: `scripts/dev.sh verify` (headless default skips the Tauri crate; pass `--with-launcher` or set `ARW_VERIFY_INCLUDE_LAUNCHER=1` to include it). Use `--fast` to skip docs/UI checks, or `--ci` for a CI‑parity sweep (registry integrity, docgens in `--check` mode, env‑guard, and smokes). Missing Node.js auto‑skips the launcher UI smoke; set `ARW_VERIFY_REQUIRE_DOCS=1` to require Python/PyYAML for doc checks.
+- Guardrail sweep: `scripts/dev.sh verify` (headless default skips the Tauri crate; pass `--with-launcher` or set `ARW_VERIFY_INCLUDE_LAUNCHER=1` to include it). Use `--fast` to skip docs/UI checks, or `--ci` for a CI-parity sweep (registry integrity, docgens in `--check` mode, env-guard, and smokes). Missing Node.js auto-skips the launcher UI smoke; set `ARW_VERIFY_REQUIRE_DOCS=1` to require Python/PyYAML for doc checks.
+- TypeScript client: when Node.js and npm are available and you do not pass `--fast`, `verify` also builds the minimal TypeScript client and `arw-events` bin under `clients/typescript` (skips automatically if Node/npm are missing).
 - Build: `scripts/build.sh` (Linux/macOS) or `scripts/build.ps1` (Windows). Both default to a headless build that skips the Tauri launcher; add `--with-launcher` / `-WithLauncher` or set `ARW_BUILD_LAUNCHER=1` when you need the desktop UI (requires WebKitGTK 4.1 + libsoup3 on Linux or WebView2 on Windows). `make build` / `just build` follow the same headless default, with `make build-launcher` / `just build-launcher` opting into the full workspace build.
 - Format: `cargo fmt --all`
 - Lint: `cargo clippy --workspace --all-targets -- -D warnings`

@@ -104,6 +104,8 @@ nav:
       - Cost & Quotas: guide/cost_quota.md
       - Context Recipes: guide/context_recipes.md
       - Metrics & Insights: guide/METRICS_AND_INSIGHTS.md
+      - Economy Ledger: guide/economy_ledger.md
+      - Daily Brief: guide/daily_brief.md
       - Monitoring & Alerts: ops/monitoring.md
       - Runtime Bundle Runbook: ops/runtime_bundle_runbook.md
       - Cluster Runbook: ops/cluster_runbook.md

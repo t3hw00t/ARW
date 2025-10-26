@@ -258,6 +258,89 @@ runtime-smoke-gpu-sim:
   RUNTIME_SMOKE_GPU_POLICY=simulate bash scripts/runtime_smoke_suite.sh
 
 runtime-smoke-gpu-real:
+
+ts-economy-smoke base='http://127.0.0.1:8091' timeout='10000' token='':
+  set -euo pipefail; \
+  base='{{base}}'; timeout='{{timeout}}'; token='{{token}}'; \
+  pushd clients/typescript >/dev/null; \
+  npm run -s build; \
+  if [ -n "$token" ]; then \
+    ARW_ADMIN_TOKEN="$token" BASE="$base" node dist/examples/smoke_watch_economy_ledger.js --timeout "$timeout"; \
+  else \
+    BASE="$base" node dist/examples/smoke_watch_economy_ledger.js --timeout "$timeout"; \
+  fi; \
+  popd >/dev/null
+
+# Tail events via TS bin (arw-events); forward flags via *args
+ts-events base='http://127.0.0.1:8091' token='' *args:
+  set -euo pipefail; \
+  base='{{base}}'; token='{{token}}'; \
+  pushd clients/typescript >/dev/null; \
+  npm run -s build; \
+  if [ -n "$token" ]; then \
+    ARW_ADMIN_TOKEN="$token" BASE="$base" node dist/bin/arw-events.js {{args}}; \
+  else \
+    BASE="$base" node dist/bin/arw-events.js {{args}}; \
+  fi; \
+  popd >/dev/null
+
+# Convenience: tail read-model patches with resume storage
+ts-events-patches store='.arw/last-event-id' base='http://127.0.0.1:8091' replay='25' token='' structured='false':
+  set -euo pipefail; \
+  base='{{base}}'; store='{{store}}'; replay='{{replay}}'; token='{{token}}'; structured='{{structured}}'; \
+  pushd clients/typescript >/dev/null; \
+  npm run -s build; \
+  flags=(--prefix 'state.read.model.patch' --replay "$replay" --store "$store"); \
+  case "$structured" in 1|true|yes|on) flags+=(--structured);; esac; \
+  if [ -n "$token" ]; then \
+    ARW_ADMIN_TOKEN="$token" BASE="$base" node dist/bin/arw-events.js "${flags[@]}"; \
+  else \
+    BASE="$base" node dist/bin/arw-events.js "${flags[@]}"; \
+  fi; \
+  popd >/dev/null
+
+# CLI: economy ledger view/export
+cli-economy-ledger base='http://127.0.0.1:8091' limit='' offset='' currency='' json='false' pretty='false' csv='false' token='':
+  set -euo pipefail; \
+  base='{{base}}'; limit='{{limit}}'; offset='{{offset}}'; currency='{{currency}}'; json='{{json}}'; pretty='{{pretty}}'; csv='{{csv}}'; token='{{token}}'; \
+  args=(state economy-ledger --base "$base"); \
+  if [ -n "$limit" ]; then args+=(--limit "$limit"); fi; \
+  if [ -n "$offset" ]; then args+=(--offset "$offset"); fi; \
+  if [ -n "$currency" ]; then args+=(--currency "$currency"); fi; \
+  case "$json" in 1|true|yes|on) args+=(--json);; esac; \
+  case "$pretty" in 1|true|yes|on) args+=(--pretty);; esac; \
+  case "$csv" in 1|true|yes|on) args+=(--csv);; esac; \
+  if [ -n "$token" ]; then ARW_ADMIN_TOKEN="$token" cargo run -p arw-cli -- "${args[@]}"; else cargo run -p arw-cli -- "${args[@]}"; fi
+
+# Watch a specific read-model id with auto snapshot hydration
+ts-readmodel-watch id='' base='http://127.0.0.1:8091' snapshot='' timeout='0' token='' json='false':
+  set -euo pipefail; \
+  id='{{id}}'; base='{{base}}'; snapshot='{{snapshot}}'; timeout='{{timeout}}'; token='{{token}}'; json='{{json}}'; \
+  if [ -z "$id" ]; then echo "error: id required (e.g., just ts-readmodel-watch id=projects)" >&2; exit 1; fi; \
+  pushd clients/typescript >/dev/null; \
+  npm run -s build; \
+  args=(--id "$id"); \
+  if [ -n "$snapshot" ]; then args+=(--snapshot "$snapshot"); fi; \
+  if [ -n "$timeout" ] && [ "$timeout" != '0' ]; then args+=(--timeout "$timeout"); fi; \
+  case "$json" in 1|true|yes|on) args+=(--json);; esac; \
+  if [ -n "$token" ]; then \
+    ARW_ADMIN_TOKEN="$token" BASE="$base" node dist/examples/readmodel_watch.js "${args[@]}"; \
+  else \
+    BASE="$base" node dist/examples/readmodel_watch.js "${args[@]}"; \
+  fi; \
+  popd >/dev/null
+
+# Watch Daily Brief publish events (brief.daily.published) with initial snapshot
+ts-daily-brief-watch base='http://127.0.0.1:8091' timeout='8000' token='' json='false':
+  set -euo pipefail; \
+  base='{{base}}'; timeout='{{timeout}}'; token='{{token}}'; json='{{json}}'; \
+  pushd clients/typescript >/dev/null; \
+  npm run -s build; 
+  if [ -n "$token" ]; then export ARW_ADMIN_TOKEN="$token"; fi; \
+  export BASE="$base"; \
+  args=(); if [ "$json" = "true" ]; then args+=(--json); fi; if [ -n "$timeout" ]; then args+=(--timeout "$timeout"); fi; \
+  node dist/examples/daily_brief.js "${args[@]}"; \
+  popd >/dev/null
   # Real GPU helper: skips stub stage, keeps artifacts, and enforces the CUDA-capable llama-server.
   RUNTIME_SMOKE_KEEP_TMP=1 \
   RUNTIME_SMOKE_GPU_POLICY=require \

@@ -143,6 +143,8 @@ document.addEventListener('DOMContentLoaded', async () => {
   const elSummaryPersona = document.getElementById('todaySummaryPersona');
   const elSummaryAutonomy = document.getElementById('todaySummaryAutonomy');
   const elSummaryNote = document.getElementById('todaySummaryNote');
+  const elDailyBriefLive = document.getElementById('dailyBriefLive');
+  const elSummaryLine = document.getElementById('todaySummaryLine');
   const jumpButtons = document.querySelectorAll('[data-hub-jump]');
   const economyDocs = document.getElementById('economyDocs');
   const economyBacklog = document.getElementById('economyBacklog');
@@ -161,12 +163,40 @@ document.addEventListener('DOMContentLoaded', async () => {
   const elMemoryQualityUpdated = document.getElementById('memoryQualityUpdated');
   const elMemoryQuality = document.getElementById('memoryQuality');
   const elEconomyContent = document.getElementById('economyContent');
+  const elEconomyTotals = document.getElementById('economyTotalsPills');
   const elEconomyLaneList = document.getElementById('economyLaneList');
   const elEconomyBudgetList = document.getElementById('economyBudgetList');
   const elEconomyAttention = document.getElementById('economyAttention');
   const elEconomyAlerts = document.getElementById('economyAlerts');
   const elEconomyEmpty = document.getElementById('economyEmpty');
   const elEconomyUpdated = document.getElementById('economyUpdated');
+  const elEconomyLive = document.getElementById('economyLive');
+  const elEconomyCurrency = document.getElementById('economyCurrency');
+  let economyCurrency = typeof hubPrefs.economyCurrency === 'string' ? hubPrefs.economyCurrency : '';
+  if (elEconomyCurrency) {
+    const setOptions = (totals = []) => {
+      const selected = typeof elEconomyCurrency.value === 'string' ? elEconomyCurrency.value : '';
+      const opts = new Set(['']);
+      for (const t of (Array.isArray(totals) ? totals : [])) {
+        const c = (t.currency || 'unitless').toString();
+        opts.add(c);
+      }
+      elEconomyCurrency.innerHTML = '';
+      const mk = (val, label) => { const o = document.createElement('option'); o.value = val; o.textContent = label; return o; };
+      elEconomyCurrency.appendChild(mk('', 'All'));
+      Array.from(opts).filter(v => v).sort().forEach(c => elEconomyCurrency.appendChild(mk(c, c === 'unitless' ? 'Unitless' : c)));
+      const want = economyCurrency || selected;
+      if (want && opts.has(want)) { elEconomyCurrency.value = want; }
+    };
+    elEconomyCurrency.addEventListener('change', () => {
+      economyCurrency = elEconomyCurrency.value || '';
+      try { hubPrefs.economyCurrency = economyCurrency; ARW.setPrefs('ui:hub', hubPrefs).catch(()=>{}); } catch {}
+      refreshEconomyLedger({ force: true });
+    });
+    // seed empty options
+    elEconomyCurrency.innerHTML = '<option value="">All</option>';
+    if (economyCurrency) { try { elEconomyCurrency.value = economyCurrency; } catch {} }
+  }
   if (elRuntimeFocusBtn && elRuntimeTable) {
     elRuntimeFocusBtn.setAttribute('aria-label', 'Focus runtime table');
     elRuntimeFocusBtn.addEventListener('click', () => {
@@ -3633,6 +3663,10 @@ async function refreshRuntimeBundles() {
     const plural = (count) => (count === 1 ? '' : 's');
     if (model && typeof model === 'object') {
       const summaryLine = typeof model.summary === 'string' ? model.summary : '';
+      if (elSummaryLine) {
+        try { elSummaryLine.textContent = summaryLine || ''; elSummaryLine.hidden = !summaryLine; } catch {}
+      }
+
       if (elSummaryRuntime) {
         const runtime = model.runtime && typeof model.runtime === 'object' ? model.runtime : null;
         let runtimeText = '';
@@ -3656,25 +3690,27 @@ async function refreshRuntimeBundles() {
       }
       if (elSummaryEconomy) {
         const economy = model.economy && typeof model.economy === 'object' ? model.economy : null;
-        let economyText = 'Ledger status pending.';
-        if (economy) {
-          if (Array.isArray(economy.totals) && economy.totals.length) {
-            const primary = economy.totals[0] || {};
+        let economyText = '';
+        const buildLine = (totals) => {
+          if (Array.isArray(totals) && totals.length) {
+            const primary = totals[0] || {};
             const currency = primary.currency || 'unitless';
-            const settled =
-              typeof primary.settled === 'number'
-                ? formatLedgerAmount(primary.settled)
-                : '0';
-            const pending =
-              typeof primary.pending === 'number'
-                ? formatLedgerAmount(primary.pending)
-                : '0';
-            economyText = `${currency} settled ${settled}, pending ${pending}`;
-          } else if (Array.isArray(economy.recent_entries) && economy.recent_entries.length === 0) {
+            const settled = typeof primary.settled === 'number' ? formatLedgerAmount(primary.settled) : '0';
+            const pending = typeof primary.pending === 'number' ? formatLedgerAmount(primary.pending) : '0';
+            return `${currency} settled ${settled}, pending ${pending}`;
+          }
+          return '';
+        };
+        if (economy) {
+          economyText = buildLine(economy.totals);
+          if (!economyText && Array.isArray(economy.recent_entries) && economy.recent_entries.length === 0) {
             economyText = 'No ledger activity yet.';
           }
         }
-        elSummaryEconomy.textContent = economyText;
+        if (!economyText && economyModel && typeof economyModel === 'object') {
+          economyText = buildLine(economyModel.totals);
+        }
+        elSummaryEconomy.textContent = economyText || 'Ledger status pending.';
       }
       if (elSummaryMemory) {
         const memory = model.memory && typeof model.memory === 'object' ? model.memory : null;
@@ -3813,7 +3849,8 @@ async function refreshRuntimeBundles() {
     let snapshot = null;
     let fetchError = null;
     try {
-      const data = await fetchJson('/state/economy/ledger', { signal: controller.signal });
+      const path = economyCurrency ? `/state/economy/ledger?currency=${encodeURIComponent(economyCurrency)}` : '/state/economy/ledger';
+      const data = await fetchJson(path, { signal: controller.signal });
       if (data && typeof data === 'object') {
         snapshot = { ...data, __source: 'ledger' };
       }
@@ -3842,6 +3879,7 @@ async function refreshRuntimeBundles() {
 
     if (snapshot) {
       economyModel = snapshot;
+      try { if (elEconomyCurrency) { const totals = Array.isArray(snapshot.totals) ? snapshot.totals : []; const before = elEconomyCurrency.value; (function(){ const opts = new Set(['']); totals.forEach(t => opts.add((t.currency||'unitless').toString())); const mk=(v,l)=>{const o=document.createElement('option'); o.value=v; o.textContent=l; return o;}; elEconomyCurrency.innerHTML=''; elEconomyCurrency.appendChild(mk('','All')); Array.from(opts).filter(v=>v).sort().forEach(c=> elEconomyCurrency.appendChild(mk(c, c==='unitless'?'Unitless':c))); if (before && opts.has(before)) elEconomyCurrency.value = before; })(); } } catch {}
       renderEconomySnapshot(snapshot);
       lastEconomyRefresh = Date.now();
     } else if (economyModel) {
@@ -3867,6 +3905,37 @@ async function refreshRuntimeBundles() {
     const totals = Array.isArray(model?.totals) ? model.totals : [];
     const entries = Array.isArray(model?.entries) ? model.entries : [];
     const attention = Array.isArray(model?.attention) ? model.attention : [];
+    if (elEconomyTotals) {
+      elEconomyTotals.innerHTML = '';
+      if (totals.length) {
+        for (const total of totals) {
+          const currency = total.currency || 'unitless';
+          const label = currency && currency !== 'unitless' ? currency : 'Unitless';
+          const pill = document.createElement('span');
+          pill.className = 'metric-pill';
+          const parts = [];
+          if (typeof total.settled === 'number') parts.push(`Settled ${formatLedgerAmount(total.settled)}`);
+          if (typeof total.pending === 'number') parts.push(`Pending ${formatLedgerAmount(total.pending)}`);
+          if (!parts.length) parts.push('No activity');
+          pill.textContent = `${label} • ${parts.join(' • ')}`;
+          // Accessibility + detail: expose raw numbers in title and aria-label
+          const raw = [];
+          if (typeof total.settled === 'number') raw.push(`settled: ${total.settled}`);
+          if (typeof total.pending === 'number') raw.push(`pending: ${total.pending}`);
+          const title = raw.length ? `${label} — ${raw.join(', ')}` : `${label}`;
+          pill.title = title;
+          pill.setAttribute('aria-label', title);
+          // Click for details: filter recent entries by currency
+          pill.tabIndex = 0;
+          pill.setAttribute('role', 'button');
+          pill.addEventListener('click', () => openEconomyDetails(label, currency, entries));
+          pill.addEventListener('keydown', (ev) => {
+            if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); openEconomyDetails(label, currency, entries); }
+          });
+          elEconomyTotals.appendChild(pill);
+        }
+      }
+    }
     if (elEconomyContent) {
       elEconomyContent.hidden = !(hasError ? false : (totals.length > 0 || entries.length > 0));
     }
@@ -4293,13 +4362,131 @@ async function refreshRuntimeBundles() {
     () => refreshMemoryRecent({ quiet: true })
   );
   const idEconomySse = ARW.sse.subscribe(
-    (kind) => kind === 'economy.ledger.updated' || kind.startsWith('autonomy.'),
-    () => refreshEconomyLedger({ force: true })
+    (kind, event) => {
+      if (kind === 'economy.ledger.updated' || kind.startsWith('autonomy.')) return true;
+      if (kind === 'state.read.model.patch') {
+        const payload = event?.env?.payload || event?.payload;
+        return payload?.id === 'economy_ledger';
+      }
+      return false;
+    },
+    () => { try { markEconomyLive(); } catch {} refreshEconomyLedger({ force: true }); }
   );
+
+  function markEconomyLive(){
+    if (!elEconomyLive) return;
+    try { elEconomyLive.hidden = false; } catch {}
+    elEconomyLive.textContent = 'LIVE';
+    elEconomyLive.setAttribute('aria-label', 'Economy: live update received');
+    setTimeout(() => { try { elEconomyLive.hidden = true; } catch {} }, 5000);
+  }
+
+  function openEconomyDetails(label, currency, allEntries){
+    if (!window.ARW || !ARW.modal || typeof ARW.modal.form !== 'function') return;
+    const container = document.createElement('div');
+    container.style.display = 'grid';
+    container.style.gap = '12px';
+    const actions = document.createElement('div');
+    actions.className = 'row';
+    actions.style.gap = '8px';
+    const btnCsv = document.createElement('button');
+    btnCsv.className = 'ghost mini';
+    btnCsv.type = 'button';
+    btnCsv.textContent = 'Download CSV';
+    actions.appendChild(btnCsv);
+    container.appendChild(actions);
+    const list = document.createElement('ul');
+    list.className = 'metric-list';
+    const recent = [...(Array.isArray(allEntries) ? allEntries : [])]
+      .filter((e) => (e?.currency || 'unitless') === (currency || 'unitless'))
+      .sort((a, b) => (Date.parse(b?.issued_at || '')||0) - (Date.parse(a?.issued_at || '')||0))
+      .slice(0, 10);
+    if (!recent.length){
+      const li = document.createElement('li');
+      li.textContent = 'No recent entries for this currency.';
+      list.appendChild(li);
+    } else {
+      for (const entry of recent){
+        const li = document.createElement('li');
+        const amount = entry.net_amount ?? entry.gross_amount;
+        const status = (entry.status || 'pending').toString();
+        const issued = entry.issued_at ? ` (${formatRelativeIso(entry.issued_at)})` : '';
+        const tagParts = [];
+        if (entry.job_id) tagParts.push(entry.job_id);
+        if (entry.contract_id) tagParts.push(entry.contract_id);
+        if (entry.persona_id) tagParts.push(entry.persona_id);
+        const tags = tagParts.length ? ` — ${tagParts.join(' · ')}` : '';
+        li.textContent = `${status.charAt(0).toUpperCase()}${status.slice(1)} - ${formatLedgerValue(amount, entry.currency || 'unitless')}${issued}${tags}`;
+        list.appendChild(li);
+      }
+    }
+    container.appendChild(list);
+
+    // Hook up CSV download
+    btnCsv.addEventListener('click', async () => {
+      try {
+        const path = `/state/economy/ledger?currency=${encodeURIComponent(currency || 'unitless')}&limit=1000`;
+        const data = await fetchJson(path);
+        const entries = Array.isArray(data?.entries) ? data.entries : [];
+        const header = 'id,currency,status,net_amount,gross_amount,issued_at,settled_at,job_id,persona_id,contract_id\n';
+        const lines = [header];
+        for (const e of entries){
+          const row = [
+            e.id||'', e.currency||'unitless', e.status||'',
+            (e.net_amount!=null? e.net_amount : ''), (e.gross_amount!=null? e.gross_amount : ''),
+            e.issued_at||'', e.settled_at||'', e.job_id||'', e.persona_id||'', e.contract_id||''
+          ].map((v)=>{
+            const s = String(v);
+            return (s.includes(',')||s.includes('"')||s.includes('\n')) ? '"'+s.replace(/"/g,'""')+'"' : s;
+          }).join(',');
+          lines.push(row+'\n');
+        }
+        const blob = new Blob(lines, { type: 'text/csv;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${(label||'ledger')}.csv`;
+        document.body.appendChild(a);
+        a.click();
+        setTimeout(()=>{ URL.revokeObjectURL(url); a.remove(); }, 1000);
+      } catch(err){ console.warn('CSV download failed', err); }
+    });
+
+    ARW.modal.form({
+      title: `${label} Ledger Details`,
+      description: 'Recent entries for this currency',
+      body: container,
+      submitLabel: 'Close',
+      hideCancel: true,
+    }).catch(()=>{});
+  }
+  let dailyBriefLiveHideTimer = null;
+  let dailyBriefLiveTickTimer = null;
   const idDailyBriefSse = ARW.sse.subscribe(
     (kind) => kind === 'brief.daily.published',
-    () => refreshDailyBrief({ force: true })
+    () => { try { markDailyBriefLive(); } catch {} refreshDailyBrief({ force: true }); }
   );
+
+  function markDailyBriefLive(){
+    if (!elDailyBriefLive) return;
+    try { if (dailyBriefLiveHideTimer) { clearTimeout(dailyBriefLiveHideTimer); dailyBriefLiveHideTimer = null; } } catch {}
+    try { if (dailyBriefLiveTickTimer) { clearInterval(dailyBriefLiveTickTimer); dailyBriefLiveTickTimer = null; } } catch {}
+    const started = Date.now();
+    const updateText = () => {
+      const secs = Math.max(0, Math.round((Date.now() - started) / 1000));
+      const label = secs === 0 ? 'just now' : `${secs}s ago`;
+      elDailyBriefLive.textContent = `LIVE • ${label}`;
+      elDailyBriefLive.setAttribute('aria-label', `Daily Brief: live update received, updated ${label}`);
+      elDailyBriefLive.title = `Updated ${label}`;
+    };
+    try { elDailyBriefLive.hidden = false; } catch {}
+    updateText();
+    dailyBriefLiveTickTimer = setInterval(updateText, 1000);
+    dailyBriefLiveHideTimer = setTimeout(() => {
+      try { elDailyBriefLive.hidden = true; } catch {}
+      try { if (dailyBriefLiveTickTimer) { clearInterval(dailyBriefLiveTickTimer); dailyBriefLiveTickTimer = null; } } catch {}
+    }, 5000);
+  }
   ARW.sse.subscribe(
     (kind) => kind === 'context.assembled',
     ({ env }) => {

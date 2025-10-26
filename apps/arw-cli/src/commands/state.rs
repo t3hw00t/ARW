@@ -24,6 +24,8 @@ pub enum StateCmd {
     Identity(StateIdentityArgs),
     /// Inspect cluster registry via /state/cluster
     Cluster(StateClusterArgs),
+    /// Inspect economy ledger via /state/economy/ledger
+    EconomyLedger(StateEconomyLedgerArgs),
 }
 
 #[derive(Args)]
@@ -108,6 +110,40 @@ pub struct StateClusterArgs {
     pretty: bool,
 }
 
+#[derive(Args)]
+pub struct StateEconomyLedgerArgs {
+    /// Base URL of the service (e.g., http://127.0.0.1:8091)
+    #[arg(long, default_value = "http://127.0.0.1:8091")]
+    base: String,
+    /// Admin token; falls back to ARW_ADMIN_TOKEN env
+    #[arg(long)]
+    admin_token: Option<String>,
+    /// Timeout seconds
+    #[arg(long, default_value_t = 5)]
+    timeout: u64,
+    /// Max number of entries to return (recent first)
+    #[arg(long)]
+    limit: Option<usize>,
+    /// Offset for pagination (recent first)
+    #[arg(long)]
+    offset: Option<usize>,
+    /// Filter by currency code (use 'unitless' for entries without a currency)
+    #[arg(long)]
+    currency: Option<String>,
+    /// Emit raw JSON instead of formatted text
+    #[arg(long)]
+    json: bool,
+    /// Pretty-print JSON output (requires --json)
+    #[arg(long, requires = "json")]
+    pretty: bool,
+    /// Emit CSV of entries instead of text (ignored if --json)
+    #[arg(long)]
+    csv: bool,
+    /// Stream live updates via state.read.model.patch SSE (ignores --json/--csv)
+    #[arg(long, conflicts_with_all = ["json", "csv"])]
+    watch: bool,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) struct CliIdentitySnapshot {
     #[serde(default)]
@@ -174,6 +210,7 @@ pub fn execute(cmd: StateCmd) -> Result<()> {
         StateCmd::Actions(args) => cmd_state_actions(&args),
         StateCmd::Identity(args) => cmd_state_identity(&args),
         StateCmd::Cluster(args) => cmd_state_cluster(&args),
+        StateCmd::EconomyLedger(args) => cmd_state_economy_ledger(&args),
     }
 }
 
@@ -266,6 +303,382 @@ pub(crate) fn render_identity_snapshot(snapshot: &CliIdentitySnapshot) {
             "{:<4} {:<24} {:<18} {:<28} {:<8} {}",
             source, id_display, roles_display, scopes_display, tokens_display, name_notes
         );
+    }
+}
+
+fn cmd_state_economy_ledger(args: &StateEconomyLedgerArgs) -> Result<()> {
+    if args.watch {
+        return watch_economy(args);
+    }
+    let base = args.base.trim_end_matches('/');
+    let client = Client::builder()
+        .timeout(Duration::from_secs(args.timeout))
+        .build()
+        .context("building HTTP client")?;
+    let mut req = client.get(format!("{}/state/economy/ledger", base));
+    let mut params: Vec<(String, String)> = Vec::new();
+    if let Some(limit) = args.limit {
+        params.push(("limit".into(), limit.to_string()));
+    }
+    if let Some(offset) = args.offset {
+        params.push(("offset".into(), offset.to_string()));
+    }
+    if let Some(ref c) = args.currency {
+        if !c.trim().is_empty() {
+            params.push(("currency".into(), c.clone()));
+        }
+    }
+    if !params.is_empty() {
+        req = req.query(&params);
+    }
+    req = with_admin_headers(req, resolve_admin_token(&args.admin_token).as_deref());
+    let resp = req.send().context("fetching economy ledger")?;
+    if resp.status() == StatusCode::UNAUTHORIZED {
+        bail!("unauthorized: provide --admin-token or set ARW_ADMIN_TOKEN");
+    }
+    if !resp.status().is_success() {
+        bail!("request failed with status {}", resp.status());
+    }
+    let snapshot: JsonValue = resp.json().context("decoding JSON")?;
+    if args.json {
+        if args.pretty {
+            println!("{}", serde_json::to_string_pretty(&snapshot)?);
+        } else {
+            println!("{}", serde_json::to_string(&snapshot)?);
+        }
+        return Ok(());
+    }
+    if args.csv {
+        render_economy_csv(&snapshot)?;
+        return Ok(());
+    }
+    render_economy_text(&snapshot)?;
+    Ok(())
+}
+
+fn watch_economy(args: &StateEconomyLedgerArgs) -> Result<()> {
+    let base = args.base.trim_end_matches('/').to_string();
+    let token = resolve_admin_token(&args.admin_token);
+    // Always hydrate full snapshot for patch compatibility; apply filters locally when rendering.
+    let client = Client::builder()
+        .timeout(Duration::from_secs(args.timeout))
+        .build()
+        .context("building HTTP client")?;
+    let req = with_admin_headers(
+        client.get(format!("{}/state/economy/ledger", base)),
+        token.as_deref(),
+    );
+    let resp = req.send().context("fetching economy ledger")?;
+    if !resp.status().is_success() {
+        bail!("initial snapshot failed with status {}", resp.status());
+    }
+    let mut snapshot: JsonValue = resp.json().context("decoding JSON")?;
+    let mut last_event_id: Option<String> = None;
+    let mut backoff_secs = 1u64;
+    loop {
+        match stream_economy_once(
+            &base,
+            token.as_deref(),
+            last_event_id.as_deref(),
+            &mut snapshot,
+            args,
+        ) {
+            Ok(next_id) => {
+                if let Some(id) = next_id {
+                    last_event_id = Some(id);
+                }
+                backoff_secs = 1;
+            }
+            Err(err) => {
+                eprintln!("watch error: {err:?}");
+                backoff_secs = (backoff_secs * 2).min(30);
+            }
+        }
+        thread::sleep(Duration::from_secs(backoff_secs));
+    }
+}
+
+fn stream_economy_once(
+    base: &str,
+    token: Option<&str>,
+    last_event_id: Option<&str>,
+    snapshot: &mut JsonValue,
+    args: &StateEconomyLedgerArgs,
+) -> Result<Option<String>> {
+    let client = reqwest::blocking::Client::builder()
+        .timeout(None)
+        .build()
+        .context("building SSE client")?;
+    let mut req = client
+        .get(format!("{}/events", base))
+        .query(&[("prefix", "state.read.model.patch"), ("replay", "0")])
+        .header(ACCEPT, "text/event-stream");
+    if let Some(id) = last_event_id {
+        req = req.header("Last-Event-ID", id);
+    }
+    req = with_admin_headers(req, token);
+    let resp = req.send().context("connecting to /events stream")?;
+    let status = resp.status();
+    if status == StatusCode::UNAUTHORIZED {
+        bail!("unauthorized: provide --admin-token or set ARW_ADMIN_TOKEN");
+    }
+    if !status.is_success() {
+        bail!("events stream failed with status {}", status);
+    }
+    let mut reader = BufReader::new(resp);
+    let mut line = String::new();
+    let mut event_name = String::new();
+    let mut data_buf = String::new();
+    let mut event_id_line: Option<String> = None;
+    let mut latest_id = last_event_id.map(|s| s.to_string());
+    loop {
+        line.clear();
+        let read = reader.read_line(&mut line)?;
+        if read == 0 {
+            return Ok(latest_id);
+        }
+        if line.ends_with('\n') {
+            line.pop();
+            if line.ends_with('\r') {
+                line.pop();
+            }
+        }
+        if line.is_empty() {
+            if event_name == "state.read.model.patch" && !data_buf.is_empty() {
+                if let Err(err) = handle_economy_patch(&data_buf, snapshot, args) {
+                    eprintln!("failed to process patch: {err:?}");
+                } else if let Some(id_val) = event_id_line.as_ref() {
+                    latest_id = Some(id_val.clone());
+                }
+            }
+            event_name.clear();
+            data_buf.clear();
+            event_id_line = None;
+            continue;
+        }
+        if line.starts_with(':') {
+            continue;
+        }
+        if let Some(rest) = line.strip_prefix("event:") {
+            event_name = rest.trim().to_string();
+            continue;
+        }
+        if let Some(rest) = line.strip_prefix("data:") {
+            if !data_buf.is_empty() {
+                data_buf.push('\n');
+            }
+            data_buf.push_str(rest.trim_start());
+            continue;
+        }
+        if let Some(rest) = line.strip_prefix("id:") {
+            event_id_line = Some(rest.trim().to_string());
+            continue;
+        }
+    }
+}
+
+fn handle_economy_patch(
+    data: &str,
+    snapshot: &mut JsonValue,
+    args: &StateEconomyLedgerArgs,
+) -> Result<()> {
+    let env: JsonValue = serde_json::from_str(data).context("decoding SSE payload")?;
+    let payload = env.get("payload").cloned().unwrap_or(env.clone());
+    let rm = payload.get("payload").cloned().unwrap_or(payload.clone());
+    let read_model_id = rm
+        .get("id")
+        .or_else(|| rm.get("read_model"))
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
+    if read_model_id != "economy_ledger" {
+        return Ok(());
+    }
+    let patch_value = match rm.get("patch") {
+        Some(v) if v.is_array() => v.clone(),
+        _ => return Ok(()),
+    };
+    let patch: JsonPatch =
+        serde_json::from_value(patch_value).context("decoding JSON Patch for economy")?;
+    apply_json_patch(snapshot, &patch).context("applying economy patch")?;
+    let view = build_economy_view(snapshot, args)?;
+    let version = view.get("version").and_then(|v| v.as_u64()).unwrap_or(0);
+    let note = format!("{} (version {})", Local::now().format("%H:%M:%S"), version);
+    println!("{}", note);
+    render_economy_text(&view)?;
+    Ok(())
+}
+
+fn build_economy_view(snapshot: &JsonValue, args: &StateEconomyLedgerArgs) -> Result<JsonValue> {
+    let mut out = snapshot.clone();
+    // Filter by currency
+    if let Some(ref c) = args.currency {
+        let needle = c.trim().to_ascii_lowercase();
+        if !needle.is_empty() {
+            if let Some(entries) = out.get_mut("entries").and_then(|v| v.as_array_mut()) {
+                let mut filtered: Vec<JsonValue> = Vec::new();
+                for e in entries.iter() {
+                    let cur = e
+                        .get("currency")
+                        .and_then(|v| v.as_str())
+                        .map(|s| s.trim().to_ascii_lowercase())
+                        .unwrap_or_else(|| "unitless".to_string());
+                    if cur == needle {
+                        filtered.push(e.clone());
+                    }
+                }
+                *entries = filtered;
+            }
+            if let Some(totals) = out.get_mut("totals").and_then(|v| v.as_array_mut()) {
+                let filtered: Vec<JsonValue> = totals
+                    .iter()
+                    .filter(|t| {
+                        t.get("currency")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("")
+                            .to_ascii_lowercase()
+                            == needle
+                    })
+                    .cloned()
+                    .collect();
+                *totals = filtered;
+            }
+        }
+    }
+    // Paginate (recent-first)
+    if let Some(limit) = args.limit {
+        if limit > 0 {
+            if let Some(entries) = out.get_mut("entries").and_then(|v| v.as_array_mut()) {
+                let mut recent = entries.clone();
+                recent.sort_by(|a, b| {
+                    let at = a
+                        .get("issued_at")
+                        .and_then(|v| v.as_str())
+                        .and_then(|s| chrono::DateTime::parse_from_rfc3339(s).ok())
+                        .map(|dt| dt.timestamp_millis())
+                        .unwrap_or(0);
+                    let bt = b
+                        .get("issued_at")
+                        .and_then(|v| v.as_str())
+                        .and_then(|s| chrono::DateTime::parse_from_rfc3339(s).ok())
+                        .map(|dt| dt.timestamp_millis())
+                        .unwrap_or(0);
+                    bt.cmp(&at)
+                });
+                let offset = args.offset.unwrap_or(0);
+                let end = (offset + limit).min(recent.len());
+                let window = if offset < end {
+                    &recent[offset..end]
+                } else {
+                    &[]
+                };
+                *entries = window.to_vec();
+            }
+        }
+    }
+    Ok(out)
+}
+
+fn render_economy_text(snapshot: &JsonValue) -> Result<()> {
+    let version = snapshot
+        .get("version")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(0);
+    println!("Economy ledger (version {})", version);
+    let totals = snapshot
+        .get("totals")
+        .and_then(|v| v.as_array())
+        .cloned()
+        .unwrap_or_default();
+    if totals.is_empty() {
+        println!("  Totals: none");
+    } else {
+        println!("  Totals:");
+        for t in totals {
+            let currency = t
+                .get("currency")
+                .and_then(|v| v.as_str())
+                .unwrap_or("unitless");
+            let settled = t.get("settled").and_then(|v| v.as_f64());
+            let pending = t.get("pending").and_then(|v| v.as_f64());
+            println!(
+                "    - {}: settled {} pending {}",
+                currency,
+                settled.map(format_amount).unwrap_or_else(|| "-".into()),
+                pending.map(format_amount).unwrap_or_else(|| "-".into())
+            );
+        }
+    }
+    let entries = snapshot
+        .get("entries")
+        .and_then(|v| v.as_array())
+        .cloned()
+        .unwrap_or_default();
+    println!("  Entries: {}", entries.len());
+    Ok(())
+}
+
+fn render_economy_csv(snapshot: &JsonValue) -> Result<()> {
+    let entries = snapshot
+        .get("entries")
+        .and_then(|v| v.as_array())
+        .cloned()
+        .unwrap_or_default();
+    let mut out = io::BufWriter::new(io::stdout());
+    writeln!(out, "id,currency,status,net_amount,gross_amount,issued_at,settled_at,job_id,persona_id,contract_id")?;
+    for e in entries {
+        let id = e.get("id").and_then(|v| v.as_str()).unwrap_or("");
+        let currency = e
+            .get("currency")
+            .and_then(|v| v.as_str())
+            .unwrap_or("unitless");
+        let status = e.get("status").and_then(|v| v.as_str()).unwrap_or("");
+        let net = e
+            .get("net_amount")
+            .and_then(|v| v.as_f64())
+            .map(|v| v.to_string())
+            .unwrap_or_default();
+        let gross = e
+            .get("gross_amount")
+            .and_then(|v| v.as_f64())
+            .map(|v| v.to_string())
+            .unwrap_or_default();
+        let issued = e.get("issued_at").and_then(|v| v.as_str()).unwrap_or("");
+        let settled = e.get("settled_at").and_then(|v| v.as_str()).unwrap_or("");
+        let job_id = e.get("job_id").and_then(|v| v.as_str()).unwrap_or("");
+        let persona_id = e.get("persona_id").and_then(|v| v.as_str()).unwrap_or("");
+        let contract_id = e.get("contract_id").and_then(|v| v.as_str()).unwrap_or("");
+        writeln!(
+            out,
+            "{},{},{},{},{},{},{},{},{},{}",
+            escape_csv(id),
+            escape_csv(currency),
+            escape_csv(status),
+            net,
+            gross,
+            escape_csv(issued),
+            escape_csv(settled),
+            escape_csv(job_id),
+            escape_csv(persona_id),
+            escape_csv(contract_id)
+        )?;
+    }
+    out.flush()?;
+    Ok(())
+}
+
+fn escape_csv(s: &str) -> String {
+    if s.contains(',') || s.contains('"') || s.contains('\n') {
+        format!("\"{}\"", s.replace('"', "\"\""))
+    } else {
+        s.to_string()
+    }
+}
+
+fn format_amount(v: f64) -> String {
+    if v.fract().abs() < f64::EPSILON {
+        format!("{:.0}", v)
+    } else {
+        format!("{:.2}", v)
     }
 }
 

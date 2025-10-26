@@ -261,6 +261,40 @@ function Invoke-Verify {
     }
   }
 
+  # TypeScript client build (optional; skips in -Fast)
+  if ($Fast.IsPresent) {
+    $results += [pscustomobject]@{
+      Name    = 'clients/typescript build'
+      Status  = 'skipped'
+      Message = 'skipped in -Fast mode'
+    }
+  } else {
+    $npm = Resolve-Tool @('npm')
+    $node = if ($node) { $node } else { Resolve-Tool @('node') }
+    if ($npm -and $node) {
+      $results += Invoke-Step -Name 'clients/typescript build' -Action {
+        Push-Location (Join-Path $RepoRoot 'clients/typescript')
+        try {
+          $lockPath = Join-Path (Get-Location) 'package-lock.json'
+          if (Test-Path $lockPath) {
+            Invoke-Program -Executable $npm -Arguments @('ci','--no-audit','--no-fund')
+          } else {
+            Invoke-Program -Executable $npm -Arguments @('install','--no-audit','--no-fund')
+          }
+          Invoke-Program -Executable $npm -Arguments @('run','build')
+        } finally {
+          Pop-Location
+        }
+      }
+    } else {
+      $results += [pscustomobject]@{
+        Name    = 'clients/typescript build'
+        Status  = 'skipped'
+        Message = 'Node.js/npm not found'
+      }
+    }
+  }
+
   $docStepName1 = 'python check_operation_docs_sync.py'
   $docStepName2 = 'python gen_topics_doc.py --check'
   if ($SkipDocPython.IsPresent) {

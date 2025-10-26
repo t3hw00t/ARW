@@ -5,7 +5,7 @@ title: Metrics & Insights
 # Metrics & Insights
 { .topic-trio style="--exp:.6; --complex:.7; --complicated:.6" data-exp=".6" data-complex=".7" data-complicated=".6" }
 
-Updated: 2025-10-09
+Updated: 2025-10-26
 Type: How‑to
 
 ## Overview
@@ -41,8 +41,9 @@ Type: How‑to
   - `arw_task_*` — background task starts/completions/aborts (`*_total`) and inflight gauges
   - `arw_legacy_capsule_headers_total` — rejected requests still carrying the deprecated gate header (should trend to zero before retiring compatibility shims)
   - `arw_modular_agent_total` / `arw_modular_tool_total` — accepted modular agent responses and tool invocations (labelled by `agent`/`tool`)
-  - `arw_modular_chat_text_len`, `arw_modular_chat_summary_ratio`, `arw_modular_recall_items`, `arw_modular_compression_candidates`, `arw_modular_validation_findings` — loss and health histograms emitted when modular turns persist to memory (surface in dashboards to track compression effectiveness).
-  - `arw_build_info{service,version,sha}` — build metadata
+  - `arw_modular_chat_text_len`, `arw_modular_chat_summary_ratio`, `arw_modular_recall_items`, `arw_modular_compression_candidates`, `arw_modular_validation_findings` - loss and health histograms emitted when modular turns persist to memory (surface in dashboards to track compression effectiveness).
+  - `arw_build_info{service,version,sha}` - build metadata
+  - `arw.economy.totals.settled{currency}` / `arw.economy.totals.pending{currency}` - per-currency ledger totals (updated whenever the economy ledger snapshot changes)
 - Trust (RPU):
     - `arw_rpu_trust_last_reload_ms` — epoch ms of last trust store reload
     - `arw_rpu_trust_issuers` — current trust issuers count

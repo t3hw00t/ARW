@@ -32,3 +32,27 @@ run = "DOCS_CHECK_FAST=1 bash scripts/docs_check.sh"
 [tasks."docs:cache:build"]
 description = "Download MkDocs/doc wheels for offline installs."
 run = "bash scripts/build_docs_wheels.sh --archive dist/docs-wheels.tar.gz"
+
+[tasks."ts:economy:smoke"]
+description = "Run TS economy ledger smoke (build + SSE)"
+run = "bash -lc 'set -euo pipefail; base=${BASE:-http://127.0.0.1:8091}; timeout=${TIMEOUT:-10000}; trigger=${TRIGGER:-1}; require=${REQUIRE_UPDATE:-1}; pushd clients/typescript >/dev/null; if [ -f package-lock.json ]; then npm ci --no-audit --no-fund; else npm install --no-audit --no-fund; fi; npm run -s build; flags=(--timeout "$timeout"); case "$trigger" in 1|true|yes|on) flags+=(--trigger);; esac; case "$require" in 1|true|yes|on) flags+=(--require-update);; esac; BASE="$base" node dist/examples/smoke_watch_economy_ledger.js "${flags[@]}"; popd >/dev/null'"
+
+[tasks."ts:events"]
+description = "Run arw-events (TS) with forwarded ARGS"
+run = "bash -lc 'just ts-events base=${BASE:-http://127.0.0.1:8091} ${ARGS:-}'"
+
+[tasks."ts:events:patches"]
+description = "Tail read-model patches with arw-events (resume to .arw/last-event-id)"
+run = "bash -lc 'just ts-events-patches base=${BASE:-http://127.0.0.1:8091} replay=${REPLAY:-25} store=${STORE:-.arw/last-event-id} structured=${STRUCTURED:-false}'"
+
+[tasks."cli:economy:ledger"]
+description = "arw-cli: economy ledger snapshot/export"
+run = "bash -lc 'cargo run -p arw-cli -- state economy-ledger --base ${BASE:-http://127.0.0.1:8091} ${LIMIT:+--limit ${LIMIT}} ${OFFSET:+--offset ${OFFSET}} ${CURRENCY:+--currency ${CURRENCY}} ${JSON:+--json} ${PRETTY:+--pretty} ${CSV:+--csv}'"
+
+[tasks."ts:readmodel:watch"]
+description = "Watch a read-model id with snapshot hydration"
+run = "bash -lc 'set -euo pipefail; id=${ID:?set ID}; base=${BASE:-http://127.0.0.1:8091}; snapshot=${SNAPSHOT:-}; timeout=${TIMEOUT:-0}; json=${JSON:-false}; require_version=${REQUIRE_VERSION:-0}; require_key=${REQUIRE_KEY:-}; pushd clients/typescript >/dev/null; if [ -f package-lock.json ]; then npm ci --no-audit --no-fund; else npm install --no-audit --no-fund; fi; npm run -s build; args=(--id "$id"); if [ -n "$snapshot" ]; then args+=(--snapshot "$snapshot"); fi; if [ -n "$timeout" ] && [ "$timeout" != "0" ]; then args+=(--timeout "$timeout"); fi; case "$json" in 1|true|yes|on) args+=(--json);; esac; case "$require_version" in 1|true|yes|on) args+=(--require-version);; esac; if [ -n "$require_key" ]; then args+=(--require-key "$require_key"); fi; BASE="$base" node dist/examples/readmodel_watch.js "${args[@]}"; popd >/dev/null'"
+
+[tasks."ts:daily:brief"]
+description = "Fetch Daily Brief snapshot + watch publish events"
+run = "bash -lc 'set -euo pipefail; base=${BASE:-http://127.0.0.1:8091}; timeout=${TIMEOUT:-8000}; json=${JSON:-false}; pushd clients/typescript >/dev/null; if [ -f package-lock.json ]; then npm ci --no-audit --no-fund; else npm install --no-audit --no-fund; fi; npm run -s build; args=(); if [ -n "$timeout" ] && [ "$timeout" != "0" ]; then args+=(--timeout "$timeout"); fi; case "$json" in 1|true|yes|on) args+=(--json);; esac; BASE="$base" node dist/examples/daily_brief.js "${args[@]}"; popd >/dev/null'"

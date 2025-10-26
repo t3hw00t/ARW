@@ -114,6 +114,104 @@ for await (const evt of stream) {
 
 See `clients/typescript/examples/reliable_stream.ts` for a fuller Node example that emits structured lifecycle logs, honors idle timeouts, and optionally appends every record to a JSONL file via `--out` for later analysis. The CLI adds rotation/retention/compression knobs when you combine it with `--out-format`, `--out-max-bytes`, `--out-keep`, and `--out-compress`.
 
+Economy ledger snapshot + SSE patches:
+
+```ts
+import { ArwClient } from '@arw/client';
+
+const client = new ArwClient(process.env.BASE!, process.env.ARW_ADMIN_TOKEN);
+
+// Fetch snapshot (supports limit/offset)
+const snap = await client.state.economyLedger({ limit: 25 });
+console.log('version', snap.version, 'entries', snap.entries.length);
+
+// Subscribe to read-model patches (id = "economy_ledger")
+const sub = client.state.watchEconomyLedger({
+  loadInitial: async () => snap,
+  onUpdate: (next) => console.log('updated version', next?.version),
+});
+
+// later
+sub.close();
+```
+
+See also: `clients/typescript/examples/economy_ledger.ts`.
+
+Smoke helper (manual):
+
+```bash
+BASE=http://127.0.0.1:8091 ARW_ADMIN_TOKEN=... \
+ts-node clients/typescript/examples/smoke_watch_economy_ledger.ts --timeout 10000
+```
+
+Daily Brief (snapshot + live):
+
+```ts
+import { ArwClient } from '@arw/client';
+
+const client = new ArwClient(process.env.BASE!, process.env.ARW_ADMIN_TOKEN);
+
+// Fetch the latest brief
+const brief = await client.state.dailyBrief();
+console.log('brief summary', brief.summary);
+
+// Watch publish events and emit summaries
+const sub = client.state.watchDailyBrief({
+  loadInitial: async () => brief,
+  onUpdate: (next) => console.log('brief updated', next?.generated_at, next?.summary),
+});
+
+// later
+sub.close();
+```
+
+Example runner: `clients/typescript/examples/daily_brief.ts`.
+
+Task shortcuts (repo root):
+
+- Just
+  - `just ts-readmodel-watch id=projects timeout=15000`
+  - `just ts-readmodel-watch id=actions snapshot=/state/actions?state=completed json=true`
+  - `just ts-events args="--prefix service.,state.read.model.patch --replay 25 --store .arw/last-event-id"`
+  - `just ts-events-patches structured=true`
+  - `just ts-economy-smoke base=http://127.0.0.1:8091 timeout=10000`
+
+- Mise
+  - `mise run ts:readmodel:watch ID=projects TIMEOUT=15000`
+  - `mise run ts:events ARGS="--prefix service. --replay 10"`
+  - `mise run ts:events:patches BASE=http://127.0.0.1:8091 REPLAY=25 STORE=.arw/last-event-id`
+  - `mise run ts:economy:smoke BASE=http://127.0.0.1:8091 TIMEOUT=10000`
+  - `mise run ts:daily:brief BASE=http://127.0.0.1:8091 TIMEOUT=8000`
+
+Read-model watcher (generic):
+
+```bash
+# Direct (ts-node)
+BASE=http://127.0.0.1:8091 ARW_ADMIN_TOKEN=... \
+ts-node clients/typescript/examples/readmodel_watch.ts \
+  --id projects \
+  --timeout 15000 \
+  --require-version \
+  --require-key items \
+  --json
+
+# Just task
+just ts-readmodel-watch id=projects timeout=15000 json=true
+just ts-readmodel-watch id=actions snapshot=/state/actions?state=completed json=true
+
+# Mise task (env)
+mise run ts:readmodel:watch ID=projects TIMEOUT=15000 JSON=true REQUIRE_VERSION=1 REQUIRE_KEY=items
+```
+
+Flags/env:
+- `--id <id>` (required): read-model id to watch.
+- `--snapshot /state/...` (optional): custom snapshot route if it differs from `/state/<id>`.
+- `--timeout <ms>`: auto-close after timeout (0 = run until manually closed).
+- `--json`: print full snapshots (default prints version only).
+- `--require-version` / `REQUIRE_VERSION=1`: assert initial snapshot has a numeric `version`.
+- `--require-key <key>` / `REQUIRE_KEY=...`: assert initial snapshot includes the top-level key.
+- `--require-update` (script only): fail if no patch is observed within the timeout.
+
 CLI:
 - Install or use via NPX after publishing: `arw-events --prefix service.,state.read.model.patch --replay 25 --store .arw/last-event-id` (uses `BASE` and `ARW_ADMIN_TOKEN` env vars).
 - Flags like `--no-reconnect`, `--delay`, `--max-delay`, `--jitter`, `--idle`, `--structured`, `--out`, `--out-format`, `--out-max-bytes`, `--out-keep`, and `--out-compress` tweak reconnect/idle policy, output format, and persistence (idle/structured/out/* only affect the Node fallback). Structured mode mirrors the `reliable_stream.ts` JSONL schema so operators can parse lifecycle logs without extra scripting, and the `--out` family appends, rotates, prunes, and optionally gzips JSONL logs for replay/backfill workflows.

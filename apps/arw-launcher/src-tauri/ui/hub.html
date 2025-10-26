@@ -104,7 +104,8 @@
         </nav>
         <main class="grid cols-2" id="hubPanelHost" role="tabpanel" aria-labelledby="hubTabToday">
           <section class="card" id="todaySummary" role="region" aria-labelledby="todaySummaryTitle" data-hub-panel="today">
-            <h3 id="todaySummaryTitle">Daily Brief (preview)</h3>
+            <h3 id="todaySummaryTitle">Daily Brief (preview) <span id="dailyBriefLive" class="badge" hidden aria-label="Daily Brief: live update received">LIVE</span></h3>
+            <p id="todaySummaryLine" class="dim" aria-live="polite"></p>
             <p class="section-lead">Quick pulse on runtimes, event streams, and persona feedback; switch tabs for the full view.</p>
             <dl class="today-summary" aria-live="polite">
               <div>
@@ -401,7 +402,15 @@
           <section class="card" id="economy" role="region" aria-labelledby="economyTitle" data-hub-panel="economy" hidden>
             <h3 id="economyTitle">Economy Overview</h3>
             <p class="section-lead">Track autonomy lane health, budgets, and attention signals while revenue metrics land.</p>
+            <div class="row" style="gap:8px; align-items:center; margin-bottom:8px">
+              <label class="key" for="economyCurrency">Currency</label>
+              <select id="economyCurrency" aria-label="Filter currency" style="min-width:140px"></select>
+            </div>
             <div id="economyContent" class="economy-grid" aria-live="polite">
+              <div class="metric-block">
+                <h4 class="metric-subhead">Totals by currency</h4>
+                <div id="economyTotalsPills" class="badge-row" aria-live="polite"></div>
+              </div>
               <div class="metric-block">
                 <h4 class="metric-subhead">Lane status</h4>
                 <ul id="economyLaneList" class="metric-list"></ul>
@@ -422,7 +431,10 @@
               <button id="economyDocs" class="ghost mini" type="button">Open roadmap</button>
               <button id="economyBacklog" class="ghost mini" type="button">View tasks</button>
             </div>
-            <span id="economyUpdated" class="dim" role="status" aria-live="polite"></span>
+            <div class="row" style="gap:8px; align-items:center">
+              <span id="economyLive" class="badge ok" aria-live="polite" hidden>LIVE</span>
+              <span id="economyUpdated" class="dim" role="status" aria-live="polite"></span>
+            </div>
           </section>
           <section class="card" id="personas" role="region" aria-labelledby="personasTitle" data-hub-panel="personas" hidden>
             <h3 id="personasTitle">Personas</h3>

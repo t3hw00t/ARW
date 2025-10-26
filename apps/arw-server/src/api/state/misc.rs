@@ -189,11 +189,26 @@ pub async fn state_contributions(
     response
 }
 
+#[derive(Debug, Default, Deserialize, IntoParams, ToSchema)]
+#[serde(default)]
+pub struct EconomyLedgerQuery {
+    /// Max number of entries to return (recent first).
+    pub limit: Option<usize>,
+    /// Offset for pagination (recent-first order).
+    pub offset: Option<usize>,
+    /// Filter entries/totals by currency code (case-insensitive). Use 'unitless' for entries without a currency.
+    pub currency: Option<String>,
+}
+
 /// Economy ledger snapshot (jobs, payouts, attention flags).
 #[utoipa::path(
     get,
     path = "/state/economy/ledger",
     tag = "State",
+    params(
+        ("limit" = Option<usize>, Query, description = "Max entries (recent first)"),
+        ("offset" = Option<usize>, Query, description = "Offset (recent first)")
+    ),
     responses(
         (status = 200, description = "Economy ledger snapshot", body = crate::economy::EconomyLedgerSnapshot),
         (status = 401, description = "Unauthorized", body = serde_json::Value)
@@ -201,6 +216,7 @@ pub async fn state_contributions(
 )]
 pub async fn state_economy_ledger(
     headers: HeaderMap,
+    Query(q): Query<EconomyLedgerQuery>,
     State(state): State<AppState>,
 ) -> impl IntoResponse {
     if !admin_ok(&headers).await {
@@ -210,7 +226,44 @@ pub async fn state_economy_ledger(
         )
             .into_response();
     }
-    let snapshot = state.economy().snapshot().await;
+    let mut snapshot = state.economy().snapshot().await;
+    // Optional currency filter (normalize to lowercase for match); treat empty currency as 'unitless'.
+    if let Some(cur) = q.currency.as_deref() {
+        let needle = cur.trim().to_ascii_lowercase();
+        if !needle.is_empty() {
+            let mut filtered_entries = Vec::new();
+            for e in snapshot.entries.iter() {
+                let c = e
+                    .currency
+                    .as_deref()
+                    .map(|s| s.trim().to_ascii_lowercase())
+                    .unwrap_or_else(|| "unitless".to_string());
+                if c == needle {
+                    filtered_entries.push(e.clone());
+                }
+            }
+            snapshot.entries = filtered_entries;
+            snapshot
+                .totals
+                .retain(|t| t.currency.to_ascii_lowercase() == needle);
+        }
+    }
+    // Apply simple pagination on entries (recent first) when requested.
+    if let Some(limit) = q.limit {
+        if limit > 0 && !snapshot.entries.is_empty() {
+            let total = snapshot.entries.len();
+            let offset = q.offset.unwrap_or(0).min(total);
+            // entries are stored chronological; reverse iterate for recent-first then slice
+            let recent: Vec<_> = snapshot.entries.into_iter().rev().collect();
+            let end = (offset + limit).min(recent.len());
+            let window = if offset < end {
+                &recent[offset..end]
+            } else {
+                &[]
+            };
+            snapshot.entries = window.to_vec();
+        }
+    }
     let version = snapshot.version;
     if let Some(resp) = http_utils::state_version_not_modified(&headers, "economy_ledger", version)
     {
@@ -222,10 +275,18 @@ pub async fn state_economy_ledger(
 }
 
 /// Daily brief snapshot.
+#[derive(Debug, Default, Deserialize, IntoParams, ToSchema)]
+#[serde(default)]
+pub struct DailyBriefQuery {
+    /// Project id (reserved; optional; may be ignored).
+    pub proj: Option<String>,
+}
+
 #[utoipa::path(
     get,
     path = "/state/briefs/daily",
     tag = "State",
+    params(("proj" = Option<String>, Query, description = "Project id (optional)")),
     responses(
         (status = 200, description = "Daily brief snapshot", body = serde_json::Value),
         (status = 401, description = "Unauthorized", body = serde_json::Value)
@@ -233,6 +294,7 @@ pub async fn state_economy_ledger(
 )]
 pub async fn state_daily_brief(
     headers: HeaderMap,
+    Query(_q): Query<DailyBriefQuery>,
     State(state): State<AppState>,
 ) -> impl IntoResponse {
     if !admin_ok(&headers).await {
@@ -304,9 +366,13 @@ mod tests {
         ctx.env.set("ARW_DEBUG", "0");
         ctx.env.remove("ARW_ADMIN_TOKEN");
         ctx.env.remove("ARW_ADMIN_TOKEN_SHA256");
-        let response = state_economy_ledger(HeaderMap::new(), State(state))
-            .await
-            .into_response();
+        let response = state_economy_ledger(
+            HeaderMap::new(),
+            Query(super::EconomyLedgerQuery::default()),
+            State(state),
+        )
+        .await
+        .into_response();
         assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
     }
 
@@ -315,7 +381,26 @@ mod tests {
         let temp = tempdir().expect("tempdir");
         let mut ctx = begin_state_env(temp.path());
         let state = build_state(temp.path(), &mut ctx.env).await;
-        let response = state_economy_ledger(HeaderMap::new(), State(state))
+        let response = state_economy_ledger(
+            HeaderMap::new(),
+            Query(super::EconomyLedgerQuery::default()),
+            State(state),
+        )
+        .await
+        .into_response();
+        assert_eq!(response.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn state_economy_ledger_currency_filter_applies() {
+        let temp = tempdir().expect("tempdir");
+        let mut ctx = begin_state_env(temp.path());
+        let state = build_state(temp.path(), &mut ctx.env).await;
+        let q = super::EconomyLedgerQuery {
+            currency: Some("unitless".to_string()),
+            ..Default::default()
+        };
+        let response = state_economy_ledger(HeaderMap::new(), Query(q), State(state))
             .await
             .into_response();
         assert_eq!(response.status(), StatusCode::OK);
@@ -396,9 +481,13 @@ mod tests {
         let mut ctx = begin_state_env(temp.path());
         let state = build_state(temp.path(), &mut ctx.env).await;
         ctx.env.set("ARW_DEBUG", "0");
-        let response = state_daily_brief(HeaderMap::new(), State(state))
-            .await
-            .into_response();
+        let response = state_daily_brief(
+            HeaderMap::new(),
+            Query(super::DailyBriefQuery::default()),
+            State(state),
+        )
+        .await
+        .into_response();
         assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
     }
 
@@ -413,9 +502,13 @@ mod tests {
             header::AUTHORIZATION,
             header::HeaderValue::from_static("Bearer secret"),
         );
-        let response = state_daily_brief(headers, State(state))
-            .await
-            .into_response();
+        let response = state_daily_brief(
+            headers,
+            Query(super::DailyBriefQuery::default()),
+            State(state),
+        )
+        .await
+        .into_response();
         assert_eq!(response.status(), StatusCode::OK);
     }
 }

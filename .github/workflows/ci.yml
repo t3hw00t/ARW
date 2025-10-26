@@ -215,3 +215,94 @@ jobs:
 
       - name: Docs lint (fast)
         run: mise run docs:check:fast
+
+      - name: Paths filter for SSE smokes
+        id: filter
+        uses: dorny/paths-filter@0bc4621f580ce0098cd1f0e4ef39b9f2d0b58a65 # v3
+        with:
+          filters: |
+            sse:
+              - 'apps/arw-server/**'
+              - 'clients/typescript/**'
+              - 'docs/guide/economy_ledger.md'
+              - '.mise.toml'
+              - 'Justfile'
+              - '.github/workflows/ci.yml'
+
+      - name: Build arw-server (debug)
+        if: steps.filter.outputs.sse == 'true'
+        run: mise exec cargo -- cargo build -p arw-server
+
+      - name: Build arw-cli (debug)
+        if: steps.filter.outputs.sse == 'true'
+        run: mise exec cargo -- cargo build -p arw-cli
+
+      - name: Start arw-server (background)
+        if: steps.filter.outputs.sse == 'true'
+        env:
+          ARW_ADMIN_TOKEN: ${{ secrets.CI_ARW_ADMIN_TOKEN || 'test-admin-token' }}
+          ARW_DEBUG: "1"
+          ARW_PORT: "8099"
+        run: |
+          set -euo pipefail
+          nohup target/debug/arw-server >/tmp/arw-svc.log 2>&1 &
+          echo $! > /tmp/arw-svc.pid
+          for i in $(seq 1 60); do
+            if curl -fsS -m 2 http://127.0.0.1:8099/healthz >/dev/null; then
+              echo "server healthy"; break; fi; sleep 1; done
+          curl -fsS http://127.0.0.1:8099/about || true
+
+      - name: Economy SSE smoke (ts:economy:smoke)
+        if: steps.filter.outputs.sse == 'true'
+        env:
+          BASE: http://127.0.0.1:8099
+          ARW_ADMIN_TOKEN: ${{ secrets.CI_ARW_ADMIN_TOKEN || 'test-admin-token' }}
+          TIMEOUT: "20000"
+          TRIGGER: "1"
+          REQUIRE_UPDATE: "1"
+        run: mise run ts:economy:smoke
+
+      - name: CLI economy ledger (JSON/CSV)
+        if: steps.filter.outputs.sse == 'true'
+        env:
+          ARW_ADMIN_TOKEN: ${{ secrets.CI_ARW_ADMIN_TOKEN || 'test-admin-token' }}
+        run: |
+          target/debug/arw-cli state economy-ledger --base http://127.0.0.1:8099 --limit 5 --json --pretty
+          target/debug/arw-cli state economy-ledger --base http://127.0.0.1:8099 --limit 5 --csv > /tmp/ledger.csv
+          test -s /tmp/ledger.csv
+
+      - name: CLI economy ledger watch (brief)
+        if: steps.filter.outputs.sse == 'true'
+        env:
+          ARW_ADMIN_TOKEN: ${{ secrets.CI_ARW_ADMIN_TOKEN || 'test-admin-token' }}
+        run: |
+          timeout 8s target/debug/arw-cli state economy-ledger --base http://127.0.0.1:8099 --limit 5 --watch || true
+
+      - name: Daily Brief smoke (TS)
+        if: steps.filter.outputs.sse == 'true'
+        env:
+          BASE: http://127.0.0.1:8099
+          ARW_ADMIN_TOKEN: ${{ secrets.CI_ARW_ADMIN_TOKEN || 'test-admin-token' }}
+          TIMEOUT: "6000"
+        run: mise run ts:daily:brief
+
+      - name: Read-model watch smoke (projects)
+        env:
+          BASE: http://127.0.0.1:8099
+          ARW_ADMIN_TOKEN: ${{ secrets.CI_ARW_ADMIN_TOKEN || 'test-admin-token' }}
+          ID: projects
+          TIMEOUT: "5000"
+          REQUIRE_KEY: items
+          REQUIRE_VERSION: "1"
+        run: mise run ts:readmodel:watch
+
+      - name: Dump server log on failure
+        if: failure()
+        run: |
+          echo '--- arw-server log (tail) ---'
+          tail -n 200 /tmp/arw-svc.log || true
+
+      - name: Stop arw-server
+        if: always() && steps.filter.outputs.sse == 'true'
+        run: |
+          if [ -f /tmp/arw-svc.pid ]; then kill "$(cat /tmp/arw-svc.pid)" || true; fi

@@ -12,7 +12,7 @@ use tokio::sync::RwLock;
 use tracing::warn;
 use utoipa::ToSchema;
 
-use crate::responses;
+use crate::{read_models, responses};
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, ToSchema, Default)]
 #[serde(default)]
@@ -144,6 +144,8 @@ impl EconomyLedger {
         usage: EconomyUsageCounters,
     ) {
         let mut guard = self.store.write().await;
+        // Capture previous snapshot for JSON Patch diff
+        let prev_json = serde_json::to_value(&guard.snapshot).unwrap_or_else(|_| json!({}));
         let next_version = guard.version.saturating_add(1);
         guard.version = next_version;
         guard.snapshot.version = next_version;
@@ -154,6 +156,22 @@ impl EconomyLedger {
         guard.snapshot.generated = Some(Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true));
         let snapshot = guard.snapshot.clone();
         drop(guard);
+        // Publish read-model patch for SSE consumers
+        let next_json = serde_json::to_value(&snapshot).unwrap_or_else(|_| json!({}));
+        read_models::publish_read_model_patch_with_previous(
+            &self.bus,
+            "economy_ledger",
+            Some(prev_json),
+            &next_json,
+        );
+        // Metrics: expose totals as gauges with currency labels.
+        for t in &snapshot.totals {
+            let cur = t.currency.to_string();
+            metrics::gauge!("arw.economy.totals.settled", "currency" => cur.clone())
+                .set(t.settled.unwrap_or(0.0));
+            metrics::gauge!("arw.economy.totals.pending", "currency" => cur.clone())
+                .set(t.pending.unwrap_or(0.0));
+        }
         self.persist(&snapshot).await;
         self.publish(&snapshot);
     }
@@ -161,6 +179,7 @@ impl EconomyLedger {
     #[allow(dead_code)]
     pub async fn push_entry(&self, entry: EconomyLedgerEntry) {
         let mut guard = self.store.write().await;
+        let prev_json = serde_json::to_value(&guard.snapshot).unwrap_or_else(|_| json!({}));
         let next_version = guard.version.saturating_add(1);
         guard.version = next_version;
         guard.snapshot.version = next_version;
@@ -168,6 +187,20 @@ impl EconomyLedger {
         guard.snapshot.entries.push(entry);
         let snapshot = guard.snapshot.clone();
         drop(guard);
+        let next_json = serde_json::to_value(&snapshot).unwrap_or_else(|_| json!({}));
+        read_models::publish_read_model_patch_with_previous(
+            &self.bus,
+            "economy_ledger",
+            Some(prev_json),
+            &next_json,
+        );
+        for t in &snapshot.totals {
+            let cur = t.currency.to_string();
+            metrics::gauge!("arw.economy.totals.settled", "currency" => cur.clone())
+                .set(t.settled.unwrap_or(0.0));
+            metrics::gauge!("arw.economy.totals.pending", "currency" => cur.clone())
+                .set(t.pending.unwrap_or(0.0));
+        }
         self.persist(&snapshot).await;
         self.publish(&snapshot);
     }
@@ -302,8 +335,30 @@ mod tests {
         assert_eq!(snap.totals.len(), 1);
         assert!(snap.usage.runtime_requests.is_empty());
 
-        let event = subscriber.recv().await.expect("ledger event");
-        assert_eq!(event.kind, topics::TOPIC_ECONOMY_LEDGER_UPDATED);
+        // We expect both a read-model patch and a ledger-updated event (order not guaranteed).
+        let mut saw_patch = false;
+        let mut saw_updated = false;
+        for _ in 0..4 {
+            let event = subscriber.recv().await.expect("bus event");
+            if event.kind == topics::TOPIC_ECONOMY_LEDGER_UPDATED {
+                saw_updated = true;
+            } else if event.kind == topics::TOPIC_READMODEL_PATCH {
+                let id = event
+                    .payload
+                    .get("id")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or_default()
+                    .to_string();
+                if id == "economy_ledger" {
+                    saw_patch = true;
+                }
+            }
+            if saw_patch && saw_updated {
+                break;
+            }
+        }
+        assert!(saw_patch, "expected read-model patch for economy_ledger");
+        assert!(saw_updated, "expected economy.ledger.updated event");
     }
 
     #[tokio::test]

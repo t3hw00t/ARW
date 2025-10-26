@@ -117,6 +117,119 @@ export interface StreamEvent<T = Json> {
   type?: string;
 }
 
+// Daily Brief types
+export interface DailyBriefEconomyTotal {
+  currency: string;
+  settled: number;
+  pending: number;
+}
+
+export interface DailyBriefEconomyEntry {
+  id: string;
+  status?: string;
+  currency?: string;
+  amount?: number;
+  issued_at?: string;
+  tags?: string[];
+}
+
+export interface DailyBriefEconomySection {
+  totals?: DailyBriefEconomyTotal[];
+  recent_entries?: DailyBriefEconomyEntry[];
+}
+
+export interface DailyBriefRuntimeSection {
+  total: number;
+  by_state?: Record<string, number>;
+  by_severity?: Record<string, number>;
+  alerts?: string[];
+}
+
+export interface DailyBriefPersonaSection {
+  total: number;
+  approvals_pending: number;
+  primary_persona?: string;
+  vibe_average?: number;
+  last_signal?: string;
+  feedback_samples?: number;
+  approvals?: string[];
+  alerts?: string[];
+}
+
+export interface DailyBriefMemorySection {
+  coverage_needs_more_ratio?: number;
+  top_reasons?: string[];
+  recall_risk_ratio?: number;
+  alerts?: string[];
+}
+
+export interface DailyBriefAutonomySection {
+  lanes_total: number;
+  lanes_autonomous: number;
+  lanes_paused: number;
+  active_jobs: number;
+  queued_jobs: number;
+  alerts?: string[];
+}
+
+export interface DailyBriefSnapshot {
+  generated_at: string;
+  summary: string;
+  economy?: DailyBriefEconomySection;
+  runtime?: DailyBriefRuntimeSection;
+  persona?: DailyBriefPersonaSection;
+  memory?: DailyBriefMemorySection;
+  autonomy?: DailyBriefAutonomySection;
+  attention?: string[];
+}
+
+// Economy ledger types
+export interface EconomyStakeholderShare {
+  id: string;
+  role?: string;
+  share?: number;
+  amount?: number;
+}
+
+export interface EconomyLedgerEntry {
+  id: string;
+  job_id?: string;
+  persona_id?: string;
+  contract_id?: string;
+  stakeholders?: EconomyStakeholderShare[];
+  currency?: string;
+  gross_amount?: number;
+  net_amount?: number;
+  status?: string; // pending|settled|failed|cancelled
+  issued_at?: string; // RFC3339
+  settled_at?: string; // RFC3339
+  metadata?: Json;
+}
+
+export interface EconomyLedgerTotal {
+  currency: string;
+  pending?: number;
+  settled?: number;
+}
+
+export interface EconomyUsageCounters {
+  runtime_requests?: Record<string, number>;
+}
+
+export interface EconomyLedgerSnapshot {
+  version: number;
+  generated?: string; // RFC3339
+  entries: EconomyLedgerEntry[];
+  totals: EconomyLedgerTotal[];
+  attention: string[];
+  usage: EconomyUsageCounters;
+}
+
+export interface EconomyLedgerOptions {
+  limit?: number;
+  offset?: number;
+}
+
 const READ_MODEL_TOPIC = 'state.read.model.patch';
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
@@ -1119,6 +1232,11 @@ export class ArwClient {
       if (!r.ok) throw new Error(`actions fetch failed: ${r.status}`);
       return r.json();
     },
+    dailyBrief: async (): Promise<DailyBriefSnapshot> => {
+      const r = await fetch(`${this.base}/state/briefs/daily`, { headers: this.headers() });
+      if (!r.ok) throw new Error(`daily brief fetch failed: ${r.status}`);
+      return r.json();
+    },
     watchObservations: (options: WatchObservationsOptions = {}): ReadModelSubscription => {
       const { limit, kindPrefix, since, loadInitial, ...rest } = options;
       const loader =
@@ -1154,6 +1272,87 @@ export class ArwClient {
         ...rest,
         loadInitial: loader,
       });
+    },
+    economyLedger: async (
+      options: EconomyLedgerOptions = {},
+    ): Promise<EconomyLedgerSnapshot> => {
+      const params = new URLSearchParams();
+      if (options.limit !== undefined) {
+        const limit = Math.max(1, Math.floor(options.limit));
+        if (Number.isFinite(limit)) params.set('limit', limit.toString());
+      }
+      if (options.offset !== undefined) {
+        const offset = Math.max(0, Math.floor(options.offset));
+        if (Number.isFinite(offset)) params.set('offset', offset.toString());
+      }
+      const query = params.toString();
+      const url = `${this.base}/state/economy/ledger${query ? `?${query}` : ''}`;
+      const r = await fetch(url, { headers: this.headers() });
+      if (!r.ok) throw new Error(`economy ledger fetch failed: ${r.status}`);
+      return r.json();
+    },
+    watchEconomyLedger: (
+      options: (EconomyLedgerOptions & SubscribeReadModelOptions) = {},
+    ): ReadModelSubscription => {
+      const { limit, offset, loadInitial, ...rest } = options as any;
+      const loader =
+        (loadInitial as any) ?? (() => this.state.economyLedger({ limit, offset }));
+      return this.events.subscribeReadModel('economy_ledger', {
+        ...(rest as SubscribeReadModelOptions),
+        loadInitial: loader,
+      });
+    },
+    // Subscribe to brief.daily.published and keep the latest snapshot in memory.
+    // Emits the full snapshot payload carried by the event; loader hydrates initial state.
+    watchDailyBrief: (
+      options: Omit<SubscribeReadModelOptions, 'loadInitial'> & { loadInitial?: () => Promise<DailyBriefSnapshot> } = {},
+    ): { close(): void; getSnapshot(): DailyBriefSnapshot | undefined; onUpdate(handler: (snap?: DailyBriefSnapshot) => void): () => void } => {
+      const { loadInitial, onStateChange, inactivityTimeoutMs, autoReconnect, reconnectInitialDelayMs, reconnectMaxDelayMs, reconnectJitterMs } = options as any;
+      let snapshot: DailyBriefSnapshot | undefined;
+      const listeners = new Set<(snap?: DailyBriefSnapshot) => void>();
+      const emit = () => { for (const fn of Array.from(listeners)) { try { fn(snapshot); } catch {} } };
+
+      let sub: any = null;
+      const start = async () => {
+        try {
+          const loader = loadInitial ?? (async () => this.state.dailyBrief());
+          snapshot = await loader();
+          emit();
+        } catch {}
+        sub = this.events.subscribe({
+          topics: ['brief.daily.published'],
+          onStateChange,
+          inactivityTimeoutMs,
+          autoReconnect,
+          reconnectInitialDelayMs,
+          reconnectMaxDelayMs,
+          reconnectJitterMs,
+        });
+        const handler = (e: any) => {
+          try {
+            const data = e?.data;
+            if (data && typeof data === 'object') {
+              snapshot = data as DailyBriefSnapshot;
+              emit();
+            }
+          } catch {}
+        };
+        // Browser EventSource
+        if (typeof (globalThis as any).EventSource !== 'undefined') {
+          (sub as EventSource).onmessage = (evt: MessageEvent) => {
+            try { handler({ data: JSON.parse((evt.data as any) || '{}') }); } catch {}
+          };
+        } else {
+          // Node fallback returns { close, onmessage, onerror }
+          sub.onmessage = (evt: any) => handler(evt);
+        }
+      };
+      start();
+      return {
+        close: () => { try { sub?.close?.(); } catch {} },
+        getSnapshot: () => snapshot,
+        onUpdate: (fn: (snap?: DailyBriefSnapshot) => void) => { listeners.add(fn); return () => listeners.delete(fn); },
+      };
     },
   };
 

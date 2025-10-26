@@ -33,7 +33,7 @@ Badges can be combined (for example, `[Pack: Collaboration][Future]`) to show bo
 - [Pack: Collaboration] Command palette/quick-action menu in the launcher
 - [Pack: Collaboration][Pack: Persona] Companion Hub consolidation with role-aware tabs and accessibility audits (`t-20251027-companion-hub-foundation`)
 - [Pack: Persona][Pack: Collaboration] Conversational daily brief surfacing empathy/memory/autonomy/economy highlights (`t-20251027-daily-brief`, in_progress)
-- [Pack: Collaboration][Pack: Persona] Memory quality snapshots wired to `/state/memory/recent` plus autonomy lane/budget dashboarding while economy ledgers incubate
+- [Pack: Collaboration][Pack: Persona] Memory quality snapshots wired to `/state/memory/recent` plus autonomy lane/budget dashboarding; Economy read-models available (see How-to → Economy Ledger)
 - [Pack: Persona][Pack: Collaboration] Vibe feedback controls in Chat/Launcher (sentiment dial, confirmation style toggle) with opt-in telemetry
 - [Pack: Persona] Persona card surface showing worldview traits, empathy tone, recent growth checkpoints
 - [Pack: Collaboration] Chat/Hub provenance panes showing validation outcomes, memory evidence, and tool audit trails (Modular Cognitive Stack phase 2)
