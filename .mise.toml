@@ -76,3 +76,7 @@ run = "bash -lc 'bash scripts/adapter_smoke.sh'"
 [tasks."adapters:mock:up"]
 description = "Run mock adapter health server"
 run = "bash -lc 'ARW_MOCK_ADAPTER_PORT=${PORT:-8081} cargo run -p arw-mock-adapter --bin mock-adapter-health'"
+
+[tasks."adapters:smoke:oneshot"]
+description = "Build + start mock server; run smoke with health; stop server"
+run = "bash -lc 'set -euo pipefail; ARW_MOCK_ADAPTER_PORT=${PORT:-8081} ADAPTER_SMOKE_OUT=${OUT:-} bash scripts/adapter_smoke_oneshot.sh'"

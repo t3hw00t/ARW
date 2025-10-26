@@ -275,6 +275,11 @@ ts-economy-smoke base='http://127.0.0.1:8091' timeout='10000' token='':
 adapters-smoke:
   bash scripts/adapter_smoke.sh
 
+# One-shot: build + start mock server, run smoke with health, stop server
+adapters-smoke-oneshot port=8081 out='':
+  set -euo pipefail; \
+  ARW_MOCK_ADAPTER_PORT='{{port}}' ADAPTER_SMOKE_OUT='{{out}}' bash scripts/adapter_smoke_oneshot.sh
+
 # Tail events via TS bin (arw-events); forward flags via *args
 ts-events base='http://127.0.0.1:8091' token='' *args:
   set -euo pipefail; \

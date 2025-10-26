@@ -36,6 +36,7 @@ Assistant quickstart → [Agent Onboarding](docs/ai/AGENT_ONBOARDING.md)
 - [Orchestrator CLI](docs/guide/orchestrator_cli.md) - Catalog, launch, and monitor persona-aware training runs from the terminal.
 - [Repo Map](docs/ai/REPO_MAP.md) - Directory overview for retrieval and navigation.
 - [Documentation Home](docs/index.md) - Product overview, guides, and reference docs.
+ - Adapters quick smoke (one-shot): `just adapters-smoke-oneshot` or `mise run adapters:smoke:oneshot`
 
 ## Release Status
 - Legacy release bundles (<= `v0.1.4`) have been retired; no prebuilt downloads are published while we refocus on the next milestone.
