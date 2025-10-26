@@ -113,6 +113,20 @@ See: `docs/reference/adapter_manifest.md` for full schema details.
 
 ## CI
 
-- The CI lints manifests under `adapters/` with strict warnings when relevant files change.
-  - See `.github/workflows/ci.yml` (paths‑gated step: adapters).
+- The CI lints manifests under `adapters/` with strict warnings when relevant files change and runs a lightweight smoke.
+  - Lint: validates manifests (normal + strict).
+  - Smoke: `scripts/adapter_smoke.sh` validates all manifests and can optionally probe health endpoints.
+  - JSON report: set `ADAPTER_SMOKE_OUT=/tmp/adapter-smoke.json` to emit a structured report (CI uploads as an artifact).
 
+### Smoke Harness (local)
+
+- Validate + advisories only:
+  - `bash scripts/adapter_smoke.sh`
+
+- Include best‑effort health probes (JSON manifests only):
+  - `ADAPTER_SMOKE_HEALTH=1 bash scripts/adapter_smoke.sh`
+
+- Emit a JSON report:
+  - `ADAPTER_SMOKE_OUT=dist/adapter-smoke.json bash scripts/adapter_smoke.sh`
+
+The JSON report includes per‑manifest status and advisories (e.g., missing consent summary or description) that are non‑fatal recommendations in addition to SDK validation.

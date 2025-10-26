@@ -334,4 +334,11 @@ jobs:
       - name: Adapter smoke harness
         if: steps.filter.outputs.adapters == 'true'
         run: |
-          bash scripts/adapter_smoke.sh
+          ADAPTER_SMOKE_OUT=/tmp/adapter-smoke.json bash scripts/adapter_smoke.sh
+
+      - name: Upload adapters smoke artifact
+        if: steps.filter.outputs.adapters == 'true'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: adapters-smoke
+          path: /tmp/adapter-smoke.json
