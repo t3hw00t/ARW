@@ -145,6 +145,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   const elSummaryNote = document.getElementById('todaySummaryNote');
   const elDailyBriefLive = document.getElementById('dailyBriefLive');
   const elSummaryLine = document.getElementById('todaySummaryLine');
+  const elDailyBriefProj = document.getElementById('dailyBriefProj');
   const jumpButtons = document.querySelectorAll('[data-hub-jump]');
   const btnDailyBriefDetails = document.getElementById('btnDailyBriefDetails');
   const economyDocs = document.getElementById('economyDocs');
@@ -3641,7 +3642,10 @@ async function refreshRuntimeBundles() {
     }
     let snapshot = null;
     try {
-      const data = await fetchJson('/state/briefs/daily');
+      const url = (typeof curProj === 'string' && curProj.trim())
+        ? `/state/briefs/daily?proj=${encodeURIComponent(curProj.trim())}`
+        : '/state/briefs/daily';
+      const data = await fetchJson(url);
       if (data && typeof data === 'object' && data.summary) {
         snapshot = data;
       }
@@ -3666,6 +3670,14 @@ async function refreshRuntimeBundles() {
       const summaryLine = typeof model.summary === 'string' ? model.summary : '';
       if (elSummaryLine) {
         try { elSummaryLine.textContent = summaryLine || ''; elSummaryLine.hidden = !summaryLine; } catch {}
+      }
+      if (elDailyBriefProj) {
+        const proj = (typeof curProj === 'string' && curProj.trim()) ? curProj.trim() : '';
+        if (proj) {
+          try { elDailyBriefProj.hidden = false; elDailyBriefProj.textContent = `Project: ${proj}`; elDailyBriefProj.title = `Current project: ${proj}`; } catch {}
+        } else {
+          try { elDailyBriefProj.hidden = true; } catch {}
+        }
       }
       // Title hover: show relative + absolute updated time
       try {
@@ -4534,6 +4546,12 @@ async function refreshRuntimeBundles() {
           const snap = await fetchJson(url);
           if (snap && typeof snap === 'object') {
             dailyBriefModel = snap;
+            // Update current project preference and persist
+            try {
+              curProj = q || null;
+              hubPrefs.lastProject = curProj || '';
+              ARW.setPrefs('ui:hub', hubPrefs).catch(()=>{});
+            } catch {}
             renderDailyBrief(snap);
             ARW.toast(q ? `Loaded brief for project ${q}` : 'Loaded brief');
           }
