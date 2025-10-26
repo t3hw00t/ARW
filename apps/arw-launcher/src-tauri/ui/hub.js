@@ -4477,7 +4477,7 @@ async function refreshRuntimeBundles() {
         document.body.appendChild(a);
         a.click();
         setTimeout(()=>{ URL.revokeObjectURL(url); a.remove(); }, 1000);
-      } catch(err){ console.warn('CSV download failed', err); }
+      } catch(err){ console.warn('daily brief project fetch failed', err); ARW.toast('Load failed'); console.warn('CSV download failed', err); }
     });
 
     ARW.modal.form({
@@ -4555,7 +4555,7 @@ async function refreshRuntimeBundles() {
             renderDailyBrief(snap);
             ARW.toast(q ? `Loaded brief for project ${q}` : 'Loaded brief');
           }
-        } catch(err){ console.warn('daily brief project fetch failed', err); ARW.toast('Load failed'); }
+        } catch(err){ console.warn('daily brief project fetch failed', err); ARW.toast('Load failed'); console.warn('daily brief project fetch failed', err); ARW.toast('Load failed'); }
       });
       actions.appendChild(copy);
       actions.appendChild(copyJson);
@@ -5395,7 +5395,7 @@ async function refreshRuntimeBundles() {
           }
           const resp = await fetchRaw(`/projects/${encodeURIComponent(curProj)}/file?path=${encodeURIComponent(dest)}`, { method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
           if (!resp.ok){ console.warn('Upload failed', f.name, resp.status); continue; }
-        }catch(err){ console.error('Upload error', err); }
+        } catch(err){ console.warn('daily brief project fetch failed', err); ARW.toast('Load failed'); console.error('Upload error', err); }
       }
       await loadTree(currentPath);
     });
