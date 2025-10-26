@@ -65,6 +65,10 @@ run = "bash -lc 'set -euo pipefail; manifest=${MANIFEST:?set MANIFEST}; cargo ru
 description = "Lint all adapter manifests under adapters/ (strict warnings)"
 run = "bash -lc 'set -euo pipefail; ADAPTERS_LINT_STRICT_WARNINGS=1 bash scripts/lint_adapters.sh'"
 
+[tasks."adapters:lint:changed"]
+description = "Lint only changed adapter manifests vs BASE (default origin/main)"
+run = "bash -lc 'set -euo pipefail; BASE=${BASE:-origin/main} bash scripts/lint_adapters_changed.sh'"
+
 [tasks."adapters:schema"]
 description = "Regenerate adapter manifest schema and copy to docs/"
 run = "bash -lc 'set -euo pipefail; cargo run -p arw-cli -- adapters schema --out spec/schemas/runtime_adapter_manifest.schema.json; mkdir -p docs/spec/schemas; cp spec/schemas/runtime_adapter_manifest.schema.json docs/spec/schemas/runtime_adapter_manifest.schema.json'"

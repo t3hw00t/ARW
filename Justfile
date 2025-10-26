@@ -231,6 +231,10 @@ adapters-lint:
 	set -euo pipefail; \
 	bash scripts/lint_adapters.sh
 
+adapters-lint-changed base='origin/main':
+	set -euo pipefail; \
+	BASE='{{base}}' bash scripts/lint_adapters_changed.sh
+
 persona-seed base="http://127.0.0.1:8091" id="persona.alpha" name="" archetype="" telemetry="false" scope="" state_dir="" json="false" pretty="false":
 	set -euo pipefail; base='{{base}}'; id='{{id}}'; name='{{name}}'; archetype='{{archetype}}'; \
 	telemetry='{{telemetry}}'; scope='{{scope}}'; state_dir='{{state_dir}}'; json='{{json}}'; pretty='{{pretty}}'; \

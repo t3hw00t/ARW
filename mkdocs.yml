@@ -91,6 +91,7 @@ nav:
       - Projects UI: guide/projects_ui.md
       - Recipes: guide/recipes.md
       - Validate Adapter Manifests: guide/adapters_validate.md
+      - Adapter Gallery: guide/adapter_gallery.md
       - Adapter SDK: guide/adapter_sdk.md
       - Runtime Matrix: guide/runtime_matrix.md
       - Runtime Manager: guide/runtime_manager.md

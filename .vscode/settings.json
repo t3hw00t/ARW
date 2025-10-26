@@ -3,10 +3,11 @@
     {
       "fileMatch": [
         "adapters/*.json",
-        "examples/adapters/*.json"
+        "examples/adapters/*.json",
+        "adapters/*.toml",
+        "examples/adapters/*.toml"
       ],
       "url": "https://t3hw00t.github.io/ARW/spec/schemas/runtime_adapter_manifest.schema.json"
     }
   ]
 }
-

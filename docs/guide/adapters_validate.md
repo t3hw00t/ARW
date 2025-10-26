@@ -21,6 +21,8 @@ Validate all manifests
 - Place manifests under `adapters/` in the repo.
 - Run: `bash scripts/lint_adapters.sh`
 - Fail on warnings: `ADAPTERS_LINT_STRICT_WARNINGS=1 bash scripts/lint_adapters.sh`
+- Lint only changed manifests vs a base ref: `BASE=origin/main bash scripts/lint_adapters_changed.sh`
+- You can also pass an explicit list: `ADAPTERS_FILES="adapters/a.json adapters/b.toml" bash scripts/lint_adapters.sh`
 - Include in verify: set `ARW_VERIFY_INCLUDE_ADAPTERS=1` and run `bash scripts/dev.sh verify`.
 
 CI integration
