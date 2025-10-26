@@ -5,8 +5,17 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
+# Prefer repository-local virtual environment Python if available
+$ScriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
+$RepoRoot = (Resolve-Path (Join-Path $ScriptRoot '..')).Path
+
 function Find-Python {
+  # Candidate order: repo venv (Windows/Posix), env overrides, then PATH tools
+  $winVenv = Join-Path $RepoRoot '.venv\Scripts\python.exe'
+  $posixVenv = Join-Path $RepoRoot '.venv/bin/python'
   foreach ($candidate in @(
+      $winVenv,
+      $posixVenv,
       $env:PYTHON,
       $env:PYTHON3,
       (Get-Command python3 -ErrorAction SilentlyContinue),
@@ -29,8 +38,7 @@ if (-not $python) {
   exit 0
 }
 
-$scriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
-$core = Join-Path $scriptRoot 'docgen_core.py'
+$core = Join-Path $ScriptRoot 'docgen_core.py'
 
 & $python $core @Args
 exit $LASTEXITCODE

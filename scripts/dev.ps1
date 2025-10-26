@@ -160,8 +160,16 @@ function Invoke-Verify {
     'node',
     (Join-Path ${env:ProgramFiles} 'nodejs\node.exe')
   )
-  $mkdocs = Resolve-Tool @('mkdocs', (Join-Path $RepoRoot '.venv\Scripts\mkdocs.exe'))
-  $python = Resolve-Tool @('python','python3')
+  $mkdocs = Resolve-Tool @(
+    (Join-Path $RepoRoot '.venv\Scripts\mkdocs.exe'),
+    (Join-Path $RepoRoot '.venv/bin/mkdocs'),
+    'mkdocs'
+  )
+  $python = Resolve-Tool @(
+    (Join-Path $RepoRoot '.venv\Scripts\python.exe'),
+    (Join-Path $RepoRoot '.venv/bin/python'),
+    'python','python3'
+  )
   $pythonHasYaml = $false
   if ($python) {
     try {
@@ -177,11 +185,14 @@ function Invoke-Verify {
     throw "cargo not found in PATH. Install Rust toolchain via https://rustup.rs"
   }
 
-  $includeLauncher = $WithLauncher.IsPresent -or ($env:ARW_VERIFY_INCLUDE_LAUNCHER -match '^(1|true|yes)$')
+  # Include launcher by default; allow opt-out via env
+  $includeLauncher = $true
+  if ($env:ARW_VERIFY_EXCLUDE_LAUNCHER -match '^(1|true|yes)$') { $includeLauncher = $false }
+  if ($WithLauncher.IsPresent) { $includeLauncher = $true }
   if ($includeLauncher) {
-    Write-Host "[verify] including arw-launcher targets (per request)"
+    Write-Host "[verify] including arw-launcher targets (default)"
   } else {
-    Write-Host "[verify] skipping arw-launcher crate (headless default; pass -WithLauncher or set ARW_VERIFY_INCLUDE_LAUNCHER=1 to include)"
+    Write-Host "[verify] excluding arw-launcher crate (set ARW_VERIFY_EXCLUDE_LAUNCHER=1 to disable)"
   }
   $requireDocs = $Ci.IsPresent
   if ($env:ARW_VERIFY_REQUIRE_DOCS -match '^(1|true|yes)$') {
@@ -205,13 +216,15 @@ function Invoke-Verify {
   $testArgs = $null
   $testStepName = $null
   if ($nextest) {
-    $testArgs = @('nextest','run','--workspace','--test-threads=1')
+    $testArgs = @('nextest','run','--workspace')
     if (-not $includeLauncher) { $testArgs += @('--exclude','arw-launcher') }
+    if ($Ci.IsPresent) { $testArgs += @('--no-fail-fast') }
     $testStepName = "cargo $($testArgs -join ' ')"
   } else {
     Write-Warning 'cargo-nextest not found; falling back to cargo test --workspace --locked.'
     $testArgs = @('test','--workspace','--locked')
     if (-not $includeLauncher) { $testArgs += @('--exclude','arw-launcher') }
+    # Limit test binary threads to reduce flakiness in fallback mode
     $testArgs += @('--','--test-threads=1')
     $testStepName = "cargo $($testArgs -join ' ')"
   }
@@ -288,12 +301,12 @@ function Invoke-Verify {
           $env:PYTHONIOENCODING = $previousEncoding
         }
       }
-    }
+    } -Required:$requireDocs
 
     $results += Invoke-Step -Name $docStepName2 -Action {
       $scriptPath = Join-Path $RepoRoot 'scripts\gen_topics_doc.py'
       Invoke-Program -Executable $python -Arguments @($scriptPath,'--check')
-    }
+    } -Required:$requireDocs
   }
 
   if ($null -eq $python) {
@@ -317,11 +330,23 @@ function Invoke-Verify {
     }
   }
 
-  $docsSkipReason = if ($SkipDocs) { 'docs lint disabled (--fast/--skip-docs)' } else { 'Docs toolchain missing; install via `mise run bootstrap:docs` or pass -SkipDocs/-Fast' }
+  # Run doc generation before mkdocs when docs are enabled
+  $docgenArgs = @()
+  if (-not $Ci.IsPresent) { $docgenArgs += @('--skip-builds') }
+  $docgenSkipReason = if ($SkipDocs) { 'doc generation disabled (--fast/--skip-docs)' } else { 'Docs toolchain missing; pass -SkipDocs/-Fast to skip' }
+  $results += Invoke-Step -Name ('docgen ' + ($docgenArgs -join ' ')) -Action {
+    & (Join-Path $ScriptRoot 'docgen.ps1') @docgenArgs
+  } -Required:$requireDocs -ShouldRun { -not $SkipDocs } -SkipReason $docgenSkipReason
+
+  $docsSkipReason = if ($SkipDocs) { 'docs lint disabled (--fast/--skip-docs)' } else { 'Docs toolchain missing; install via venv then pass -SkipDocs/-Fast to skip' }
   $results += Invoke-Step -Name 'docs lint' -Action {
     $docsScript = Join-Path $RepoRoot 'scripts\docs_check.py'
     if (Test-Path $docsScript) {
-      $pythonLocal = Resolve-Tool @('python3','python')
+      $pythonLocal = Resolve-Tool @(
+        (Join-Path $RepoRoot '.venv\Scripts\python.exe'),
+        (Join-Path $RepoRoot '.venv/bin/python'),
+        'python3','python'
+      )
       if ($pythonLocal) {
         Invoke-Program -Executable $pythonLocal -Arguments @($docsScript)
         return
@@ -562,7 +587,11 @@ switch ($commandKey) {
     Invoke-Program -Executable $cargo -Arguments @('clippy','--workspace','--all-targets','--fix','-Z','unstable-options','--allow-dirty','--allow-staged')
   }
   'lint-events' {
-    $python = Resolve-Tool @('python','python3')
+    $python = Resolve-Tool @(
+      (Join-Path $RepoRoot '.venv\Scripts\python.exe'),
+      (Join-Path $RepoRoot '.venv/bin/python'),
+      'python','python3'
+    )
     if (-not $python) { throw 'python not found; install Python 3.11+ to lint events.' }
     Invoke-Program -Executable $python -Arguments @((Join-Path $RepoRoot 'scripts\lint_event_names.py'))
   }
@@ -570,19 +599,24 @@ switch ($commandKey) {
     & (Join-Path $ScriptRoot 'test.ps1') @Args
   }
   'test-fast' {
+    $cargo = Resolve-Tool @('cargo')
     $nextest = Resolve-Tool @('cargo-nextest')
-    if ($nextest) {
-      Invoke-Program -Executable $nextest -Arguments @('run','--workspace')
+    if ($cargo -and $nextest) {
+      # Prefer invoking as `cargo nextest run` (official interface)
+      Invoke-Program -Executable $cargo -Arguments @('nextest','run','--workspace')
     } else {
       Write-Warning 'cargo-nextest not found; falling back to cargo test --workspace --locked.'
-      $cargo = Resolve-Tool @('cargo')
       if (-not $cargo) { throw 'cargo not found in PATH.' }
       Invoke-Program -Executable $cargo -Arguments @('test','--workspace','--locked','--','--test-threads=1')
     }
   }
   'docs' {
     & (Join-Path $ScriptRoot 'docgen.ps1') @Args
-    $mkdocs = Resolve-Tool @('mkdocs', (Join-Path $RepoRoot '.venv\Scripts\mkdocs.exe'))
+    $mkdocs = Resolve-Tool @(
+      (Join-Path $RepoRoot '.venv\Scripts\mkdocs.exe'),
+      (Join-Path $RepoRoot '.venv/bin/mkdocs'),
+      'mkdocs'
+    )
     if ($mkdocs) {
       Invoke-Program -Executable $mkdocs -Arguments @('build','--strict','-f',(Join-Path $RepoRoot 'mkdocs.yml'))
     } else {
@@ -593,13 +627,21 @@ switch ($commandKey) {
     & (Join-Path $ScriptRoot 'docgen.ps1') @Args
     $docsScript = Join-Path $RepoRoot 'scripts\docs_check.py'
     if (Test-Path $docsScript) {
-      $pythonDocs = Resolve-Tool @('python3','python')
+      $pythonDocs = Resolve-Tool @(
+        (Join-Path $RepoRoot '.venv\Scripts\python.exe'),
+        (Join-Path $RepoRoot '.venv/bin/python'),
+        'python3','python'
+      )
       if ($pythonDocs) {
         Invoke-Program -Executable $pythonDocs -Arguments @($docsScript)
         return
       }
     }
-    $mkdocs = Resolve-Tool @('mkdocs', (Join-Path $RepoRoot '.venv\Scripts\mkdocs.exe'))
+    $mkdocs = Resolve-Tool @(
+      (Join-Path $RepoRoot '.venv\Scripts\mkdocs.exe'),
+      (Join-Path $RepoRoot '.venv/bin/mkdocs'),
+      'mkdocs'
+    )
     if ($mkdocs) {
       Write-Warning 'Python not available; running mkdocs build --strict as a lightweight docs check.'
       Invoke-Program -Executable $mkdocs -Arguments @('build','--strict','-f',(Join-Path $RepoRoot 'mkdocs.yml'))

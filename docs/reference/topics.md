@@ -3,7 +3,7 @@ title: Event Topics (Canonical)
 ---
 
 # Event Topics (Canonical)
-Updated: 2025-10-19
+Updated: 2025-10-26
 Type: Reference
 
 Source of truth for event kinds published by the service. Generated from
@@ -26,6 +26,13 @@ Related docs:
 | `models.manifest.written` | `TOPIC_MODELS_MANIFEST_WRITTEN` |
 | `egress.preview` | `TOPIC_EGRESS_PREVIEW` |
 | `egress.ledger.appended` | `TOPIC_EGRESS_LEDGER_APPENDED` |
+| `brief.daily.published` | `TOPIC_BRIEF_DAILY_PUBLISHED` |
+
+## Economy
+
+| Topic | Constant |
+|-------|----------|
+| `economy.ledger.updated` | `TOPIC_ECONOMY_LEDGER_UPDATED` |
 | `models.concurrency.changed` | `TOPIC_CONCURRENCY_CHANGED` |
 | `state.read.model.patch` | `TOPIC_READMODEL_PATCH` |
 | `models.refreshed` | `TOPIC_MODELS_REFRESHED` |

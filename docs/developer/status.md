@@ -3,14 +3,16 @@ title: Workspace Status
 ---
 
 # Workspace Status
-Updated: 2025-10-17
-Type: Reference
 
 <!-- GENERATED FILE: scripts/docgen_core.py; do not edit by hand -->
 
-Generated: 2025-10-17 23:14 UTC
+Updated: 2025-10-26
+Type: Reference
+Generated: 2025-10-26 11:31 UTC
 
 ## Libraries
+- **arw-compress**: 0.2.0-dev — [crates/compress/Cargo.toml](https://github.com/t3hw00t/ARW/blob/main/crates/compress/Cargo.toml)
+- **arw-contracts**: 0.1.0 — [crates/arw-contracts/Cargo.toml](https://github.com/t3hw00t/ARW/blob/main/crates/arw-contracts/Cargo.toml)
 - **arw-core**: 0.2.0-dev — [crates/arw-core/Cargo.toml](https://github.com/t3hw00t/ARW/blob/main/crates/arw-core/Cargo.toml)
 - **arw-events**: 0.2.0-dev — [crates/arw-events/Cargo.toml](https://github.com/t3hw00t/ARW/blob/main/crates/arw-events/Cargo.toml)
 - **arw-heuristics**: 0.2.0-dev — [crates/arw-heuristics/Cargo.toml](https://github.com/t3hw00t/ARW/blob/main/crates/arw-heuristics/Cargo.toml)
@@ -20,6 +22,7 @@ Generated: 2025-10-17 23:14 UTC
 - **arw-policy**: 0.2.0-dev — [crates/arw-policy/Cargo.toml](https://github.com/t3hw00t/ARW/blob/main/crates/arw-policy/Cargo.toml)
 - **arw-protocol**: 0.2.0-dev — [crates/arw-protocol/Cargo.toml](https://github.com/t3hw00t/ARW/blob/main/crates/arw-protocol/Cargo.toml)
 - **arw-runtime**: 0.2.0-dev — [crates/arw-runtime/Cargo.toml](https://github.com/t3hw00t/ARW/blob/main/crates/arw-runtime/Cargo.toml)
+- **arw-runtime-adapter**: 0.2.0-dev — [crates/arw-runtime-adapter/Cargo.toml](https://github.com/t3hw00t/ARW/blob/main/crates/arw-runtime-adapter/Cargo.toml)
 - **arw-tauri**: 0.2.0-dev — [crates/arw-tauri/Cargo.toml](https://github.com/t3hw00t/ARW/blob/main/crates/arw-tauri/Cargo.toml)
 - **arw-topics**: 0.2.0-dev — [crates/arw-topics/Cargo.toml](https://github.com/t3hw00t/ARW/blob/main/crates/arw-topics/Cargo.toml)
 - **arw-wasi**: 0.2.0-dev — [crates/arw-wasi/Cargo.toml](https://github.com/t3hw00t/ARW/blob/main/crates/arw-wasi/Cargo.toml)

@@ -6,7 +6,7 @@ title: Tasks Status
 
 <!-- GENERATED FILE: scripts/docgen_core.py; do not edit by hand -->
 
-Updated: 2025-10-25
+Updated: 2025-10-26
 Type: Reference
 
 ## To Do
@@ -33,6 +33,7 @@ Type: Reference
 - [t-20251022-runtime-adapter-sdk] Universal runtime adapter SDK — in_progress
 - [t-20251022-worldview-bridge] Worldview bridge calibration loop — in_progress
 - [t-20251024-context-persona-loop] Persona-aware context loop — in_progress
+- [t-20251027-daily-brief] Daily brief signals MVP — in_progress
 
 ## Paused
 
