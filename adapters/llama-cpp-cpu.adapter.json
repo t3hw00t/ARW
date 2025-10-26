@@ -1,0 +1,34 @@
+{
+  "$schema": "https://t3hw00t.github.io/ARW/spec/schemas/runtime_adapter_manifest.schema.json",
+  "id": "llama.cpp.cpu",
+  "version": "0.1.0",
+  "name": "llama.cpp (CPU)",
+  "description": "Text inference via llama.cpp on CPU-only hosts.",
+  "modalities": ["text"],
+  "tags": ["llama.cpp", "cpu", "text"],
+  "entrypoint": {
+    "crate_name": "llama_cpp_adapter",
+    "symbol": "create_adapter"
+  },
+  "resources": {
+    "accelerator": "cpu",
+    "recommended_memory_mb": 4096,
+    "recommended_cpu_threads": 4,
+    "requires_network": false
+  },
+  "consent": {
+    "summary": "Runs local text generation using CPU; no network egress.",
+    "capabilities": ["read_files"]
+  },
+  "metrics": [
+    { "name": "tokens_processed_total", "description": "Total tokens processed", "unit": "count" }
+  ],
+  "health": {
+    "poll_interval_ms": 5000,
+    "grace_period_ms": 15000
+  },
+  "metadata": {
+    "profile": "cpu-default"
+  }
+}
+

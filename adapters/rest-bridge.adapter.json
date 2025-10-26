@@ -1,0 +1,36 @@
+{
+  "$schema": "https://t3hw00t.github.io/ARW/spec/schemas/runtime_adapter_manifest.schema.json",
+  "id": "bridge.rest",
+  "version": "0.1.0",
+  "name": "REST Bridge",
+  "description": "Proxy adapter that bridges REST runtimes into the supervisor.",
+  "modalities": ["text"],
+  "tags": ["proxy", "rest", "bridge"],
+  "entrypoint": {
+    "crate_name": "rest_bridge_adapter",
+    "symbol": "create_adapter"
+  },
+  "resources": {
+    "accelerator": "other",
+    "recommended_memory_mb": 512,
+    "recommended_cpu_threads": 2,
+    "requires_network": true
+  },
+  "consent": {
+    "summary": "Performs outbound HTTP requests to a configured runtime host.",
+    "details_url": "https://example.com/adapters/rest-bridge",
+    "capabilities": ["network_egress"]
+  },
+  "metrics": [
+    { "name": "http_requests_total", "description": "Total upstream requests", "unit": "count" }
+  ],
+  "health": {
+    "poll_interval_ms": 5000,
+    "grace_period_ms": 15000,
+    "status_endpoint": "/healthz"
+  },
+  "metadata": {
+    "upstream": "http://127.0.0.1:8080"
+  }
+}
+

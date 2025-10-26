@@ -56,3 +56,15 @@ run = "bash -lc 'set -euo pipefail; id=${ID:?set ID}; base=${BASE:-http://127.0.
 [tasks."ts:daily:brief"]
 description = "Fetch Daily Brief snapshot + watch publish events"
 run = "bash -lc 'set -euo pipefail; base=${BASE:-http://127.0.0.1:8091}; timeout=${TIMEOUT:-8000}; json=${JSON:-false}; pushd clients/typescript >/dev/null; if [ -f package-lock.json ]; then npm ci --no-audit --no-fund; else npm install --no-audit --no-fund; fi; npm run -s build; args=(); if [ -n "$timeout" ] && [ "$timeout" != "0" ]; then args+=(--timeout "$timeout"); fi; case "$json" in 1|true|yes|on) args+=(--json);; esac; BASE="$base" node dist/examples/daily_brief.js "${args[@]}"; popd >/dev/null'"
+
+[tasks."adapters:validate"]
+description = "Validate a single adapter manifest"
+run = "bash -lc 'set -euo pipefail; manifest=${MANIFEST:?set MANIFEST}; cargo run -p arw-cli -- adapters validate --manifest \"$manifest\"'"
+
+[tasks."adapters:lint"]
+description = "Lint all adapter manifests under adapters/ (strict warnings)"
+run = "bash -lc 'set -euo pipefail; ADAPTERS_LINT_STRICT_WARNINGS=1 bash scripts/lint_adapters.sh'"
+
+[tasks."adapters:schema"]
+description = "Regenerate adapter manifest schema and copy to docs/"
+run = "bash -lc 'set -euo pipefail; cargo run -p arw-cli -- adapters schema --out spec/schemas/runtime_adapter_manifest.schema.json; mkdir -p docs/spec/schemas; cp spec/schemas/runtime_adapter_manifest.schema.json docs/spec/schemas/runtime_adapter_manifest.schema.json'"

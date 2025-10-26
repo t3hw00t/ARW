@@ -239,6 +239,13 @@ jobs:
               - 'apps/arw-launcher/src-tauri/ui/hub.html'
               - '.mise.toml'
               - '.github/workflows/ci.yml'
+            adapters:
+              - 'adapters/**'
+              - 'scripts/lint_adapters.sh'
+              - 'apps/arw-cli/src/commands/adapters.rs'
+              - 'spec/schemas/runtime_adapter_manifest.schema.json'
+              - 'docs/guide/adapter_sdk.md'
+              - 'docs/guide/adapters_validate.md'
 
       - name: Build arw-server (debug)
         if: ${{ steps.filter.outputs.sse == 'true' || steps.filter.outputs.daily_brief == 'true' }}
@@ -317,3 +324,9 @@ jobs:
         if: always() && (steps.filter.outputs.sse == 'true' || steps.filter.outputs.daily_brief == 'true')
         run: |
           if [ -f /tmp/arw-svc.pid ]; then kill "$(cat /tmp/arw-svc.pid)" || true; fi
+
+      - name: Adapter manifests lint (strict)
+        if: steps.filter.outputs.adapters == 'true'
+        run: |
+          bash scripts/lint_adapters.sh
+          ADAPTERS_LINT_STRICT_WARNINGS=1 bash scripts/lint_adapters.sh

@@ -1,0 +1,34 @@
+{
+  "$schema": "https://t3hw00t.github.io/ARW/spec/schemas/runtime_adapter_manifest.schema.json",
+  "id": "community.host",
+  "version": "0.1.0",
+  "name": "Community Host",
+  "description": "Community-maintained host adapter for experimental runtimes.",
+  "modalities": ["text"],
+  "tags": ["community", "host"],
+  "entrypoint": {
+    "crate_name": "community_host_adapter",
+    "symbol": "create_adapter"
+  },
+  "resources": {
+    "accelerator": "other",
+    "recommended_memory_mb": 1024,
+    "recommended_cpu_threads": 2,
+    "requires_network": false
+  },
+  "consent": {
+    "summary": "Runs community-adapted runtimes locally with no network egress by default.",
+    "capabilities": []
+  },
+  "metrics": [
+    { "name": "runtime_sessions_total", "description": "Total sessions", "unit": "count" }
+  ],
+  "health": {
+    "poll_interval_ms": 5000,
+    "grace_period_ms": 15000
+  },
+  "metadata": {
+    "maintainers": "community"
+  }
+}
+
