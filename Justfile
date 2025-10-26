@@ -271,6 +271,10 @@ ts-economy-smoke base='http://127.0.0.1:8091' timeout='10000' token='':
   fi; \
   popd >/dev/null
 
+# Adapter gallery smokes
+adapters-smoke:
+  bash scripts/adapter_smoke.sh
+
 # Tail events via TS bin (arw-events); forward flags via *args
 ts-events base='http://127.0.0.1:8091' token='' *args:
   set -euo pipefail; \
@@ -804,3 +808,8 @@ requirements-lock:
     echo "error: pip-tools is not installed. Install it with \"python -m pip install pip-tools\" (add --break-system-packages on Debian/Ubuntu) and re-run." >&2; \
     exit 1; \
   fi
+
+# Adapter gallery smokes
+adsapters-smoke:
+  bash scripts/adapter_smoke.sh
+

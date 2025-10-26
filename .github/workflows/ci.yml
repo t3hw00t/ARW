@@ -330,3 +330,8 @@ jobs:
         run: |
           bash scripts/lint_adapters.sh
           ADAPTERS_LINT_STRICT_WARNINGS=1 bash scripts/lint_adapters.sh
+
+      - name: Adapter smoke harness
+        if: steps.filter.outputs.adapters == 'true'
+        run: |
+          bash scripts/adapter_smoke.sh
