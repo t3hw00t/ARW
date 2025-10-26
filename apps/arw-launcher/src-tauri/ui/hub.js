@@ -4522,7 +4522,28 @@ async function refreshRuntimeBundles() {
       const code = document.createElement('code'); code.textContent = cmd; code.style.whiteSpace = 'pre-wrap'; code.style.wordBreak = 'break-all';
       const copy = document.createElement('button'); copy.className = 'ghost mini'; copy.textContent = 'Copy curl'; copy.title = 'Copy curl to clipboard';
       copy.addEventListener('click', ()=>{ try { ARW.copy(cmd); ARW.toast('Copied'); } catch(e) { console.warn('copy failed', e); } });
+      const copyJson = document.createElement('button'); copyJson.className = 'ghost mini'; copyJson.textContent = 'Copy JSON'; copyJson.title = 'Copy current brief JSON';
+      copyJson.addEventListener('click', ()=>{ try { ARW.copy(JSON.stringify(dailyBriefModel||{}, null, 2)); ARW.toast('Copied'); } catch(e){ console.warn('copy json failed', e); } });
+      const projLabel = document.createElement('label'); projLabel.className='key'; projLabel.textContent='Project'; projLabel.style.marginLeft='0.5rem';
+      const projInput = document.createElement('input'); projInput.placeholder = 'project id (optional)'; projInput.style.minWidth='160px'; try { projInput.value = (typeof curProj === 'string' ? curProj : ''); } catch {}
+      const projLoad = document.createElement('button'); projLoad.className='ghost mini'; projLoad.textContent='Load'; projLoad.title='Load brief for project';
+      projLoad.addEventListener('click', async ()=>{
+        const q = (projInput.value||'').trim();
+        const url = q ? `/state/briefs/daily?proj=${encodeURIComponent(q)}` : '/state/briefs/daily';
+        try {
+          const snap = await fetchJson(url);
+          if (snap && typeof snap === 'object') {
+            dailyBriefModel = snap;
+            renderDailyBrief(snap);
+            ARW.toast(q ? `Loaded brief for project ${q}` : 'Loaded brief');
+          }
+        } catch(err){ console.warn('daily brief project fetch failed', err); ARW.toast('Load failed'); }
+      });
       actions.appendChild(copy);
+      actions.appendChild(copyJson);
+      actions.appendChild(projLabel);
+      actions.appendChild(projInput);
+      actions.appendChild(projLoad);
       actions.appendChild(code);
       container.appendChild(actions);
     } catch {}
