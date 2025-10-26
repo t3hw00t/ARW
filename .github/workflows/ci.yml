@@ -246,9 +246,17 @@ jobs:
               - 'spec/schemas/runtime_adapter_manifest.schema.json'
               - 'docs/guide/adapter_sdk.md'
               - 'docs/guide/adapters_validate.md'
+            eco_preset:
+              - 'apps/arw-server/src/config.rs'
+              - 'apps/arw-server/src/bootstrap.rs'
+              - 'docs/guide/performance_presets.md'
+              - 'docs/guide/quickstart.md'
+              - 'scripts/start.sh'
+              - 'scripts/start.ps1'
+              - '.github/workflows/ci.yml'
 
       - name: Build arw-server (debug)
-        if: ${{ steps.filter.outputs.sse == 'true' || steps.filter.outputs.daily_brief == 'true' }}
+        if: ${{ steps.filter.outputs.sse == 'true' || steps.filter.outputs.daily_brief == 'true' || steps.filter.outputs.eco_preset == 'true' }}
         run: mise exec cargo -- cargo build -p arw-server
 
       - name: Build arw-cli (debug)
@@ -269,6 +277,22 @@ jobs:
             if curl -fsS -m 2 http://127.0.0.1:8099/healthz >/dev/null; then
               echo "server healthy"; break; fi; sleep 1; done
           curl -fsS http://127.0.0.1:8099/about || true
+
+      - name: Start arw-server (eco preset, background)
+        if: steps.filter.outputs.eco_preset == 'true'
+        env:
+          ARW_ADMIN_TOKEN: ${{ secrets.CI_ARW_ADMIN_TOKEN || 'test-admin-token' }}
+          ARW_DEBUG: "1"
+          ARW_PORT: "8101"
+          ARW_PERF_PRESET: eco
+        run: |
+          set -euo pipefail
+          nohup target/debug/arw-server >/tmp/arw-svc-eco.log 2>&1 &
+          echo $! > /tmp/arw-svc-eco.pid
+          for i in $(seq 1 60); do
+            if curl -fsS -m 2 http://127.0.0.1:8101/healthz >/dev/null; then
+              echo "eco server healthy"; break; fi; sleep 1; done
+          curl -fsS http://127.0.0.1:8101/about || true
 
       - name: Economy SSE smoke (ts:economy:smoke)
         if: steps.filter.outputs.sse == 'true'
@@ -319,11 +343,38 @@ jobs:
         run: |
           echo '--- arw-server log (tail) ---'
           tail -n 200 /tmp/arw-svc.log || true
+          echo '--- arw-server eco log (tail) ---'
+          tail -n 200 /tmp/arw-svc-eco.log || true
 
       - name: Stop arw-server
         if: always() && (steps.filter.outputs.sse == 'true' || steps.filter.outputs.daily_brief == 'true')
         run: |
           if [ -f /tmp/arw-svc.pid ]; then kill "$(cat /tmp/arw-svc.pid)" || true; fi
+
+      - name: Stop arw-server (eco)
+        if: always() && steps.filter.outputs.eco_preset == 'true'
+        run: |
+          if [ -f /tmp/arw-svc-eco.pid ]; then kill "$(cat /tmp/arw-svc-eco.pid)" || true; fi
+
+      - name: Eco preset about check
+        if: steps.filter.outputs.eco_preset == 'true'
+        run: |
+          python3 - <<'PY'
+import json, urllib.request, sys
+url='http://127.0.0.1:8101/about'
+data=urllib.request.urlopen(url, timeout=3).read()
+about=json.loads(data)
+p=about.get('perf_preset') or {}
+tier=p.get('tier')
+if tier!='eco':
+  print('unexpected tier', p)
+  sys.exit(1)
+hmc=p.get('http_max_conc')
+if hmc is not None and hmc!=128:
+  print('unexpected http_max_conc', hmc)
+  sys.exit(1)
+print('eco preset ok', p)
+PY
 
       - name: Adapter manifests lint (strict)
         if: steps.filter.outputs.adapters == 'true'
