@@ -146,6 +146,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   const elDailyBriefLive = document.getElementById('dailyBriefLive');
   const elSummaryLine = document.getElementById('todaySummaryLine');
   const elDailyBriefProj = document.getElementById('dailyBriefProj');
+  const elDailyBriefProjClear = document.getElementById('dailyBriefProjClear');
   const jumpButtons = document.querySelectorAll('[data-hub-jump]');
   const btnDailyBriefDetails = document.getElementById('btnDailyBriefDetails');
   const economyDocs = document.getElementById('economyDocs');
@@ -3659,6 +3660,22 @@ async function refreshRuntimeBundles() {
     return snapshot;
   }
 
+  async function clearDailyBriefProject() {
+    try {
+      curProj = null;
+      try { hubPrefs.lastProject = ''; await ARW.setPrefs('ui:hub', hubPrefs); } catch {}
+      const snap = await fetchJson('/state/briefs/daily');
+      if (snap && typeof snap === 'object') {
+        dailyBriefModel = snap;
+        renderDailyBrief(snap);
+      }
+      ARW.toast('Project cleared');
+    } catch (err) {
+      console.warn('daily brief clear failed', err);
+      ARW.toast('Clear failed');
+    }
+  }
+
   function renderDailyBrief(model) {
     const bullet = ' \u2022 ';
     const toPercent = (value) =>
@@ -3674,9 +3691,15 @@ async function refreshRuntimeBundles() {
       if (elDailyBriefProj) {
         const proj = (typeof curProj === 'string' && curProj.trim()) ? curProj.trim() : '';
         if (proj) {
-          try { elDailyBriefProj.hidden = false; elDailyBriefProj.textContent = `Project: ${proj}`; elDailyBriefProj.title = `Current project: ${proj}`; } catch {}
+          try {
+            elDailyBriefProj.hidden = false;
+            elDailyBriefProj.textContent = `Project: ${proj}`;
+            elDailyBriefProj.title = `Current project: ${proj} — Click Clear to reset or use Details`;
+          } catch {}
+          try { if (elDailyBriefProjClear) elDailyBriefProjClear.hidden = false; } catch {}
         } else {
           try { elDailyBriefProj.hidden = true; } catch {}
+          try { if (elDailyBriefProjClear) elDailyBriefProjClear.hidden = true; } catch {}
         }
       }
       // Title hover: show relative + absolute updated time
@@ -4520,6 +4543,10 @@ async function refreshRuntimeBundles() {
     btnDailyBriefDetails.addEventListener('click', () => {
       try { openDailyBriefDetails(); } catch (err) { console.warn('daily brief details open failed', err); }
     });
+  }
+
+  if (elDailyBriefProjClear) {
+    elDailyBriefProjClear.addEventListener('click', () => { clearDailyBriefProject(); });
   }
 
   function openDailyBriefDetails(){

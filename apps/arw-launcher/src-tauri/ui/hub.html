@@ -106,7 +106,10 @@
           <section class="card" id="todaySummary" role="region" aria-labelledby="todaySummaryTitle" data-hub-panel="today">
             <h3 id="todaySummaryTitle">Daily Brief (preview) <span id="dailyBriefLive" class="badge" hidden aria-label="Daily Brief: live update received">LIVE</span></h3>
             <p id="todaySummaryLine" class="dim" aria-live="polite"></p>
-            <p><span id="dailyBriefProj" class="badge" hidden title="Current project">Project: —</span></p>
+            <p>
+              <span id="dailyBriefProj" class="badge" hidden title="Current project">Project: —</span>
+              <button id="dailyBriefProjClear" class="ghost mini" type="button" hidden aria-label="Clear project filter">Clear</button>
+            </p>
             <p class="section-lead">Quick pulse on runtimes, event streams, and persona feedback; switch tabs for the full view.</p>
             <dl class="today-summary" aria-live="polite">
               <div>
