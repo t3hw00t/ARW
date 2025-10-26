@@ -4514,6 +4514,18 @@ async function refreshRuntimeBundles() {
     const model = dailyBriefModel;
     const container = document.createElement('div');
     container.className = 'col';
+    // Actions: copy curl
+    try {
+      const actions = document.createElement('div');
+      actions.className = 'row';
+      const cmd = `curl -H "Authorization: Bearer $ARW_ADMIN_TOKEN" "${base}/state/briefs/daily"`;
+      const code = document.createElement('code'); code.textContent = cmd; code.style.whiteSpace = 'pre-wrap'; code.style.wordBreak = 'break-all';
+      const copy = document.createElement('button'); copy.className = 'ghost mini'; copy.textContent = 'Copy curl'; copy.title = 'Copy curl to clipboard';
+      copy.addEventListener('click', ()=>{ try { ARW.copy(cmd); ARW.toast('Copied'); } catch(e) { console.warn('copy failed', e); } });
+      actions.appendChild(copy);
+      actions.appendChild(code);
+      container.appendChild(actions);
+    } catch {}
     const addSection = (title, contentEl) => {
       const h = document.createElement('h4');
       h.textContent = title;
@@ -4527,20 +4539,40 @@ async function refreshRuntimeBundles() {
       const list = document.createElement('ul');
       list.style.listStyle = 'disc';
       list.style.paddingLeft = '1.25rem';
-      const entries = (model && model.economy && Array.isArray(model.economy.recent_entries)) ? model.economy.recent_entries.slice(0,5) : [];
-      if (entries.length === 0) {
-        const li = document.createElement('li'); li.textContent = 'No recent entries.'; list.appendChild(li);
-      } else {
-        for (const e of entries) {
-          const li = document.createElement('li');
-          const amt = (e.amount != null) ? formatLedgerValue(e.amount, e.currency || 'unitless') : '';
-          const issued = e.issued_at ? ` (${formatRelativeIso(e.issued_at)})` : '';
-          const status = (e.status || 'pending').toString();
-          const tags = Array.isArray(e.tags) && e.tags.length ? ` — ${e.tags.join(', ')}` : '';
-          li.textContent = `${status.charAt(0).toUpperCase()}${status.slice(1)} — ${amt}${issued}${tags}`;
-          list.appendChild(li);
+      const entriesAll = (model && model.economy && Array.isArray(model.economy.recent_entries)) ? model.economy.recent_entries : [];
+      let page = 0; const pageSize = 10;
+      const pager = document.createElement('div'); pager.className = 'row';
+      const btnPrev = document.createElement('button'); btnPrev.className = 'ghost mini'; btnPrev.textContent = 'Prev';
+      const btnNext = document.createElement('button'); btnNext.className = 'ghost mini'; btnNext.textContent = 'Next';
+      const info = document.createElement('span'); info.className = 'dim'; info.style.marginLeft = '0.5rem';
+      const renderPage = () => {
+        list.innerHTML = '';
+        const total = entriesAll.length;
+        const start = page * pageSize;
+        const end = Math.min(total, start + pageSize);
+        const slice = total ? entriesAll.slice(start, end) : [];
+        if (!slice.length) {
+          const li = document.createElement('li'); li.textContent = total ? 'No entries on this page.' : 'No recent entries.'; list.appendChild(li);
+        } else {
+          for (const e of slice) {
+            const li = document.createElement('li');
+            const amt = (e.amount != null) ? formatLedgerValue(e.amount, e.currency || 'unitless') : '';
+            const issued = e.issued_at ? ` (${formatRelativeIso(e.issued_at)})` : '';
+            const status = (e.status || 'pending').toString();
+            const tags = Array.isArray(e.tags) && e.tags.length ? ` — ${e.tags.join(', ')}` : '';
+            li.textContent = `${status.charAt(0).toUpperCase()}${status.slice(1)} — ${amt}${issued}${tags}`;
+            list.appendChild(li);
+          }
         }
-      }
+        btnPrev.disabled = page <= 0;
+        btnNext.disabled = end >= total;
+        info.textContent = total ? `Showing ${start + 1}-${end} of ${total}` : '';
+      };
+      btnPrev.addEventListener('click', ()=>{ if (page > 0){ page -= 1; renderPage(); }});
+      btnNext.addEventListener('click', ()=>{ const total = entriesAll.length; if ((page + 1) * pageSize < total){ page += 1; renderPage(); }});
+      renderPage();
+      pager.appendChild(btnPrev); pager.appendChild(btnNext); pager.appendChild(info);
+      wrap.appendChild(pager);
       wrap.appendChild(list);
       addSection('Economy', wrap);
     }

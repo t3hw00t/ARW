@@ -204,7 +204,9 @@ impl LaneEngagement {
         let elapsed = now
             .duration_since(last)
             .unwrap_or_else(|_| Duration::from_secs(0));
-        if elapsed.is_zero() {
+        // Guard against immediate micro-decay right after a touch/reset to keep
+        // responses stable within a short window and avoid test flakiness.
+        if elapsed < Duration::from_millis(1000) {
             return self.score;
         }
         let factor = decay_factor(elapsed, half_life);
