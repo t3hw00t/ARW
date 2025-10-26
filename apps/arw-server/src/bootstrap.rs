@@ -49,6 +49,8 @@ pub(crate) struct BootstrapOutput {
 
 pub(crate) async fn build() -> BootstrapOutput {
     config::apply_effective_paths();
+    // Apply performance preset defaults early (eco/balanced), then proceed with config init
+    config::apply_perf_preset_from_env();
     let initial_config = config::load_initial_config_state();
     config::init_gating_from_configs();
     config::init_cache_policy_from_manifest();

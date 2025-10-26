@@ -79,6 +79,66 @@ pub fn load_initial_config_state() -> InitialConfigState {
     state
 }
 
+fn set_default_env(key: &str, value: &str) -> bool {
+    // Do not override if already set
+    match std::env::var(key) {
+        Ok(existing) if !existing.trim().is_empty() => false,
+        _ => {
+            std::env::set_var(key, value);
+            true
+        }
+    }
+}
+
+/// Apply a coarse performance preset by setting conservative defaults if unset.
+///
+/// - ARW_PERF_PRESET=eco sets low-power defaults for HTTP concurrency, workers,
+///   caches, and logging;
+/// - When ARW_PERF_PRESET is unset, we set ARW_PERF_PRESET_TIER=balanced for visibility.
+pub fn apply_perf_preset_from_env() {
+    let preset = std::env::var("ARW_PERF_PRESET")
+        .ok()
+        .map(|v| v.trim().to_ascii_lowercase())
+        .unwrap_or_default();
+
+    match preset.as_str() {
+        "eco" => {
+            // Mark effective tier
+            std::env::set_var("ARW_PERF_PRESET_TIER", "eco");
+            // Prefer low power for capability hints
+            set_default_env("ARW_PREFER_LOW_POWER", "1");
+            set_default_env("ARW_LOW_POWER", "1");
+            set_default_env("ARW_OCR_PREFER_LOW_POWER", "1");
+            set_default_env("ARW_OCR_LOW_POWER", "1");
+            // Reduce request concurrency
+            set_default_env("ARW_HTTP_MAX_CONC", "128");
+            // Cap workers and queue
+            set_default_env("ARW_WORKERS_MAX", "4");
+            set_default_env("ARW_ACTIONS_QUEUE_MAX", "64");
+            // Trim tool cache size/ttl
+            set_default_env("ARW_TOOLS_CACHE_TTL_SECS", "300");
+            set_default_env("ARW_TOOLS_CACHE_CAP", "256");
+            // Quieter access logging by default
+            set_default_env("ARW_ACCESS_LOG", "0");
+            set_default_env("ARW_ACCESS_UA", "0");
+            set_default_env("ARW_ACCESS_UA_HASH", "0");
+            set_default_env("ARW_ACCESS_REF", "0");
+            // Avoid extra SSE payload decoration
+            set_default_env("ARW_EVENTS_SSE_DECORATE", "0");
+            // Back off watcher churn a bit
+            set_default_env("ARW_RUNTIME_WATCHER_COOLDOWN_MS", "1500");
+            // Slow down embed backfill and shrink batches for CPU-only
+            set_default_env("ARW_MEMORY_EMBED_BACKFILL_BATCH", "64");
+            set_default_env("ARW_MEMORY_EMBED_BACKFILL_IDLE_SEC", "600");
+        }
+        // Future tiers can be added here. For now, mark balanced by default for visibility.
+        _ => {
+            // Only stamp a tier label when not explicitly set by the user.
+            set_default_env("ARW_PERF_PRESET_TIER", "balanced");
+        }
+    }
+}
+
 pub(crate) fn runtime_config_path() -> Option<PathBuf> {
     discovered_config_path().0
 }
