@@ -31,7 +31,6 @@ Type: Reference
 - [t-20251022-runtime-adapter-sdk] Universal runtime adapter SDK — in_progress
 - [t-20251022-worldview-bridge] Worldview bridge calibration loop — in_progress
 - [t-20251024-context-persona-loop] Persona-aware context loop — in_progress
-- [t-20251027-daily-brief] Daily brief signals MVP — in_progress
 
 ## Paused
 
@@ -44,3 +43,4 @@ Type: Reference
 - [t-20251024-cli-ocr-help] CLI OCR flags documentation — done
 - [t-20251024-capability-service] Shared capability service — done
 - [t-20251030-economy-ledger-core] Economy ledger core surfaces — done
+- [t-20251027-daily-brief] Daily brief signals MVP — done

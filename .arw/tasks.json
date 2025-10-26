@@ -1,5 +1,5 @@
 {
-  "updated": "2025-10-25T05:00:00Z",
+  "updated": "2025-10-26T20:34:43Z",
   "tasks": [
     {
       "id": "t-20251017-persona-core",
@@ -468,7 +468,7 @@
     {
       "id": "t-20251027-daily-brief",
       "title": "Daily brief signals MVP",
-      "status": "in_progress",
+      "status": "done",
       "scope": [
         "Pack: Persona",
         "Pack: Collaboration"

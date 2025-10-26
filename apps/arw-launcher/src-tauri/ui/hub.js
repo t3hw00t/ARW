@@ -3692,9 +3692,12 @@ async function refreshRuntimeBundles() {
         const proj = (typeof curProj === 'string' && curProj.trim()) ? curProj.trim() : '';
         if (proj) {
           try {
+            elDailyBriefProj.style.transition = 'opacity 0.2s';
+            elDailyBriefProj.style.opacity = '0';
             elDailyBriefProj.hidden = false;
             elDailyBriefProj.textContent = `Project: ${proj}`;
             elDailyBriefProj.title = `Current project: ${proj} — Click Clear to reset or use Details`;
+            setTimeout(()=>{ try { elDailyBriefProj.style.opacity = '1'; } catch {} }, 0);
           } catch {}
           try { if (elDailyBriefProjClear) elDailyBriefProjClear.hidden = false; } catch {}
         } else {
@@ -4561,10 +4564,30 @@ async function refreshRuntimeBundles() {
       const code = document.createElement('code'); code.textContent = cmd; code.style.whiteSpace = 'pre-wrap'; code.style.wordBreak = 'break-all';
       const copy = document.createElement('button'); copy.className = 'ghost mini'; copy.textContent = 'Copy curl'; copy.title = 'Copy curl to clipboard';
       copy.addEventListener('click', ()=>{ try { ARW.copy(cmd); ARW.toast('Copied'); } catch(e) { console.warn('copy failed', e); } });
+      // Override with dynamic handler that includes ?proj when present
+      copy.onclick = (ev) => {
+        try { ev?.stopImmediatePropagation?.(); ev?.preventDefault?.(); } catch {}
+        try {
+          const q = (typeof projInput?.value === 'string') ? projInput.value.trim() : '';
+          const suffix = q ? `?proj=${encodeURIComponent(q)}` : '';
+          const dyn = `curl -H \"Authorization: Bearer $ARW_ADMIN_TOKEN\" \"${base}/state/briefs/daily${suffix}\"`;
+          ARW.copy(dyn);
+          ARW.toast('Copied');
+        } catch(e) { console.warn('copy failed', e); }
+        return false;
+      };
       const copyJson = document.createElement('button'); copyJson.className = 'ghost mini'; copyJson.textContent = 'Copy JSON'; copyJson.title = 'Copy current brief JSON';
       copyJson.addEventListener('click', ()=>{ try { ARW.copy(JSON.stringify(dailyBriefModel||{}, null, 2)); ARW.toast('Copied'); } catch(e){ console.warn('copy json failed', e); } });
       const projLabel = document.createElement('label'); projLabel.className='key'; projLabel.textContent='Project'; projLabel.style.marginLeft='0.5rem';
       const projInput = document.createElement('input'); projInput.placeholder = 'project id (optional)'; projInput.style.minWidth='160px'; try { projInput.value = (typeof curProj === 'string' ? curProj : ''); } catch {}
+      // Keep the displayed curl in sync with the current input
+      projInput.addEventListener('input', ()=>{
+        try {
+          const q = (typeof projInput.value === 'string') ? projInput.value.trim() : '';
+          const suffix = q ? `?proj=${encodeURIComponent(q)}` : '';
+          code.textContent = `curl -H \"Authorization: Bearer $ARW_ADMIN_TOKEN\" \"${base}/state/briefs/daily${suffix}\"`;
+        } catch {}
+      });
       const projLoad = document.createElement('button'); projLoad.className='ghost mini'; projLoad.textContent='Load'; projLoad.title='Load brief for project';
       projLoad.addEventListener('click', async ()=>{
         const q = (projInput.value||'').trim();
@@ -4581,6 +4604,11 @@ async function refreshRuntimeBundles() {
             } catch {}
             renderDailyBrief(snap);
             ARW.toast(q ? `Loaded brief for project ${q}` : 'Loaded brief');
+            // Refresh code block to include the loaded project
+            try {
+              const suffix = q ? `?proj=${encodeURIComponent(q)}` : '';
+              code.textContent = `curl -H \"Authorization: Bearer $ARW_ADMIN_TOKEN\" \"${base}/state/briefs/daily${suffix}\"`;
+            } catch {}
           }
         } catch(err){ console.warn('daily brief project fetch failed', err); ARW.toast('Load failed'); console.warn('daily brief project fetch failed', err); ARW.toast('Load failed'); }
       });
@@ -4589,6 +4617,12 @@ async function refreshRuntimeBundles() {
       actions.appendChild(projLabel);
       actions.appendChild(projInput);
       actions.appendChild(projLoad);
+      // Initialize curl preview
+      try {
+        const q0 = (typeof projInput?.value === 'string') ? projInput.value.trim() : '';
+        const suffix0 = q0 ? `?proj=${encodeURIComponent(q0)}` : '';
+        code.textContent = `curl -H \"Authorization: Bearer $ARW_ADMIN_TOKEN\" \"${base}/state/briefs/daily${suffix0}\"`;
+      } catch {}
       actions.appendChild(code);
       container.appendChild(actions);
     } catch {}
