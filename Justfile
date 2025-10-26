@@ -296,6 +296,10 @@ adapters-verify manifest pubkey sig='':
 	set -euo pipefail; \
 	bash scripts/adapters_verify.sh '{{manifest}}' '{{pubkey}}' '{{sig}}'
 
+preset-diag base='http://127.0.0.1:8091' token='':
+  set -euo pipefail; \
+  BASE='{{base}}' TOKEN='{{token}}' bash scripts/preset_diag.sh
+
 # Tail events via TS bin (arw-events); forward flags via *args
 ts-events base='http://127.0.0.1:8091' token='' *args:
   set -euo pipefail; \

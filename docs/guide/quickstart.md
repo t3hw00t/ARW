@@ -4,7 +4,7 @@ title: Quickstart
 
 # Quickstart
 
-Updated: 2025-10-25
+Updated: 2025-10-26
 Type: Tutorial
 
 Run the unified ARW server locally in minutes. The architecture centres on the `/actions` → `/events` → `/state/*` triad; enable `ARW_DEBUG=1` to serve the browser debug panels.
@@ -32,6 +32,9 @@ Need a single command that brings in Rust, Python, Node.js, jq, and ripgrep? Ins
 - Use `ARW_PERSONA_VIBE_HISTORY_RETAIN=<limit>` to clamp persona feedback history (default 50 samples) when disk space or memory is tight. This knob has no effect unless the persona preview (`ARW_PERSONA_ENABLE=1`) is active.
 - You can still raise individual knobs later (for example `ARW_HTTP_MAX_CONC`, `ARW_TOOLS_CACHE_CAP`) if a workload needs more throughput.
 - Clear the preset or set `ARW_PERF_PRESET=balanced` once you move to a machine with more cores or a dedicated GPU.
+- Check the active tier anytime:
+  - `curl -s http://127.0.0.1:8091/about | jq '.perf_preset'`
+  - Or run the helper: `just preset-diag` / `mise run preset:diag` (prints tier and key knobs)
 - Prefer a bundled setup? Run `python scripts/universal_access_kit.py --force --zip` (or `just kit-universal`) to produce `dist/universal-access-kit` (docs, eco env, starter persona); see [Universal Access Starter Kit](universal_access_kit.md) for details.
 
 ## Select Your Environment

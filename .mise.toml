@@ -96,3 +96,7 @@ run = "bash -lc 'set -euo pipefail; manifest=${MANIFEST:?set MANIFEST}; key=${KE
 [tasks."adapters:verify"]
 description = "Verify a manifest signature with an RSA public key"
 run = "bash -lc 'set -euo pipefail; manifest=${MANIFEST:?set MANIFEST}; pubkey=${PUBKEY:?set PUBKEY}; sig=${SIG:-}; bash scripts/adapters_verify.sh "$manifest" "$pubkey" ${sig:+"$sig"}'"
+
+[tasks."preset:diag"]
+description = "Print effective preset (via /about) and list local env overrides"
+run = "bash -lc 'set -euo pipefail; BASE=${BASE:-http://127.0.0.1:8091} TOKEN=${ARW_ADMIN_TOKEN:-${TOKEN:-}} bash scripts/preset_diag.sh'"

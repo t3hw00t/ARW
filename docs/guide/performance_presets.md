@@ -3,7 +3,7 @@ title: Performance Presets
 ---
 
 # Performance Presets
-Updated: 2025-10-23
+Updated: 2025-10-26
 Type: How‑to
 
 ARW ships with built‑in performance presets to adapt resource usage to your machine without hand‑tuning dozens of knobs.
@@ -29,11 +29,17 @@ echo $ARW_PERF_PRESET_TIER
 ```
 
 ### Eco Preset Details
-- Caps local workers at four via `ARW_WORKERS_MAX=4` to keep queue throughput predictable on dual-core CPUs.
-- Shrinks the action/tool cache (`ARW_TOOLS_CACHE_TTL_SECS=300`, `ARW_TOOLS_CACHE_CAP=256`) so low-memory hosts avoid reclaim churn.
-- Leaves OpenTelemetry exporters disabled (`ARW_OTEL=0`, `ARW_OTEL_METRICS=0`) unless you opt back in explicitly.
+- HTTP concurrency: `ARW_HTTP_MAX_CONC=128` by default on eco.
+- Worker/queue caps: `ARW_WORKERS_MAX=4`, `ARW_ACTIONS_QUEUE_MAX=64` to keep throughput predictable.
+- Tool cache: `ARW_TOOLS_CACHE_TTL_SECS=300`, `ARW_TOOLS_CACHE_CAP=256` to avoid reclaim churn on low‑memory hosts.
+- Low‑power hints: `ARW_PREFER_LOW_POWER=1`, `ARW_LOW_POWER=1`, and OCR low‑power hints enabled (`ARW_OCR_PREFER_LOW_POWER=1`, `ARW_OCR_LOW_POWER=1`).
+- Quieter logs by default: access log and UA/referrer flags off (`ARW_ACCESS_LOG=0`, `ARW_ACCESS_UA=0`, `ARW_ACCESS_UA_HASH=0`, `ARW_ACCESS_REF=0`).
+- SSE payload decoration off: `ARW_EVENTS_SSE_DECORATE=0`.
+- Runtime watcher cooldown: `ARW_RUNTIME_WATCHER_COOLDOWN_MS=1500` to reduce churn.
+- Memory embed backfill: smaller batches and longer idle (`ARW_MEMORY_EMBED_BACKFILL_BATCH=64`, `ARW_MEMORY_EMBED_BACKFILL_IDLE_SEC=600`).
+- OpenTelemetry exporters remain opt‑in (no preset change) — set `ARW_OTEL=1`/`ARW_OTEL_METRICS=1` explicitly if desired.
 - Honors `ARW_PERSONA_VIBE_HISTORY_RETAIN` so persona telemetry history stays lean on eco hosts.
-- Guardrails such as `scripts/triad_smoke.sh` now default to the eco preset; override with `TRIAD_SMOKE_PERF_PRESET` or `ARW_PERF_PRESET` when you need other tiers during smoke runs.
+- Guardrails such as `scripts/triad_smoke.sh` can default to the eco preset; override with `TRIAD_SMOKE_PERF_PRESET` or `ARW_PERF_PRESET` when you need other tiers during smoke runs.
 - Override any value manually when a workload needs more headroom; explicit env vars always win over preset defaults.
 
 ## What Presets Tune
@@ -72,6 +78,17 @@ export ARW_PERF_PRESET=balanced
 export ARW_HTTP_MAX_CONC=2048   # override one knob
 arw-server
 ```
+
+### Check the Effective Tier
+
+- Programmatically via `/about`:
+```
+curl -s http://127.0.0.1:8091/about | jq '.perf_preset'
+```
+- Quick diagnostic helper (repo root):
+  - Just: `just preset-diag`
+  - Mise: `mise run preset:diag`
+  Prints the current tier and a few key knobs reported by `/about`, and lists any local env overrides.
 
 ## Build vs Runtime
 - Build profiles (`release`, `maxperf`) control compiler and binary characteristics.
