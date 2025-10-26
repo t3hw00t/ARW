@@ -813,3 +813,8 @@ requirements-lock:
 adsapters-smoke:
   bash scripts/adapter_smoke.sh
 
+
+# Run mock adapter health server
+adapters-mock-up port=8081:
+  set -euo pipefail; port='{{port}}'; cargo run -p arw-mock-adapter --bin mock-adapter-health --quiet --color never
+

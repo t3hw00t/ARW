@@ -72,3 +72,7 @@ run = "bash -lc 'set -euo pipefail; cargo run -p arw-cli -- adapters schema --ou
 [tasks."adapters:smoke"]
 description = "Run adapter smoke harness (validate manifests + optional health)"
 run = "bash -lc 'bash scripts/adapter_smoke.sh'"
+
+[tasks."adapters:mock:up"]
+description = "Run mock adapter health server"
+run = "bash -lc 'ARW_MOCK_ADAPTER_PORT=${PORT:-8081} cargo run -p arw-mock-adapter --bin mock-adapter-health'"

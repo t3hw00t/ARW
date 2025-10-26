@@ -555,6 +555,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "arw-mock-adapter"
+version = "0.2.0-dev"
+dependencies = [
+ "anyhow",
+ "arw-runtime",
+ "async-trait",
+ "axum",
+ "chrono",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
 name = "arw-otel"
 version = "0.2.0-dev"
 dependencies = [

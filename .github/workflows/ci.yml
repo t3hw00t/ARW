@@ -331,8 +331,23 @@ jobs:
           bash scripts/lint_adapters.sh
           ADAPTERS_LINT_STRICT_WARNINGS=1 bash scripts/lint_adapters.sh
 
+      - name: Build mock adapter health server
+        if: steps.filter.outputs.adapters == 'true'
+        run: |
+          cargo build -p arw-mock-adapter
+
+      - name: Start mock adapter health (background)
+        if: steps.filter.outputs.adapters == 'true'
+        run: |
+          set -euo pipefail
+          nohup target/debug/mock-adapter-health >/tmp/mock-adapter.log 2>&1 &
+          echo $! > /tmp/mock-adapter.pid
+          for i in $(seq 1 30); do if curl -fsS -m 2 http://127.0.0.1:8081/healthz >/dev/null; then echo 'mock adapter up'; break; fi; sleep 1; done
+
       - name: Adapter smoke harness
         if: steps.filter.outputs.adapters == 'true'
+        env:
+          ADAPTER_SMOKE_HEALTH: "1"
         run: |
           ADAPTER_SMOKE_OUT=/tmp/adapter-smoke.json bash scripts/adapter_smoke.sh
 
@@ -342,3 +357,8 @@ jobs:
         with:
           name: adapters-smoke
           path: /tmp/adapter-smoke.json
+
+      - name: Stop mock adapter health
+        if: always() && steps.filter.outputs.adapters == 'true'
+        run: |
+          if [ -f /tmp/mock-adapter.pid ]; then kill "$(cat /tmp/mock-adapter.pid)" || true; fi

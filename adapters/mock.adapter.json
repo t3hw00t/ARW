@@ -1,0 +1,35 @@
+{
+  "$schema": "https://t3hw00t.github.io/ARW/spec/schemas/runtime_adapter_manifest.schema.json",
+  "id": "mock.adapter",
+  "version": "0.1.0",
+  "name": "Mock Adapter",
+  "description": "Mock adapter manifest used for local/CI smoke with a tiny health server.",
+  "modalities": ["text"],
+  "tags": ["mock", "demo"],
+  "entrypoint": {
+    "crate_name": "arw-mock-adapter",
+    "symbol": "create_adapter"
+  },
+  "resources": {
+    "accelerator": "cpu",
+    "recommended_memory_mb": 64,
+    "recommended_cpu_threads": 1,
+    "requires_network": false
+  },
+  "consent": {
+    "summary": "Demonstration adapter; no external egress.",
+    "capabilities": []
+  },
+  "metrics": [
+    { "name": "sessions_total", "description": "Total sessions handled", "unit": "count" }
+  ],
+  "health": {
+    "poll_interval_ms": 5000,
+    "grace_period_ms": 15000,
+    "status_endpoint": "/healthz"
+  },
+  "metadata": {
+    "upstream": "http://127.0.0.1:8081"
+  }
+}
+
