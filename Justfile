@@ -212,6 +212,25 @@ orchestrator-catalog base="http://127.0.0.1:8091" status="" category="" json="fa
 	if [ "$json" = "true" ]; then args+=(--json --pretty); fi; \
 	cargo run -p arw-cli -- "${args[@]}"
 
+# Adapter manifest helper
+adapters-validate manifest json="false" pretty="false" strict="false":
+	set -euo pipefail; manifest='{{manifest}}'; json='{{json}}'; pretty='{{pretty}}'; strict='{{strict}}'; \
+	if [ -z "$manifest" ]; then echo "error: manifest path required (use: just adapters-validate manifest=examples/adapters/demo.adapter.json)" >&2; exit 1; fi; \
+	args=(adapters validate --manifest "$manifest"); \
+	if [ "$json" = "true" ]; then args+=(--json); if [ "$pretty" = "true" ]; then args+=(--pretty); fi; fi; \
+	if [ "$strict" = "true" ]; then args+=(--strict-warnings); fi; \
+	cargo run -p arw-cli -- "${args[@]}"
+
+adapters-schema:
+	set -euo pipefail; \
+	cargo run -p arw-cli -- adapters schema --out spec/schemas/runtime_adapter_manifest.schema.json; \
+	mkdir -p docs/spec/schemas; \
+	cp spec/schemas/runtime_adapter_manifest.schema.json docs/spec/schemas/runtime_adapter_manifest.schema.json
+
+adapters-lint:
+	set -euo pipefail; \
+	bash scripts/lint_adapters.sh
+
 persona-seed base="http://127.0.0.1:8091" id="persona.alpha" name="" archetype="" telemetry="false" scope="" state_dir="" json="false" pretty="false":
 	set -euo pipefail; base='{{base}}'; id='{{id}}'; name='{{name}}'; archetype='{{archetype}}'; \
 	telemetry='{{telemetry}}'; scope='{{scope}}'; state_dir='{{state_dir}}'; json='{{json}}'; pretty='{{pretty}}'; \

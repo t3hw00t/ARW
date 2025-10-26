@@ -1,0 +1,149 @@
+name: Adapters Lint
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    # On pushes, run only the strict matrix entry; on PRs, run both
+    if: ${{ github.event_name != 'push' || matrix.strict }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        strict: [false, true]
+    timeout-minutes: 20
+    env:
+      CARGO_TERM_COLOR: always
+      ARW_ENV_MODE_FORCE: linux
+      ARW_ENV_CACHE_KEY: linux
+    steps:
+      - name: Checkout
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5
+        with:
+          fetch-depth: 0
+
+      - name: Select environment mode
+        run: bash scripts/env/switch.sh linux
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@5d458579430fc14a04a08a1e7d3694f545e91ce6 # stable
+        with:
+          components: rustfmt
+
+      - name: Restore Rust cache
+        uses: Swatinem/rust-cache@7939da402645ba29a2df566723491a2c856e8f8a # v2
+        with:
+          workspaces: |
+            . -> target
+          shared-key: ${{ env.ARW_ENV_CACHE_KEY }}
+
+      - name: Detect changed adapter manifests (PR)
+        if: ${{ github.event_name == 'pull_request' }}
+        id: changes
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE="${{ github.event.pull_request.base.sha }}"
+          echo "Base SHA: $BASE"
+          echo "Scanning changed adapter manifests between $BASE and HEAD"
+          LIST=$(git diff --name-status "$BASE"...HEAD || true)
+          echo "$LIST" | sed -n '1,200p'
+          CHANGED=""
+          DELETED=""
+          while IFS=$'\t' read -r status a b; do
+            case "$status" in
+              A|M)
+                path="$a";;
+              R*)
+                path="$b";;
+              D)
+                if [[ "$a" =~ ^adapters/.*\.(json|toml)$ ]]; then
+                  DELETED+="$a\n"
+                fi
+                continue;;
+              *) continue;;
+            esac
+            if [[ "$path" =~ ^adapters/.*\.(json|toml)$ && -f "$path" ]]; then
+              CHANGED+="$path\n"
+            fi
+          done <<< "$LIST"
+          echo "Changed manifests:"$'\n'"$CHANGED"
+          if [[ -n "$DELETED" ]]; then
+            echo "Deleted manifests:"$'\n'"$DELETED"
+          fi
+          {
+            echo "files<<EOF"
+            printf '%s\n' "$CHANGED"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+          COUNT=$(printf '%s\n' "$CHANGED" | sed '/^\s*$/d' | wc -l)
+          echo "count=$COUNT" >> "$GITHUB_OUTPUT"
+
+      - name: Lint adapter manifests
+        if: ${{ github.event_name != 'pull_request' || steps.changes.outputs.count != '0' }}
+        env:
+          ADAPTERS_LINT_STRICT_WARNINGS: ${{ matrix.strict && '1' || '0' }}
+          ADAPTERS_FILES: ${{ steps.changes.outputs.files }}
+        run: bash scripts/lint_adapters.sh
+
+      - name: Adapter lint summary
+        if: ${{ always() }}
+        shell: bash
+        env:
+          CHANGED: ${{ steps.changes.outputs.files }}
+          IS_PR: ${{ github.event_name == 'pull_request' }}
+        run: |
+          set -euo pipefail
+          # Build file list
+          mapfile -t FILES < <(
+            if [[ "$IS_PR" == "true" && -n "${CHANGED:-}" ]]; then
+              printf '%s\n' $CHANGED
+            else
+              find adapters -type f \( -name "*.json" -o -name "*.toml" \) | sort
+            fi
+          )
+          if [[ ${#FILES[@]} -eq 0 ]]; then
+            echo "No adapter manifests to summarize." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          echo "## Adapter Manifest Lint Summary" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Manifest | Errors | Warnings | Status |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|---|---:|---:|---|" >> "$GITHUB_STEP_SUMMARY"
+          failures=0
+          for f in "${FILES[@]}"; do
+            out=$(cargo run -q -p arw-cli -- adapters validate --manifest "$f" --json 2>/dev/null || true)
+            if [[ -z "$out" ]]; then
+              echo "| $f | n/a | n/a | run error |" >> "$GITHUB_STEP_SUMMARY"
+              continue
+            fi
+            py='import sys,json; d=json.load(sys.stdin); e=len(d["report"].get("errors",[])); w=len(d["report"].get("warnings",[])); print(e,w);'
+            read -r errors warnings < <(printf '%s' "$out" | python3 -c "$py")
+            status="ok"
+            if [[ ${errors:-0} -gt 0 ]]; then status="error"; failures=$((failures+1)); fi
+            echo "| $f | ${errors:-0} | ${warnings:-0} | $status |" >> "$GITHUB_STEP_SUMMARY"
+            # Emit annotations (file-level)
+            ann_py='import sys,json; d=json.load(sys.stdin); 
+e=d["report"].get("errors",[]); w=d["report"].get("warnings",[]);
+import os; f=os.environ.get("F")
+import sys
+for i in e:
+  print(f"::error file={f}::" + i.get("field","field") + ": " + i.get("message",""))
+for i in w:
+  print(f"::warning file={f}::" + i.get("field","field") + ": " + i.get("message",""))'
+            F="$f" python3 -c "$ann_py" <<< "$out"
+          done
+          if [[ $failures -gt 0 ]]; then
+            echo "\nOne or more manifests have errors. See table above." >> "$GITHUB_STEP_SUMMARY"
+          fi

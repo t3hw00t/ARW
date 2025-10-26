@@ -90,6 +90,7 @@ nav:
       - Connectors: guide/connectors.md
       - Projects UI: guide/projects_ui.md
       - Recipes: guide/recipes.md
+      - Validate Adapter Manifests: guide/adapters_validate.md
       - Runtime Matrix: guide/runtime_matrix.md
       - Runtime Manager: guide/runtime_manager.md
       - Vision Runtime Preview: guide/vision_runtime.md
@@ -157,6 +158,7 @@ nav:
       - Specs Index: reference/specs.md
       - Interface Release Notes: reference/interface-release-notes.md
       - Gating Keys: GATING_KEYS.md
+      - Adapter Manifest: reference/adapter_manifest.md
       - Gating Config: reference/gating_config.md
       - Tools:
           - UI Screenshot Tools: reference/tools/ui_screenshot.md

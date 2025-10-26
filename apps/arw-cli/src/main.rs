@@ -7,8 +7,8 @@ use arw_core::{hello_core, load_effective_paths};
 use clap::CommandFactory;
 use clap::{Args, Parser, Subcommand};
 use commands::{
-    AdminCmd, CapCmd, ContextCmd, EventsCmd, GateCmd, HttpCmd, OrchestratorCmd, PathsArgs,
-    PingArgs, RuntimeCmd, ScreenshotsCmd, SmokeCmd, SpecCmd, StateCmd, ToolsListArgs,
+    AdaptersCmd, AdminCmd, CapCmd, ContextCmd, EventsCmd, GateCmd, HttpCmd, OrchestratorCmd,
+    PathsArgs, PingArgs, RuntimeCmd, ScreenshotsCmd, SmokeCmd, SpecCmd, StateCmd, ToolsListArgs,
     ToolsSubcommand,
 };
 use logic_units::LogicUnitsCmd;
@@ -38,6 +38,11 @@ enum Commands {
     Admin {
         #[command(subcommand)]
         cmd: AdminCmd,
+    },
+    /// Adapter helpers (manifests)
+    Adapters {
+        #[command(subcommand)]
+        cmd: AdaptersCmd,
     },
     /// Gating helpers
     Gate {
@@ -144,6 +149,12 @@ fn main() {
         }
         Some(Commands::Admin { cmd }) => {
             if let Err(e) = commands::admin::execute(cmd) {
+                eprintln!("{}", e);
+                std::process::exit(1);
+            }
+        }
+        Some(Commands::Adapters { cmd }) => {
+            if let Err(e) = commands::adapters::execute(cmd) {
                 eprintln!("{}", e);
                 std::process::exit(1);
             }

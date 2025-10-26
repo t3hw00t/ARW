@@ -102,10 +102,27 @@ Docs lint checklist
 - Install repo hooks to automate checks: `just hooks-install` (or `scripts/dev.ps1 hooks` on Windows) to run format, clippy, tests, spec checks, and docs build when docs change.
 
 PR acceptance checklist
-- User‑visible docs updated when behavior changes
+- User-visible docs updated when behavior changes
 - Schemas/examples refreshed as needed
 - Changelog entry included
 - Labels applied (type/*, area/*)
+
+## Adapters & Manifests
+
+- Directory: place runtime adapter manifests under `adapters/` (CI lints these on every PR/push).
+- Validate one file locally:
+  - `cargo run -p arw-cli -- adapters validate --manifest adapters/demo.adapter.json`
+  - JSON output: add `--json --pretty`
+  - Strict warnings: add `--strict-warnings`
+- Lint all manifests:
+  - `bash scripts/lint_adapters.sh` (set `ADAPTERS_LINT_STRICT_WARNINGS=1` to fail on warnings)
+  - `just adapters-lint` (wrapper)
+- Verify integration (opt-in):
+  - `ARW_VERIFY_INCLUDE_ADAPTERS=1 bash scripts/dev.sh verify`
+- JSON Schema for IDEs:
+  - Hosted: `https://t3hw00t.github.io/ARW/spec/schemas/runtime_adapter_manifest.schema.json`
+  - VS Code: `.vscode/settings.json` maps `adapters/*.json` and `examples/adapters/*.json` to the schema
+  - Examples include a `$schema` field for immediate validation in editors
 
 ## Event & Interface Policy
 

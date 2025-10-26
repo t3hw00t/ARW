@@ -2,6 +2,8 @@ use std::{collections::BTreeMap, fs, path::Path};
 
 use anyhow::Context as _;
 use arw_runtime::{RuntimeAccelerator, RuntimeModality};
+use once_cell::sync::Lazy;
+use regex::Regex;
 use schemars::JsonSchema;
 use semver::Version;
 use serde::{Deserialize, Serialize};
@@ -113,6 +115,11 @@ impl RuntimeAdapterManifest {
             report.push_error("entrypoint.symbol", "symbol is required");
         }
 
+        // Modalities should not be empty.
+        if self.modalities.is_empty() {
+            report.push_error("modalities", "at least one modality must be declared");
+        }
+
         let mut seen_modalities: Vec<RuntimeModality> = Vec::new();
         for modality in &self.modalities {
             if seen_modalities.contains(modality) {
@@ -125,12 +132,124 @@ impl RuntimeAdapterManifest {
             }
         }
 
+        // Tags hygiene: prefer kebab/underscore case, no spaces, dedupe.
+        static TAG_RE: Lazy<Regex> =
+            Lazy::new(|| Regex::new(r"^[a-z0-9][a-z0-9_-]{0,31}$").unwrap());
+        let mut seen_tags: Vec<&str> = Vec::new();
+        for tag in &self.tags {
+            let t = tag.trim();
+            if t.is_empty() {
+                report.push_warning("tags", "ignore empty tag entries");
+                continue;
+            }
+            if !TAG_RE.is_match(t) {
+                report.push_warning("tags", "tag should be lowercase, 1-32 chars, [a-z0-9_-]");
+            }
+            if seen_tags.contains(&t) {
+                report.push_warning("tags", "duplicate tag");
+            } else {
+                seen_tags.push(t);
+            }
+        }
+
         if let Some(consent) = &self.consent {
             if consent.summary.trim().is_empty() {
                 report.push_warning(
                     "consent.summary",
                     "consent summary should describe why elevated access is required",
                 );
+            }
+            if let Some(url) = &consent.details_url {
+                let u = url.trim();
+                if !(u.starts_with("http://") || u.starts_with("https://")) {
+                    report.push_warning(
+                        "consent.details_url",
+                        "details_url should start with http:// or https://",
+                    );
+                }
+            }
+        }
+
+        // Resource sanity checks
+        if let Some(cpu) = self.resources.recommended_cpu_threads {
+            if cpu == 0 {
+                report.push_error(
+                    "resources.recommended_cpu_threads",
+                    "recommended_cpu_threads must be >= 1 when specified",
+                );
+            } else if cpu > 128 {
+                report.push_warning(
+                    "resources.recommended_cpu_threads",
+                    "cpu thread hint above 128 is unusual; consider lowering",
+                );
+            }
+        }
+
+        if let Some(mem) = self.resources.recommended_memory_mb {
+            if mem == 0 {
+                report.push_error(
+                    "resources.recommended_memory_mb",
+                    "recommended_memory_mb must be > 0 when specified",
+                );
+            } else if mem < 512 {
+                report.push_warning(
+                    "resources.recommended_memory_mb",
+                    "memory hint below 512MB may be too low for stable operation",
+                );
+            }
+        }
+
+        if self.resources.requires_network.unwrap_or(false) {
+            // Recommend an explicit capability token when network is required.
+            let mut has_net_cap = false;
+            if let Some(consent) = &self.consent {
+                let caps = consent
+                    .capabilities
+                    .iter()
+                    .map(|s| s.trim().to_ascii_lowercase());
+                for c in caps {
+                    if c == "egress" || c == "network" || c == "net" {
+                        has_net_cap = true;
+                        break;
+                    }
+                }
+            }
+            if !has_net_cap {
+                report.push_warning(
+                    "resources.requires_network",
+                    "requires_network is true but consent.capabilities lacks 'egress'",
+                );
+            }
+        }
+
+        // Health grace should not be shorter than poll interval.
+        if self.health.grace_period_ms < self.health.poll_interval_ms {
+            report.push_warning(
+                "health.grace_period_ms",
+                "grace_period_ms is shorter than poll_interval_ms; consider increasing",
+            );
+        }
+
+        // Metric names hygiene: follow Prometheus-ish pattern and dedupe.
+        static METRIC_RE: Lazy<Regex> =
+            Lazy::new(|| Regex::new(r"^[a-zA-Z_:][a-zA-Z0-9_:]*$").unwrap());
+        let mut seen_metrics: Vec<&str> = Vec::new();
+        for m in &self.metrics {
+            let name = m.name.trim();
+            if name.is_empty() {
+                report.push_error("metrics.name", "metric name is required");
+                continue;
+            }
+            if !METRIC_RE.is_match(name) {
+                report.push_warning(
+                    "metrics.name",
+                    "metric name should match ^[a-zA-Z_:][a-zA-Z0-9_:]*$",
+                );
+            }
+            if seen_metrics.contains(&name) {
+                report.push_warning("metrics", "duplicate metric name");
+            } else {
+                seen_metrics.push(name);
             }
         }
 
@@ -368,5 +487,127 @@ mod tests {
         fs::write(&path, SAMPLE_MANIFEST.as_bytes()).unwrap();
         let manifest = RuntimeAdapterManifest::from_path(&path).unwrap();
         assert_eq!(manifest.id, "demo.adapter");
+    }
+
+    #[test]
+    fn modalities_required_and_tags_linted() {
+        let mut manifest =
+            RuntimeAdapterManifest::from_str(&SAMPLE_MANIFEST, ManifestFormat::Json).unwrap();
+        manifest.modalities.clear();
+        manifest.tags = vec!["".into(), "Bad Tag".into(), "ok".into(), "ok".into()];
+        let report = manifest.validate();
+        assert!(
+            report.errors.iter().any(|i| i.field == "modalities"),
+            "missing modalities should error"
+        );
+        assert!(report
+            .warnings
+            .iter()
+            .any(|i| i.field == "tags" && i.message.contains("ignore empty")));
+        assert!(
+            report
+                .warnings
+                .iter()
+                .any(|i| i.field == "tags" && i.message.contains("lowercase")),
+            "bad tag pattern should warn"
+        );
+        assert!(report
+            .warnings
+            .iter()
+            .any(|i| i.field == "tags" && i.message.contains("duplicate")));
+    }
+
+    #[test]
+    fn resources_sanity_and_network_consent_hint() {
+        let mut manifest =
+            RuntimeAdapterManifest::from_str(&SAMPLE_MANIFEST, ManifestFormat::Json).unwrap();
+        manifest.resources.recommended_cpu_threads = Some(0);
+        manifest.resources.recommended_memory_mb = Some(0);
+        manifest.resources.requires_network = Some(true);
+        // Ensure consent lacks 'egress'
+        if let Some(consent) = manifest.consent.as_mut() {
+            consent.capabilities.clear();
+        }
+        let report = manifest.validate();
+        assert!(report
+            .errors
+            .iter()
+            .any(|i| i.field == "resources.recommended_cpu_threads"));
+        assert!(report
+            .errors
+            .iter()
+            .any(|i| i.field == "resources.recommended_memory_mb"));
+        assert!(report
+            .warnings
+            .iter()
+            .any(|i| i.field == "resources.requires_network"));
+    }
+
+    #[test]
+    fn health_grace_should_exceed_poll() {
+        let mut manifest =
+            RuntimeAdapterManifest::from_str(&SAMPLE_MANIFEST, ManifestFormat::Json).unwrap();
+        manifest.health.poll_interval_ms = 2_000;
+        manifest.health.grace_period_ms = 1_000;
+        let report = manifest.validate();
+        assert!(report
+            .warnings
+            .iter()
+            .any(|i| i.field == "health.grace_period_ms"));
+    }
+
+    #[test]
+    fn metrics_names_and_duplicates() {
+        let mut manifest =
+            RuntimeAdapterManifest::from_str(&SAMPLE_MANIFEST, ManifestFormat::Json).unwrap();
+        manifest.metrics = vec![
+            AdapterMetric {
+                name: "".into(),
+                description: None,
+                unit: None,
+            },
+            AdapterMetric {
+                name: "bad@name".into(),
+                description: None,
+                unit: None,
+            },
+            AdapterMetric {
+                name: "tokens_processed_total".into(),
+                description: None,
+                unit: None,
+            },
+            AdapterMetric {
+                name: "tokens_processed_total".into(),
+                description: None,
+                unit: None,
+            },
+        ];
+        let report = manifest.validate();
+        assert!(
+            report.errors.iter().any(|i| i.field == "metrics.name"),
+            "empty metric name should error"
+        );
+        assert!(
+            report.warnings.iter().any(|i| i.field == "metrics.name"),
+            "invalid metric pattern should warn"
+        );
+        assert!(report
+            .warnings
+            .iter()
+            .any(|i| i.field == "metrics" && i.message.contains("duplicate")));
+    }
+
+    #[test]
+    fn consent_details_url_scheme_hint() {
+        let mut manifest =
+            RuntimeAdapterManifest::from_str(&SAMPLE_MANIFEST, ManifestFormat::Json).unwrap();
+        if let Some(consent) = manifest.consent.as_mut() {
+            consent.details_url = Some("ftp://example.com/details".into());
+        }
+        let report = manifest.validate();
+        assert!(report
+            .warnings
+            .iter()
+            .any(|i| i.field == "consent.details_url"));
     }
 }

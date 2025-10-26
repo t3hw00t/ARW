@@ -4,6 +4,21 @@ This project follows Keep a Changelog and Semantic Versioning. All notable chang
 
 ## [Unreleased]
 
+### Added
+- Adapter manifest lints in SDK with unit tests.
+- CLI `arw-cli adapters validate` to lint manifests (human/JSON, strict mode).
+- CLI `arw-cli adapters schema` to generate JSON Schema.
+- CLI `arw-cli adapters init` to scaffold a new manifest (JSON/TOML).
+- Hosted JSON Schema and docs site copy; VS Code schema mapping.
+- Documentation: how-to guide, reference, schema index, and links in runtime matrix.
+- Sample manifests (JSON and TOML) under `examples/adapters/` and CI examples under `adapters/`.
+- CI: adapters lint workflow with PR fast-path, strict mode, summary table, and annotations.
+- Dev UX: Justfile helpers, optional verify integration, pre-commit hook.
+
+### Changed
+- README: added Adapters Guide badge and links.
+
+### Housekeeping
 - Retired all published bundles through `v0.1.4`, refreshed the workspace to the `0.2.0-dev` pre-release train, and removed legacy artifacts from the tree.
 - Hardened bus fan-out to survive broadcast lag (SSE replay, metrics, and state observers now recover after channel overflows) and tightened filtered subscriber logging.
 - Auto-scale the action worker pool (defaults to roughly 2× host cores, configurable via `ARW_WORKERS` with an optional `ARW_WORKERS_MAX` cap) and added SQLite indexes for the actions table to keep queue drains fast as workloads grow.

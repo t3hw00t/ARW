@@ -1,0 +1,206 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "RuntimeAdapterManifest",
+  "description": "Wrapper struct for adapter manifests.",
+  "type": "object",
+  "required": [
+    "entrypoint",
+    "id",
+    "version"
+  ],
+  "properties": {
+    "consent": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/AdapterConsent"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "description": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "entrypoint": {
+      "$ref": "#/definitions/AdapterEntrypoint"
+    },
+    "health": {
+      "default": {
+        "grace_period_ms": 15000,
+        "poll_interval_ms": 5000
+      },
+      "allOf": [
+        {
+          "$ref": "#/definitions/AdapterHealthSpec"
+        }
+      ]
+    },
+    "id": {
+      "type": "string"
+    },
+    "metadata": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      }
+    },
+    "metrics": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/AdapterMetric"
+      }
+    },
+    "modalities": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "name": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "resources": {
+      "default": {},
+      "allOf": [
+        {
+          "$ref": "#/definitions/AdapterResources"
+        }
+      ]
+    },
+    "tags": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "version": {
+      "type": "string"
+    }
+  },
+  "definitions": {
+    "AdapterConsent": {
+      "type": "object",
+      "properties": {
+        "capabilities": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "details_url": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "summary": {
+          "default": "",
+          "type": "string"
+        }
+      }
+    },
+    "AdapterEntrypoint": {
+      "type": "object",
+      "properties": {
+        "crate_name": {
+          "default": "",
+          "type": "string"
+        },
+        "kind": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "symbol": {
+          "default": "",
+          "type": "string"
+        }
+      }
+    },
+    "AdapterHealthSpec": {
+      "type": "object",
+      "properties": {
+        "grace_period_ms": {
+          "default": 15000,
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
+        },
+        "poll_interval_ms": {
+          "default": 5000,
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
+        },
+        "status_endpoint": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "AdapterMetric": {
+      "type": "object",
+      "properties": {
+        "description": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "name": {
+          "default": "",
+          "type": "string"
+        },
+        "unit": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "AdapterResources": {
+      "type": "object",
+      "properties": {
+        "accelerator": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "recommended_cpu_threads": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint8",
+          "minimum": 0.0
+        },
+        "recommended_memory_mb": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0.0
+        },
+        "requires_network": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        }
+      }
+    }
+  }
+}

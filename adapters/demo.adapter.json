@@ -1,0 +1,31 @@
+{
+  "$schema": "https://t3hw00t.github.io/ARW/spec/schemas/runtime_adapter_manifest.schema.json",
+  "id": "sample.demo.adapter",
+  "version": "0.1.0",
+  "name": "Sample Demo Adapter",
+  "description": "Clean example adapter manifest placed under adapters/ for CI linting.",
+  "modalities": ["text"],
+  "tags": ["demo", "example"],
+  "entrypoint": {
+    "crate_name": "demo_adapter",
+    "symbol": "create_adapter"
+  },
+  "resources": {
+    "accelerator": "cpu",
+    "recommended_memory_mb": 1024,
+    "recommended_cpu_threads": 4,
+    "requires_network": false
+  },
+  "consent": {
+    "summary": "Processes local text prompts",
+    "capabilities": ["read_files"],
+    "details_url": "https://example.com/adapters/demo"
+  },
+  "metrics": [
+    {"name": "tokens_processed_total", "description": "Total tokens", "unit": "count"}
+  ],
+  "health": {
+    "poll_interval_ms": 5000,
+    "grace_period_ms": 15000
+  }
+}

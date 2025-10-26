@@ -1,3 +1,4 @@
+pub mod adapters;
 pub mod admin;
 pub mod capsule;
 pub mod context;
@@ -14,6 +15,7 @@ pub mod status;
 pub mod tools;
 pub mod util;
 
+pub use adapters::AdaptersCmd;
 pub use admin::AdminCmd;
 pub use capsule::CapCmd;
 pub use context::ContextCmd;

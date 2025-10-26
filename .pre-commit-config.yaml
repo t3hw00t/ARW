@@ -1,0 +1,11 @@
+repos:
+  - repo: local
+    hooks:
+      - id: adapters-lint
+        name: Lint adapter manifests
+        entry: bash scripts/lint_adapters.sh
+        language: system
+        pass_filenames: false
+        files: ^adapters/.*\.(json|toml)$
+        stages: [commit]
+

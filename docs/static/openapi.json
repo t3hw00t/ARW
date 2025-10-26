@@ -3889,6 +3889,88 @@
           }
         }
       }
+    },
+    "/v1/plan": {
+      "post": {
+        "tags": [
+          "Planning"
+        ],
+        "operationId": "plan_doc",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PlanDocRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Planner output",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlanDocResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid plan request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "description": "Planning: POST /v1/plan."
+      }
+    },
+    "/v1/run": {
+      "post": {
+        "tags": [
+          "Planning"
+        ],
+        "operationId": "run_doc",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RunDocRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Planner output applied to runtime",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunDocResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid run request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "description": "Planning: POST /v1/run."
+      }
     }
   },
   "components": {
@@ -3967,6 +4049,37 @@
           },
           "version": {
             "type": "string"
+          }
+        }
+      },
+      "AnyEnvelope": {
+        "type": "object",
+        "required": [
+          "ok",
+          "data"
+        ],
+        "properties": {
+          "code": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "corr_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "data": {},
+          "message": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "ok": {
+            "type": "boolean"
           }
         }
       },
@@ -5350,6 +5463,12 @@
             "type": "string"
           },
           "links": {},
+          "persona_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "privacy": {
             "type": [
               "string",
@@ -6297,6 +6416,12 @@
               "string",
               "null"
             ]
+          },
+          "persona_id": {
+            "type": [
+              "string",
+              "null"
+            ]
           }
         }
       },
@@ -6323,6 +6448,28 @@
               "null"
             ]
           }
+        }
+      },
+      "PlanDocRequest": {
+        "type": "object",
+        "required": [
+          "policy"
+        ],
+        "properties": {
+          "memory": {},
+          "policy": {}
+        }
+      },
+      "PlanDocResponse": {
+        "type": "object",
+        "required": [
+          "plan",
+          "policy"
+        ],
+        "properties": {
+          "memory": {},
+          "plan": {},
+          "policy": {}
         }
       },
       "ProblemDetails": {
@@ -6549,6 +6696,56 @@
           "role": {
             "type": "string"
           }
+        }
+      },
+      "RunDocApplied": {
+        "type": "object",
+        "required": [
+          "notes",
+          "warnings"
+        ],
+        "properties": {
+          "kv_policy": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "notes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "warnings": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "RunDocRequest": {
+        "type": "object",
+        "required": [
+          "policy"
+        ],
+        "properties": {
+          "memory": {},
+          "policy": {}
+        }
+      },
+      "RunDocResponse": {
+        "type": "object",
+        "required": [
+          "plan",
+          "applied"
+        ],
+        "properties": {
+          "applied": {
+            "$ref": "#/components/schemas/RunDocApplied"
+          },
+          "plan": {}
         }
       },
       "RunOutcome": {
@@ -7388,6 +7585,10 @@
     {
       "name": "Staging",
       "description": "Human-in-the-loop approvals queue"
+    },
+    {
+      "name": "Planning",
+      "description": "Planning endpoints"
     }
   ]
 }

@@ -1,0 +1,32 @@
+# Example TOML manifest (equivalent to demo.adapter.json)
+id = "sample.demo.adapter"
+version = "0.1.0"
+name = "Sample Demo Adapter (TOML)"
+description = "Clean example adapter manifest in TOML"
+
+modalities = ["text"]
+tags = ["demo", "example"]
+
+[entrypoint]
+crate_name = "demo_adapter"
+symbol = "create_adapter"
+
+[resources]
+accelerator = "cpu"
+recommended_memory_mb = 1024
+recommended_cpu_threads = 4
+requires_network = false
+
+[consent]
+summary = "Processes local text prompts"
+capabilities = ["read_files"]
+
+[[metrics]]
+name = "tokens_processed_total"
+description = "Total tokens"
+unit = "count"
+
+[health]
+poll_interval_ms = 5000
+grace_period_ms = 15000
+

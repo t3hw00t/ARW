@@ -1,0 +1,12 @@
+{
+  "json.schemas": [
+    {
+      "fileMatch": [
+        "adapters/*.json",
+        "examples/adapters/*.json"
+      ],
+      "url": "https://t3hw00t.github.io/ARW/spec/schemas/runtime_adapter_manifest.schema.json"
+    }
+  ]
+}
+

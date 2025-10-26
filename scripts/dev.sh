@@ -217,6 +217,12 @@ run_verify() {
     fi
   fi
 
+  # Optional: adapters lint (opt-in via env)
+  if [[ "${ARW_VERIFY_INCLUDE_ADAPTERS:-}" =~ ^(1|true|yes)$ ]]; then
+    echo "[verify] adapters lint (ARW_VERIFY_INCLUDE_ADAPTERS=1)"
+    if ! bash "$REPO_ROOT/scripts/lint_adapters.sh"; then ok=1; fi
+  fi
+
   PYTHON="$(command -v python3 || command -v python || true)"
   if [[ -n "$PYTHON" ]]; then
     local run_doc_sync=1

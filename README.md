@@ -5,6 +5,7 @@
 [![CI](https://github.com/t3hw00t/ARW/actions/workflows/ci.yml/badge.svg)](https://github.com/t3hw00t/ARW/actions/workflows/ci.yml)
 [![Docs Check](https://github.com/t3hw00t/ARW/actions/workflows/docs-check.yml/badge.svg)](https://github.com/t3hw00t/ARW/actions/workflows/docs-check.yml)
 [![Docs](https://img.shields.io/badge/docs-material%20for%20mkdocs-blue)](docs/index.md)
+[![Adapters Guide](https://img.shields.io/badge/adapters-validate-blue)](docs/guide/adapters_validate.md)
 [![Container](https://img.shields.io/badge/ghcr-arw--server-blue?logo=docker)](https://ghcr.io/t3hw00t/arw-server)
 [![npm](https://img.shields.io/npm/v/%40arw%2Fclient?label=%40arw%2Fclient)](https://www.npmjs.com/package/@arw/client)
 [![License](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-informational)](#licensing)

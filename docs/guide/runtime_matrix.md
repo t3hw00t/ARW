@@ -5,11 +5,13 @@ title: Runtime Matrix
 # Runtime Matrix
 
 > Need the short version? See [Runtime Quickstart (Non-Technical)](runtime_quickstart.md).
-Updated: 2025-10-16
+Updated: 2025-10-26
 Type: Blueprint
 Status: In progress
 
 ARW seeds a runtime matrix read-model from `runtime.health` events. Today it merges per-node HTTP telemetry with runtime registry states and accelerator summaries while the full grid of models and hardware remains under active development.
+
+See also: [Adapter Manifest](../reference/adapter_manifest.md) for declaring external runtime adapters and validating their manifests with `arw-cli`.
 
 ## Current state
 - Local node health published every five seconds; payloads now merge HTTP telemetry with the runtime registry snapshot so readiness, degraded/error counts, and restart pressure all travel together.
