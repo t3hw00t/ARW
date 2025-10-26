@@ -284,6 +284,14 @@ adapters-smoke-oneshot port=8081 out='':
   set -euo pipefail; \
   ARW_MOCK_ADAPTER_PORT='{{port}}' ADAPTER_SMOKE_OUT='{{out}}' bash scripts/adapter_smoke_oneshot.sh
 
+adapters-sign manifest key:
+	set -euo pipefail; \
+	bash scripts/adapters_sign.sh '{{manifest}}' '{{key}}'
+
+adapters-verify manifest pubkey sig='':
+	set -euo pipefail; \
+	bash scripts/adapters_verify.sh '{{manifest}}' '{{pubkey}}' '{{sig}}'
+
 # Tail events via TS bin (arw-events); forward flags via *args
 ts-events base='http://127.0.0.1:8091' token='' *args:
   set -euo pipefail; \

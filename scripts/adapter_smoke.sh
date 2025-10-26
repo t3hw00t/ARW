@@ -51,19 +51,24 @@ json_rows=()
 for f in "${files[@]}"; do
   printf ' - %s\n' "$f"
   args=(run -q -p arw-cli -- adapters validate --manifest "$f" --json)
+  # measure validation time
+  t0=$(date +%s%3N 2>/dev/null || echo 0)
   if is_truthy "$STRICT"; then args+=(--strict-warnings); fi
   set +e; out="$("$CARGO" "${args[@]}")"; code=$?; set -e
+  t1=$(date +%s%3N 2>/dev/null || echo 0)
+  validate_ms=0; if [[ "$t0" != 0 && "$t1" != 0 ]]; then validate_ms=$((t1 - t0)); fi
   if [[ $code -ne 0 ]]; then
     echo "   -> FAIL ($code)"
   else
     echo "   -> OK"
   fi
   # compute advisories (non-fatal recommendations) and counts via python
-  row=$(ARW_ADAPTER_SMOKE_RAW="$out" ARW_ADAPTER_SMOKE_FILE="$f" ARW_ADAPTER_SMOKE_STRICT="$STRICT" python3 - <<'PY'
+  row=$(ARW_ADAPTER_SMOKE_RAW="$out" ARW_ADAPTER_SMOKE_FILE="$f" ARW_ADAPTER_SMOKE_STRICT="$STRICT" ARW_ADAPTER_VALIDATE_MS="$validate_ms" python3 - <<'PY'
 import json,sys,os
 RAW=os.environ.get('ARW_ADAPTER_SMOKE_RAW','')
 PATH=os.environ.get('ARW_ADAPTER_SMOKE_FILE','')
 STRICT=os.environ.get('ARW_ADAPTER_SMOKE_STRICT','0')
+VAL_MS=int(os.environ.get('ARW_ADAPTER_VALIDATE_MS','0') or '0')
 try:
   data=json.loads(RAW)
 except Exception:
@@ -90,6 +95,7 @@ row={
   'errors': report.get('errors') or [],
   'warnings': report.get('warnings') or [],
   'advisories': advisories,
+  'validate_ms': VAL_MS,
 }
 print(json.dumps(row,separators=(',',':')))
 PY
@@ -126,23 +132,65 @@ PY
     if [[ -n "$base" && -n "$path" ]]; then
       url="${base%/}${path}"
       log "Probing: $url"
+      # measure health probe time
+      h0=$(date +%s%3N 2>/dev/null || echo 0)
       set +e; curl -fsS -m 2 "$url" >/dev/null; code=$?; set -e
+      h1=$(date +%s%3N 2>/dev/null || echo 0)
+      health_ms=0; if [[ "$h0" != 0 && "$h1" != 0 ]]; then health_ms=$((h1 - h0)); fi
       if [[ $code -ne 0 ]]; then
         log "Probe failed (non-fatal): $url"
+        probe_status="fail"
       else
         log "Probe OK: $url"
+        probe_status="ok"
+      fi
+      # augment last row with health info
+      if [[ ${#json_rows[@]} -gt 0 ]]; then
+        last="${json_rows[-1]}"
+        augmented=$(python3 - <<'PY'
+import json,sys,os
+row=json.loads(sys.stdin.read())
+row['health_probe_ms']=int(os.environ.get('ARW_ADAPTER_HEALTH_MS','0') or '0')
+row['health_status']=os.environ.get('ARW_ADAPTER_HEALTH_STATUS','')
+print(json.dumps(row,separators=(',',':')))
+PY
+        <<<"$last" ARW_ADAPTER_HEALTH_MS="$health_ms" ARW_ADAPTER_HEALTH_STATUS="$probe_status")
+        json_rows[-1]="$augmented"
       fi
     fi
   done
 fi
 
+report_json="[$(IFS=,; echo "${json_rows[*]}")]"
+
 if [[ -n "$OUT_PATH" ]]; then
-  tmp="$(mktemp)"
-  printf '[%s]\n' "$(IFS=,; echo "${json_rows[*]}")" > "$tmp"
+  tmp="$(mktemp)"; printf '%s\n' "$report_json" > "$tmp"
   mkdir -p "$(dirname "$OUT_PATH")" || true
-  mv "$tmp" "$OUT_PATH"
-  log "Wrote JSON report to $OUT_PATH"
+  mv "$tmp" "$OUT_PATH"; log "Wrote JSON report to $OUT_PATH"
 fi
+
+# Print Markdown summary and GitHub annotations when on CI
+python3 - <<'PY'
+import json,os,sys
+data=json.loads(os.environ.get('ARW_ADAPTER_REPORT','[]'))
+def cnt(x): return len(x) if isinstance(x,list) else 0
+total=len(data)
+oks=sum(1 for r in data if r.get('ok'))
+errs=sum(cnt(r.get('errors')) for r in data)
+warns=sum(cnt(r.get('warnings')) for r in data)
+advs=sum(cnt(r.get('advisories')) for r in data)
+print("| manifest | ok | errors | warnings | advisories | validate_ms | health_ms |\n|---|---:|---:|---:|---:|---:|---:|")
+for r in data:
+  path=r.get('path','')
+  ok='yes' if r.get('ok') else 'no'
+  vm=r.get('validate_ms') or 0
+  hm=r.get('health_probe_ms') or 0
+  print(f"| {path} | {ok} | {cnt(r.get('errors'))} | {cnt(r.get('warnings'))} | {cnt(r.get('advisories'))} | {vm} | {hm} |")
+print(f"\nSummary: files={total} ok={oks} errors={errs} warnings={warns} advisories={advs}")
+if os.environ.get('GITHUB_ACTIONS'):
+  print(f"::notice::adapter smoke summary files={total} ok={oks} errors={errs} warnings={warns} advisories={advs}")
+PY
+ARW_ADAPTER_REPORT="$report_json"
 
 log "Adapter smoke completed."
 exit 0

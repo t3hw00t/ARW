@@ -38,6 +38,12 @@ Assistant quickstart → [Agent Onboarding](docs/ai/AGENT_ONBOARDING.md)
 - [Documentation Home](docs/index.md) - Product overview, guides, and reference docs.
  - Adapters quick smoke (one-shot): `just adapters-smoke-oneshot` or `mise run adapters:smoke:oneshot`
 
+## Adapters
+
+- Gallery: see sample manifests and quick commands at `docs/guide/adapter_gallery.md`.
+- SDK: build custom adapters with `crates/arw-runtime-adapter` — guide at `docs/guide/adapter_sdk.md`.
+- Validate: `docs/guide/adapters_validate.md` (single-file, lint-all, changed-only).
+
 ## Release Status
 - Legacy release bundles (<= `v0.1.4`) have been retired; no prebuilt downloads are published while we refocus on the next milestone.
 - The `main` branch now tracks the `0.2.0-dev` pre-release; GitHub Releases remain frozen until the next milestone cut.

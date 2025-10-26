@@ -44,3 +44,22 @@ This page lists sample adapter manifests included with the repo and shows how to
 
 See also: Adapter SDK guide for SDK usage and the smoke harness report format.
 
+## Signing (optional)
+
+You can sign a manifest with an RSA key using the helper scripts (not enforced by CI):
+
+- Generate a key pair (example):
+  - `openssl genrsa -out private.pem 2048`
+  - `openssl rsa -in private.pem -pubout -out public.pem`
+
+- Sign a manifest:
+  - Just: `just adapters-sign manifest=adapters/mock.adapter.json key=private.pem`
+  - Mise: `mise run adapters:sign MANIFEST=adapters/mock.adapter.json KEY=private.pem`
+  - Produces `<manifest>.sig` (binary) and `<manifest>.sig.b64` (Base64).
+
+- Verify a signature:
+  - Just: `just adapters-verify manifest=adapters/mock.adapter.json pubkey=public.pem`
+  - Mise: `mise run adapters:verify MANIFEST=adapters/mock.adapter.json PUBKEY=public.pem`
+  - For Base64 signatures: pass `sig=<file.sig.b64>`.
+
+Signing is an optional provenance aid for community galleries. Validation and smoke do not currently enforce signatures.
