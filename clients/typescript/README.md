@@ -175,6 +175,7 @@ Task shortcuts (repo root):
   - `just ts-events args="--prefix service.,state.read.model.patch --replay 25 --store .arw/last-event-id"`
   - `just ts-events-patches structured=true`
   - `just ts-economy-smoke base=http://127.0.0.1:8091 timeout=10000`
+  - `just ts-daily-brief-watch base=http://127.0.0.1:8091 timeout=8000`
 
 - Mise
   - `mise run ts:readmodel:watch ID=projects TIMEOUT=15000`

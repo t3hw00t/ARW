@@ -225,20 +225,31 @@ jobs:
               - 'apps/arw-server/**'
               - 'clients/typescript/**'
               - 'docs/guide/economy_ledger.md'
+              - 'docs/guide/daily_brief.md'
               - '.mise.toml'
               - 'Justfile'
               - '.github/workflows/ci.yml'
+            daily_brief:
+              - 'apps/arw-server/src/daily_brief.rs'
+              - 'apps/arw-server/src/api/state/misc.rs'
+              - 'clients/typescript/arw-client.ts'
+              - 'clients/typescript/examples/daily_brief.ts'
+              - 'docs/guide/daily_brief.md'
+              - 'apps/arw-launcher/src-tauri/ui/hub.js'
+              - 'apps/arw-launcher/src-tauri/ui/hub.html'
+              - '.mise.toml'
+              - '.github/workflows/ci.yml'
 
       - name: Build arw-server (debug)
-        if: steps.filter.outputs.sse == 'true'
+        if: ${{ steps.filter.outputs.sse == 'true' || steps.filter.outputs.daily_brief == 'true' }}
         run: mise exec cargo -- cargo build -p arw-server
 
       - name: Build arw-cli (debug)
-        if: steps.filter.outputs.sse == 'true'
+        if: ${{ steps.filter.outputs.sse == 'true' || steps.filter.outputs.daily_brief == 'true' }}
         run: mise exec cargo -- cargo build -p arw-cli
 
       - name: Start arw-server (background)
-        if: steps.filter.outputs.sse == 'true'
+        if: ${{ steps.filter.outputs.sse == 'true' || steps.filter.outputs.daily_brief == 'true' }}
         env:
           ARW_ADMIN_TOKEN: ${{ secrets.CI_ARW_ADMIN_TOKEN || 'test-admin-token' }}
           ARW_DEBUG: "1"
@@ -279,7 +290,7 @@ jobs:
           timeout 8s target/debug/arw-cli state economy-ledger --base http://127.0.0.1:8099 --limit 5 --watch || true
 
       - name: Daily Brief smoke (TS)
-        if: steps.filter.outputs.sse == 'true'
+        if: steps.filter.outputs.daily_brief == 'true'
         env:
           BASE: http://127.0.0.1:8099
           ARW_ADMIN_TOKEN: ${{ secrets.CI_ARW_ADMIN_TOKEN || 'test-admin-token' }}
@@ -303,6 +314,6 @@ jobs:
           tail -n 200 /tmp/arw-svc.log || true
 
       - name: Stop arw-server
-        if: always() && steps.filter.outputs.sse == 'true'
+        if: always() && (steps.filter.outputs.sse == 'true' || steps.filter.outputs.daily_brief == 'true')
         run: |
           if [ -f /tmp/arw-svc.pid ]; then kill "$(cat /tmp/arw-svc.pid)" || true; fi

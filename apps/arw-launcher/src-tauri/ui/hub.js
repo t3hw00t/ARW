@@ -146,6 +146,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   const elDailyBriefLive = document.getElementById('dailyBriefLive');
   const elSummaryLine = document.getElementById('todaySummaryLine');
   const jumpButtons = document.querySelectorAll('[data-hub-jump]');
+  const btnDailyBriefDetails = document.getElementById('btnDailyBriefDetails');
   const economyDocs = document.getElementById('economyDocs');
   const economyBacklog = document.getElementById('economyBacklog');
   const elSseStat = document.getElementById('sseStat');
@@ -3666,6 +3667,17 @@ async function refreshRuntimeBundles() {
       if (elSummaryLine) {
         try { elSummaryLine.textContent = summaryLine || ''; elSummaryLine.hidden = !summaryLine; } catch {}
       }
+      // Title hover: show relative + absolute updated time
+      try {
+        const elTitle = document.getElementById('todaySummaryTitle');
+        if (elTitle) {
+          const rel = typeof model.generated_at === 'string' ? (formatRelativeIso(model.generated_at) || '') : '';
+          const abs = typeof model.generated_at === 'string' ? model.generated_at : '';
+          const label = rel ? `Updated ${rel}` : (abs ? `Updated ${abs}` : 'Updated recently');
+          elTitle.setAttribute('aria-label', label);
+          elTitle.title = abs ? `${label} (${abs})` : label;
+        }
+      } catch {}
 
       if (elSummaryRuntime) {
         const runtime = model.runtime && typeof model.runtime === 'object' ? model.runtime : null;
@@ -3814,6 +3826,10 @@ async function refreshRuntimeBundles() {
         elSummaryNote.textContent = attention ? `${base}${bullet}${attention}` : base;
       }
     } else {
+      try {
+        const elTitle = document.getElementById('todaySummaryTitle');
+        if (elTitle) { elTitle.removeAttribute('title'); elTitle.removeAttribute('aria-label'); }
+      } catch {}
       if (elSummaryRuntime && !economyModel) {
         elSummaryRuntime.textContent = 'Runtime status pending';
       }
@@ -4486,6 +4502,98 @@ async function refreshRuntimeBundles() {
       try { elDailyBriefLive.hidden = true; } catch {}
       try { if (dailyBriefLiveTickTimer) { clearInterval(dailyBriefLiveTickTimer); dailyBriefLiveTickTimer = null; } } catch {}
     }, 5000);
+  }
+
+  if (btnDailyBriefDetails) {
+    btnDailyBriefDetails.addEventListener('click', () => {
+      try { openDailyBriefDetails(); } catch (err) { console.warn('daily brief details open failed', err); }
+    });
+  }
+
+  function openDailyBriefDetails(){
+    const model = dailyBriefModel;
+    const container = document.createElement('div');
+    container.className = 'col';
+    const addSection = (title, contentEl) => {
+      const h = document.createElement('h4');
+      h.textContent = title;
+      h.className = 'dim';
+      container.appendChild(h);
+      container.appendChild(contentEl);
+    };
+    // Economy
+    {
+      const wrap = document.createElement('div');
+      const list = document.createElement('ul');
+      list.style.listStyle = 'disc';
+      list.style.paddingLeft = '1.25rem';
+      const entries = (model && model.economy && Array.isArray(model.economy.recent_entries)) ? model.economy.recent_entries.slice(0,5) : [];
+      if (entries.length === 0) {
+        const li = document.createElement('li'); li.textContent = 'No recent entries.'; list.appendChild(li);
+      } else {
+        for (const e of entries) {
+          const li = document.createElement('li');
+          const amt = (e.amount != null) ? formatLedgerValue(e.amount, e.currency || 'unitless') : '';
+          const issued = e.issued_at ? ` (${formatRelativeIso(e.issued_at)})` : '';
+          const status = (e.status || 'pending').toString();
+          const tags = Array.isArray(e.tags) && e.tags.length ? ` — ${e.tags.join(', ')}` : '';
+          li.textContent = `${status.charAt(0).toUpperCase()}${status.slice(1)} — ${amt}${issued}${tags}`;
+          list.appendChild(li);
+        }
+      }
+      wrap.appendChild(list);
+      addSection('Economy', wrap);
+    }
+    // Persona
+    {
+      const wrap = document.createElement('div');
+      const p = model && model.persona ? model.persona : null;
+      const ul = document.createElement('ul'); ul.style.listStyle = 'disc'; ul.style.paddingLeft = '1.25rem';
+      const count = Number(p && p.approvals_pending || 0);
+      const header = document.createElement('p'); header.textContent = `Approvals pending: ${count}`;
+      wrap.appendChild(header);
+      const approvals = (p && Array.isArray(p.approvals)) ? p.approvals : [];
+      if (approvals.length) {
+        for (const name of approvals) { const li = document.createElement('li'); li.textContent = name; ul.appendChild(li); }
+      } else { const li = document.createElement('li'); li.textContent = 'No approvals listed.'; ul.appendChild(li); }
+      wrap.appendChild(ul);
+      addSection('Persona', wrap);
+    }
+    // Runtime
+    {
+      const wrap = document.createElement('div');
+      const r = model && model.runtime ? model.runtime : null;
+      const p = document.createElement('p');
+      if (r) {
+        const total = Number(r.total || 0);
+        const ready = Number(r.by_state && (r.by_state.Ready ?? r.by_state.ready) || 0);
+        p.textContent = `Runtimes ready ${ready}/${total}`;
+      } else { p.textContent = 'No runtime data.'; }
+      wrap.appendChild(p);
+      const alerts = r && Array.isArray(r.alerts) ? r.alerts : [];
+      if (alerts.length) {
+        const ul = document.createElement('ul'); ul.style.listStyle = 'disc'; ul.style.paddingLeft = '1.25rem';
+        for (const a of alerts) { const li = document.createElement('li'); li.textContent = a; ul.appendChild(li); }
+        wrap.appendChild(ul);
+      }
+      addSection('Runtime', wrap);
+    }
+    // Memory
+    {
+      const wrap = document.createElement('div');
+      const m = model && model.memory ? model.memory : null;
+      if (m) {
+        const parts = [];
+        if (typeof m.coverage_needs_more_ratio === 'number') parts.push(`Coverage gaps ${Math.round(m.coverage_needs_more_ratio * 100)}%`);
+        if (typeof m.recall_risk_ratio === 'number') parts.push(`Recall risk ${Math.round(m.recall_risk_ratio * 100)}%`);
+        const p = document.createElement('p'); p.textContent = parts.join(' • ') || 'No memory signals.'; wrap.appendChild(p);
+        const reasons = Array.isArray(m.top_reasons) ? m.top_reasons : [];
+        if (reasons.length) { const ul = document.createElement('ul'); ul.style.listStyle = 'disc'; ul.style.paddingLeft = '1.25rem'; reasons.slice(0,5).forEach(x => { const li = document.createElement('li'); li.textContent = x; ul.appendChild(li); }); wrap.appendChild(ul); }
+        const alerts = Array.isArray(m.alerts) ? m.alerts : []; if (alerts.length) { const ul = document.createElement('ul'); ul.style.listStyle = 'disc'; ul.style.paddingLeft = '1.25rem'; alerts.forEach(x => { const li = document.createElement('li'); li.textContent = x; ul.appendChild(li); }); wrap.appendChild(ul); }
+      } else { const p = document.createElement('p'); p.textContent = 'No memory data.'; wrap.appendChild(p); }
+      addSection('Memory', wrap);
+    }
+    ARW.modal.form({ title: 'Daily Brief Details', description: 'Recent highlights across economy, persona, runtime, and memory', body: container, submitLabel: 'Close', hideCancel: true }).catch(()=>{});
   }
   ARW.sse.subscribe(
     (kind) => kind === 'context.assembled',

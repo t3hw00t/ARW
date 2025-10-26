@@ -4,7 +4,7 @@ title: Interface Roadmap
 
 # Interface Roadmap
 
-Updated: 2025-10-25
+Updated: 2025-10-26
 Type: Reference
 
 See also: [Roadmap](ROADMAP.md)
@@ -32,7 +32,7 @@ Badges can be combined (for example, `[Pack: Collaboration][Future]`) to show bo
 - [Pack: Collaboration] Inline doc hints and contextual tooltips
 - [Pack: Collaboration] Command palette/quick-action menu in the launcher
 - [Pack: Collaboration][Pack: Persona] Companion Hub consolidation with role-aware tabs and accessibility audits (`t-20251027-companion-hub-foundation`)
-- [Pack: Persona][Pack: Collaboration] Conversational daily brief surfacing empathy/memory/autonomy/economy highlights (`t-20251027-daily-brief`, in_progress)
+- [Pack: Persona][Pack: Collaboration] Conversational daily brief surfacing empathy/memory/autonomy/economy highlights (`t-20251027-daily-brief`, done). See How‑to → Daily Brief for snapshot and publish stream details.
 - [Pack: Collaboration][Pack: Persona] Memory quality snapshots wired to `/state/memory/recent` plus autonomy lane/budget dashboarding; Economy read-models available (see How-to → Economy Ledger)
 - [Pack: Persona][Pack: Collaboration] Vibe feedback controls in Chat/Launcher (sentiment dial, confirmation style toggle) with opt-in telemetry
 - [Pack: Persona] Persona card surface showing worldview traits, empathy tone, recent growth checkpoints

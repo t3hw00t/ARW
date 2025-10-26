@@ -28,7 +28,7 @@ Consolidate every user-facing surface into a role-aware Companion Hub so ARW fee
 ### Phase 1 — Companion Hub Foundation
 
 - Reuse launcher Hub scaffolding but reorganize into primary tabs: Today, Personas, Memory, Automations, Economy, Projects, System.
-- Build the Daily Brief publisher: hourly/triggered job synthesizes key metrics into natural-language updates delivered through chat/mascot.
+- Build the Daily Brief publisher: hourly/triggered job synthesizes key metrics into natural-language updates delivered through chat/mascot. See How‑to → Daily Brief for the API and client usage.
 - Integrate existing read-models (`route_stats`, `context_metrics`, `training_metrics`, `autonomy/lanes`, `projects`, `persona/*`, `models_metrics`, `memory_recent`) and reuse SSE patches for live updates.
 - Surface baseline memory quality (lane coverage, freshness, review queue) and autonomy lane/budget summaries while dedicated economy ledgers are still in flight.
 - Ship responsive layout with accessibility audits (axe-core + manual screen-reader smoke).
