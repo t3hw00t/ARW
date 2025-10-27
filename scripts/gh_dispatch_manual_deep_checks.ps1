@@ -60,7 +60,7 @@ function Dispatch-And-Wait-WithGh {
 }
 
 function Download-And-Summarize-WithGh {
-  param([string]$Repo, [int]$RunId)
+  param([string]$Repo, [long]$RunId)
   $outDir = Join-Path $env:TEMP "manual-deep-linux-$RunId"
   if (Test-Path $outDir) { Remove-Item -Recurse -Force $outDir }
   New-Item -ItemType Directory -Force -Path $outDir | Out-Null
