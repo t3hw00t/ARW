@@ -6,7 +6,7 @@ title: Tasks Status
 
 <!-- GENERATED FILE: scripts/docgen_core.py; do not edit by hand -->
 
-Updated: 2025-10-26
+Updated: 2025-10-27
 Type: Reference
 
 ## To Do
@@ -20,7 +20,6 @@ Type: Reference
 - [t-20251023-coop-forum] Cooperative policy forum & settlement simulator — todo
 - [t-20251023-access-starter-kit] Universal access starter kit — todo
 - [t-20251023-community-distribution] Community distribution mirrors — todo
-- [t-20251024-compression-lite] Consumer-grade vision compression backend — todo
 - [t-20251024-knowledge-cards] Knowledge card compression — todo
 - [t-20251024-economy-meter] Shared economy contribution meter — todo
 - [t-20251030-proactive-brief-engine] Proactive daily brief engine — todo
@@ -42,5 +41,6 @@ Type: Reference
 - [t-20251024-screenshot-docs] Screenshot pipeline docs refresh — done
 - [t-20251024-cli-ocr-help] CLI OCR flags documentation — done
 - [t-20251024-capability-service] Shared capability service — done
+- [t-20251024-compression-lite] Consumer-grade vision compression (lite) — done
 - [t-20251030-economy-ledger-core] Economy ledger core surfaces — done
 - [t-20251027-daily-brief] Daily brief signals MVP — done

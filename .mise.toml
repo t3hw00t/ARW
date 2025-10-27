@@ -9,6 +9,14 @@ ripgrep = "13.0.0"
 description = "Run fmt → clippy → tests → docs guardrail sequence."
 run = "bash scripts/dev.sh verify"
 
+[tasks."deep:checks"]
+description = "Local deep checks (Linux/macOS): server + CLI + SSE"
+run = "bash scripts/deep_checks_local.sh"
+
+[tasks."deep:checks:ps"]
+description = "Local deep checks (Windows PowerShell): server + CLI + SSE"
+run = "pwsh -NoLogo -File scripts/deep_checks_local.ps1"
+
 [tasks."verify:fast"]
 description = "Run the fast guardrail (fmt → clippy → tests only)."
 run = "bash scripts/dev.sh verify --fast"
@@ -100,3 +108,39 @@ run = "bash -lc 'set -euo pipefail; manifest=${MANIFEST:?set MANIFEST}; pubkey=$
 [tasks."preset:diag"]
 description = "Print effective preset (via /about) and list local env overrides"
 run = "bash -lc 'set -euo pipefail; BASE=${BASE:-http://127.0.0.1:8091} TOKEN=${ARW_ADMIN_TOKEN:-${TOKEN:-}} bash scripts/preset_diag.sh'"
+
+[tasks."ocr:smoke"]
+description = "Trigger OCR tool to exercise pre-OCR pipeline and check metrics"
+run = "bash -lc 'set -euo pipefail; BASE=${BASE:-http://127.0.0.1:8103} TOKEN=${ARW_ADMIN_TOKEN:-${TOKEN:-test-admin-token}} TIMEOUT=${TIMEOUT:-8} bash scripts/ocr_smoke.sh'"
+
+[tasks."mini:dashboard"]
+description = "Run the mini dashboard (economy read-model watcher)"
+run = "bash -lc 'set -euo pipefail; BASE=${BASE:-http://127.0.0.1:8091} ID=${ID:-economy_ledger} LIMIT=${LIMIT:-25} TOKEN=${ARW_ADMIN_TOKEN:-${TOKEN:-}} cargo run -p arw-mini-dashboard -- --base \"$BASE\" --id \"$ID\" --limit \"$LIMIT\"'"
+
+[tasks."mini:dashboard:smoke"]
+description = "Mini dashboard route_stats JSON once smoke"
+run = "bash -lc 'set -euo pipefail; BASE=${BASE:-http://127.0.0.1:8091} cargo run -p arw-mini-dashboard -- --base \"$BASE\" --id route_stats --json --once'"
+
+[tasks."cli:events:tail"]
+description = "arw-cli events tail with common defaults"
+run = "bash -lc 'set -euo pipefail; BASE=${BASE:-http://127.0.0.1:8091} PREFIX=${PREFIX:-service.,state.read.model.patch} REPLAY=${REPLAY:-25} STORE=${STORE:-.arw/last-event-id} STRUCTURED=${STRUCTURED:-0}; cargo run -p arw-cli -- events tail --base \"$BASE\" --prefix \"$PREFIX\" --replay \"$REPLAY\" --store \"$STORE\" ${STRUCTURED:+--structured}'"
+
+[tasks."access:kit"]
+description = "Assemble the Universal Access Kit (eco env, docs, persona; best-effort site + mini dashboard)"
+run = "bash -lc 'set -euo pipefail; python3 scripts/universal_access_kit.py --force --zip || python scripts/universal_access_kit.py --force --zip'"
+
+[tasks."access:kit:check"]
+description = "Validate an existing Universal Access Kit in dist/ (and its zip archive)"
+run = "bash -lc 'set -euo pipefail; python3 scripts/universal_access_kit.py --check-only --zip || python scripts/universal_access_kit.py --check-only --zip'"
+
+[tasks."access:kit:lite"]
+description = "Assemble kit skipping optional extras (set ARW_KIT_SKIP_OPTIONAL=1)"
+run = "bash -lc 'set -euo pipefail; ARW_KIT_SKIP_OPTIONAL=${ARW_KIT_SKIP_OPTIONAL:-1} python3 scripts/universal_access_kit.py --force --zip || ARW_KIT_SKIP_OPTIONAL=${ARW_KIT_SKIP_OPTIONAL:-1} python scripts/universal_access_kit.py --force --zip'"
+
+[tasks."access:kit"]
+description = "Assemble the Universal Access Kit (eco env, docs, persona; best-effort site + mini dashboard)"
+run = "bash -lc 'set -euo pipefail; python3 scripts/universal_access_kit.py --force --zip || python scripts/universal_access_kit.py --force --zip'"
+
+[tasks."access:kit:check"]
+description = "Validate an existing Universal Access Kit in dist/ (and its zip archive)"
+run = "bash -lc 'set -euo pipefail; python3 scripts/universal_access_kit.py --check-only --zip || python scripts/universal_access_kit.py --check-only --zip'"

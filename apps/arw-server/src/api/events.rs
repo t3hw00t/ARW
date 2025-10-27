@@ -14,7 +14,31 @@ use uuid::Uuid;
 
 use crate::AppState;
 use arw_topics as topics;
+use metrics::{counter, gauge};
 use sha2::Digest as _;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::Arc;
+
+// Track active SSE clients with an atomic and expose as a gauge.
+static SSE_ACTIVE_CLIENTS: AtomicU64 = AtomicU64::new(0);
+
+struct SseClientGuard;
+impl SseClientGuard {
+    fn new() -> Arc<Self> {
+        let v = SSE_ACTIVE_CLIENTS
+            .fetch_add(1, Ordering::SeqCst)
+            .saturating_add(1);
+        gauge!("arw_events_sse_clients").set(v as f64);
+        Arc::new(SseClientGuard)
+    }
+}
+impl Drop for SseClientGuard {
+    fn drop(&mut self) {
+        let prev = SSE_ACTIVE_CLIENTS.fetch_sub(1, Ordering::SeqCst);
+        let v = prev.saturating_sub(1);
+        gauge!("arw_events_sse_clients").set(v as f64);
+    }
+}
 
 /// Server‑Sent Events stream of envelopes.
 #[utoipa::path(
@@ -88,6 +112,10 @@ pub async fn events_sse(
     } else {
         "live"
     };
+    // Record a connection open for SSE with low-cardinality label on mode
+    counter!("arw_events_sse_connections_total", "mode" => replay_mode).increment(1);
+    // Keep an active-clients guard alive for the lifetime of the stream
+    let sse_guard = SseClientGuard::new();
     let handshake_payload = serde_json::json!({
         "request_id": request_id,
         "resume_from": resume_from,
@@ -109,7 +137,13 @@ pub async fn events_sse(
         policy: None,
         ce: None,
     };
-    let _ = tx.send((handshake_env, Some("0".to_string()))).await;
+    if tx
+        .send((handshake_env, Some("0".to_string())))
+        .await
+        .is_err()
+    {
+        counter!("arw_events_sse_errors_total", "stage" => "handshake").increment(1);
+    }
 
     // Optional resume: prioritize after=ID or Last-Event-ID over replay
     let mut did_replay = false;
@@ -126,7 +160,11 @@ pub async fn events_sse(
                             policy: None,
                             ce: None,
                         };
-                        let _ = tx2.send((env, Some(r.id.to_string()))).await;
+                        if tx2.send((env, Some(r.id.to_string()))).await.is_err() {
+                            counter!("arw_events_sse_errors_total", "stage" => "resume")
+                                .increment(1);
+                            break;
+                        }
                     }
                 });
                 did_replay = true;
@@ -150,7 +188,10 @@ pub async fn events_sse(
                         policy: None,
                         ce: None,
                     };
-                    let _ = tx2.send((env, Some(r.id.to_string()))).await;
+                    if tx2.send((env, Some(r.id.to_string()))).await.is_err() {
+                        counter!("arw_events_sse_errors_total", "stage" => "replay").increment(1);
+                        break;
+                    }
                 }
             });
         }
@@ -175,7 +216,16 @@ pub async fn events_sse(
                     let cache = sse_ids.lock().await;
                     cache.get(key).map(|v| v.to_string())
                 };
-                let _ = tx.send((env, id_opt)).await;
+                if id_opt.is_some() {
+                    counter!("arw_events_sse_dedup_hits_total").increment(1);
+                } else {
+                    counter!("arw_events_sse_dedup_misses_total").increment(1);
+                }
+                if tx.send((env, id_opt)).await.is_err() {
+                    // downstream closed; count as an SSE error from bus dispatch
+                    counter!("arw_events_sse_errors_total", "stage" => "bus").increment(1);
+                    break;
+                }
             }
         }
     });
@@ -184,7 +234,9 @@ pub async fn events_sse(
         .unwrap_or_else(|| "envelope".into());
     let decorate = crate::util::env_bool("ARW_EVENTS_SSE_DECORATE").unwrap_or(false);
     let stream_request_id = request_id.clone();
+    let guard_ref = sse_guard.clone();
     let stream = tokio_stream::wrappers::ReceiverStream::new(rx).map(move |(env, sid)| {
+        let _keep_alive = &guard_ref; // hold guard until stream ends
         let mut ev = SseEvent::default().event(env.kind.clone());
         if let Some(idv) = sid.clone() {
             ev = ev.id(idv);
@@ -219,8 +271,12 @@ pub async fn events_sse(
                     .or_insert_with(|| serde_json::Value::String(stream_request_id.clone()));
             }
             ev = ev.data(serde_json::to_string(&final_data).unwrap_or("{}".to_string()));
+            // Count a sent event (decorated)
+            counter!("arw_events_sse_sent_total", "decorated" => "yes").increment(1);
         } else {
             ev = ev.data(data);
+            // Count a sent event (not decorated)
+            counter!("arw_events_sse_sent_total", "decorated" => "no").increment(1);
         }
         Result::<SseEvent, std::convert::Infallible>::Ok(ev)
     });

@@ -555,6 +555,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "arw-mini-dashboard"
+version = "0.2.0-dev"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "clap",
+ "json-patch 4.1.0",
+ "reqwest",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "arw-mock-adapter"
 version = "0.2.0-dev"
 dependencies = [

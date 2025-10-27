@@ -4,7 +4,7 @@ title: Monitoring & Alerts
 
 # Monitoring & Alerts
 
-Updated: 2025-10-25
+Updated: 2025-10-27
 Type: How‑to
 
 This note captures the minimal wiring needed to surface ARW metrics in Prometheus/Grafana and keep an eye on the legacy shut-down counter.
@@ -99,11 +99,17 @@ Then reload Alertmanager (`/-/reload`).
 
 ## Grafana panels
 
-Import the “Quick Panels” snippet into a dashboard so the legacy counters are visible at a glance (the export script above drops `grafana_quick_panels.json` alongside the Prometheus rules):
+Import the "Quick Panels" snippet into a dashboard so the legacy counters are visible at a glance (the export script above drops `grafana_quick_panels.json` alongside the Prometheus rules). For SSE visibility (clients, sent/min, errors, and de‑dup miss ratio), import the SSE row snippet as well.
 
 1. Grafana → Dashboards → Import → paste the JSON from `docs/snippets/grafana_quick_panels.md`.
 2. Select your Prometheus datasource when prompted (`DS_PROMETHEUS`).
-3. Pin the stat panel (“Legacy Capsule Headers (15m)”) to the migration dashboard.
+3. Pin the stat panel ("Legacy Capsule Headers (15m)") to the migration dashboard.
+
+SSE row
+1. Grafana → Dashboards → Import → paste JSON from `docs/snippets/grafana_sse_row.json`.
+2. Choose your Prometheus datasource (`DS_PROMETHEUS`).
+3. Ensure the recording rules are active so `arw:sse_sent_per_min:5m`, `arw:sse_errors_ratio:5m`, and `arw:sse_dedup_miss_ratio:5m` exist.
+4. Optional: adjust thresholds to suit your environment (e.g., error ratio > 5%, de‑dup miss ratio > 10%).
 
 ### Planner Coverage Panel
 

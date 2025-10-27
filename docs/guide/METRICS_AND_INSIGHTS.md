@@ -5,7 +5,7 @@ title: Metrics & Insights
 # Metrics & Insights
 { .topic-trio style="--exp:.6; --complex:.7; --complicated:.6" data-exp=".6" data-complex=".7" data-complicated=".6" }
 
-Updated: 2025-10-26
+Updated: 2025-10-27
 Type: How‑to
 
 ## Overview
@@ -32,8 +32,10 @@ Type: How‑to
 - Endpoint: `GET /metrics` (text/plain; Prometheus exposition format)
 - Selected counters and gauges:
   - `arw_bus_*` — event bus totals and receiver counts
-  - `arw_http_route_*` — per-route hits/errors and latency histogram (p95 available via UI)
-  - `arw_models_download_*` — models download lifecycle counters and EWMA throughput
+  - `arw_http_route_*` - per-route hits/errors and latency histogram (p95 available via UI)
+  - `arw_events_sse_clients` (gauge) / `arw_events_sse_connections_total{mode}` / `arw_events_sse_sent_total{decorated}` / `arw_events_sse_errors_total{stage}` - current SSE clients; connections opened (mode: live|recent|after); events sent (decorated: yes|no); internal stream send errors (stage: handshake|resume|replay|bus)
+  - `arw_events_sse_dedup_hits_total` / `arw_events_sse_dedup_misses_total` - cache effectiveness for SSE id de-duplication
+  - `arw_models_download_*` - models download lifecycle counters and EWMA throughput
   - `arw_tools_cache_hits` / `arw_tools_cache_miss` — deterministic action cache outcomes (hit vs. new execution)
   - `arw_tools_cache_coalesced` / `arw_tools_cache_coalesced_waiters` — number of followers served by singleflight coalescing and how many callers waited
   - `arw_tools_cache_error` / `arw_tools_cache_bypass` — serialization/store failures vs. intentionally uncached tools
@@ -44,6 +46,8 @@ Type: How‑to
   - `arw_modular_chat_text_len`, `arw_modular_chat_summary_ratio`, `arw_modular_recall_items`, `arw_modular_compression_candidates`, `arw_modular_validation_findings` - loss and health histograms emitted when modular turns persist to memory (surface in dashboards to track compression effectiveness).
   - `arw_build_info{service,version,sha}` - build metadata
   - `arw.economy.totals.settled{currency}` / `arw.economy.totals.pending{currency}` - per-currency ledger totals (updated whenever the economy ledger snapshot changes)
+  - `arw_ocr_preprocess_total{quality}` / `arw_ocr_preprocess_ms{quality}` / `arw_ocr_preprocess_scale_ratio{quality}` / `arw_ocr_preprocess_size_ratio{quality}` - pre‑OCR pipeline activity, latency (ms), and ratios (geometric area and file size after/before)
+  - `arw_ocr_backend_fallbacks_total{from,to}` / `arw_ocr_cache_hits_total{backend,quality}` / `arw_ocr_runs_total{backend,quality,runtime}` - OCR backend health, cache reuse, and executed runs
 - Trust (RPU):
     - `arw_rpu_trust_last_reload_ms` — epoch ms of last trust store reload
     - `arw_rpu_trust_issuers` — current trust issuers count
@@ -95,6 +99,35 @@ See also:
 - Snippets → Prometheus Alerting Rules — ARW
 - [Restructure Handbook](../RESTRUCTURE.md) → Legacy Retirement Checklist (captures the expected zeroing-out of `arw_legacy_capsule_headers_total` prior to shutdown)
 
+
+### SSE metrics examples (PromQL)
+
+- Current SSE clients gauge:
+```
+arw_events_sse_clients
+```
+
+- Sent events per minute (instant, raw):
+```
+60 * rate(arw_events_sse_sent_total[5m])
+```
+
+- If you installed the recording rules snippet, use:
+```
+arw:sse_sent_per_min:5m
+arw:sse_errors_ratio:5m
+```
+
+- Quick panels/alerts:
+  - Panel stat: current clients (`arw_events_sse_clients`), trend `arw:sse_sent_per_min:5m`.
+  - Alert: low sent rate with clients (`ARWSSESentRateLow`).
+  - Alert: error ratio high (`ARWSSEErrorRatioHigh`).
+  - Grafana row snippet: `docs/snippets/grafana_sse_row.json` (clients stat, sent/min, errors ratio, de-dup miss ratio)
+
+Tuning and sidecar hints
+- Cache size: `ARW_EVENTS_SSE_CAP` controls the id de‑duplication cache capacity (default 2048). Increase it if the de‑dup miss ratio trends upward under sustained load.
+- De‑dup counters: `arw_events_sse_dedup_hits_total` and `arw_events_sse_dedup_misses_total`; recording rule `arw:sse_dedup_miss_ratio:5m` helps visualize health.
+- Launcher sidecar: the Metrics lane shows a small “Dedup …” line with a miss‑ratio sparkline; a rising trend suggests the cache is too small or event uniqueness changed.
 ### Legacy compatibility tracking
 
 Add quick panels/alerts to watch the legacy capsule header counter:

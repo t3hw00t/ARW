@@ -1,5 +1,5 @@
 # CLI Reference
-Updated: 2025-10-24
+Updated: 2025-10-27
 Type: Reference
 
 Microsummary: Commands, subcommands, and flags for `arw-cli` with pointers to tutorials. Beta.
@@ -37,7 +37,7 @@ Commands (summary)
 - `arw-cli runtime bundles manifest sign <manifest> [--key-b64 B64 | --key-file FILE] [--issuer NAME] [--key-id ID] [--output FILE] [--compact]` — append or replace ed25519 signature entries on a bundle manifest and emit canonical sha256 metadata
 - `arw-cli runtime bundles manifest verify <manifest> [--json {--pretty}] [--require-trusted]` — validate manifest signatures, hashes, and key metadata (append `--require-trusted` to fail unless a signer registry entry matches)
 - `arw-cli runtime bundles audit [--dest DIR | --remote --base URL] [--json {--pretty}] [--require-signed]` — scan installed bundles (defaults to `<state_dir>/runtime/bundles`) or a running server and report signature coverage, optionally failing when unsigned manifests are detected
-- `arw-cli research-watcher list|approve|archive [...]` — inspect queue snapshots and bulk-approve/archive Suggested logic units; supports `--status`, `--limit`, `--ids`, `--from-status`, `--filter-source`, `--filter-contains`, `--note`, `--dry-run`, and JSON output coupled with the usual `--base`/`--admin-token` flags.
+- `arw-cli research-watcher list|approve|archive [...]` - inspect queue snapshots and bulk-approve/archive Suggested logic units; supports `--status`, `--limit`, `--ids`, `--from-status`, `--filter-source`, `--filter-contains`, `--note`, `--dry-run`, and JSON output coupled with the usual `--base`/`--admin-token` flags.
 - Just shortcuts: `just research-watcher-list`, `just research-watcher-approve`, and `just research-watcher-archive` wrap the same helpers with defaults; pass overrides like `base=https://hub token=$ARW_ADMIN_TOKEN` or trailing ids (for approve/archive) as needed.
 - Convenience wrapper: `scripts/verify_bundle_signatures.sh` runs the remote audit with `--require-signed`, respecting `BASE_URL`, `ARW_ADMIN_TOKEN`, and additional CLI flags—ideal for CI pipelines.
 - Local and remote bundle snapshots now include per-installation `signature` blocks (`ok`, `canonical_sha256`, `warnings`, per-key status) and a top-level `signature_summary` (with `enforced` flag) so operators can spot unsigned or mismatched manifests at a glance and confirm when enforcement is active.
@@ -53,6 +53,23 @@ Human-readable output from `runtime bundles list` now includes consent summaries
 - `arw-cli admin autonomy budgets --lane <id> [--wall-clock-secs N] [--tokens N] [--spend-cents N] [--clear] [--dry-run] [--json {--pretty}]` — preview or persist lane budgets.
 
 See the [CLI Guide](../guide/cli.md) for examples. Use `--help` on any command for details.
+
+Events (tail and journal)
+- `arw-cli events journal [--limit N] [--prefix CSV] [--json {--pretty}] [--follow {--interval SECS}] [--after RFC3339 | --after-relative WINDOW]` — snapshot the journal from `/admin/events/journal` or poll continuously.
+- `arw-cli events tail [--base URL] [--admin-token TOKEN] [--prefix CSV] [--replay N] [--store PATH] [--structured]` — stream the live `/events` SSE:
+  - `--prefix` filters by event kind prefixes (e.g., `service.,state.read.model.patch`)
+  - `--replay` replays the last N events when not resuming via `--store`
+  - `--store` saves and loads `Last-Event-ID` so tails resume across runs
+  - `--structured` prints the JSON envelope; omit for a compact time/kind/snippet view
+  - `--jq-hint` adds a one-line jq example to stderr when using `--structured`
+
+Quick tails (copy/paste)
+- Compact tail with resume:
+  - `arw-cli events tail --prefix service.,state.read.model.patch --replay 25 --store .arw/last-event-id`
+- Structured JSON (for piping to jq):
+  - `arw-cli events tail --prefix economy. --structured --jq-hint`
+- Focus on read-model patches only:
+  - `arw-cli events tail --prefix state.read.model.patch --replay 10 --store .arw/last-event-id`
 
 Companion (TypeScript client CLI)
 - After publishing `@arw/client`, a small Node-based CLI `arw-events` is available for tailing the SSE stream with resume and filters.

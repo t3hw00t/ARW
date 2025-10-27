@@ -1,0 +1,33 @@
+{
+  "panels": [
+    {
+      "type": "stat",
+      "title": "SSE Clients",
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 0 },
+      "targets": [ { "expr": "arw_events_sse_clients" } ],
+      "options": { "colorMode": "value", "graphMode": "none", "justifyMode": "center" }
+    },
+    {
+      "type": "timeseries",
+      "title": "SSE Sent / min",
+      "gridPos": { "h": 8, "w": 12, "x": 6, "y": 0 },
+      "targets": [ { "expr": "arw:sse_sent_per_min:5m" } ],
+      "fieldConfig": { "defaults": { "unit": "opsmin" } }
+    },
+    {
+      "type": "timeseries",
+      "title": "SSE Error Ratio (5m)",
+      "gridPos": { "h": 8, "w": 6, "x": 18, "y": 0 },
+      "targets": [ { "expr": "arw:sse_errors_ratio:5m" } ],
+      "fieldConfig": { "defaults": { "unit": "percentunit" } }
+    },
+    {
+      "type": "timeseries",
+      "title": "SSE De-dup Miss Ratio (5m)",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "targets": [ { "expr": "arw:sse_dedup_miss_ratio:5m" } ],
+      "fieldConfig": { "defaults": { "unit": "percentunit" } }
+    }
+  ]
+}
+

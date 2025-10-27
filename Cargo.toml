@@ -19,6 +19,7 @@ members = [
   "crates/arw-otel",
   "apps/arw-server",
   "apps/arw-connector",
+  "apps/arw-mini-dashboard",
   "apps/snappy-bench",
   "crates/arw-tauri",
   "apps/arw-launcher/src-tauri"
@@ -45,6 +46,7 @@ default-members = [
   "crates/arw-otel",
   "apps/arw-server",
   "apps/arw-connector",
+  "apps/arw-mini-dashboard",
   "apps/snappy-bench",
   "crates/arw-tauri"
 ]

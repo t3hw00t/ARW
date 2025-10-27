@@ -154,6 +154,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   const elSseStat = document.getElementById('sseStat');
   const elPersonaStatus = document.getElementById('personaStatus');
   const elPersonaMetrics = document.getElementById('personaMetrics');
+  const elSseCounters = document.getElementById('sseCounters');
   const elPersonaHistory = document.getElementById('personaHistory');
   const elMemoryLaneList = document.getElementById('memoryLaneList');
   const elMemoryFreshNewest = document.getElementById('memoryFreshNewest');
@@ -1957,6 +1958,7 @@ async function refreshRuntimeBundles() {
     } catch {}
     mountSidecar(currentLaneProfile, { force: true, source: sidecarSource || 'base-change' });
     ARW.sse.connect(base, { replay: 25 });
+    startSseCounterLoop();
     await Promise.allSettled([
       refreshEpisodesSnapshot(),
       refreshProjectsSnapshot(),
@@ -1989,6 +1991,7 @@ async function refreshRuntimeBundles() {
     }
   }
   ARW.sse.connect(base, { replay: 25 });
+  startSseCounterLoop();
   personaPanel = ARW.personaPanel.attach({
     root: document.getElementById('personas'),
     select: document.getElementById('personaSelect'),
@@ -2505,6 +2508,61 @@ async function refreshRuntimeBundles() {
   const fetchJson = (path, init) => ARW.http.json(base, path, init);
   const fetchText = (path, init) => ARW.http.text(base, path, init);
   const fetchRaw = (path, init) => ARW.http.fetch(base, path, init);
+
+  let ssePrevSent = null;
+  let ssePrevTs = 0;
+  async function refreshSseCounters() {
+    if (!elSseCounters) return;
+    try {
+      const text = await fetchText('/metrics');
+      let conn = 0, sent = 0, errs = 0, clients = null;
+      const lines = String(text || '').split(/\n+/);
+      for (const line of lines) {
+        if (!line) continue;
+        if (line.startsWith('arw_events_sse_clients')) {
+          const v = Number(line.split(/\s+/).pop());
+          if (Number.isFinite(v)) clients = v;
+        }
+        if (line.startsWith('arw_events_sse_connections_total')) {
+          const v = Number(line.split(/\s+/).pop());
+          if (Number.isFinite(v)) conn += v;
+        } else if (line.startsWith('arw_events_sse_sent_total')) {
+          const v = Number(line.split(/\s+/).pop());
+          if (Number.isFinite(v)) sent += v;
+        } else if (line.startsWith('arw_events_sse_errors_total')) {
+          const v = Number(line.split(/\s+/).pop());
+          if (Number.isFinite(v)) errs += v;
+        }
+      }
+      // Compute simple per-minute rate based on last sample
+      let rate = null;
+      const nowTs = Date.now();
+      if (ssePrevSent != null && ssePrevTs > 0 && sent >= ssePrevSent) {
+        const dtSec = Math.max(1, Math.round((nowTs - ssePrevTs) / 1000));
+        const d = sent - ssePrevSent;
+        rate = Math.round((d / dtSec) * 60);
+      }
+      ssePrevSent = sent;
+      ssePrevTs = nowTs;
+      const parts = [];
+      if (clients != null) parts.push(`clients ${clients}`);
+      parts.push(`conn ${conn}`);
+      parts.push(`sent ${sent}`);
+      if (rate != null) parts.push(`~${rate}/min`);
+      if (errs > 0) parts.push(`err ${errs}`);
+      elSseCounters.textContent = '· ' + parts.join(' · ');
+      elSseCounters.title = 'SSE counters from /metrics';
+    } catch (err) {
+      // ignore
+    }
+  }
+  let sseCounterTimer = null;
+  function startSseCounterLoop() {
+    if (!elSseCounters) return;
+    if (sseCounterTimer) clearInterval(sseCounterTimer);
+    refreshSseCounters();
+    sseCounterTimer = setInterval(refreshSseCounters, 10000);
+  }
 
   function getHttpStatus(err) {
     if (!err) return undefined;

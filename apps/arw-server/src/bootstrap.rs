@@ -62,7 +62,11 @@ pub(crate) async fn build() -> BootstrapOutput {
     let persona_enabled = kernel_enabled && config::persona_enabled_from_env();
     let metrics = Arc::new(metrics::Metrics::default());
     let queue_signals = Arc::new(queue::QueueSignals::default());
-    let sse_id_map = Arc::new(Mutex::new(SseIdCache::with_capacity(2048)));
+    let sse_cap = std::env::var("ARW_EVENTS_SSE_CAP")
+        .ok()
+        .and_then(|s| s.parse::<usize>().ok())
+        .unwrap_or(2048);
+    let sse_id_map = Arc::new(Mutex::new(SseIdCache::with_capacity(sse_cap)));
 
     let mut background_tasks = TaskManager::with_metrics(metrics.clone());
 

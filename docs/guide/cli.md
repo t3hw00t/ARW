@@ -3,10 +3,10 @@ title: CLI Guide
 ---
 
 # CLI Guide
-Updated: 2025-10-24
-Type: How‑to
+Updated: 2025-10-27
+Type: How-to
 
-Goal-oriented tasks using the `arw-cli` binary. This guide shows common commands with copy‑pasteable examples and flags you’re likely to want.
+Goal-oriented tasks using the `arw-cli` binary. This guide shows common commands with copy-pasteable examples and flags you're likely to want.
 
 Examples assume the unified `arw-server` is running on `http://127.0.0.1:8091`.
 
@@ -180,3 +180,6 @@ Tips
 Related
 - Reference (commands and flags): [CLI Reference](../reference/cli.md)
 - Security: [security_hardening.md](security_hardening.md), [GATING_KEYS.md](../GATING_KEYS.md), see also [Policy & Permissions](policy_permissions.md)
+- Events
+  - `arw-cli events journal --limit 200 --prefix service.,state.read.model.patch --follow --interval 3` — tails a text summary of recent envelopes; add `--json` for raw, or `--after-relative 15m` to skip older entries initially.
+  - `arw-cli events tail --prefix service.,state.read.model.patch --replay 25 --store .arw/last-event-id` — streams the live `/events` SSE with optional prefix filters and Last-Event-ID resume (`--structured` prints raw JSON envelopes).

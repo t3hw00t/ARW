@@ -65,6 +65,10 @@ const installSidecar = (ARW) => {
         activity: 'Recent actions, runs, and snapshots populate automatically.'
       }, opts?.laneHints || {});
       const sections = [];
+      // SSE metrics sampler state for rate
+      let sseMetricsTimer = null;
+      let ssePrevSent = null;
+      let ssePrevTs = 0;
       const mountUid = `arw-sidecar-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
       let laneIndex = 0;
       for (const name of lanes) {
@@ -2080,6 +2084,154 @@ const installSidecar = (ARW) => {
         }
         tbl.appendChild(tb);
         el.appendChild(tbl);
+        // Append SSE counters from /metrics for quick visibility
+        // SSE block wrapper + toggle
+        const sseCtrl = document.createElement('div');
+        sseCtrl.className = 'row';
+        sseCtrl.style.marginTop = '6px';
+        const sseToggle = document.createElement('button');
+        sseToggle.type = 'button';
+        sseToggle.className = 'ghost mini';
+        let sseVisible = true;
+        const updateToggleLabel = () => {
+          sseToggle.textContent = sseVisible ? 'Hide SSE metrics' : 'Show SSE metrics';
+          sseToggle.setAttribute('aria-label', sseVisible ? 'Hide SSE metrics panel' : 'Show SSE metrics panel');
+          sseToggle.title = sseVisible
+            ? 'Hide SSE metrics (clients, sent/min, de-dup trend)'
+            : 'Show SSE metrics (clients, sent/min, de-dup trend)';
+        };
+        // Load persisted visibility preference
+        try {
+          const prefs = (await ARW.getPrefs('launcher')) || {};
+          if (typeof prefs.sidecarSseVisible === 'boolean') {
+            sseVisible = prefs.sidecarSseVisible;
+          }
+        } catch {}
+        updateToggleLabel();
+        sseCtrl.appendChild(sseToggle);
+        el.appendChild(sseCtrl);
+        const sseBlock = document.createElement('div');
+        sseBlock.className = 'sse-block';
+        sseBlock.style.marginTop = '2px';
+        el.appendChild(sseBlock);
+        const sseDiv = document.createElement('div');
+        sseDiv.className = 'dim';
+        sseDiv.style.marginTop = '0';
+        sseDiv.textContent = 'SSE: loading…';
+        sseBlock.appendChild(sseDiv);
+        const sentDiv = document.createElement('div');
+        sentDiv.className = 'dim';
+        sentDiv.style.marginTop = '2px';
+        sentDiv.textContent = 'Sent/min: loading…';
+        sseBlock.appendChild(sentDiv);
+        const dedupDiv = document.createElement('div');
+        dedupDiv.className = 'dim';
+        dedupDiv.style.marginTop = '2px';
+        dedupDiv.textContent = 'Dedup: loading…';
+        sseBlock.appendChild(dedupDiv);
+        const updateSseCounters = async () => {
+          try {
+            if (!opts.base) { sseDiv.textContent = 'SSE: metrics unavailable'; return; }
+            const resp = await ARW.http.fetch(opts.base, '/metrics');
+            if (!resp || !resp.ok) { sseDiv.textContent = 'SSE: metrics unavailable'; return; }
+            const text = await resp.text();
+            let conn = 0, sent = 0, errs = 0, clients = null;
+            let dh = 0, dm = 0; // dedup hits/misses
+            const lines = String(text || '').split(/\n+/);
+            for (const line of lines) {
+              if (!line) continue;
+              if (line.startsWith('arw_events_sse_clients')) {
+                const v = Number(line.split(/\s+/).pop());
+                if (Number.isFinite(v)) clients = v;
+              } else if (line.startsWith('arw_events_sse_connections_total')) {
+                const v = Number(line.split(/\s+/).pop());
+                if (Number.isFinite(v)) conn += v;
+              } else if (line.startsWith('arw_events_sse_sent_total')) {
+                const v = Number(line.split(/\s+/).pop());
+                if (Number.isFinite(v)) sent += v;
+              } else if (line.startsWith('arw_events_sse_errors_total')) {
+                const v = Number(line.split(/\s+/).pop());
+                if (Number.isFinite(v)) errs += v;
+              } else if (line.startsWith('arw_events_sse_dedup_hits_total')) {
+                const v = Number(line.split(/\s+/).pop());
+                if (Number.isFinite(v)) dh += v;
+              } else if (line.startsWith('arw_events_sse_dedup_misses_total')) {
+                const v = Number(line.split(/\s+/).pop());
+                if (Number.isFinite(v)) dm += v;
+              }
+            }
+            let rate = null;
+            const nowTs = Date.now();
+            if (ssePrevSent != null && ssePrevTs > 0 && sent >= ssePrevSent) {
+              const dtSec = Math.max(1, Math.round((nowTs - ssePrevTs) / 1000));
+              const d = sent - ssePrevSent;
+              rate = Math.round((d / dtSec) * 60);
+            }
+            ssePrevSent = sent;
+            ssePrevTs = nowTs;
+            const parts = [];
+            if (clients != null) parts.push(`clients ${clients}`);
+            parts.push(`conn ${conn}`);
+            parts.push(`sent ${sent}`);
+            if (rate != null) parts.push(`~${rate}/min`);
+            if (errs > 0) parts.push(`err ${errs}`);
+            sseDiv.textContent = `SSE: ${parts.join(' · ')}`;
+            sseDiv.title = 'SSE counters from /metrics';
+            // Sent/min sparkline
+            if (rate != null) {
+              ARW.metricsTrend.push('__sse_sent_rate__', rate);
+              const sentSpark = sparkline(ARW.metricsTrend.get('__sse_sent_rate__'));
+              sentDiv.innerHTML = `Sent/min: ~${rate} ${sentSpark}`;
+              sentDiv.title = 'SSE approx. sent per minute (sampled)';
+            } else {
+              sentDiv.textContent = 'Sent/min: awaiting samples…';
+            }
+            // Dedup summary + sparkline of misses ratio
+            const denom = dh + dm;
+            if (denom > 0) {
+              const ratio = dm / denom;
+              ARW.metricsTrend.push('__sse_dedup_ratio__', Math.round(ratio * 100));
+              const spark = sparkline(ARW.metricsTrend.get('__sse_dedup_ratio__'));
+              const pct = Math.round(ratio * 100);
+              dedupDiv.innerHTML = `Dedup: hits ${dh} · misses ${dm} · ${pct}% ${spark}`;
+              dedupDiv.title = 'SSE de-duplication (miss ratio over time)';
+            } else {
+              dedupDiv.textContent = 'Dedup: awaiting samples…';
+            }
+          } catch (_) {
+            sseDiv.textContent = 'SSE: metrics unavailable';
+            sentDiv.textContent = 'Sent/min: metrics unavailable';
+            dedupDiv.textContent = 'Dedup: metrics unavailable';
+          }
+        };
+        const stopSseTimer = () => { if (sseMetricsTimer) { clearInterval(sseMetricsTimer); sseMetricsTimer = null; } };
+        const startSseTimer = () => { stopSseTimer(); sseMetricsTimer = setInterval(updateSseCounters, 10000); };
+        if (sseVisible) {
+          await updateSseCounters();
+          startSseTimer();
+        } else {
+          sseBlock.style.display = 'none';
+        }
+        sseToggle.addEventListener('click', async () => {
+          sseVisible = !sseVisible;
+          updateToggleLabel();
+          if (sseVisible) {
+            sseBlock.style.display = '';
+            await updateSseCounters();
+            startSseTimer();
+          } else {
+            sseBlock.style.display = 'none';
+            stopSseTimer();
+          }
+          // Persist preference
+          try {
+            const prefs = (await ARW.getPrefs('launcher')) || {};
+            prefs.sidecarSseVisible = sseVisible;
+            await ARW.setPrefs('launcher', prefs);
+          } catch (err) {
+            console.warn('persist sidecar SSE visibility failed', err);
+          }
+        });
 
         const snappy = ARW.read.get('snappy') || null;
         const snappyBox = document.createElement('div');
@@ -2188,6 +2340,7 @@ const installSidecar = (ARW) => {
           if (idProvenance != null) ARW.sse.unsubscribe(idProvenance);
           if (idMetrics != null) ARW.read.unsubscribe(idMetrics);
           if (idSnappy != null) ARW.read.unsubscribe(idSnappy);
+          if (sseMetricsTimer) { clearInterval(sseMetricsTimer); sseMetricsTimer = null; }
           if (approvalsSub) ARW.read.unsubscribe(approvalsSub);
           if (provSummarySub) ARW.read.unsubscribe(provSummarySub);
           if (idActivity != null) ARW.sse.unsubscribe(idActivity);

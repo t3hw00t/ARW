@@ -1,93 +1,43 @@
 ---
-title: Universal Access Starter Kit
+title: Universal Access Kit
 ---
 
-# Universal Access Starter Kit
+# Universal Access Kit
 
-Updated: 2025-10-23  
+Updated: 2025-10-27
 Type: How-to
 
-The starter kit bundles eco-friendly defaults, offline documentation pointers, and a preview persona seed so anyone can launch ARW on a low-spec machine without relying on network access. Use it when preparing USB installers, classroom labs, or recovery media for trusted peers.
+The Universal Access Kit bundles eco-friendly defaults, quickstart docs, and a starter persona so you can bring ARW online on low-spec or offline machines. When build tools are present, it also includes an offline MkDocs site and the mini dashboard binary.
 
-## Prerequisites
-- Python 3.11 or newer (ships with `tomllib`)
-- A cloned ARW workspace
-- Optional: PowerShell 7+ on Windows for environment import helpers
+What’s included
+- docs/: selected quickstart and offline guides (Markdown). If MkDocs is installed, a full site/ build is added.
+- config/: eco-preset.env, persona_seed.json, kit-notes.md
+- bin/: arw-mini-dashboard (optional, if Cargo is available)
+- README.html: offline entry page linking to site/ (if present) and docs/ Markdown quickstarts
 
-## Generate the Kit
-```bash
-# From the repo root
-python scripts/universal_access_kit.py --force --zip
-```
+Build the kit
+- Just: `just kit-universal`
+- Mise: `mise run access:kit`
 
-This creates:
+Lite build (skip optional extras)
+- Just: `just kit-universal-lite`
+- Mise: `mise run access:kit:lite`
 
-```
-dist/universal-access-kit/
-├── README.txt
-├── docs/
-│   ├── GOAL_ROADMAP_CROSSWALK.md
-│   ├── offline_sync.md
-│   ├── performance_presets.md
-│   ├── persona_quickstart.md
-│   ├── quickstart.md
-│   └── runtime_quickstart.md
-└── config/
-    ├── eco-preset.env
-    ├── kit-notes.md
-    └── persona_seed.json
-```
+Validate an existing kit
+- Just: `just kit-universal-check`
+- Mise: `mise run access:kit:check`
 
-Passing `--zip` writes `dist/universal-access-kit.zip` alongside the folder so you can copy a single archive to other machines. Use `--check-only` (optionally with `--zip`) to validate an existing kit in place.
+Notes
+- If `mkdocs` is available, the kit includes a `site/` folder with the offline docs site.
+- If `cargo` is available, the kit includes `bin/arw-mini-dashboard` (tiny read‑model watcher).
+- Eco preset values are sourced from `configs/presets/examples.toml`. Explicit env vars always override.
+ - Set `ARW_KIT_SKIP_OPTIONAL=1` to skip the optional docs site and binary bundling.
 
-Validate a generated kit:
-```bash
-python scripts/universal_access_kit.py --check-only --zip
-```
+CI
+- On kit-related changes, CI assembles and validates the kit and uploads `universal-access-kit.zip` as an artifact for download.
 
-## Apply Eco Defaults
-
-- **PowerShell**
-  ```powershell
-  Get-Content .\config\eco-preset.env |
-    ForEach-Object {
-      if ($_ -and $_ -notmatch '^#') {
-        $name, $value = $_.Split('=', 2)
-        Set-Item -Path Env:$name -Value $value
-      }
-    }
-  ```
-
-- **Bash / Zsh**
-  ```bash
-  set -a
-  source ./config/eco-preset.env
-  set +a
-  ```
-
-The file always includes `ARW_PERF_PRESET=eco` and the current eco tier overrides pulled from `configs/presets/examples.toml`, so it stays in sync with upstream preset tuning.
-
-## Seed the Preview Persona
-
-```bash
-arw-cli admin persona seed --from ./config/persona_seed.json
-```
-
-The template keeps telemetry disabled by default. Update the JSON before seeding if you want to opt-in to vibe feedback (`preferences.telemetry.vibe.enabled: true`).
-
-## Keep Getting Ready
-- Read `config/kit-notes.md` and `README.txt` for validation steps (health checks, smoke runs, docs wheels).
-- Generate offline MkDocs wheels when you have network access:
-  ```bash
-  # Linux/macOS
-  bash scripts/dev.sh docs-cache
-
-  # Windows PowerShell
-  pwsh -File scripts\dev.ps1 docs-cache
-  ```
-- Copy the kit folder or zip to your target machine, then follow [Quickstart](quickstart.md) or [Runtime Quickstart](runtime_quickstart.md) locally.
-
-## Automation Tips
-- Use the bundled recipes: `just kit-universal` to rebuild + zip, `just kit-universal-check` to verify contents before publishing.
-- Pair the kit with the `dist/docs-wheels.tar.gz` archive for a complete offline bundle.
-- Re-run the generator whenever presets, docs, or persona templates shift; the script pulls live data from the repository each time.
+Quick start
+1) Source `config/eco-preset.env` before launching the server.
+2) Seed a persona: `arw-cli admin persona seed --from ./config/persona_seed.json`.
+3) Start the server and verify `/healthz` and `/about`.
+4) (Optional) Run the mini dashboard: `./bin/arw-mini-dashboard --base http://127.0.0.1:8091`.

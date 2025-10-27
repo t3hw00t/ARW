@@ -25,6 +25,8 @@ pub enum EventsCmd {
     Journal(EventsJournalArgs),
     /// Tail modular events (modular.agent/tool accepted) with sensible defaults
     Modular(ModularTailArgs),
+    /// Tail the live /events SSE with optional prefix/replay and Last-Event-ID storage
+    Tail(EventsTailArgs),
 }
 
 #[derive(Args)]
@@ -120,11 +122,40 @@ pub struct ModularTailArgs {
     pub journal: EventsJournalArgs,
 }
 
+#[derive(Args, Clone)]
+pub struct EventsTailArgs {
+    /// Base URL of the service (e.g., http://127.0.0.1:8091)
+    #[arg(long, default_value = "http://127.0.0.1:8091")]
+    pub base: String,
+    /// Admin token; falls back to ARW_ADMIN_TOKEN env
+    #[arg(long)]
+    pub admin_token: Option<String>,
+    /// Timeout seconds for the initial connect (stream itself does not time out)
+    #[arg(long, default_value_t = 5)]
+    pub timeout: u64,
+    /// CSV of event kind prefixes to include (dot.case)
+    #[arg(long)]
+    pub prefix: Option<String>,
+    /// Replay the last N events on connect (ignored when resuming via store)
+    #[arg(long, default_value_t = 0)]
+    pub replay: usize,
+    /// Path to store/load Last-Event-ID to resume across runs
+    #[arg(long)]
+    pub store: Option<String>,
+    /// Emit the JSON envelope as-is instead of a one-line summary
+    #[arg(long)]
+    pub structured: bool,
+    /// Print a small jq hint for filtering structured output
+    #[arg(long)]
+    pub jq_hint: bool,
+}
+
 pub(crate) fn execute(cmd: EventsCmd) -> Result<()> {
     match cmd {
         EventsCmd::Observations(args) => cmd_events_observations(&args),
         EventsCmd::Journal(args) => cmd_events_journal(&args),
         EventsCmd::Modular(args) => cmd_events_modular(&args),
+        EventsCmd::Tail(args) => cmd_events_tail(&args),
     }
 }
 
@@ -532,6 +563,159 @@ fn handle_observations_patch(
     let note = format!("{} (version {})", Local::now().format("%H:%M:%S"), version);
     render_observations_text(&view, args, since_resolution, Some(&note))?;
     Ok(())
+}
+
+fn cmd_events_tail(args: &EventsTailArgs) -> Result<()> {
+    let token = resolve_admin_token(&args.admin_token);
+    let client = Client::builder()
+        .timeout(Duration::from_secs(args.timeout))
+        .build()
+        .context("building HTTP client")?;
+    let base = args.base.trim_end_matches('/');
+    if args.structured && args.jq_hint {
+        eprintln!("jq hints (copy one):");
+        eprintln!("  jq -c '. | {{time,kind,payload}}'");
+        eprintln!("  jq -c '. | select(.kind|startswith(\"state.read.model.patch\")) | {{time,kind,payload}}'");
+    }
+
+    // Load Last-Event-ID from store if provided
+    let mut last_event_id: Option<String> = None;
+    if let Some(path) = args.store.as_ref() {
+        if let Ok(text) = std::fs::read_to_string(path) {
+            let id = text.trim();
+            if !id.is_empty() {
+                last_event_id = Some(id.to_string());
+            }
+        }
+    }
+
+    let mut backoff_secs = 1u64;
+    loop {
+        match stream_events_once(
+            &client,
+            base,
+            token.as_deref(),
+            last_event_id.as_deref(),
+            args,
+        ) {
+            Ok(next) => {
+                if let Some(id) = next {
+                    last_event_id = Some(id.clone());
+                    if let Some(store) = args.store.as_ref() {
+                        if let Some(parent) = std::path::Path::new(store).parent() {
+                            let _ = std::fs::create_dir_all(parent);
+                        }
+                        let _ = std::fs::write(store, id);
+                    }
+                }
+                backoff_secs = 1;
+            }
+            Err(err) => {
+                eprintln!("tail error: {err:?}");
+                backoff_secs = (backoff_secs * 2).min(30);
+            }
+        }
+        thread::sleep(Duration::from_secs(backoff_secs));
+    }
+}
+
+fn stream_events_once(
+    client: &Client,
+    base: &str,
+    token: Option<&str>,
+    last_event_id: Option<&str>,
+    args: &EventsTailArgs,
+) -> Result<Option<String>> {
+    let mut req = client
+        .get(format!("{}/events", base))
+        .header(ACCEPT, "text/event-stream");
+    // Apply filters
+    let mut qp: Vec<(String, String)> = Vec::new();
+    if let Some(p) = args.prefix.as_ref() {
+        if !p.trim().is_empty() {
+            qp.push(("prefix".to_string(), p.trim().to_string()));
+        }
+    }
+    if last_event_id.is_none() && args.replay > 0 {
+        qp.push(("replay".to_string(), args.replay.to_string()));
+    }
+    if !qp.is_empty() {
+        req = req.query(&qp);
+    }
+    if let Some(id) = last_event_id {
+        req = req.header("Last-Event-ID", id);
+    }
+    req = with_admin_headers(req, token);
+    let resp = req.send().context("connecting to /events stream")?;
+    let status = resp.status();
+    if status == StatusCode::UNAUTHORIZED {
+        bail!("unauthorized: provide --admin-token or set ARW_ADMIN_TOKEN");
+    }
+    if !status.is_success() {
+        bail!("events stream failed with status {}", status);
+    }
+
+    let mut reader = BufReader::new(resp);
+    let mut line = String::new();
+    let mut event_name = String::new();
+    let mut data_buf = String::new();
+    let mut event_id_line: Option<String> = None;
+    let mut latest_id = last_event_id.map(|s| s.to_string());
+
+    loop {
+        line.clear();
+        let read = reader.read_line(&mut line)?;
+        if read == 0 {
+            return Ok(latest_id);
+        }
+        if line.ends_with('\n') {
+            line.pop();
+            if line.ends_with('\r') {
+                line.pop();
+            }
+        }
+        if line.is_empty() {
+            if !data_buf.is_empty() {
+                // Emit either structured JSON or a compact one-line summary
+                if args.structured {
+                    println!("{}", data_buf);
+                } else if let Ok(env) = serde_json::from_str::<JsonValue>(&data_buf) {
+                    let ts = env.get("time").and_then(|v| v.as_str()).unwrap_or("");
+                    let kind = env.get("kind").and_then(|v| v.as_str()).unwrap_or("");
+                    let payload = env.get("payload").cloned().unwrap_or(json!({}));
+                    let snippet = format_payload_snippet(&payload, 120);
+                    println!("{} {} {}", ts, kind, snippet);
+                } else {
+                    println!("{}", data_buf);
+                }
+                if let Some(ev) = event_id_line.as_ref() {
+                    latest_id = Some(ev.clone());
+                }
+            }
+            event_name.clear();
+            data_buf.clear();
+            event_id_line = None;
+            continue;
+        }
+        if line.starts_with(':') {
+            continue;
+        }
+        if let Some(rest) = line.strip_prefix("event:") {
+            event_name = rest.trim().to_string();
+            continue;
+        }
+        if let Some(rest) = line.strip_prefix("data:") {
+            if !data_buf.is_empty() {
+                data_buf.push('\n');
+            }
+            data_buf.push_str(rest.trim_start());
+            continue;
+        }
+        if let Some(rest) = line.strip_prefix("id:") {
+            event_id_line = Some(rest.trim().to_string());
+            continue;
+        }
+    }
 }
 struct SinceResolution {
     query: Option<String>,

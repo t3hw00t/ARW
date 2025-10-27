@@ -36,6 +36,8 @@ Assistant quickstart → [Agent Onboarding](docs/ai/AGENT_ONBOARDING.md)
 - [Orchestrator CLI](docs/guide/orchestrator_cli.md) - Catalog, launch, and monitor persona-aware training runs from the terminal.
 - [Repo Map](docs/ai/REPO_MAP.md) - Directory overview for retrieval and navigation.
 - [Documentation Home](docs/index.md) - Product overview, guides, and reference docs.
+ - CLI: Tail events quickly — `arw-cli events tail --prefix service.,state.read.model.patch --replay 25 --store .arw/last-event-id` (see docs/reference/cli.md)
+ - Grafana: SSE row snippet — import `docs/snippets/grafana_sse_row.json` into a dashboard
  - Adapters quick smoke (one-shot): `just adapters-smoke-oneshot` or `mise run adapters:smoke:oneshot`
 
 ## Adapters
@@ -97,3 +99,4 @@ Assistant quickstart → [Agent Onboarding](docs/ai/AGENT_ONBOARDING.md)
 - Automation dashboards and task tracking sit under .arw/ (large generated files are excluded from releases).
 - For status badges, CI pipelines, and deployment artifacts, see the badges at the top of this README.
 
+\n- Mini dashboard (economy watcher): just mini-dashboard base=http://127.0.0.1:8091\n

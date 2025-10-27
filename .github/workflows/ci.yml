@@ -90,6 +90,12 @@ jobs:
           git diff --cached --name-only
           git diff --cached --quiet || (echo 'error: uncommitted generated docs' && exit 1)
 
+      - name: Generate adapters smoke JSON for docs (best-effort)
+        run: |
+          set -euo pipefail
+          mkdir -p docs/static
+          ARW_MOCK_ADAPTER_PORT=8081 ADAPTER_SMOKE_OUT=docs/static/adapters-smoke.json bash scripts/adapter_smoke_oneshot.sh || true
+
       - name: Build docs (strict)
         run: mkdocs build --strict
 
@@ -246,6 +252,13 @@ jobs:
               - 'spec/schemas/runtime_adapter_manifest.schema.json'
               - 'docs/guide/adapter_sdk.md'
               - 'docs/guide/adapters_validate.md'
+            ocr:
+              - 'apps/arw-server/src/tools/**'
+              - 'scripts/ocr_smoke.sh'
+              - 'docs/guide/vision_runtime.md'
+              - '.mise.toml'
+              - 'Justfile'
+              - '.github/workflows/ci.yml'
             eco_preset:
               - 'apps/arw-server/src/config.rs'
               - 'apps/arw-server/src/bootstrap.rs'
@@ -253,6 +266,12 @@ jobs:
               - 'docs/guide/quickstart.md'
               - 'scripts/start.sh'
               - 'scripts/start.ps1'
+              - '.github/workflows/ci.yml'
+            access_kit:
+              - 'scripts/universal_access_kit.py'
+              - 'docs/guide/universal_access_kit.md'
+              - '.mise.toml'
+              - 'Justfile'
               - '.github/workflows/ci.yml'
 
       - name: Build arw-server (debug)
@@ -320,6 +339,79 @@ jobs:
         run: |
           timeout 8s target/debug/arw-cli state economy-ledger --base http://127.0.0.1:8099 --limit 5 --watch || true
 
+      - name: CLI events tail (brief)
+        if: steps.filter.outputs.sse == 'true'
+        env:
+          ARW_ADMIN_TOKEN: ${{ secrets.CI_ARW_ADMIN_TOKEN || 'test-admin-token' }}
+        run: |
+          set -euo pipefail
+          # Tail the live SSE briefly and capture some lines
+          timeout 6s target/debug/arw-cli events tail --base http://127.0.0.1:8099 --prefix state.read.model.patch --replay 1 --structured > /tmp/events_tail.json || true
+          test -s /tmp/events_tail.json
+          head -n 10 /tmp/events_tail.json || true
+
+      - name: Universal Access Kit (assemble)
+        if: steps.filter.outputs.access_kit == 'true'
+        env:
+          ARW_KIT_SKIP_OPTIONAL: '1'
+        run: mise run access:kit
+
+      - name: Universal Access Kit (check)
+        if: steps.filter.outputs.access_kit == 'true'
+        run: mise run access:kit:check
+
+      - name: Universal Access Kit (verify files)
+        if: steps.filter.outputs.access_kit == 'true'
+        run: |
+          set -euo pipefail
+          BASE=dist/universal-access-kit
+          test -f "$BASE/README.txt"
+          test -f "$BASE/README.html"
+          test -f "$BASE/config/eco-preset.env"
+          for f in quickstart.md runtime_quickstart.md offline_sync.md performance_presets.md persona_quickstart.md GOAL_ROADMAP_CROSSWALK.md; do
+            test -f "$BASE/docs/$f" || { echo "missing $f"; exit 1; }
+          done
+
+      - name: Upload Universal Access Kit artifact (zip)
+        if: steps.filter.outputs.access_kit == 'true'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: universal-access-kit
+          path: dist/universal-access-kit.zip
+
+      - name: Comment PR with kit artifact link
+        if: steps.filter.outputs.access_kit == 'true' && github.event_name == 'pull_request'
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7
+        with:
+          script: |
+            const runUrl = `${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}`;
+            const body = [
+              'Universal Access Kit artifact uploaded.',
+              '',
+              `- Artifact: universal-access-kit.zip`,
+              `- Download: ${runUrl}`,
+              '',
+              'Open the Actions run and download the artifact from the Artifacts section.'
+            ].join('\n');
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.payload.pull_request.number,
+              body,
+            });
+
+      - name: SSE metrics present (connections/sent)
+        if: steps.filter.outputs.sse == 'true'
+        run: |
+          set -euo pipefail
+          METRICS=$(curl -fsS http://127.0.0.1:8099/metrics)
+          echo "$METRICS" | grep -E '^arw_events_sse_connections_total' >/dev/null
+          echo "$METRICS" | grep -E '^arw_events_sse_sent_total' >/dev/null
+          CONN=$(printf "%s" "$METRICS" | awk '/^arw_events_sse_connections_total/{s+=$NF} END {printf("%d", s+0)}')
+          SENT=$(printf "%s" "$METRICS" | awk '/^arw_events_sse_sent_total/{s+=$NF} END {printf("%d", s+0)}')
+          test "$CONN" -ge 1 || (echo "expected >=1 SSE connection, got $CONN" && exit 1)
+          test "$SENT" -ge 1 || (echo "expected >=1 SSE event sent, got $SENT" && exit 1)
+
       - name: Daily Brief smoke (TS)
         if: steps.filter.outputs.daily_brief == 'true'
         env:
@@ -339,6 +431,11 @@ jobs:
         run: mise run ts:readmodel:watch
 
       - name: Dump server log on failure
+      - name: Mini dashboard (route_stats once)
+        if: steps.filter.outputs.sse == 'true'
+        env:
+          ARW_ADMIN_TOKEN: ${{ secrets.CI_ARW_ADMIN_TOKEN || 'test-admin-token' }}
+        run: cargo run -p arw-mini-dashboard -- --base http://127.0.0.1:8099 --id route_stats --json --once
         if: failure()
         run: |
           echo '--- arw-server log (tail) ---'
@@ -375,6 +472,40 @@ if hmc is not None and hmc!=128:
   sys.exit(1)
 print('eco preset ok', p)
 PY
+
+      - name: Build arw-server (screenshots feature)
+        if: steps.filter.outputs.ocr == 'true'
+        run: cargo build -p arw-server --features tool_screenshots
+
+      - name: Start arw-server (ocr smoke, background)
+        if: steps.filter.outputs.ocr == 'true'
+        env:
+          ARW_ADMIN_TOKEN: ${{ secrets.CI_ARW_ADMIN_TOKEN || 'test-admin-token' }}
+          ARW_DEBUG: '1'
+          ARW_PORT: '8103'
+          ARW_PREFER_LOW_POWER: '1'
+        run: |
+          set -euo pipefail
+          nohup target/debug/arw-server >/tmp/arw-svc-ocr.log 2>&1 &
+          echo $! > /tmp/arw-svc-ocr.pid
+          for i in $(seq 1 60); do
+            if curl -fsS -m 2 http://127.0.0.1:8103/healthz >/dev/null; then
+              echo 'ocr server healthy'; break; fi; sleep 1; done
+          curl -fsS http://127.0.0.1:8103/about || true
+
+      - name: OCR preprocess smoke
+        if: steps.filter.outputs.ocr == 'true'
+        env:
+          BASE: http://127.0.0.1:8103
+          ARW_ADMIN_TOKEN: ${{ secrets.CI_ARW_ADMIN_TOKEN || 'test-admin-token' }}
+          TIMEOUT: '8'
+        run: bash scripts/ocr_smoke.sh
+
+      - name: Stop arw-server (ocr)
+        if: always() && steps.filter.outputs.ocr == 'true'
+        run: |
+          if [ -f /tmp/arw-svc-ocr.pid ]; then kill "$(cat /tmp/arw-svc-ocr.pid)" || true; fi
+          if [ -f /tmp/arw-svc-ocr.log ]; then tail -n +1 /tmp/arw-svc-ocr.log || true; fi
 
       - name: Adapter manifests lint (strict)
         if: steps.filter.outputs.adapters == 'true'

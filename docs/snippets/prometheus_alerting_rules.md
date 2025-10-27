@@ -4,7 +4,7 @@ title: Prometheus Alerting Rules — ARW
 
 # Prometheus Alerting Rules — ARW
 
-Updated: 2025-10-25
+Updated: 2025-10-27
 Type: How‑to
 
 Example alerting rules for common resource conditions. Tune thresholds and durations to your environment. GPU alerts depend on the GPU telemetry pack; if the `arw_gpu_*` metrics are absent, drop or postpone those rules.
@@ -112,6 +112,54 @@ groups:
             Planner feedback is repeatedly forcing autonomy into guided mode ({{ printf "%.0f" $value }}
             interrupts/15m). Review guard failures, the engagement ledger, and recent audit.log entries
             from /admin/autonomy/{lane}/engagement resets.
+
+      # SSE clients zero for an extended period (may indicate disconnected UIs)
+      - alert: ARWSSEClientsZero
+        expr: arw_events_sse_clients == 0
+        for: 30m
+        labels:
+          severity: info
+        annotations:
+          summary: "SSE clients at zero for 30m"
+          description: |
+            No active SSE clients have been observed for 30 minutes. This can be normal in headless
+            scenarios; silence if expected. Otherwise, confirm the Launcher or clients are connected.
+
+      # SSE sent rate low while clients connected
+      - alert: ARWSSESentRateLow
+        expr: (arw_events_sse_clients > 0) and (arw:sse_sent_per_min:5m < 1)
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "SSE sent rate low (< 1/min for 10m with clients connected)"
+          description: |
+            Event throughput to SSE subscribers is low ({{ printf "%.0f" $value }} per minute). Check
+            the server event bus, read-model publishers, or recent CI changes affecting SSE emission.
+
+      # SSE error ratio elevated
+      - alert: ARWSSEErrorRatioHigh
+        expr: arw:sse_errors_ratio:5m > 0.05
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "SSE error ratio high (> 5% over 10m)"
+          description: |
+            SSE internal send errors exceed 5% of sent events. Inspect server logs and network conditions; ensure
+            reverse proxies are not buffering or terminating SSE improperly.
+
+      # SSE de-duplication miss ratio elevated
+      - alert: ARWSSEDedupMissRatioHigh
+        expr: arw:sse_dedup_miss_ratio:5m > 0.10
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "SSE de-dup miss ratio high (> 10% over 10m)"
+          description: |
+            De-duplication misses exceed 10% of total (hits+misses). Consider raising ARW_EVENTS_SSE_CAP
+            for the id cache, or confirm hashing over time/kind/payload is stable across producers.
 
 ```
 

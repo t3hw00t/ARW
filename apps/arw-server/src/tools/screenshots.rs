@@ -24,6 +24,28 @@ const LITE_MAX_DIMENSION: u32 = 1280;
 const METRIC_OCR_RUNS: &str = "arw_ocr_runs_total";
 const METRIC_OCR_CACHE_HITS: &str = "arw_ocr_cache_hits_total";
 const METRIC_OCR_PREPROCESS: &str = "arw_ocr_preprocess_total";
+const METRIC_OCR_PREPROCESS_MS: &str = "arw_ocr_preprocess_ms";
+const METRIC_OCR_PREPROCESS_SCALE_RATIO: &str = "arw_ocr_preprocess_scale_ratio";
+const METRIC_OCR_PREPROCESS_SIZE_RATIO: &str = "arw_ocr_preprocess_size_ratio";
+static DESCRIBE_OCR_PREPROCESS: std::sync::Once = std::sync::Once::new();
+
+fn ensure_ocr_preprocess_metrics_described() {
+    DESCRIBE_OCR_PREPROCESS.call_once(|| {
+        // Units are recorder-defined; omit explicit units for broad compatibility.
+        metrics::describe_histogram!(
+            METRIC_OCR_PREPROCESS_MS,
+            "Pre-OCR preprocessing latency in milliseconds"
+        );
+        metrics::describe_histogram!(
+            METRIC_OCR_PREPROCESS_SCALE_RATIO,
+            "Pre-OCR geometric area ratio after/before (0..1)"
+        );
+        metrics::describe_histogram!(
+            METRIC_OCR_PREPROCESS_SIZE_RATIO,
+            "Pre-OCR file size ratio after/before (0..1)"
+        );
+    });
+}
 const METRIC_OCR_FALLBACKS: &str = "arw_ocr_backend_fallbacks_total";
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -339,13 +361,33 @@ fn prepare_lite_image(path: &str) -> Result<PreparedImage, ToolError> {
             new_h.max(1),
             imageops::FilterType::Triangle,
         );
+        // Record an approximate geometric scale ratio (area after / area before).
+        if width > 0 && height > 0 {
+            let before = (width as f64) * (height as f64);
+            let after = (new_w as f64) * (new_h as f64);
+            if before.is_finite() && after.is_finite() && before > 0.0 {
+                let ratio = (after / before).clamp(0.0, 1.0);
+                ensure_ocr_preprocess_metrics_described();
+                metrics::histogram!(METRIC_OCR_PREPROCESS_SCALE_RATIO).record(ratio);
+            }
+        }
         steps.push(format!(
             "downscale:max={} ({}x{}→{}x{})",
             LITE_MAX_DIMENSION, width, height, new_w, new_h
         ));
     }
 
+    // Persist the prepared image and record file-size ratio if detectable.
     let temp_path = write_temp_png(&buffer)?;
+    if let (Ok(before), Ok(after)) = (std::fs::metadata(path), std::fs::metadata(&temp_path)) {
+        let b = before.len() as f64;
+        let a = after.len() as f64;
+        if b.is_finite() && a.is_finite() && b > 0.0 {
+            let ratio = (a / b).clamp(0.0, 1.0);
+            ensure_ocr_preprocess_metrics_described();
+            metrics::histogram!(METRIC_OCR_PREPROCESS_SIZE_RATIO).record(ratio);
+        }
+    }
     Ok(PreparedImage::with_temp(temp_path, steps))
 }
 
@@ -546,6 +588,7 @@ fn ocr_blocking(
         }
     }
 
+    let prep_start = std::time::Instant::now();
     let prepared = match prepare_image_for_quality(path, run_meta.quality) {
         Ok(image) => image,
         Err(err) => {
@@ -565,6 +608,9 @@ fn ocr_blocking(
             "quality" => run_meta.quality.as_str()
         )
         .increment(1);
+        let elapsed_ms = prep_start.elapsed().as_secs_f64() * 1000.0;
+        ensure_ocr_preprocess_metrics_described();
+        metrics::histogram!(METRIC_OCR_PREPROCESS_MS).record(elapsed_ms);
     }
 
     let original_backend = run_meta.backend;
@@ -1057,6 +1103,8 @@ mod tests {
             low_power_hint: false,
             low_power_hint_source: None,
             gpu_vram_source: None,
+            decoder_gpus: None,
+            decoder_capacity: None,
             os: "test".into(),
             collected_at: "1970-01-01T00:00:00Z".into(),
         }
@@ -1139,6 +1187,26 @@ mod tests {
                 .expect("prepare");
         assert_eq!(prepared.path(), path.to_string_lossy());
         assert!(prepared.steps().is_empty());
+    }
+
+    #[test]
+    fn metric_backend_label_maps_known_and_unknown() {
+        assert_eq!(metric_backend_label(Some("legacy")), "legacy");
+        assert_eq!(
+            metric_backend_label(Some("VISION_COMPRESSION")),
+            "vision_compression"
+        );
+        assert_eq!(metric_backend_label(Some("other")), "unknown");
+        assert_eq!(metric_backend_label(None), "unknown");
+    }
+
+    #[test]
+    fn metric_quality_label_maps_known_and_unknown() {
+        assert_eq!(metric_quality_label(Some("lite")), "lite");
+        assert_eq!(metric_quality_label(Some("Balanced")), "balanced");
+        assert_eq!(metric_quality_label(Some("FULL")), "full");
+        assert_eq!(metric_quality_label(Some("other")), "unknown");
+        assert_eq!(metric_quality_label(None), "unknown");
     }
 }
 

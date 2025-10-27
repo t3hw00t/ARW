@@ -1,0 +1,474 @@
+name: Build + Deep Checks (Manual)
+
+on:
+  # Manual-only: this job never runs automatically on PRs or pushes.
+  workflow_dispatch:
+    inputs:
+      targets:
+        description: "Which deep-checks targets to run (all/linux/macos/windows)"
+        required: false
+        default: "all"
+        type: choice
+        options:
+          - all
+          - linux
+          - macos
+          - windows
+      soft:
+        description: "Soft mode (do not fail if events tail is empty while other checks pass)"
+        required: false
+        default: "false"
+        type: choice
+        options:
+          - "false"
+          - "true"
+
+permissions:
+  contents: read
+
+jobs:
+  build-binaries:
+    name: Build CLI + Mini Dashboard (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ ubuntu-latest, macos-latest, windows-latest ]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@5d458579430fc14a04a08a1e7d3694f545e91ce6 # stable
+        with:
+          components: rustfmt
+
+      - name: Rust cache
+        uses: Swatinem/rust-cache@7939da402645ba29a2df566723491a2c856e8f8a # v2
+        with:
+          workspaces: |
+            . -> target
+
+      - name: Build (release)
+        run: |
+          cargo build -p arw-cli -p arw-mini-dashboard --release
+
+      - name: Prepare artifacts (Windows)
+        if: ${{ matrix.os == 'windows-latest' }}
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path dist | Out-Null
+          Copy-Item target/release/arw-cli.exe dist/
+          Copy-Item target/release/arw-mini-dashboard.exe dist/
+          Compress-Archive -Path dist/arw-cli.exe -DestinationPath dist/arw-cli-windows-x64.zip -CompressionLevel Optimal
+          Compress-Archive -Path dist/arw-mini-dashboard.exe -DestinationPath dist/arw-mini-dashboard-windows-x64.zip -CompressionLevel Optimal
+          Get-ChildItem dist/*.zip | Get-FileHash -Algorithm SHA256 | ForEach-Object { "`$($_.Hash)  `$($_.Path | Split-Path -Leaf)" } | Out-File -Encoding ascii dist/checksums-windows.txt
+
+      - name: Prepare artifacts (Unix)
+        if: ${{ matrix.os != 'windows-latest' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          OSN="${{ runner.os }}"; OSN=${OSN,,}
+          mkdir -p dist
+          cp target/release/arw-cli dist/
+          cp target/release/arw-mini-dashboard dist/
+          strip dist/arw-cli || true
+          strip dist/arw-mini-dashboard || true
+          tar czf dist/arw-cli-${OSN}-x64.tar.gz -C dist arw-cli
+          tar czf dist/arw-mini-dashboard-${OSN}-x64.tar.gz -C dist arw-mini-dashboard
+          if [[ "$OSN" == "macos" ]]; then
+            (cd dist && shasum -a 256 *.tar.gz > checksums-${OSN}.txt)
+          else
+            (cd dist && sha256sum *.tar.gz > checksums-${OSN}.txt)
+          fi
+
+      - name: Sanity run (--help)
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "${{ runner.os }}" == "Windows" ]]; then
+            pwsh -NoLogo -Command "& ./dist/arw-cli.exe --help | Out-Host; & ./dist/arw-mini-dashboard.exe --help | Out-Host"
+          else
+            ./dist/arw-cli --help >/dev/null
+            ./dist/arw-mini-dashboard --help >/dev/null
+          fi
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: release-preview-${{ runner.os }}
+          path: |
+            dist/*
+
+  assemble-kit:
+    name: Assemble Universal Access Kit (lite)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5
+
+      - name: Setup Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.x'
+
+      - name: Build kit (skip optional extras)
+        env:
+          ARW_KIT_SKIP_OPTIONAL: '1'
+        run: |
+          python3 scripts/universal_access_kit.py --force --zip
+          test -f dist/universal-access-kit.zip
+          test -f dist/universal-access-kit/README.html
+
+      - name: Upload kit artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: universal-access-kit-preview
+          path: |
+            dist/universal-access-kit
+            dist/universal-access-kit.zip
+
+  deep-checks-linux:
+    name: Deep Checks (Linux)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      BASE: http://127.0.0.1:8099
+      ARW_ADMIN_TOKEN: test-admin-token
+    if: ${{ github.event.inputs.targets == '' || github.event.inputs.targets == 'all' || github.event.inputs.targets == 'linux' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@5d458579430fc14a04a08a1e7d3694f545e91ce6 # stable
+
+      - name: Rust cache
+        uses: Swatinem/rust-cache@7939da402645ba29a2df566723491a2c856e8f8a # v2
+        with:
+          workspaces: |
+            . -> target
+
+      - name: Build server + tools (release)
+        run: |
+          cargo build -p arw-server -p arw-cli -p arw-mini-dashboard --release
+
+      - name: Start arw-server
+        env:
+          ARW_ADMIN_TOKEN: ${{ env.ARW_ADMIN_TOKEN }}
+          ARW_DEBUG: '1'
+          ARW_PORT: '8099'
+        run: |
+          set -euo pipefail
+          nohup target/release/arw-server >/tmp/arw-svc.log 2>&1 &
+          echo $! > /tmp/arw-svc.pid
+          for i in $(seq 1 60); do
+            if curl -fsS -m 2 $BASE/healthz >/dev/null; then echo ready; break; fi; sleep 1; done
+          curl -fsS $BASE/about || true
+
+  deep-checks-macos:
+    name: Deep Checks (macOS)
+    runs-on: macos-latest
+    timeout-minutes: 30
+    env:
+      BASE: http://127.0.0.1:8099
+      ARW_ADMIN_TOKEN: test-admin-token
+    if: ${{ github.event.inputs.targets == '' || github.event.inputs.targets == 'all' || github.event.inputs.targets == 'macos' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@5d458579430fc14a04a08a1e7d3694f545e91ce6 # stable
+
+      - name: Rust cache
+        uses: Swatinem/rust-cache@7939da402645ba29a2df566723491a2c856e8f8a # v2
+        with:
+          workspaces: |
+            . -> target
+
+      - name: Setup Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.x'
+
+      - name: Build server + tools (release)
+        run: |
+          cargo build -p arw-server -p arw-cli -p arw-mini-dashboard --release
+
+      - name: Start arw-server
+        env:
+          ARW_ADMIN_TOKEN: ${{ env.ARW_ADMIN_TOKEN }}
+          ARW_DEBUG: '1'
+          ARW_PORT: '8099'
+        run: |
+          set -euo pipefail
+          nohup target/release/arw-server >/tmp/arw-svc.log 2>&1 &
+          echo $! > /tmp/arw-svc.pid
+          for i in $(seq 1 60); do
+            if curl -fsS -m 2 $BASE/healthz >/dev/null; then echo ready; break; fi; sleep 1; done
+          curl -fsS $BASE/about || true
+
+      - name: Check daily brief + economy
+        run: |
+          set -euo pipefail
+          curl -fsS $BASE/state/briefs/daily -H "Authorization: Bearer $ARW_ADMIN_TOKEN" -o /tmp/brief.json
+          target/release/arw-cli state economy-ledger --base $BASE --limit 5 --json > /tmp/economy.json
+          python3 - <<'PY'
+import json
+assert 'version' in json.load(open('/tmp/economy.json'))
+json.load(open('/tmp/brief.json'))
+print('brief+economy ok')
+PY
+
+      - name: Mini dashboard once (economy JSON)
+        run: |
+          set -euo pipefail
+          target/release/arw-mini-dashboard --base $BASE --id economy_ledger --json --once > /tmp/economy_once.json
+          python3 - <<'PY'
+import json
+data=json.load(open('/tmp/economy_once.json'))
+assert isinstance(data, dict)
+print('mini once ok')
+PY
+
+      - name: Events tail (structured replay; timed)
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+import subprocess, time, os, signal, sys, json
+out='/tmp/events_tail.json'
+p=subprocess.Popen(['target/release/arw-cli','events','tail','--base',os.environ['BASE'],'--prefix','service.,state.','--structured','--replay','1','--store','/tmp/last-event-id'], stdout=open(out,'w'), stderr=subprocess.DEVNULL)
+time.sleep(7)
+p.terminate()
+try:
+  p.wait(timeout=3)
+except subprocess.TimeoutExpired:
+  p.kill()
+f=open(out,'r'); line=f.readline(); assert line
+json.loads(line)
+          print('events tail ok')
+          PY
+
+      - name: SSE metrics presence
+        run: |
+          set -euo pipefail
+          curl -fsS $BASE/metrics | tee /tmp/metrics.txt | grep -E '^arw_events_sse_(connections_total|sent_total)'
+          echo 'metrics ok'
+
+      - name: Stop arw-server and collect logs
+        if: always()
+        run: |
+          if [ -f /tmp/arw-svc.pid ]; then kill "$(cat /tmp/arw-svc.pid)" || true; fi
+          if [ -f /tmp/arw-svc.log ]; then tail -n +1 /tmp/arw-svc.log | sed -e 's/^/[server] /' > /tmp/server.log || true; fi
+
+      - name: Upload deep-checks artifacts
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: release-preview-deep-macos
+          path: |
+            /tmp/brief.json
+            /tmp/economy.json
+            /tmp/economy_once.json
+            /tmp/events_tail.json
+            /tmp/server.log
+
+  deep-checks-windows:
+    name: Deep Checks (Windows)
+    runs-on: windows-latest
+    timeout-minutes: 35
+    env:
+      BASE: http://127.0.0.1:8099
+      ARW_ADMIN_TOKEN: test-admin-token
+    if: ${{ github.event.inputs.targets == '' || github.event.inputs.targets == 'all' || github.event.inputs.targets == 'windows' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@5d458579430fc14a04a08a1e7d3694f545e91ce6 # stable
+
+      - name: Rust cache
+        uses: Swatinem/rust-cache@7939da402645ba29a2df566723491a2c856e8f8a # v2
+        with:
+          workspaces: |
+            . -> target
+
+      - name: Build server + tools (release)
+        run: |
+          cargo build -p arw-server -p arw-cli -p arw-mini-dashboard --release
+
+      - name: Start arw-server
+        shell: pwsh
+        run: |
+          $env:ARW_ADMIN_TOKEN='${{ env.ARW_ADMIN_TOKEN }}'
+          $env:ARW_DEBUG='1'
+          $env:ARW_PORT='8099'
+          $p = Start-Process -FilePath target/release/arw-server.exe -PassThru -WindowStyle Hidden -RedirectStandardOutput server.out -RedirectStandardError server.err
+          Set-Content -Path $env:TEMP\arw-svc.pid -Value $p.Id
+          for ($i=0; $i -lt 60; $i++) { try { iwr -UseBasicParsing "$env:BASE/healthz" -TimeoutSec 2 | Out-Null; break } catch { Start-Sleep -Seconds 1 } }
+          iwr -UseBasicParsing "$env:BASE/about" | Out-Null
+
+      - name: Check daily brief + economy
+        shell: pwsh
+        run: |
+          $headers = @{ Authorization = "Bearer $env:ARW_ADMIN_TOKEN" }
+          (iwr -UseBasicParsing -Headers $headers "$env:BASE/state/briefs/daily").Content | Out-File -FilePath $env:TEMP\brief.json -Encoding ascii
+          target/release/arw-cli.exe state economy-ledger --base $env:BASE --limit 5 --json | Out-File -FilePath $env:TEMP\economy.json -Encoding ascii
+          $brief = Get-Content $env:TEMP\brief.json -Raw | ConvertFrom-Json
+          $econ = Get-Content $env:TEMP\economy.json -Raw | ConvertFrom-Json
+          if (-not $econ.PSObject.Properties.Name.Contains('version')) { throw 'economy has no version' }
+
+      - name: Mini dashboard once (route_stats JSON)
+        shell: pwsh
+        run: |
+          target/release/arw-mini-dashboard.exe --base $env:BASE --id route_stats --json --once | Out-File -FilePath $env:TEMP\route_stats.json -Encoding ascii
+          $rs = Get-Content $env:TEMP\route_stats.json -Raw | ConvertFrom-Json
+          if ($null -eq $rs) { throw 'route_stats parse failed' }
+
+      - name: Events tail (structured replay; timed)
+        shell: pwsh
+        env:
+          DEEP_SOFT: ${{ github.event.inputs.soft }}
+        run: |
+          $psi = New-Object System.Diagnostics.ProcessStartInfo
+          $psi.FileName = "target/release/arw-cli.exe"
+          $psi.Arguments = "events tail --base $env:BASE --prefix service.,state. --structured --replay 1 --store $env:TEMP/last-event-id"
+          $psi.RedirectStandardOutput = $true
+          $psi.RedirectStandardError = $true
+          $psi.UseShellExecute = $false
+          $p = [System.Diagnostics.Process]::Start($psi)
+          Start-Sleep -Seconds 7
+          if (-not $p.HasExited) { $p.Kill() }
+          $out = $p.StandardOutput.ReadToEnd()
+          $first = ($out -split "`n")[0]
+          if (-not $first) {
+            if ($env:DEEP_SOFT -eq '1' -or $env:DEEP_SOFT -eq 'true') { Write-Host '[soft] no events output; continuing due to DEEP_SOFT' } else { throw 'no events output' }
+          } else {
+            $null = $first | ConvertFrom-Json
+          }
+          $out | Out-File -FilePath $env:TEMP\events_tail.json -Encoding ascii
+
+      - name: SSE metrics presence
+        shell: pwsh
+        run: |
+          $m = iwr -UseBasicParsing "$env:BASE/metrics"
+          if (-not ($m.Content -match '^arw_events_sse_connections_total' -or $m.Content -match '^arw_events_sse_sent_total')) { throw 'sse metrics missing' } else { Write-Host 'metrics ok' }
+
+      - name: Stop arw-server and collect logs
+        if: always()
+        shell: pwsh
+        run: |
+          if (Test-Path $env:TEMP\arw-svc.pid) { $pid = Get-Content $env:TEMP\arw-svc.pid; Stop-Process -Id $pid -ErrorAction SilentlyContinue }
+          Get-ChildItem . -Filter server.* | Get-Content | Out-File -FilePath $env:TEMP\server.log -Encoding ascii
+
+      - name: Upload deep-checks artifacts
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: release-preview-deep-windows
+          path: |
+            ${{ env.TEMP }}\brief.json
+            ${{ env.TEMP }}\economy.json
+            ${{ env.TEMP }}\route_stats.json
+            ${{ env.TEMP }}\events_tail.json
+            ${{ env.TEMP }}\server.log
+
+      - name: Check economy ledger (JSON)
+        run: |
+          set -euo pipefail
+          target/release/arw-cli state economy-ledger --base $BASE --limit 5 --json > /tmp/economy.json
+          python3 - <<'PY'
+import json,sys
+data=json.load(open('/tmp/economy.json'))
+assert isinstance(data, dict)
+assert 'version' in data
+print('economy ok v', data.get('version'))
+PY
+
+      - name: Mini dashboard once (route_stats JSON)
+        run: |
+          set -euo pipefail
+          target/release/arw-mini-dashboard --base $BASE --id route_stats --json --once > /tmp/route_stats.json
+          python3 - <<'PY'
+import json
+data=json.load(open('/tmp/route_stats.json'))
+assert isinstance(data, dict)
+print('route_stats keys', list(data.keys())[:5])
+PY
+
+      - name: Events tail (structured replay)
+        env:
+          DEEP_SOFT: ${{ github.event.inputs.soft }}
+        run: |
+          set -euo pipefail
+          timeout 7s target/release/arw-cli events tail --base $BASE --prefix service.,state. --structured --replay 1 --store /tmp/last-event-id > /tmp/events_tail.json || true
+          head -n 3 /tmp/events_tail.json || true
+          python3 - <<'PY'
+import json,sys,os
+f=open('/tmp/events_tail.json','r')
+line=f.readline()
+if line:
+  json.loads(line)
+  print('events tail ok (parsed first line)')
+else:
+  soft=os.environ.get('DEEP_SOFT','false').lower() in ('1','true','yes','on')
+  if soft:
+    print('[soft] no events output; continuing due to DEEP_SOFT')
+  else:
+    raise SystemExit('no events output')
+PY
+
+      - name: SSE metrics presence
+        run: |
+          set -euo pipefail
+          curl -fsS $BASE/metrics | tee /tmp/metrics.txt | grep -E '^arw_events_sse_(connections_total|sent_total)'
+          echo 'metrics ok'
+
+      - name: Stop arw-server and collect logs
+        if: always()
+        run: |
+          if [ -f /tmp/arw-svc.pid ]; then kill "$(cat /tmp/arw-svc.pid)" || true; fi
+          if [ -f /tmp/arw-svc.log ]; then tail -n +1 /tmp/arw-svc.log | sed -e 's/^/[server] /' > /tmp/server.log || true; fi
+
+      - name: Upload deep-checks artifacts
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: release-preview-deep-linux
+          path: |
+            /tmp/economy.json
+            /tmp/route_stats.json
+            /tmp/events_tail.json
+            /tmp/server.log
+
+  summary:
+    name: Summary
+    runs-on: ubuntu-latest
+    if: always()
+    needs:
+      - build-binaries
+      - assemble-kit
+      - deep-checks-linux
+      - deep-checks-macos
+      - deep-checks-windows
+    env:
+      TARGETS: ${{ github.event.inputs.targets }}
+    steps:
+      - name: Write run summary
+        run: |
+          echo "# Build + Deep Checks" >> "$GITHUB_STEP_SUMMARY"
+          echo >> "$GITHUB_STEP_SUMMARY"
+          echo "Requested targets: ${TARGETS:-all}" >> "$GITHUB_STEP_SUMMARY"
+          echo >> "$GITHUB_STEP_SUMMARY"
+          echo "## Jobs" >> "$GITHUB_STEP_SUMMARY"
+          echo "- build-binaries: ${{ needs.build-binaries.result }} (artifacts: release-preview-Linux/macOS/Windows)" >> "$GITHUB_STEP_SUMMARY"
+          echo "- assemble-kit: ${{ needs.assemble-kit.result }} (artifact: universal-access-kit-preview)" >> "$GITHUB_STEP_SUMMARY"
+          echo "- deep-checks-linux: ${{ needs.deep-checks-linux.result }} (artifact: release-preview-deep-linux)" >> "$GITHUB_STEP_SUMMARY"
+          echo "- deep-checks-macos: ${{ needs.deep-checks-macos.result }} (artifact: release-preview-deep-macos)" >> "$GITHUB_STEP_SUMMARY"
+          echo "- deep-checks-windows: ${{ needs.deep-checks-windows.result }} (artifact: release-preview-deep-windows)" >> "$GITHUB_STEP_SUMMARY"

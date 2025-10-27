@@ -15,6 +15,8 @@ import shutil
 import sys
 import zipfile
 from pathlib import Path
+import subprocess
+import os
 
 try:
     import tomllib  # Python 3.11+
@@ -40,7 +42,7 @@ DOCS_TO_COPY = [
 
 DOC_FILENAMES = [Path(p).name for p in DOCS_TO_COPY]
 CONFIG_FILENAMES = ["eco-preset.env", "persona_seed.json", "kit-notes.md"]
-ROOT_FILENAMES = ["README.txt"]
+ROOT_FILENAMES = ["README.txt", "README.html"]
 
 PERSONA_TEMPLATE = {
     "id": "persona-example",
@@ -93,6 +95,9 @@ config/
   persona_seed.json   -> starter persona template
   kit-notes.md        -> reminder checklist
 
+bin/ (optional)
+  arw-mini-dashboard  -> tiny offline watcher for read-models (built if Cargo is available)
+
 Get Started
 -----------
 
@@ -122,6 +127,51 @@ Get Started
 Need more context? See docs/guide/offline_sync.md and docs/guide/quickstart.md.
 """
 
+README_HTML = """<!doctype html>
+<html lang=\"en\"><head>
+  <meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">
+  <title>ARW Universal Access Kit</title>
+  <style>
+    body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,\"Helvetica Neue\",sans-serif;line-height:1.45;margin:24px;max-width:860px}
+    h1{margin:0 0 8px 0} .dim{color:#6b7280}
+    .card{border:1px solid #e5e7eb;border-radius:10px;padding:16px;margin:12px 0;background:#fff}
+    code, pre{background:#f8fafc;border:1px solid #e5e7eb;border-radius:6px;padding:2px 4px}
+    a.button{display:inline-block;border:1px solid #111827;padding:8px 12px;border-radius:8px;text-decoration:none}
+  </style>
+  </head><body>
+  <h1>Universal Access Starter Kit</h1>
+  <p class=\"dim\">Offline entry page. Open the docs site if present, or the Markdown quickstarts below.</p>
+
+  <div class=\"card\">
+    <h2>Docs</h2>
+    <ul>
+      <li><a href=\"site/index.html\">Open offline docs site</a> (if the <code>site/</code> folder is present)</li>
+      <li><a href=\"docs/quickstart.md\">Quickstart (Markdown)</a></li>
+      <li><a href=\"docs/runtime_quickstart.md\">Runtime Quickstart</a></li>
+      <li><a href=\"docs/offline_sync.md\">Offline &amp; Sync</a></li>
+      <li><a href=\"docs/performance_presets.md\">Performance Presets</a></li>
+      <li><a href=\"docs/persona_quickstart.md\">Persona Quickstart</a></li>
+    </ul>
+  </div>
+
+  <div class=\"card\">
+    <h2>Config</h2>
+    <ul>
+      <li><code>config/eco-preset.env</code> — eco tier environment variables</li>
+      <li><code>config/persona_seed.json</code> — starter persona</li>
+      <li><code>config/kit-notes.md</code> — checklist &amp; smoke</li>
+    </ul>
+  </div>
+
+  <div class=\"card\">
+    <h2>Mini Dashboard</h2>
+    <p>If bundled, run: <code>./bin/arw-mini-dashboard --base http://127.0.0.1:8091</code></p>
+  </div>
+
+  <p class=\"dim\">See also README.txt for a plain text version.</p>
+  </body></html>
+"""
+
 KIT_NOTES_MD = """\
 # Starter Kit Checklist
 
@@ -132,8 +182,19 @@ KIT_NOTES_MD = """\
 - [ ] Verify `/healthz` and `/about` while connected locally.
 - [ ] Optional: run `scripts/dev.sh verify --fast` (or PowerShell variant) once.
 - [ ] Capture persona updates through `/state/persona` before enabling empathy features.
-- [ ] Generate docs wheels with `scripts/dev.sh docs-cache` (or `scripts\dev.ps1 docs-cache`)
-      so future rebuilds remain offline-friendly.
+- [ ] Generate docs wheels with `scripts/dev.sh docs-cache` (or `scripts\\dev.ps1 docs-cache`) so future rebuilds remain offline-friendly.
+
+## Quick Smoke
+
+- [ ] If `bin/arw-mini-dashboard` exists, run a one-shot metrics check:
+
+      `./bin/arw-mini-dashboard --base http://127.0.0.1:8091 --id route_stats --json --once`
+
+      Expect a JSON object with `by_path` populated. If not present, confirm the server is healthy and generating `route_stats`.
+
+- [ ] Otherwise, from the repo root (with Rust installed):
+
+      `mise run mini:dashboard ID=route_stats` (Ctrl+C to exit)
 """
 
 
@@ -202,12 +263,48 @@ def assemble_kit(output_dir: Path, force: bool, zip_output: bool) -> tuple[Path,
         shutil.rmtree(output_dir)
     (output_dir / "docs").mkdir(parents=True, exist_ok=True)
     (output_dir / "config").mkdir(parents=True, exist_ok=True)
+    (output_dir / "bin").mkdir(parents=True, exist_ok=True)
 
     copy_docs(output_dir / "docs")
     write_env_file(output_dir / "config" / "eco-preset.env", load_eco_env())
     write_persona_seed(output_dir / "config" / "persona_seed.json")
     (output_dir / "README.txt").write_text(README_TEMPLATE, encoding="utf-8")
+    (output_dir / "README.html").write_text(README_HTML, encoding="utf-8")
     (output_dir / "config" / "kit-notes.md").write_text(KIT_NOTES_MD, encoding="utf-8")
+
+    # Optional site build if mkdocs is available
+    try:
+        mk = shutil.which("mkdocs")
+        if mk:
+            site_dir = output_dir / "site"
+            site_dir.mkdir(parents=True, exist_ok=True)
+            subprocess.run(
+                [mk, "build", "--strict", "-f", str(REPO_ROOT / "mkdocs.yml"), "-d", str(site_dir)],
+                cwd=str(REPO_ROOT),
+                check=True,
+            )
+            print(f"[kit] mkdocs site built at {site_dir}")
+        else:
+            print("[kit] mkdocs not found; skipping site build")
+    except Exception as exc:
+        print(f"[kit] mkdocs build failed: {exc}")
+
+    # Optional mini dashboard build if cargo is available
+    try:
+        cargo = shutil.which("cargo")
+        if cargo:
+            subprocess.run([cargo, "build", "-p", "arw-mini-dashboard", "--release"], cwd=str(REPO_ROOT), check=True)
+            exe = "arw-mini-dashboard.exe" if sys.platform.startswith("win") else "arw-mini-dashboard"
+            src = REPO_ROOT / "target" / "release" / exe
+            if src.exists():
+                shutil.copy2(src, output_dir / "bin" / exe)
+                print(f"[kit] bundled mini dashboard: {exe}")
+            else:
+                print("[kit] mini dashboard binary not found after build")
+        else:
+            print("[kit] cargo not found; skipping mini dashboard build")
+    except Exception as exc:
+        print(f"[kit] mini dashboard build failed: {exc}")
 
     zip_path: Path | None = None
     if zip_output:
@@ -220,6 +317,46 @@ def assemble_kit(output_dir: Path, force: bool, zip_output: bool) -> tuple[Path,
         zip_path = Path(archive_path)
         print(f"[kit] wrote archive {archive_path}")
     print(f"[kit] assets written to {output_dir}")
+    # Optional extras (skip in CI or when ARW_KIT_SKIP_OPTIONAL is set)
+    skip_optional = os.environ.get("ARW_KIT_SKIP_OPTIONAL", "0").lower() in ("1", "true", "yes") or bool(os.environ.get("CI"))
+
+    if skip_optional:
+        print("[kit] skipping optional extras (site and binary) due to CI/ARW_KIT_SKIP_OPTIONAL")
+    else:
+        # Optional site build if mkdocs is available
+        try:
+            mk = shutil.which("mkdocs")
+            if mk:
+                site_dir = output_dir / "site"
+                site_dir.mkdir(parents=True, exist_ok=True)
+                subprocess.run(
+                    [mk, "build", "--strict", "-f", str(REPO_ROOT / "mkdocs.yml"), "-d", str(site_dir)],
+                    cwd=str(REPO_ROOT),
+                    check=True,
+                )
+                print(f"[kit] mkdocs site built at {site_dir}")
+            else:
+                print("[kit] mkdocs not found; skipping site build")
+        except Exception as exc:
+            print(f"[kit] mkdocs build failed: {exc}")
+
+        # Optional mini dashboard build if cargo is available
+        try:
+            cargo = shutil.which("cargo")
+            if cargo:
+                subprocess.run([cargo, "build", "-p", "arw-mini-dashboard", "--release"], cwd=str(REPO_ROOT), check=True)
+                exe = "arw-mini-dashboard.exe" if sys.platform.startswith("win") else "arw-mini-dashboard"
+                src = REPO_ROOT / "target" / "release" / exe
+                if src.exists():
+                    shutil.copy2(src, output_dir / "bin" / exe)
+                    print(f"[kit] bundled mini dashboard: {exe}")
+                else:
+                    print("[kit] mini dashboard binary not found after build")
+            else:
+                print("[kit] cargo not found; skipping mini dashboard build")
+        except Exception as exc:
+            print(f"[kit] mini dashboard build failed: {exc}")
+
     return output_dir, zip_path
 
 
@@ -313,3 +450,6 @@ def main(argv: list[str]) -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main(sys.argv[1:]))
+
+
+

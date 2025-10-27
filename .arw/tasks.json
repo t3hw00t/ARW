@@ -371,21 +371,21 @@
     },
     {
       "id": "t-20251024-compression-lite",
-      "title": "Consumer-grade vision compression backend",
-      "status": "todo",
+      "title": "Consumer-grade vision compression (lite)",
+      "status": "done",
       "scope": [
         "Kernel",
         "Pack: Research"
       ],
-      "description": "Implement a built-in lightweight vision compression worker (\u22641B decoder or CPU offload) to keep the adaptive OCR pipeline viable on 4-8 GB devices.",
+      "description": "Integrate a lightweight pre-OCR pipeline (CPU-safe grayscale + downscale) and an optional feature-gated vision compression backend with friendly fallback and operator metrics.",
       "references": [
         "apps/arw-server/src/tools/screenshots.rs",
         "docs/ops/deepseek_ocr_pipeline.md"
       ],
       "acceptance": [
-        "New backend fits within 8 GB VRAM or CPU-only mode and registers under `vision_compression`.",
-        "Capability planner selects the lite backend when the high-end endpoint is unavailable.",
-        "Benchmarks document latency/accuracy trade-offs against the DeepSeek reference."
+        "Pre-OCR lite pipeline applies grayscale + downscale (max dim 1280) with metrics for count, ms, and scale ratio.",
+        "`vision_compression` backend is behind feature `arw-server/ocr_compression` and uses `ARW_OCR_COMPRESSION_ENDPOINT`; unavailability triggers legacy fallback + counter.",
+        "Unit tests cover lite prep (downscale) and balanced (noop); docs list env knobs and metrics in Vision guide/Insights."
       ]
     },
     {

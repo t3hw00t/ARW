@@ -4,7 +4,7 @@ title: Quickstart
 
 # Quickstart
 
-Updated: 2025-10-26
+Updated: 2025-10-27
 Type: Tutorial
 
 Run the unified ARW server locally in minutes. The architecture centres on the `/actions` → `/events` → `/state/*` triad; enable `ARW_DEBUG=1` to serve the browser debug panels.
@@ -383,3 +383,9 @@ Generate the secret with any equivalent tool if `openssl` is unavailable.
 - Run `cargo run -p arw-server` during development for hot reloads and tracing; set `ARW_OTEL=1` (optionally combine with `ARW_OTEL_ENDPOINT=http://collector:4317`) to stream traces to your OTLP collector.
 
 
+
+### OCR quick knobs (optional)
+
+- Select backend/quality via env: `ARW_OCR_BACKEND=legacy|vision_compression`, `ARW_OCR_QUALITY=lite|balanced|full`.
+- With Eco preset, quality defaults to lite on low-spec hardware.
+- Metrics: see Metrics & Insights for `arw_ocr_preprocess_*` and `arw_ocr_runs_total`.

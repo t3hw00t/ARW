@@ -59,6 +59,8 @@ nav:
       - Deployment & Isolation: guide/deployment.md
       - Dev TLS: guide/dev_tls.md
       - Release Guide: guide/release.md
+      - Alpha Readiness: guide/alpha_readiness.md
+      - Releasing (Preview → RC → GA): guide/releasing.md
       - Kubernetes (Helm): guide/kubernetes.md
       - Reverse Proxy: guide/reverse_proxy.md
       - Models Download: guide/models_download.md
@@ -108,6 +110,8 @@ nav:
       - Metrics & Insights: guide/METRICS_AND_INSIGHTS.md
       - Economy Ledger: guide/economy_ledger.md
       - Daily Brief: guide/daily_brief.md
+      - Deep Checks (Local): guide/deep_checks.md
+      - Mini Dashboard (TUI): guide/mini_dashboard.md
       - Monitoring & Alerts: ops/monitoring.md
       - Runtime Bundle Runbook: ops/runtime_bundle_runbook.md
       - Cluster Runbook: ops/cluster_runbook.md

@@ -4,7 +4,7 @@ title: Vision Runtime Preview
 
 # Vision Runtime Preview
 
-Updated: 2025-10-11
+Updated: 2025-10-27
 Type: Guide (Preview)
 
 This guide shows how to stage the preview vision runtimes (llava.cpp and Moondream) under the managed runtime supervisor. It focuses on a privacy-first, accessibility-aware setup that you can opt into today while the signed bundles are still in flight.
@@ -80,7 +80,7 @@ Watch `/state/runtime_matrix` (SSE or `arw-cli runtime matrix`) for:
 - Accessible status label (for example `Ready – Vision CUDA`)
 - Restart budget counters (ensure they decrement on failures)
 
-## Step 4 — Run the Vision Smoke Test (optional but recommended)
+## Step 4 - Run the Vision Smoke Test (optional but recommended)
 
 With the manifest in place you can exercise the automated supervisor check:
 
@@ -117,3 +117,34 @@ Related:
 - [Managed Runtime Supervisor](../architecture/managed_runtime_supervisor.md)
 - [Multi-Modal Runtime Plan](../architecture/multimodal_runtime_plan.md)
 - [Guardrail Gateway](../architecture/egress_firewall.md)
+
+## OCR Compression (Lite, feature-gated)
+
+The OCR toolchain supports a lightweight, pre‑OCR image pipeline and an optional external “vision compression” backend. Build flags and environment knobs control behavior:
+
+- Build features (server):
+  - `arw-server/ocr_tesseract` enables the legacy Tesseract backend.
+  - `arw-server/ocr_compression` enables the vision compression backend and related wiring.
+- Backend selection (env):
+  - `ARW_OCR_BACKEND` or `ARW_VISION_BACKEND`: `legacy` or `vision_compression`.
+  - `ARW_OCR_QUALITY` or `ARW_VISION_QUALITY`: `lite`, `balanced`, `full`.
+- External backend endpoint (when `ocr_compression` is built):
+  - `ARW_OCR_COMPRESSION_ENDPOINT` (required), e.g. `http://127.0.0.1:18081/ocr`.
+  - `ARW_OCR_COMPRESSION_TIMEOUT_SECS` (default 120).
+
+Lite pre‑OCR steps (always safe on CPU):
+- Grayscale conversion; downscale so max dimension ≤ 1280 px.
+- Captured in sidecar metadata (`preprocess_steps`) and counters.
+
+Metrics (Prometheus):
+- `arw_ocr_preprocess_total{quality}` — pre‑OCR transformations applied.
+- `arw_ocr_preprocess_ms{quality}` — pre‑OCR latency in milliseconds.
+- `arw_ocr_preprocess_scale_ratio{quality}` — geometric area ratio (after/before).
+- `arw_ocr_preprocess_size_ratio{quality}` — file size ratio (after/before) for the prepared image.
+- `arw_ocr_backend_fallbacks_total{from,to}` — vision → legacy fallbacks.
+- `arw_ocr_cache_hits_total{backend,quality}` — cache reuse hits.
+- `arw_ocr_runs_total{backend,quality,runtime}` — executed OCR runs.
+
+Notes:
+- If `ocr_compression` isn’t compiled, the vision backend reports “unavailable” and the tool falls back to legacy when requested.
+- Low‑spec devices can set `ARW_PREFER_LOW_POWER=1` (or use the Eco preset) to steer quality to `lite` by default.

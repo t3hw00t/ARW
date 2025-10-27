@@ -238,6 +238,10 @@ adapters-lint-changed base='origin/main':
 persona-seed base="http://127.0.0.1:8091" id="persona.alpha" name="" archetype="" telemetry="false" scope="" state_dir="" json="false" pretty="false":
 	set -euo pipefail; base='{{base}}'; id='{{id}}'; name='{{name}}'; archetype='{{archetype}}'; \
 	telemetry='{{telemetry}}'; scope='{{scope}}'; state_dir='{{state_dir}}'; json='{{json}}'; pretty='{{pretty}}'; \
+
+# Mini dashboard (economy read-model watcher)
+mini-dashboard base='http://127.0.0.1:8091' token='' id='economy_ledger' limit='25':
+  ARW_ADMIN_TOKEN='{{token}}' cargo run -p arw-mini-dashboard -- --base '{{base}}' --id '{{id}}' --limit {{limit}}
 	args=(admin persona seed --base "$base" --id "$id"); \
 	if [ -n "$name" ]; then args+=(--name "$name"); fi; \
 	if [ -n "$archetype" ]; then args+=(--archetype "$archetype"); fi; \
@@ -728,6 +732,18 @@ kit-universal:
 kit-universal-check:
   python3 scripts/universal_access_kit.py --check-only --zip || python scripts/universal_access_kit.py --check-only --zip
 
+# Lite variant (skip optional extras like site/bin)
+kit-universal-lite:
+  ARW_KIT_SKIP_OPTIONAL=1 python3 scripts/universal_access_kit.py --force --zip || ARW_KIT_SKIP_OPTIONAL=1 python scripts/universal_access_kit.py --force --zip
+
+# Mini dashboard smoke (route_stats JSON once)
+mini-dashboard-smoke base="http://127.0.0.1:8091":
+  cargo run -p arw-mini-dashboard -- --base {{base}} --id route_stats --json --once
+
+# CLI events tail wrappers
+cli-events-tail base="http://127.0.0.1:8091" prefix="service.,state.read.model.patch" replay="25" store=".arw/last-event-id" structured="false":
+  cargo run -p arw-cli -- events tail --base {{base}} --prefix {{prefix}} --replay {{replay}} --store {{store}} {{if structured == 'true' { "--structured" }}}
+
 # Design tokens
 tokens-sync:
   bash scripts/sync_tokens.sh
@@ -843,3 +859,10 @@ adsapters-smoke:
 adapters-mock-up port=8081:
   set -euo pipefail; port='{{port}}'; cargo run -p arw-mock-adapter --bin mock-adapter-health --quiet --color never
 
+ocr-smoke base=http://127.0.0.1:8103 token='' timeout=8:
+    BASE={{base}} TOKEN={{token}} TIMEOUT={{timeout}} bash scripts/ocr_smoke.sh
+deep-checks base="http://127.0.0.1:8099":
+    BASE={{base}} bash scripts/deep_checks_local.sh
+
+deep-checks-ps base="http://127.0.0.1:8099":
+    pwsh -NoLogo -File scripts/deep_checks_local.ps1 -ErrorAction Stop
