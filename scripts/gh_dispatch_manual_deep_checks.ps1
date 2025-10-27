@@ -54,9 +54,9 @@ function Dispatch-And-Wait-WithGh {
   } while ((Get-Date) -lt $deadline)
   if (-not $runId) { throw "Timed out waiting for workflow run to start." }
   Write-Host ("[gh] run id: {0}" -f $runId)
-  # Wait for completion (watch returns nonzero on failure)
-  gh run watch $runId -R $Repo --exit-status
-  return $runId
+  # Wait for completion (watch returns nonzero on failure); suppress output
+  gh run watch $runId -R $Repo --exit-status | Out-Null
+  return [long]$runId
 }
 
 function Download-And-Summarize-WithGh {
