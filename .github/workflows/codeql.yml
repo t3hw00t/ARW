@@ -45,9 +45,11 @@ jobs:
         uses: github/codeql-action/init@b97083e1835df46b2227bae5c4fc6e43569531c1 # v3
         with:
           languages: rust
-      - name: Build (workspace)
+      - name: Build (workspace; exclude launcher)
         run: |
-          cargo build --workspace --locked
+          # The launcher requires a special feature on Linux. For CodeQL analysis,
+          # exclude it to keep builds simple and fast.
+          cargo build --workspace --locked --exclude arw-launcher
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@b97083e1835df46b2227bae5c4fc6e43569531c1 # v3
 concurrency:

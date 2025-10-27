@@ -457,21 +457,21 @@ jobs:
         if: steps.filter.outputs.eco_preset == 'true'
         run: |
           python3 - <<'PY'
-import json, urllib.request, sys
-url='http://127.0.0.1:8101/about'
-data=urllib.request.urlopen(url, timeout=3).read()
-about=json.loads(data)
-p=about.get('perf_preset') or {}
-tier=p.get('tier')
-if tier!='eco':
-  print('unexpected tier', p)
-  sys.exit(1)
-hmc=p.get('http_max_conc')
-if hmc is not None and hmc!=128:
-  print('unexpected http_max_conc', hmc)
-  sys.exit(1)
-print('eco preset ok', p)
-PY
+            import json, urllib.request, sys
+            url='http://127.0.0.1:8101/about'
+            data=urllib.request.urlopen(url, timeout=3).read()
+            about=json.loads(data)
+            p=about.get('perf_preset') or {}
+            tier=p.get('tier')
+            if tier!='eco':
+              print('unexpected tier', p)
+              sys.exit(1)
+            hmc=p.get('http_max_conc')
+            if hmc is not None and hmc!=128:
+              print('unexpected http_max_conc', hmc)
+              sys.exit(1)
+            print('eco preset ok', p)
+          PY
 
       - name: Build arw-server (screenshots feature)
         if: steps.filter.outputs.ocr == 'true'

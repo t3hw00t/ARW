@@ -234,23 +234,23 @@ jobs:
           timeout 7s target/release/arw-cli events tail --base $BASE --prefix service.,state. --structured --replay 1 --store /tmp/last-event-id > /tmp/events_tail.json || true
           head -n 3 /tmp/events_tail.json || true
           python3 - <<'PY'
-import os, sys, json
-p='/tmp/events_tail.json'
-line=''
-try:
-    with open(p,'r',encoding='utf-8') as fh:
-        line=fh.readline()
-except Exception:
-    line=''
-soft=os.environ.get('DEEP_SOFT','false').lower() in ('1','true','yes','on')
-if not line:
-    if soft:
-        print('[soft] no events output; continuing due to DEEP_SOFT')
-        sys.exit(0)
-    raise SystemExit('no events output')
-json.loads(line)
-print('events tail ok')
-PY
+            import os, sys, json
+            p='/tmp/events_tail.json'
+            line=''
+            try:
+                with open(p,'r',encoding='utf-8') as fh:
+                    line=fh.readline()
+            except Exception:
+                line=''
+            soft=os.environ.get('DEEP_SOFT','false').lower() in ('1','true','yes','on')
+            if not line:
+                if soft:
+                    print('[soft] no events output; continuing due to DEEP_SOFT')
+                    sys.exit(0)
+                raise SystemExit('no events output')
+            json.loads(line)
+            print('events tail ok')
+          PY
 
       - name: SSE metrics presence
         run: |
@@ -397,23 +397,23 @@ PY
           timeout 7s target/release/arw-cli events tail --base $BASE --prefix service.,state. --structured --replay 1 --store /tmp/last-event-id > /tmp/events_tail.json || true
           head -n 3 /tmp/events_tail.json || true
           python3 - <<'PY'
-import os, sys, json
-p='/tmp/events_tail.json'
-line=''
-try:
-    with open(p,'r',encoding='utf-8') as fh:
-        line=fh.readline()
-except Exception:
-    line=''
-soft=os.environ.get('DEEP_SOFT','false').lower() in ('1','true','yes','on')
-if not line:
-    if soft:
-        print('[soft] no events output; continuing due to DEEP_SOFT')
-        sys.exit(0)
-    raise SystemExit('no events output')
-json.loads(line)
-print('events tail ok (parsed first line)')
-PY
+            import os, sys, json
+            p='/tmp/events_tail.json'
+            line=''
+            try:
+                with open(p,'r',encoding='utf-8') as fh:
+                    line=fh.readline()
+            except Exception:
+                line=''
+            soft=os.environ.get('DEEP_SOFT','false').lower() in ('1','true','yes','on')
+            if not line:
+                if soft:
+                    print('[soft] no events output; continuing due to DEEP_SOFT')
+                    sys.exit(0)
+                raise SystemExit('no events output')
+            json.loads(line)
+            print('events tail ok (parsed first line)')
+          PY
 
       - name: SSE metrics presence
         run: |
