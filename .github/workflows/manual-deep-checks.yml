@@ -1,0 +1,99 @@
+name: Manual Deep Checks
+
+on:
+  workflow_dispatch:
+    inputs:
+      soft:
+        description: "Soft mode (allow empty short tail)"
+        required: false
+        default: "false"
+      tail_secs:
+        description: "Tail duration in seconds"
+        required: false
+        default: "7"
+
+jobs:
+  linux:
+    name: Linux Deep Checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      BASE: http://127.0.0.1:8099
+      ARW_ADMIN_TOKEN: test-admin-token
+      SOFT: ${{ github.event.inputs.soft || 'false' }}
+      TAIL_SECS: ${{ github.event.inputs.tail_secs || '7' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@5d458579430fc14a04a08a1e7d3694f545e91ce6 # stable
+
+      - name: Rust cache
+        uses: Swatinem/rust-cache@7939da402645ba29a2df566723491a2c856e8f8a # v2
+        with:
+          workspaces: |
+            . -> target
+
+      - name: Build server + tools (release)
+        run: |
+          cargo build -p arw-server -p arw-cli -p arw-mini-dashboard --release
+
+      - name: Start arw-server
+        run: |
+          set -euo pipefail
+          nohup target/release/arw-server >/tmp/arw-svc.log 2>&1 &
+          echo $! > /tmp/arw-svc.pid
+          for i in $(seq 1 60); do
+            if curl -fsS -m 2 $BASE/healthz >/dev/null; then echo ready; break; fi; sleep 1; done
+          curl -fsS $BASE/about || true
+
+      - name: Economy snapshot JSON
+        run: |
+          set -euo pipefail
+          target/release/arw-cli state economy-ledger --base $BASE --limit 5 --json > /tmp/economy.json
+          python3 -c "import json; d=json.load(open('/tmp/economy.json')); assert isinstance(d, dict) and 'version' in d"
+
+      - name: Route stats snapshot JSON
+        run: |
+          set -euo pipefail
+          curl -fsS $BASE/state/route_stats -H "Authorization: Bearer $ARW_ADMIN_TOKEN" -o /tmp/route_stats.json
+          test -s /tmp/route_stats.json
+
+      - name: Events tail (structured)
+        run: |
+          set -euo pipefail
+          timeout ${TAIL_SECS}s target/release/arw-cli events tail --base $BASE --prefix service.,state. --structured --replay 1 --store /tmp/last-event-id > /tmp/events_tail.json || true
+          if [ "${SOFT}" = "true" ]; then
+            head -n 1 /tmp/events_tail.json || true
+          else
+            python3 -c "import json,sys; line=open('/tmp/events_tail.json').readline(); assert line, 'no events output'; json.loads(line)"
+          fi
+
+      - name: Metrics scrape
+        run: |
+          set -euo pipefail
+          curl -fsS $BASE/metrics -o /tmp/metrics.txt || true
+          if grep -E '^arw_events_sse_(clients|connections_total|sent_total)' /tmp/metrics.txt >/dev/null; then
+            echo ok
+          else
+            if [ "${SOFT}" = "true" ]; then echo soft; else echo 'missing SSE metrics' && exit 1; fi
+          fi
+
+      - name: Upload artifacts
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: manual-deep-linux
+          path: |
+            /tmp/economy.json
+            /tmp/route_stats.json
+            /tmp/events_tail.json
+            /tmp/metrics.txt
+            /tmp/arw-svc.log
+
+      - name: Stop server
+        if: always()
+        run: |
+          if [ -f /tmp/arw-svc.pid ]; then kill "$(cat /tmp/arw-svc.pid)" || true; fi
+
