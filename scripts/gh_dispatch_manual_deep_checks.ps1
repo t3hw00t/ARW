@@ -64,14 +64,23 @@ function Download-And-Summarize-WithGh {
   $outDir = Join-Path $env:TEMP "manual-deep-linux-$RunId"
   if (Test-Path $outDir) { Remove-Item -Recurse -Force $outDir }
   New-Item -ItemType Directory -Force -Path $outDir | Out-Null
-  gh run download $RunId -R $Repo -n manual-deep-linux -D $outDir
-  $econ = Get-Content (Join-Path $outDir 'economy.json') -Raw | ConvertFrom-Json
-  $rs = Get-Content (Join-Path $outDir 'route_stats.json') -Raw | ConvertFrom-Json
-  $first = (Get-Content (Join-Path $outDir 'events_tail.json') -TotalCount 1)
-  $metrics = Get-Content (Join-Path $outDir 'metrics.txt') -Raw
+  gh run download $RunId -R $Repo -n manual-deep-linux -D $outDir | Out-Null
+  function Resolve-FirstFile([string]$dir,[string]$name) {
+    $f = Get-ChildItem -Path $dir -Recurse -File -Filter $name -ErrorAction SilentlyContinue | Select-Object -First 1
+    if ($f) { return $f.FullName } else { return $null }
+  }
+  $econFile   = Resolve-FirstFile $outDir 'economy.json'
+  $rsFile     = Resolve-FirstFile $outDir 'route_stats.json'
+  $eventsFile = Resolve-FirstFile $outDir 'events_tail.json'
+  $metricsFile= Resolve-FirstFile $outDir 'metrics.txt'
+  if (-not $econFile) { throw "economy.json missing in artifact" }
+  $econ = Get-Content $econFile -Raw | ConvertFrom-Json
+  $rs = $null; if ($rsFile) { $rs = Get-Content $rsFile -Raw | ConvertFrom-Json }
+  $first = $null; if ($eventsFile) { $first = Get-Content $eventsFile -TotalCount 1 }
+  $metrics = ''; if ($metricsFile) { $metrics = Get-Content $metricsFile -Raw }
   $hasSSE = ($metrics -match '^arw_events_sse_(clients|connections_total|sent_total)')
   Write-Host ("[artifact] ECON version: {0} entries={1}" -f $econ.version, ($econ.entries | Measure-Object).Count)
-  Write-Host ("[artifact] ROUTE_STATS keys: {0}" -f ($rs.PSObject.Properties.Name -join ', '))
+  if ($rs) { Write-Host ("[artifact] ROUTE_STATS keys: {0}" -f ($rs.PSObject.Properties.Name -join ', ')) } else { Write-Warning "[artifact] route_stats.json missing" }
   Write-Host ("[artifact] EVENTS first line present: {0}" -f ([bool]$first))
   Write-Host ("[artifact] METRICS SSE present: {0}" -f $hasSSE)
   Write-Host ("[artifact] saved: {0}" -f $outDir) -ForegroundColor Green
