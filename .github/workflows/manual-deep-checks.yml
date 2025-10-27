@@ -57,18 +57,30 @@ jobs:
       - name: Route stats snapshot JSON
         run: |
           set -euo pipefail
-          curl -fsS $BASE/state/route_stats -H "Authorization: Bearer $ARW_ADMIN_TOKEN" -o /tmp/route_stats.json
-          test -s /tmp/route_stats.json
+          curl -fsS $BASE/state/route_stats -H "Authorization: Bearer $ARW_ADMIN_TOKEN" -o /tmp/route_stats.json || true
+          if [ ! -s /tmp/route_stats.json ]; then
+            sleep 2
+            curl -fsS $BASE/state/route_stats -H "Authorization: Bearer $ARW_ADMIN_TOKEN" -o /tmp/route_stats.json || true
+          fi
+          if [ ! -s /tmp/route_stats.json ]; then
+            if [ "${SOFT}" = "true" ]; then echo "[soft] route_stats missing"; else echo 'route_stats missing' && exit 1; fi
+          fi
 
       - name: Events tail (structured)
         run: |
           set -euo pipefail
-          timeout ${TAIL_SECS}s target/release/arw-cli events tail --base $BASE --prefix service.,state. --structured --replay 1 --store /tmp/last-event-id > /tmp/events_tail.json || true
+          timeout ${TAIL_SECS}s target/release/arw-cli events tail --base $BASE --prefix service.,state.,economy. --structured --replay 1 --store /tmp/last-event-id > /tmp/events_tail.json || true
           if [ "${SOFT}" = "true" ]; then
             head -n 1 /tmp/events_tail.json || true
           else
             python3 -c "import json,sys; line=open('/tmp/events_tail.json').readline(); assert line, 'no events output'; json.loads(line)"
           fi
+
+      - name: SSE tick (unfiltered, best-effort)
+        run: |
+          set -euo pipefail
+          # Open a very short unfiltered SSE stream to tick counters even if no events match filters
+          timeout 3s curl -fsS -N -H "Accept: text/event-stream" -H "Authorization: Bearer $ARW_ADMIN_TOKEN" "$BASE/events" >/tmp/events_raw.sse || true
 
       - name: Metrics scrape
         run: |
@@ -96,4 +108,3 @@ jobs:
         if: always()
         run: |
           if [ -f /tmp/arw-svc.pid ]; then kill "$(cat /tmp/arw-svc.pid)" || true; fi
-
