@@ -1,22 +1,4 @@
-# Normalize line endings: default LF
-* text=auto eol=lf
-
-# PowerShell and Windows scripts should use CRLF
-*.ps1 text eol=crlf
-*.psm1 text eol=crlf
-*.cmd text eol=crlf
-*.bat text eol=crlf
-
-# Keep PNG/SVG and other binaries untouched
-*.png -text
-*.jpg -text
-*.jpeg -text
-*.gif -text
-*.ico -text
-*.woff -text
-*.woff2 -text
-*.ttf -text
-*.eot -text
-*.pdf -text
-
-.arw/tasks.json linguist-generated export-ignore
+# Ensure reproducible line endings for generated artifacts and API spec
+docs/** text eol=lf
+spec/*.yaml text eol=lf
+interfaces/*.yaml text eol=lf

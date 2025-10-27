@@ -128,21 +128,38 @@ jobs:
               echo "| $f | n/a | n/a | run error |" >> "$GITHUB_STEP_SUMMARY"
               continue
             fi
-            py='import sys,json; d=json.load(sys.stdin); e=len(d["report"].get("errors",[])); w=len(d["report"].get("warnings",[])); print(e,w);'
-            read -r errors warnings < <(printf '%s' "$out" | python3 -c "$py")
+            # Count errors/warnings via a tiny Python helper
+            read -r errors warnings < <(printf '%s' "$out" | python3 - <<'PY'
+import sys,json
+try:
+    d=json.load(sys.stdin)
+    e=len(d.get('report',{}).get('errors',[]))
+    w=len(d.get('report',{}).get('warnings',[]))
+    print(e,w)
+except Exception:
+    print(0,0)
+PY
+            )
             status="ok"
             if [[ ${errors:-0} -gt 0 ]]; then status="error"; failures=$((failures+1)); fi
             echo "| $f | ${errors:-0} | ${warnings:-0} | $status |" >> "$GITHUB_STEP_SUMMARY"
-            # Emit annotations (file-level)
-            ann_py='import sys,json; d=json.load(sys.stdin); 
-e=d["report"].get("errors",[]); w=d["report"].get("warnings",[]);
-import os; f=os.environ.get("F")
-import sys
-for i in e:
-  print(f"::error file={f}::" + i.get("field","field") + ": " + i.get("message",""))
-for i in w:
-  print(f"::warning file={f}::" + i.get("field","field") + ": " + i.get("message",""))'
-            F="$f" python3 -c "$ann_py" <<< "$out"
+            # Emit annotations (file-level) with a here-doc to avoid YAML quoting issues
+            F="$f" python3 - <<'PY' <<< "$out"
+import sys,json,os
+try:
+    d=json.load(sys.stdin)
+except Exception:
+    sys.exit(0)
+f=os.environ.get('F','')
+for i in d.get('report',{}).get('errors',[]):
+    field=i.get('field','field')
+    msg=i.get('message','')
+    print(f"::error file={f}::{field}: {msg}")
+for i in d.get('report',{}).get('warnings',[]):
+    field=i.get('field','field')
+    msg=i.get('message','')
+    print(f"::warning file={f}::{field}: {msg}")
+PY
           done
           if [[ $failures -gt 0 ]]; then
             echo "\nOne or more manifests have errors. See table above." >> "$GITHUB_STEP_SUMMARY"

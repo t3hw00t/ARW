@@ -8,7 +8,6 @@ on:
 jobs:
   gpu-smoke:
     # Requires a self-hosted runner with GPU and labels [self-hosted, linux, gpu]
-    if: contains(runner.labels, 'self-hosted') && contains(runner.labels, 'gpu')
     runs-on: [self-hosted, linux, gpu]
     timeout-minutes: 60
     steps:
@@ -48,4 +47,3 @@ jobs:
           export RUNTIME_SMOKE_ALLOW_GPU=1
           # If runner provides explicit binary/model, use them; otherwise rely on local cache/discovery
           just runtime-check
-

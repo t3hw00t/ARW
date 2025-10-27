@@ -1,6 +1,9 @@
 [advisories]
-# cargo-deny defaults to denying advisories; scope unmaintained to direct deps
-unmaintained = "workspace"
+# Advisory severities
+vulnerability = "deny"
+unmaintained = "warn"
+yanked = "warn"
+unsound = "deny"
 ignore = []
 
 [licenses]
