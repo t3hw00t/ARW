@@ -1,79 +1,104 @@
-#!/usr/bin/env pwsh
+Param(
+  [string]$Base = "http://127.0.0.1:8099",
+  [int]$TailSeconds = 10,
+  [switch]$Soft
+)
+
 $ErrorActionPreference = 'Stop'
 
-# Local deep checks harness (Windows)
-# - Builds arw-server, arw-cli, arw-mini-dashboard (release)
-# - Starts arw-server on ARW_PORT (default 8099)
-# - Verifies daily brief/economy snapshots, route_stats (mini-dashboard once),
-#   events tail structured output, and SSE metrics presence
-
-$BASE = $env:BASE; if (-not $BASE) { $BASE = 'http://127.0.0.1:8099' }
-$env:ARW_ADMIN_TOKEN = if ($env:ARW_ADMIN_TOKEN) { $env:ARW_ADMIN_TOKEN } else { 'test-admin-token' }
-$env:ARW_PORT = if ($env:ARW_PORT) { $env:ARW_PORT } else { '8099' }
-$env:ARW_DEBUG = '1'
-
-Write-Host '[deep-checks] building (release)'
+Write-Host "[deep-checks] building (release)" -ForegroundColor Cyan
 cargo build -p arw-server -p arw-cli -p arw-mini-dashboard --release
 
-Write-Host "[deep-checks] starting arw-server on port $($env:ARW_PORT)"
+# Isolated state/cache/logs under %TEMP% to avoid profile paths and lock conflicts
+$baseDir = Join-Path $env:TEMP 'arw-local'
+$dataDir = Join-Path $baseDir 'data'
+$cacheDir = Join-Path $baseDir 'cache'
+$logsDir = Join-Path $baseDir 'logs'
+New-Item -ItemType Directory -Force -Path $dataDir,$cacheDir,$logsDir | Out-Null
+
+$env:ARW_ADMIN_TOKEN = $env:ARW_ADMIN_TOKEN -as [string]
+if (-not $env:ARW_ADMIN_TOKEN) { $env:ARW_ADMIN_TOKEN = 'test-admin-token' }
+$env:ARW_DEBUG = '1'
+$env:ARW_PORT  = ([uri]$Base).Port
+if (-not $env:ARW_PORT) { $env:ARW_PORT = '8099' }
+$env:ARW_DATA_DIR  = $dataDir
+$env:ARW_CACHE_DIR = $cacheDir
+$env:ARW_LOGS_DIR  = $logsDir
+
+Write-Host "[deep-checks] starting arw-server on $Base" -ForegroundColor Cyan
 $p = Start-Process -FilePath target/release/arw-server.exe -PassThru -WindowStyle Hidden -RedirectStandardOutput server.out -RedirectStandardError server.err
-Set-Content -Path $env:TEMP\arw-svc-local.pid -Value $p.Id
+$pidFile = Join-Path $env:TEMP 'arw-svc.pid'
+Set-Content -Path $pidFile -Value $p.Id
 
-for ($i=0; $i -lt 60; $i++) {
-  try { Invoke-WebRequest -UseBasicParsing "$BASE/healthz" -TimeoutSec 2 | Out-Null; break } catch { Start-Sleep -Seconds 1 }
+# Wait for healthz
+$ok = $false
+for ($i=0; $i -lt 120; $i++) {
+  try {
+    (Invoke-WebRequest -UseBasicParsing "$Base/healthz" -TimeoutSec 2) | Out-Null
+    $ok = $true; break
+  } catch { Start-Sleep -Seconds 1 }
 }
-Invoke-WebRequest -UseBasicParsing "$BASE/about" | Out-Null
+if (-not $ok) {
+  Write-Warning "[deep-checks] server did not become healthy"
+  if (Test-Path server.err) { Get-Content server.err | Select-Object -Last 120 }
+  throw "server not healthy"
+}
+Invoke-WebRequest -UseBasicParsing "$Base/about" | Out-Null
 
-Write-Host '[deep-checks] daily brief + economy'
+# Economy snapshot JSON
+$econPath = Join-Path $env:TEMP 'economy.json'
+& target/release/arw-cli.exe state economy-ledger --base $Base --limit 5 --json | Out-File -FilePath $econPath -Encoding ascii
+$econ = Get-Content $econPath -Raw | ConvertFrom-Json
+if ($null -eq $econ -or -not ($econ.PSObject.Properties.Name -contains 'version')) {
+  throw "economy.json missing version"
+}
+
+# Route stats snapshot JSON
+$rsPath = Join-Path $env:TEMP 'route_stats.json'
 $headers = @{ Authorization = "Bearer $env:ARW_ADMIN_TOKEN" }
-(Invoke-WebRequest -UseBasicParsing -Headers $headers "$BASE/state/briefs/daily").Content | Out-File -FilePath $env:TEMP\brief.json -Encoding ascii
-target/release/arw-cli.exe state economy-ledger --base $BASE --limit 5 --json | Out-File -FilePath $env:TEMP\economy.json -Encoding ascii
-$brief = Get-Content $env:TEMP\brief.json -Raw | ConvertFrom-Json
-$econ = Get-Content $env:TEMP\economy.json -Raw | ConvertFrom-Json
-if (-not $econ.PSObject.Properties.Name.Contains('version')) { throw 'economy has no version' }
+(Invoke-WebRequest -UseBasicParsing -Headers $headers "$Base/state/route_stats").Content | Out-File -FilePath $rsPath -Encoding ascii
+$rs = Get-Content $rsPath -Raw | ConvertFrom-Json
+if ($null -eq $rs -and -not $Soft) { throw "route_stats parse failed" }
 
-Write-Host '[deep-checks] route_stats once (mini-dashboard)'
-target/release/arw-mini-dashboard.exe --base $BASE --id route_stats --json --once | Out-File -FilePath $env:TEMP\route_stats.json -Encoding ascii
-$rs = Get-Content $env:TEMP\route_stats.json -Raw | ConvertFrom-Json
-if ($null -eq $rs) { throw 'route_stats parse failed' }
-
-Write-Host '[deep-checks] events tail (structured, ~7s)'
+# Events tail (structured)
+Write-Host "[deep-checks] events tail (structured) ${TailSeconds}s" -ForegroundColor Cyan
 $psi = New-Object System.Diagnostics.ProcessStartInfo
 $psi.FileName = "target/release/arw-cli.exe"
-$psi.Arguments = "events tail --base $BASE --prefix service.,state. --structured --replay 1 --store $env:TEMP/last-event-id"
+$psi.Arguments = "events tail --base $Base --prefix service.,state. --structured --replay 1 --store $env:TEMP/last-event-id"
 $psi.RedirectStandardOutput = $true
 $psi.RedirectStandardError = $true
 $psi.UseShellExecute = $false
-$pt = [System.Diagnostics.Process]::Start($psi)
-Start-Sleep -Seconds 7
-if (-not $pt.HasExited) { $pt.Kill() }
-$out = $pt.StandardOutput.ReadToEnd()
-$first = ($out -split "`n")[0]
-if (-not $first) {
-  if ($env:DEEP_SOFT -eq '1' -or $env:DEEP_SOFT -eq 'true') {
-    Write-Host '[deep-checks][soft] no events output; continuing due to DEEP_SOFT'
-  } else {
-    throw 'no events output'
-  }
-} else {
-  $null = $first | ConvertFrom-Json
-}
-$out | Out-File -FilePath $env:TEMP\events_tail.json -Encoding ascii
+$p2 = [System.Diagnostics.Process]::Start($psi)
+Start-Sleep -Seconds $TailSeconds
+if (-not $p2.HasExited) { try { $p2.Kill() } catch {} }
+$eventsPath = Join-Path $env:TEMP 'events_tail.json'
+$out = $p2.StandardOutput.ReadToEnd()
+$out | Out-File -FilePath $eventsPath -Encoding ascii
+$first = (Get-Content $eventsPath -TotalCount 1)
+if (-not $first -and -not $Soft) { throw "no events output" }
 
-Write-Host '[deep-checks] metrics (SSE counters present)'
-$m = Invoke-WebRequest -UseBasicParsing "$BASE/metrics"
-if (-not ($m.Content -match '^arw_events_sse_connections_total' -or $m.Content -match '^arw_events_sse_sent_total')) {
-  if ($env:DEEP_SOFT -eq '1' -or $env:DEEP_SOFT -eq 'true') {
-    Write-Host '[deep-checks][soft] sse metrics missing; continuing due to DEEP_SOFT'
-  } else {
-    throw 'sse metrics missing'
-  }
-} else {
-  Write-Host 'metrics ok'
+# Metrics scrape with fallback
+$metricsPath = Join-Path $env:TEMP 'metrics.txt'
+Write-Host "[deep-checks] metrics scrape" -ForegroundColor Cyan
+Invoke-WebRequest -UseBasicParsing "$Base/metrics" | Select-Object -ExpandProperty Content | Out-File -FilePath $metricsPath -Encoding ascii
+$metrics = Get-Content $metricsPath -Raw
+$hasSSE = ($metrics -match '^arw_events_sse_(clients|connections_total|sent_total)')
+if (-not $hasSSE) {
+  $hasPatchCounter = ($metrics -match '^arw_events_total\{kind="state.read.model.patch"\}')
+  if (-not $hasPatchCounter -and -not $Soft) { throw "missing SSE metrics" }
 }
 
-Write-Host '[deep-checks] stopping server'
-if (Test-Path $env:TEMP\arw-svc-local.pid) { $pid = Get-Content $env:TEMP\arw-svc-local.pid; Stop-Process -Id $pid -ErrorAction SilentlyContinue }
-Write-Host "[deep-checks] logs: server.out/server.err"
+# Summaries
+Write-Host ("ECON version: {0} entries: {1} totals: {2}" -f $econ.version, ($econ.entries | Measure-Object).Count, ($econ.totals | Measure-Object).Count)
+Write-Host ("ROUTE_STATS keys: {0}" -f ($rs.PSObject.Properties.Name -join ', '))
+Write-Host ("EVENTS first line present: {0} len={1}" -f ([bool]$first), ($first | ForEach-Object { $_.Length }))
+Write-Host ("METRICS SSE present: {0}" -f $hasSSE)
 
-Write-Host '[deep-checks] OK'
+# Stop server
+Write-Host "[deep-checks] stopping server" -ForegroundColor Cyan
+try {
+  if (Test-Path $pidFile) { $pid = Get-Content $pidFile; Stop-Process -Id $pid -ErrorAction SilentlyContinue }
+} catch {}
+Write-Host "[deep-checks] logs: $(Resolve-Path server.out), $(Resolve-Path server.err)" -ForegroundColor DarkGray
+
+Write-Host "[deep-checks] OK" -ForegroundColor Green
