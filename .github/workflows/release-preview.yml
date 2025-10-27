@@ -229,22 +229,9 @@ jobs:
       - name: Events tail (structured replay; timed)
         run: |
           set -euo pipefail
-          python3 -c "import subprocess,time,os,json; out='/tmp/events_tail.json'; p=subprocess.Popen(['target/release/arw-cli','events','tail','--base',os.environ['BASE'],'--prefix','service.,state.','--structured','--replay','1','--store','/tmp/last-event-id'], stdout=open(out,'w'), stderr=subprocess.DEVNULL); time.sleep(7);\
-\
-import sys; ok=True\
-\
-try:\
-    p.terminate(); p.wait(timeout=3)\
-except Exception:\
-    p.kill()\
-line='';\
-try:\
-    line=open(out,'r').readline()\
-except Exception:\
-    ok=False\
-assert line or ok\
-if line: json.loads(line)\
-print('events tail ok' if line else 'events tail finished')"
+          timeout 7s target/release/arw-cli events tail --base $BASE --prefix service.,state. --structured --replay 1 --store /tmp/last-event-id > /tmp/events_tail.json || true
+          head -n 3 /tmp/events_tail.json || true
+          python3 -c "import json,sys; line=open('/tmp/events_tail.json').readline(); assert line, 'no events output'; json.loads(line); print('events tail ok')"
 
       - name: SSE metrics presence
         run: |
