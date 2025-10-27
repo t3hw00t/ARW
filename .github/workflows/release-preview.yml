@@ -218,41 +218,32 @@ jobs:
           set -euo pipefail
           curl -fsS $BASE/state/briefs/daily -H "Authorization: Bearer $ARW_ADMIN_TOKEN" -o /tmp/brief.json
           target/release/arw-cli state economy-ledger --base $BASE --limit 5 --json > /tmp/economy.json
-          python3 - <<'PY'
-import json
-assert 'version' in json.load(open('/tmp/economy.json'))
-json.load(open('/tmp/brief.json'))
-print('brief+economy ok')
-PY
+          python3 -c "import json; d=json.load(open('/tmp/economy.json')); assert 'version' in d; json.load(open('/tmp/brief.json')); print('brief+economy ok')"
 
       - name: Mini dashboard once (economy JSON)
         run: |
           set -euo pipefail
           target/release/arw-mini-dashboard --base $BASE --id economy_ledger --json --once > /tmp/economy_once.json
-          python3 - <<'PY'
-import json
-data=json.load(open('/tmp/economy_once.json'))
-assert isinstance(data, dict)
-print('mini once ok')
-PY
+          python3 -c "import json; data=json.load(open('/tmp/economy_once.json')); assert isinstance(data, dict); print('mini once ok')"
 
       - name: Events tail (structured replay; timed)
         run: |
           set -euo pipefail
           python3 - <<'PY'
-import subprocess, time, os, signal, sys, json
+import subprocess, time, os, json
 out='/tmp/events_tail.json'
 p=subprocess.Popen(['target/release/arw-cli','events','tail','--base',os.environ['BASE'],'--prefix','service.,state.','--structured','--replay','1','--store','/tmp/last-event-id'], stdout=open(out,'w'), stderr=subprocess.DEVNULL)
 time.sleep(7)
-p.terminate()
 try:
-  p.wait(timeout=3)
-except subprocess.TimeoutExpired:
+  p.terminate(); p.wait(timeout=3)
+except Exception:
   p.kill()
-f=open(out,'r'); line=f.readline(); assert line
-json.loads(line)
-          print('events tail ok')
-          PY
+with open(out,'r') as f:
+  line=f.readline()
+  assert line
+  json.loads(line)
+print('events tail ok')
+PY
 
       - name: SSE metrics presence
         run: |
@@ -383,24 +374,13 @@ json.loads(line)
         run: |
           set -euo pipefail
           target/release/arw-cli state economy-ledger --base $BASE --limit 5 --json > /tmp/economy.json
-          python3 - <<'PY'
-import json,sys
-data=json.load(open('/tmp/economy.json'))
-assert isinstance(data, dict)
-assert 'version' in data
-print('economy ok v', data.get('version'))
-PY
+          python3 -c "import json,sys; d=json.load(open('/tmp/economy.json')); assert isinstance(d, dict); assert 'version' in d; print('economy ok v', d.get('version'))"
 
       - name: Mini dashboard once (route_stats JSON)
         run: |
           set -euo pipefail
           target/release/arw-mini-dashboard --base $BASE --id route_stats --json --once > /tmp/route_stats.json
-          python3 - <<'PY'
-import json
-data=json.load(open('/tmp/route_stats.json'))
-assert isinstance(data, dict)
-print('route_stats keys', list(data.keys())[:5])
-PY
+          python3 -c "import json; d=json.load(open('/tmp/route_stats.json')); assert isinstance(d, dict); print('route_stats keys', list(d.keys())[:5])"
 
       - name: Events tail (structured replay)
         env:
@@ -409,20 +389,10 @@ PY
           set -euo pipefail
           timeout 7s target/release/arw-cli events tail --base $BASE --prefix service.,state. --structured --replay 1 --store /tmp/last-event-id > /tmp/events_tail.json || true
           head -n 3 /tmp/events_tail.json || true
-          python3 - <<'PY'
-import json,sys,os
-f=open('/tmp/events_tail.json','r')
-line=f.readline()
-if line:
-  json.loads(line)
-  print('events tail ok (parsed first line)')
-else:
-  soft=os.environ.get('DEEP_SOFT','false').lower() in ('1','true','yes','on')
-  if soft:
-    print('[soft] no events output; continuing due to DEEP_SOFT')
-  else:
-    raise SystemExit('no events output')
-PY
+          python3 -c "import json,os; line=open('/tmp/events_tail.json').readline();\
+assert line or os.environ.get('DEEP_SOFT','false').lower() in ('1','true','yes','on'), 'no events output';\
+json.loads(line) if line else None;\
+print('events tail ok (parsed first line)' if line else '[soft] no events output; continuing due to DEEP_SOFT')"
 
       - name: SSE metrics presence
         run: |
