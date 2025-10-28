@@ -54,6 +54,15 @@ jobs:
           target/release/arw-cli state economy-ledger --base $BASE --limit 5 --json > /tmp/economy.json
           python3 -c "import json; d=json.load(open('/tmp/economy.json')); assert isinstance(d, dict) and 'version' in d"
 
+      - name: Trigger chat event (best-effort)
+        run: |
+          set -euo pipefail
+          curl -fsS -X POST "$BASE/admin/chat/send" \
+            -H "Authorization: Bearer $ARW_ADMIN_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d '{"prompt":"manual deep checks ping"}' \
+            -o /tmp/chat_send.json || true
+
       - name: Route stats snapshot JSON
         run: |
           set -euo pipefail
@@ -69,7 +78,7 @@ jobs:
       - name: Events tail (structured)
         run: |
           set -euo pipefail
-          timeout ${TAIL_SECS}s target/release/arw-cli events tail --base $BASE --prefix service.,state.,economy. --structured --replay 1 --store /tmp/last-event-id > /tmp/events_tail.json || true
+          timeout ${TAIL_SECS}s target/release/arw-cli events tail --base $BASE --prefix service.,state.,economy.,admin. --structured --replay 1 --store /tmp/last-event-id > /tmp/events_tail.json || true
           if [ "${SOFT}" = "true" ]; then
             head -n 1 /tmp/events_tail.json || true
           else
