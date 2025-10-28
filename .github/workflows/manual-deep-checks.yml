@@ -63,6 +63,11 @@ jobs:
             -d '{"prompt":"manual deep checks ping"}' \
             -o /tmp/chat_send.json || true
 
+      - name: Trigger chat status probe (best-effort)
+        run: |
+          set -euo pipefail
+          curl -fsS "$BASE/admin/chat/status?probe=true" -H "Authorization: Bearer $ARW_ADMIN_TOKEN" -o /tmp/chat_status.json || true
+
       - name: Route stats snapshot JSON
         run: |
           set -euo pipefail
@@ -91,6 +96,15 @@ jobs:
           # Open a very short unfiltered SSE stream to tick counters even if no events match filters
           timeout 3s curl -fsS -N -H "Accept: text/event-stream" -H "Authorization: Bearer $ARW_ADMIN_TOKEN" "$BASE/events" >/tmp/events_raw.sse || true
 
+      - name: Events tail (unfiltered short, JSON extract)
+        run: |
+          set -euo pipefail
+          timeout 4s curl -fsS -N -H "Accept: text/event-stream" -H "Authorization: Bearer $ARW_ADMIN_TOKEN" "$BASE/events" > /tmp/events_any.sse || true
+          awk '/^data:/{sub(/^data:[ ]*/, ""); print}' /tmp/events_any.sse > /tmp/events_tail_any.json || true
+          if [ "${SOFT}" != "true" ]; then
+            head -n 1 /tmp/events_tail_any.json | grep -q '{' || true
+          fi
+
       - name: Metrics scrape
         run: |
           set -euo pipefail
@@ -118,6 +132,9 @@ jobs:
             /tmp/economy.json
             /tmp/route_stats.json
             /tmp/events_tail.json
+            /tmp/events_tail_any.json
+            /tmp/chat_send.json
+            /tmp/chat_status.json
             /tmp/events_journal.json
             /tmp/metrics.txt
             /tmp/arw-svc.log
