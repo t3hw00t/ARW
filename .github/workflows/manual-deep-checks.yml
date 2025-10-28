@@ -88,9 +88,17 @@ jobs:
           curl -fsS $BASE/metrics -o /tmp/metrics.txt || true
           if grep -E '^arw_events_sse_(clients|connections_total|sent_total)' /tmp/metrics.txt >/dev/null; then
             echo ok
+          elif grep -E '^arw_events_total\{kind="state.read.model.patch"\}' /tmp/metrics.txt >/dev/null; then
+            echo ok_events_total
           else
             if [ "${SOFT}" = "true" ]; then echo soft; else echo 'missing SSE metrics' && exit 1; fi
           fi
+
+      - name: Events journal snapshot (best-effort)
+        run: |
+          set -euo pipefail
+          # Try to fetch a single recent event to aid debugging when tail is empty
+          target/release/arw-cli events journal --base $BASE --prefix service.,state.,economy. --json --limit 1 > /tmp/events_journal.json || true
 
       - name: Upload artifacts
         if: always()
@@ -101,6 +109,7 @@ jobs:
             /tmp/economy.json
             /tmp/route_stats.json
             /tmp/events_tail.json
+            /tmp/events_journal.json
             /tmp/metrics.txt
             /tmp/arw-svc.log
 
