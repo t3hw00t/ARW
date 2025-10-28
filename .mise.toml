@@ -7,140 +7,133 @@ ripgrep = "13.0.0"
 
 [tasks.verify]
 description = "Run fmt → clippy → tests → docs guardrail sequence."
-run = "bash scripts/dev.sh verify"
+run = """bash scripts/dev.sh verify"""
 
 [tasks."deep:checks"]
 description = "Local deep checks (Linux/macOS): server + CLI + SSE"
-run = "bash scripts/deep_checks_local.sh"
+run = """bash scripts/deep_checks_local.sh"""
 
 [tasks."deep:checks:ps"]
 description = "Local deep checks (Windows PowerShell): server + CLI + SSE"
-run = "pwsh -NoLogo -File scripts/deep_checks_local.ps1"
+run = """pwsh -NoLogo -File scripts/deep_checks_local.ps1"""
 
 [tasks."verify:fast"]
 description = "Run the fast guardrail (fmt → clippy → tests only)."
-run = "bash scripts/dev.sh verify --fast"
+run = """bash scripts/dev.sh verify --fast"""
 
 [tasks."verify:ci"]
 description = "Run CI-parity guardrails (registries, docgens --check, env-guard, smokes)."
-run = "bash scripts/dev.sh verify --ci"
+run = """bash scripts/dev.sh verify --ci"""
 
 [tasks."bootstrap:docs"]
 description = "Install pinned MkDocs/doc tooling into the active Python."
-run = "bash scripts/bootstrap_docs.sh"
+run = """bash scripts/bootstrap_docs.sh"""
 
 [tasks."docs:check"]
 description = "Run full docs lint (mkdocs + sweeps)."
-run = "bash scripts/docs_check.sh"
+run = """bash scripts/docs_check.sh"""
 
 [tasks."docs:check:fast"]
 description = "Run lightweight docs lint (skips mkdocs + heavy sweeps)."
-run = "DOCS_CHECK_FAST=1 bash scripts/docs_check.sh"
+run = """DOCS_CHECK_FAST=1 bash scripts/docs_check.sh"""
 
 [tasks."docs:cache:build"]
 description = "Download MkDocs/doc wheels for offline installs."
-run = "bash scripts/build_docs_wheels.sh --archive dist/docs-wheels.tar.gz"
+run = """bash scripts/build_docs_wheels.sh --archive dist/docs-wheels.tar.gz"""
 
 [tasks."ts:economy:smoke"]
 description = "Run TS economy ledger smoke (build + SSE)"
-run = "bash -lc 'set -euo pipefail; base=${BASE:-http://127.0.0.1:8091}; timeout=${TIMEOUT:-10000}; trigger=${TRIGGER:-1}; require=${REQUIRE_UPDATE:-1}; pushd clients/typescript >/dev/null; if [ -f package-lock.json ]; then npm ci --no-audit --no-fund; else npm install --no-audit --no-fund; fi; npm run -s build; flags=(--timeout "$timeout"); case "$trigger" in 1|true|yes|on) flags+=(--trigger);; esac; case "$require" in 1|true|yes|on) flags+=(--require-update);; esac; BASE="$base" node dist/examples/smoke_watch_economy_ledger.js "${flags[@]}"; popd >/dev/null'"
+run = """bash -lc 'set -euo pipefail; base=${BASE:-http://127.0.0.1:8091}; timeout=${TIMEOUT:-10000}; trigger=${TRIGGER:-1}; require=${REQUIRE_UPDATE:-1}; pushd clients/typescript >/dev/null; if [ -f package-lock.json ]; then npm ci --no-audit --no-fund; else npm install --no-audit --no-fund; fi; npm run -s build; flags=(--timeout "$timeout"); case "$trigger" in 1|true|yes|on) flags+=(--trigger);; esac; case "$require" in 1|true|yes|on) flags+=(--require-update);; esac; BASE="$base" node dist/examples/smoke_watch_economy_ledger.js "${flags[@]}"; popd >/dev/null'"""
 
 [tasks."ts:events"]
 description = "Run arw-events (TS) with forwarded ARGS"
-run = "bash -lc 'just ts-events base=${BASE:-http://127.0.0.1:8091} ${ARGS:-}'"
+run = """bash -lc 'just ts-events base=${BASE:-http://127.0.0.1:8091} ${ARGS:-}'"""
 
 [tasks."ts:events:patches"]
 description = "Tail read-model patches with arw-events (resume to .arw/last-event-id)"
-run = "bash -lc 'just ts-events-patches base=${BASE:-http://127.0.0.1:8091} replay=${REPLAY:-25} store=${STORE:-.arw/last-event-id} structured=${STRUCTURED:-false}'"
+run = """bash -lc 'just ts-events-patches base=${BASE:-http://127.0.0.1:8091} replay=${REPLAY:-25} store=${STORE:-.arw/last-event-id} structured=${STRUCTURED:-false}'"""
 
 [tasks."cli:economy:ledger"]
 description = "arw-cli: economy ledger snapshot/export"
-run = "bash -lc 'cargo run -p arw-cli -- state economy-ledger --base ${BASE:-http://127.0.0.1:8091} ${LIMIT:+--limit ${LIMIT}} ${OFFSET:+--offset ${OFFSET}} ${CURRENCY:+--currency ${CURRENCY}} ${JSON:+--json} ${PRETTY:+--pretty} ${CSV:+--csv}'"
+run = """bash -lc 'cargo run -p arw-cli -- state economy-ledger --base ${BASE:-http://127.0.0.1:8091} ${LIMIT:+--limit ${LIMIT}} ${OFFSET:+--offset ${OFFSET}} ${CURRENCY:+--currency ${CURRENCY}} ${JSON:+--json} ${PRETTY:+--pretty} ${CSV:+--csv}'"""
 
 [tasks."ts:readmodel:watch"]
 description = "Watch a read-model id with snapshot hydration"
-run = "bash -lc 'set -euo pipefail; id=${ID:?set ID}; base=${BASE:-http://127.0.0.1:8091}; snapshot=${SNAPSHOT:-}; timeout=${TIMEOUT:-0}; json=${JSON:-false}; require_version=${REQUIRE_VERSION:-0}; require_key=${REQUIRE_KEY:-}; pushd clients/typescript >/dev/null; if [ -f package-lock.json ]; then npm ci --no-audit --no-fund; else npm install --no-audit --no-fund; fi; npm run -s build; args=(--id "$id"); if [ -n "$snapshot" ]; then args+=(--snapshot "$snapshot"); fi; if [ -n "$timeout" ] && [ "$timeout" != "0" ]; then args+=(--timeout "$timeout"); fi; case "$json" in 1|true|yes|on) args+=(--json);; esac; case "$require_version" in 1|true|yes|on) args+=(--require-version);; esac; if [ -n "$require_key" ]; then args+=(--require-key "$require_key"); fi; BASE="$base" node dist/examples/readmodel_watch.js "${args[@]}"; popd >/dev/null'"
+run = """bash -lc 'set -euo pipefail; id=${ID:?set ID}; base=${BASE:-http://127.0.0.1:8091}; snapshot=${SNAPSHOT:-}; timeout=${TIMEOUT:-0}; json=${JSON:-false}; require_version=${REQUIRE_VERSION:-0}; require_key=${REQUIRE_KEY:-}; pushd clients/typescript >/dev/null; if [ -f package-lock.json ]; then npm ci --no-audit --no-fund; else npm install --no-audit --no-fund; fi; npm run -s build; args=(--id "$id"); if [ -n "$snapshot" ]; then args+=(--snapshot "$snapshot"); fi; if [ -n "$timeout" ] && [ "$timeout" != "0" ]; then args+=(--timeout "$timeout"); fi; case "$json" in 1|true|yes|on) args+=(--json);; esac; case "$require_version" in 1|true|yes|on) args+=(--require-version);; esac; if [ -n "$require_key" ]; then args+=(--require-key "$require_key"); fi; BASE="$base" node dist/examples/readmodel_watch.js "${args[@]}"; popd >/dev/null'"""
 
 [tasks."ts:daily:brief"]
 description = "Fetch Daily Brief snapshot + watch publish events"
-run = "bash -lc 'set -euo pipefail; base=${BASE:-http://127.0.0.1:8091}; timeout=${TIMEOUT:-8000}; json=${JSON:-false}; pushd clients/typescript >/dev/null; if [ -f package-lock.json ]; then npm ci --no-audit --no-fund; else npm install --no-audit --no-fund; fi; npm run -s build; args=(); if [ -n "$timeout" ] && [ "$timeout" != "0" ]; then args+=(--timeout "$timeout"); fi; case "$json" in 1|true|yes|on) args+=(--json);; esac; BASE="$base" node dist/examples/daily_brief.js "${args[@]}"; popd >/dev/null'"
+run = """bash -lc 'set -euo pipefail; base=${BASE:-http://127.0.0.1:8091}; timeout=${TIMEOUT:-8000}; json=${JSON:-false}; pushd clients/typescript >/dev/null; if [ -f package-lock.json ]; then npm ci --no-audit --no-fund; else npm install --no-audit --no-fund; fi; npm run -s build; args=(); if [ -n "$timeout" ] && [ "$timeout" != "0" ]; then args+=(--timeout "$timeout"); fi; case "$json" in 1|true|yes|on) args+=(--json);; esac; BASE="$base" node dist/examples/daily_brief.js "${args[@]}"; popd >/dev/null'"""
 
 [tasks."adapters:validate"]
 description = "Validate a single adapter manifest"
-run = "bash -lc 'set -euo pipefail; manifest=${MANIFEST:?set MANIFEST}; cargo run -p arw-cli -- adapters validate --manifest \"$manifest\"'"
+run = """bash -lc 'set -euo pipefail; manifest=${MANIFEST:?set MANIFEST}; cargo run -p arw-cli -- adapters validate --manifest \"$manifest\"'"""
 
 [tasks."adapters:lint"]
 description = "Lint all adapter manifests under adapters/ (strict warnings)"
-run = "bash -lc 'set -euo pipefail; ADAPTERS_LINT_STRICT_WARNINGS=1 bash scripts/lint_adapters.sh'"
+run = """bash -lc 'set -euo pipefail; ADAPTERS_LINT_STRICT_WARNINGS=1 bash scripts/lint_adapters.sh'"""
 
 [tasks."adapters:lint:changed"]
 description = "Lint only changed adapter manifests vs BASE (default origin/main)"
-run = "bash -lc 'set -euo pipefail; BASE=${BASE:-origin/main} bash scripts/lint_adapters_changed.sh'"
+run = """bash -lc 'set -euo pipefail; BASE=${BASE:-origin/main} bash scripts/lint_adapters_changed.sh'"""
 
 [tasks."adapters:schema"]
 description = "Regenerate adapter manifest schema and copy to docs/"
-run = "bash -lc 'set -euo pipefail; cargo run -p arw-cli -- adapters schema --out spec/schemas/runtime_adapter_manifest.schema.json; mkdir -p docs/spec/schemas; cp spec/schemas/runtime_adapter_manifest.schema.json docs/spec/schemas/runtime_adapter_manifest.schema.json'"
+run = """bash -lc 'set -euo pipefail; cargo run -p arw-cli -- adapters schema --out spec/schemas/runtime_adapter_manifest.schema.json; mkdir -p docs/spec/schemas; cp spec/schemas/runtime_adapter_manifest.schema.json docs/spec/schemas/runtime_adapter_manifest.schema.json'"""
 
 [tasks."adapters:smoke"]
 description = "Run adapter smoke harness (validate manifests + optional health)"
-run = "bash -lc 'bash scripts/adapter_smoke.sh'"
+run = """bash -lc 'bash scripts/adapter_smoke.sh'"""
 
 [tasks."adapters:mock:up"]
 description = "Run mock adapter health server"
-run = "bash -lc 'ARW_MOCK_ADAPTER_PORT=${PORT:-8081} cargo run -p arw-mock-adapter --bin mock-adapter-health'"
+run = """bash -lc 'ARW_MOCK_ADAPTER_PORT=${PORT:-8081} cargo run -p arw-mock-adapter --bin mock-adapter-health'"""
 
 [tasks."adapters:smoke:oneshot"]
 description = "Build + start mock server; run smoke with health; stop server"
-run = "bash -lc 'set -euo pipefail; ARW_MOCK_ADAPTER_PORT=${PORT:-8081} ADAPTER_SMOKE_OUT=${OUT:-} bash scripts/adapter_smoke_oneshot.sh'"
+run = """bash -lc 'set -euo pipefail; ARW_MOCK_ADAPTER_PORT=${PORT:-8081} ADAPTER_SMOKE_OUT=${OUT:-} bash scripts/adapter_smoke_oneshot.sh'"""
 
 [tasks."adapters:smoke:docs"]
 description = "Generate docs/static/adapters-smoke.json and stop server"
-run = "bash -lc 'set -euo pipefail; ARW_MOCK_ADAPTER_PORT=${PORT:-8081} ADAPTER_SMOKE_OUT=${OUT:-docs/static/adapters-smoke.json} bash scripts/adapter_smoke_oneshot.sh'"
+run = """bash -lc 'set -euo pipefail; ARW_MOCK_ADAPTER_PORT=${PORT:-8081} ADAPTER_SMOKE_OUT=${OUT:-docs/static/adapters-smoke.json} bash scripts/adapter_smoke_oneshot.sh'"""
 
 [tasks."adapters:sign"]
 description = "Sign a manifest with an RSA private key"
-run = "bash -lc 'set -euo pipefail; manifest=${MANIFEST:?set MANIFEST}; key=${KEY:?set KEY}; bash scripts/adapters_sign.sh "$manifest" "$key"'"
+run = """bash -lc 'set -euo pipefail; manifest=${MANIFEST:?set MANIFEST}; key=${KEY:?set KEY}; bash scripts/adapters_sign.sh "$manifest" "$key"'"""
 
 [tasks."adapters:verify"]
 description = "Verify a manifest signature with an RSA public key"
-run = "bash -lc 'set -euo pipefail; manifest=${MANIFEST:?set MANIFEST}; pubkey=${PUBKEY:?set PUBKEY}; sig=${SIG:-}; bash scripts/adapters_verify.sh "$manifest" "$pubkey" ${sig:+"$sig"}'"
+run = """bash -lc 'set -euo pipefail; manifest=${MANIFEST:?set MANIFEST}; pubkey=${PUBKEY:?set PUBKEY}; sig=${SIG:-}; bash scripts/adapters_verify.sh "$manifest" "$pubkey" ${sig:+"$sig"}'"""
 
 [tasks."preset:diag"]
 description = "Print effective preset (via /about) and list local env overrides"
-run = "bash -lc 'set -euo pipefail; BASE=${BASE:-http://127.0.0.1:8091} TOKEN=${ARW_ADMIN_TOKEN:-${TOKEN:-}} bash scripts/preset_diag.sh'"
+run = """bash -lc 'set -euo pipefail; BASE=${BASE:-http://127.0.0.1:8091} TOKEN=${ARW_ADMIN_TOKEN:-${TOKEN:-}} bash scripts/preset_diag.sh'"""
 
 [tasks."ocr:smoke"]
 description = "Trigger OCR tool to exercise pre-OCR pipeline and check metrics"
-run = "bash -lc 'set -euo pipefail; BASE=${BASE:-http://127.0.0.1:8103} TOKEN=${ARW_ADMIN_TOKEN:-${TOKEN:-test-admin-token}} TIMEOUT=${TIMEOUT:-8} bash scripts/ocr_smoke.sh'"
+run = """bash -lc 'set -euo pipefail; BASE=${BASE:-http://127.0.0.1:8103} TOKEN=${ARW_ADMIN_TOKEN:-${TOKEN:-test-admin-token}} TIMEOUT=${TIMEOUT:-8} bash scripts/ocr_smoke.sh'"""
 
 [tasks."mini:dashboard"]
 description = "Run the mini dashboard (economy read-model watcher)"
-run = "bash -lc 'set -euo pipefail; BASE=${BASE:-http://127.0.0.1:8091} ID=${ID:-economy_ledger} LIMIT=${LIMIT:-25} TOKEN=${ARW_ADMIN_TOKEN:-${TOKEN:-}} cargo run -p arw-mini-dashboard -- --base \"$BASE\" --id \"$ID\" --limit \"$LIMIT\"'"
+run = """bash -lc 'set -euo pipefail; BASE=${BASE:-http://127.0.0.1:8091} ID=${ID:-economy_ledger} LIMIT=${LIMIT:-25} TOKEN=${ARW_ADMIN_TOKEN:-${TOKEN:-}} cargo run -p arw-mini-dashboard -- --base \"$BASE\" --id \"$ID\" --limit \"$LIMIT\"'"""
 
 [tasks."mini:dashboard:smoke"]
 description = "Mini dashboard route_stats JSON once smoke"
-run = "bash -lc 'set -euo pipefail; BASE=${BASE:-http://127.0.0.1:8091} cargo run -p arw-mini-dashboard -- --base \"$BASE\" --id route_stats --json --once'"
+run = """bash -lc 'set -euo pipefail; BASE=${BASE:-http://127.0.0.1:8091} cargo run -p arw-mini-dashboard -- --base \"$BASE\" --id route_stats --json --once'"""
 
 [tasks."cli:events:tail"]
 description = "arw-cli events tail with common defaults"
-run = "bash -lc 'set -euo pipefail; BASE=${BASE:-http://127.0.0.1:8091} PREFIX=${PREFIX:-service.,state.read.model.patch} REPLAY=${REPLAY:-25} STORE=${STORE:-.arw/last-event-id} STRUCTURED=${STRUCTURED:-0}; cargo run -p arw-cli -- events tail --base \"$BASE\" --prefix \"$PREFIX\" --replay \"$REPLAY\" --store \"$STORE\" ${STRUCTURED:+--structured}'"
+run = """bash -lc 'set -euo pipefail; BASE=${BASE:-http://127.0.0.1:8091} PREFIX=${PREFIX:-service.,state.read.model.patch} REPLAY=${REPLAY:-25} STORE=${STORE:-.arw/last-event-id} STRUCTURED=${STRUCTURED:-0}; cargo run -p arw-cli -- events tail --base \"$BASE\" --prefix \"$PREFIX\" --replay \"$REPLAY\" --store \"$STORE\" ${STRUCTURED:+--structured}'"""
 
 [tasks."access:kit"]
 description = "Assemble the Universal Access Kit (eco env, docs, persona; best-effort site + mini dashboard)"
-run = "bash -lc 'set -euo pipefail; python3 scripts/universal_access_kit.py --force --zip || python scripts/universal_access_kit.py --force --zip'"
+run = """bash -lc 'set -euo pipefail; python3 scripts/universal_access_kit.py --force --zip || python scripts/universal_access_kit.py --force --zip'"""
 
 [tasks."access:kit:check"]
 description = "Validate an existing Universal Access Kit in dist/ (and its zip archive)"
-run = "bash -lc 'set -euo pipefail; python3 scripts/universal_access_kit.py --check-only --zip || python scripts/universal_access_kit.py --check-only --zip'"
+run = """bash -lc 'set -euo pipefail; python3 scripts/universal_access_kit.py --check-only --zip || python scripts/universal_access_kit.py --check-only --zip'"""
 
 [tasks."access:kit:lite"]
 description = "Assemble kit skipping optional extras (set ARW_KIT_SKIP_OPTIONAL=1)"
-run = "bash -lc 'set -euo pipefail; ARW_KIT_SKIP_OPTIONAL=${ARW_KIT_SKIP_OPTIONAL:-1} python3 scripts/universal_access_kit.py --force --zip || ARW_KIT_SKIP_OPTIONAL=${ARW_KIT_SKIP_OPTIONAL:-1} python scripts/universal_access_kit.py --force --zip'"
+run = """bash -lc 'set -euo pipefail; ARW_KIT_SKIP_OPTIONAL=${ARW_KIT_SKIP_OPTIONAL:-1} python3 scripts/universal_access_kit.py --force --zip || ARW_KIT_SKIP_OPTIONAL=${ARW_KIT_SKIP_OPTIONAL:-1} python scripts/universal_access_kit.py --force --zip'"""
 
-[tasks."access:kit"]
-description = "Assemble the Universal Access Kit (eco env, docs, persona; best-effort site + mini dashboard)"
-run = "bash -lc 'set -euo pipefail; python3 scripts/universal_access_kit.py --force --zip || python scripts/universal_access_kit.py --force --zip'"
-
-[tasks."access:kit:check"]
-description = "Validate an existing Universal Access Kit in dist/ (and its zip archive)"
-run = "bash -lc 'set -euo pipefail; python3 scripts/universal_access_kit.py --check-only --zip || python scripts/universal_access_kit.py --check-only --zip'"

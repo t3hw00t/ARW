@@ -75,7 +75,7 @@ fn triad_smoke_script_tags_persona() -> Result<()> {
     cmd.arg(script_path)
         .env("TRIAD_SMOKE_BASE_URL", server.base_url())
         .env("TRIAD_SMOKE_PERSONA", persona)
-        .env("TRIAD_SMOKE_TIMEOUT_SECS", "45")
+        .env("TRIAD_SMOKE_TIMEOUT_SECS", "10")
         .env("ARW_TRIAD_SMOKE_ADMIN_TOKEN", "test-token");
 
     cmd.assert()
@@ -154,7 +154,7 @@ fn triad_smoke_script_uses_basic_auth_header() -> Result<()> {
     cmd.arg(script_path)
         .env("TRIAD_SMOKE_BASE_URL", server.base_url())
         .env("TRIAD_SMOKE_PERSONA", persona)
-        .env("TRIAD_SMOKE_TIMEOUT_SECS", "45")
+        .env("TRIAD_SMOKE_TIMEOUT_SECS", "10")
         .env("TRIAD_SMOKE_AUTH_MODE", "basic")
         .env("TRIAD_SMOKE_BASIC_USER", user)
         .env("TRIAD_SMOKE_BASIC_PASSWORD", password)
@@ -235,7 +235,7 @@ fn triad_smoke_script_uses_healthz_bearer_header() -> Result<()> {
     cmd.arg(script_path)
         .env("TRIAD_SMOKE_BASE_URL", server.base_url())
         .env("TRIAD_SMOKE_PERSONA", persona)
-        .env("TRIAD_SMOKE_TIMEOUT_SECS", "45")
+        .env("TRIAD_SMOKE_TIMEOUT_SECS", "10")
         .env("TRIAD_SMOKE_HEALTHZ_BEARER", health_token)
         .env("ARW_TRIAD_SMOKE_ADMIN_TOKEN", "admin-token");
 
