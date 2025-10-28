@@ -744,19 +744,13 @@ cli-events-tail base="http://127.0.0.1:8091" prefix="service.,state.read.model.p
   cargo run -p arw-cli -- events tail --base {{base}} --prefix {{prefix}} --replay {{replay}} --store {{store}} {{if structured == 'true' { "--structured" }}}
 
 # Design tokens
-tokens-sync:
-	bash scripts/sync_tokens.sh
-
-tokens-check:
-	bash scripts/check_tokens_sync.sh
-
-tokens-build:
-  python3 scripts/build_tokens.py
-
+tokens-sync := bash scripts/sync_tokens.sh
+tokens-check := bash scripts/check_tokens_sync.sh
+tokens-build := python3 scripts/build_tokens.py
 tokens-rebuild:
-  python3 scripts/build_tokens.py
-  bash scripts/sync_tokens.sh
-  bash scripts/check_tokens_sync.sh
+	python3 scripts/build_tokens.py
+	bash scripts/sync_tokens.sh
+	bash scripts/check_tokens_sync.sh
 
 tokens-tailwind:
   python3 scripts/gen_tailwind_tokens.py
