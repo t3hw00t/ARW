@@ -242,13 +242,13 @@ persona-seed base="http://127.0.0.1:8091" id="persona.alpha" name="" archetype="
 # Mini dashboard (economy read-model watcher)
 mini-dashboard base='http://127.0.0.1:8091' token='' id='economy_ledger' limit='25':
   ARW_ADMIN_TOKEN='{{token}}' cargo run -p arw-mini-dashboard -- --base '{{base}}' --id '{{id}}' --limit {{limit}}
-	args=(admin persona seed --base "$base" --id "$id"); \
-	if [ -n "$name" ]; then args+=(--name "$name"); fi; \
-	if [ -n "$archetype" ]; then args+=(--archetype "$archetype"); fi; \
-	if [ "$telemetry" = "true" ]; then args+=(--enable-telemetry); if [ -n "$scope" ]; then args+=(--telemetry-scope "$scope"); fi; fi; \
-	if [ -n "$state_dir" ]; then args+=(--state-dir "$state_dir"); fi; \
-	if [ "$json" = "true" ]; then args+=(--json); if [ "$pretty" = "true" ]; then args+=(--pretty); fi; fi; \
-	cargo run -p arw-cli -- "${args[@]}"
+  args=(admin persona seed --base "$base" --id "$id"); \
+  if [ -n "$name" ]; then args+=(--name "$name"); fi; \
+  if [ -n "$archetype" ]; then args+=(--archetype "$archetype"); fi; \
+  if [ "$telemetry" = "true" ]; then args+=(--enable-telemetry); if [ -n "$scope" ]; then args+=(--telemetry-scope "$scope"); fi; fi; \
+  if [ -n "$state_dir" ]; then args+=(--state-dir "$state_dir"); fi; \
+  if [ "$json" = "true" ]; then args+=(--json); if [ "$pretty" = "true" ]; then args+=(--pretty); fi; fi; \
+  cargo run -p arw-cli -- "${args[@]}"
 
 runtime-smoke:
   RUNTIME_SMOKE_GPU_POLICY="${RUNTIME_SMOKE_GPU_POLICY:-auto}" bash scripts/runtime_smoke_suite.sh
