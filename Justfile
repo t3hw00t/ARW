@@ -284,13 +284,13 @@ adapters-smoke:
   bash scripts/adapter_smoke.sh
 
 # One-shot: build + start mock server, run smoke with health, stop server
-adapters-smoke-oneshot port=8081 out='':
+adapters-smoke-oneshot port=8081 out="":
   set -euo pipefail; \
   ARW_MOCK_ADAPTER_PORT='{{port}}' ADAPTER_SMOKE_OUT='{{out}}' bash scripts/adapter_smoke_oneshot.sh
 
 adapters-smoke-docs port=8081 out='docs/static/adapters-smoke.json':
-	set -euo pipefail; \
-	ARW_MOCK_ADAPTER_PORT='{{port}}' ADAPTER_SMOKE_OUT='{{out}}' bash scripts/adapter_smoke_oneshot.sh
+  set -euo pipefail; \
+  ARW_MOCK_ADAPTER_PORT='{{port}}' ADAPTER_SMOKE_OUT='{{out}}' bash scripts/adapter_smoke_oneshot.sh
 
 adapters-sign manifest key:
 	set -euo pipefail; \
