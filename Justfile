@@ -284,7 +284,7 @@ adapters-smoke:
   bash scripts/adapter_smoke.sh
 
 # One-shot: build + start mock server, run smoke with health, stop server
-adapters-smoke-oneshot port=8081:
+adapters-smoke-oneshot port='8081':
   set -euo pipefail; \
   ARW_MOCK_ADAPTER_PORT='{{port}}' bash scripts/adapter_smoke_oneshot.sh
 
