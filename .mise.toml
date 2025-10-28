@@ -1,5 +1,5 @@
 [tools]
-node = "18.20"
+node = "22"
 python = "3.12"
 rust = "1.90"
 jq = "1.7"

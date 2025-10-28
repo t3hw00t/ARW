@@ -2617,7 +2617,9 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ProblemDetails'
-      description: 'Planning: POST /v1/plan.'
+      description: Validate a proposed run, apply policy and context assembly, and
+        return the computed plan without executing it.
+      summary: Assemble run plan
   /v1/run:
     post:
       tags:
@@ -2642,7 +2644,9 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ProblemDetails'
-      description: 'Planning: POST /v1/run.'
+      description: Plan and execute the requested run in a single call, returning
+        the applied plan and run outcome.
+      summary: Plan and execute run
 components:
   schemas:
     AboutCounts:

@@ -18,6 +18,7 @@ Run the unified ARW server locally in minutes. The architecture centres on the `
 ## Prerequisites
 - Rust 1.90+ toolchain (`rustup`): https://rustup.rs
 - `curl` for quick verification (or `Invoke-WebRequest` on Windows)
+- Optional: [just](https://github.com/casey/just) so you can run the task recipes directly (`just verify`, `just runtime-smoke`). Every recipe also has a `mise run ...` twin if you prefer not to install it.
 
 > ARW tracks the latest stable Rust release; run `rustup update` regularly to avoid toolchain drift.
 

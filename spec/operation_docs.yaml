@@ -198,6 +198,14 @@
   post:
     summary: Start model download
     description: Request download or import of a model artifact and enqueue the job if supported.
+/v1/plan:
+  post:
+    summary: Assemble run plan
+    description: Validate a proposed run, apply policy and context assembly, and return the computed plan without executing it.
+/v1/run:
+  post:
+    summary: Plan and execute run
+    description: Plan and execute the requested run in a single call, returning the applied plan and run outcome.
 /admin/models/download/cancel:
   post:
     summary: Cancel model download

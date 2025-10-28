@@ -94,6 +94,7 @@ run_verify() {
   local include_launcher=0
   local require_docs=0
   local ci_mode=0
+  local is_linux=0
 
   while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -130,6 +131,10 @@ run_verify() {
         ;;
     esac
   done
+
+  case "$(uname -s 2>/dev/null)" in
+    Linux|Linux-*) is_linux=1 ;;
+  esac
 
   if [[ $ci_mode -eq 1 ]]; then
     if [[ $fast -eq 1 ]]; then
@@ -171,27 +176,65 @@ run_verify() {
   if ! cargo fmt --all -- --check; then ok=1; fi
 
   local clippy_args=(--workspace --all-targets)
-  if [[ $include_launcher -ne 1 ]]; then
+  if [[ $include_launcher -ne 1 || $is_linux -eq 1 ]]; then
     clippy_args+=(--exclude arw-launcher)
   fi
   echo "[verify] cargo clippy ${clippy_args[*]} -- -D warnings"
   if ! cargo clippy "${clippy_args[@]}" -- -D warnings; then ok=1; fi
+  if [[ $include_launcher -eq 1 && $is_linux -eq 1 ]]; then
+    local launcher_clippy_args=(-p arw-launcher --all-targets --features launcher-linux-ui)
+    echo "[verify] cargo clippy ${launcher_clippy_args[*]} -- -D warnings"
+    if ! cargo clippy "${launcher_clippy_args[@]}" -- -D warnings; then ok=1; fi
+  fi
 
   if command -v cargo-nextest >/dev/null 2>&1; then
     local nextest_args=(run --workspace --test-threads=1)
-    if [[ $include_launcher -ne 1 ]]; then
+    if [[ $include_launcher -ne 1 || $is_linux -eq 1 ]]; then
       nextest_args+=(--exclude arw-launcher)
     fi
     echo "[verify] cargo nextest ${nextest_args[*]}"
     if ! cargo nextest "${nextest_args[@]}"; then ok=1; fi
+    if [[ $include_launcher -eq 1 && $is_linux -eq 1 ]]; then
+      local launcher_list_args=(list -p arw-launcher --features launcher-linux-ui --message-format json)
+      local launcher_list_out=""
+      if launcher_list_out="$(cargo nextest "${launcher_list_args[@]}" 2>&1)"; then
+        if printf '%s' "$launcher_list_out" | grep -q '"type":"test"'; then
+          local launcher_nextest_args=(run -p arw-launcher --test-threads=1 --features launcher-linux-ui)
+          echo "[verify] cargo nextest ${launcher_nextest_args[*]}"
+          if ! cargo nextest "${launcher_nextest_args[@]}"; then ok=1; fi
+        else
+          echo "[verify] no launcher tests registered; skipping cargo nextest -p arw-launcher"
+        fi
+      else
+        if printf '%s' "$launcher_list_out" | grep -qi 'no library targets found'; then
+          echo "[verify] no launcher testable targets found; skipping cargo nextest -p arw-launcher"
+        else
+          printf '%s\n' "$launcher_list_out"
+          ok=1
+        fi
+      fi
+    fi
   else
     echo "[verify] cargo-nextest not found; falling back to cargo test --workspace --locked"
     local test_args=(--workspace --locked)
-    if [[ $include_launcher -ne 1 ]]; then
+    if [[ $include_launcher -ne 1 || $is_linux -eq 1 ]]; then
       test_args+=(--exclude arw-launcher)
     fi
     local test_trailer=(-- --test-threads=1)
     if ! cargo test "${test_args[@]}" "${test_trailer[@]}"; then ok=1; fi
+    if [[ $include_launcher -eq 1 && $is_linux -eq 1 ]]; then
+      local launcher_list_out=""
+      if launcher_list_out="$(cargo test -p arw-launcher --features launcher-linux-ui -- --list 2>&1)"; then
+        local launcher_test_args=(-p arw-launcher --features launcher-linux-ui -- --test-threads=1)
+        echo "[verify] cargo test ${launcher_test_args[*]}"
+        if ! cargo test "${launcher_test_args[@]}"; then ok=1; fi
+      elif printf '%s' "$launcher_list_out" | grep -qi 'no library targets found'; then
+        echo "[verify] no launcher testable targets found; skipping cargo test -p arw-launcher"
+      else
+        printf '%s\n' "$launcher_list_out"
+        ok=1
+      fi
+    fi
   fi
 
   if [[ $skip_ui -eq 1 ]]; then

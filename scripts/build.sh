@@ -16,6 +16,11 @@ EOF
 mode=release
 run_tests=1
 include_launcher=0
+is_linux=0
+
+case "$(uname -s 2>/dev/null)" in
+  Linux|Linux-*) is_linux=1 ;;
+esac
 
 if [[ "${ARW_BUILD_LAUNCHER:-}" =~ ^(1|true|yes)$ ]]; then
   include_launcher=1
@@ -41,7 +46,7 @@ fi
 
 echo "[build] Building workspace ($mode, $build_flavour)"
 cargo_args=(build --workspace)
-if [[ $include_launcher -eq 0 ]]; then
+if [[ $include_launcher -eq 0 || $is_linux -eq 1 ]]; then
   cargo_args+=(--exclude arw-launcher)
 fi
 if [[ "$mode" == release ]]; then
@@ -49,14 +54,41 @@ if [[ "$mode" == release ]]; then
 fi
 cargo "${cargo_args[@]}"
 
+if [[ $include_launcher -eq 1 && $is_linux -eq 1 ]]; then
+  launcher_args=(build -p arw-launcher)
+  if [[ "$mode" == release ]]; then
+    launcher_args+=(--release)
+  fi
+  launcher_args+=(--features launcher-linux-ui)
+  echo "[build] Building arw-launcher (${mode})"
+  cargo "${launcher_args[@]}"
+fi
+
 if [[ $run_tests -eq 1 ]]; then
   if command -v cargo-nextest >/dev/null 2>&1; then
     echo "[build] Running tests (nextest)"
-    cargo nextest run --workspace --locked --test-threads=1
+    nextest_args=(run --workspace --locked --test-threads=1)
+    if [[ $include_launcher -eq 0 || $is_linux -eq 1 ]]; then
+      nextest_args+=(--exclude arw-launcher)
+    fi
+    cargo nextest "${nextest_args[@]}"
+    if [[ $include_launcher -eq 1 && $is_linux -eq 1 ]]; then
+      launcher_nextest_args=(run -p arw-launcher --locked --test-threads=1)
+      launcher_nextest_args+=(--features launcher-linux-ui)
+      cargo nextest "${launcher_nextest_args[@]}"
+    fi
   else
     echo "[build] cargo-nextest not found; falling back to cargo test."
     echo "[build] Install it with 'cargo install --locked cargo-nextest' for faster runs."
-    cargo test --workspace --locked -- --test-threads=1
+    test_args=(--workspace --locked)
+    if [[ $include_launcher -eq 0 || $is_linux -eq 1 ]]; then
+      test_args+=(--exclude arw-launcher)
+    fi
+    cargo test "${test_args[@]}" -- --test-threads=1
+    if [[ $include_launcher -eq 1 && $is_linux -eq 1 ]]; then
+      launcher_test_args=(-p arw-launcher --features launcher-linux-ui -- --test-threads=1)
+      cargo test "${launcher_test_args[@]}"
+    fi
   fi
 fi
 

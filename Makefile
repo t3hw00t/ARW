@@ -8,7 +8,12 @@ dev-build:
 	cargo build --workspace --exclude arw-launcher
 
 build-launcher:
-	cargo build --workspace --release --locked
+	cargo build --workspace --release --locked --exclude arw-launcher
+	if uname -s | grep -Eq '^Linux'; then \
+		cargo build -p arw-launcher --release --locked --features launcher-linux-ui; \
+	else \
+		cargo build -p arw-launcher --release --locked; \
+	fi
 
 fmt:
 	cargo fmt --all
