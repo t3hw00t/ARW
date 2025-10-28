@@ -330,6 +330,7 @@ pub(crate) mod paths {
     pub const ADMIN_CHAT_SEND: &str = "/admin/chat/send";
     pub const ADMIN_CHAT_CLEAR: &str = "/admin/chat/clear";
     pub const ADMIN_CHAT_STATUS: &str = "/admin/chat/status";
+    pub const ADMIN_EVENTS_TEST: &str = "/admin/events/test";
 }
 
 pub(crate) fn build_router() -> (Router<AppState>, Vec<String>, Vec<Value>) {
@@ -365,6 +366,11 @@ pub(crate) fn build_router() -> (Router<AppState>, Vec<String>, Vec<Value>) {
         paths::ADMIN_EVENTS_JOURNAL,
         api::events::events_journal,
         Some(Stability::Beta),
+    );
+    builder.route_post(
+        paths::ADMIN_EVENTS_TEST,
+        api::events::events_admin_test,
+        Some(Stability::Experimental),
     );
     builder.route_get(
         paths::METRICS,

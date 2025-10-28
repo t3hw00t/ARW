@@ -1,7 +1,7 @@
 use axum::http::{HeaderMap, StatusCode};
 use axum::response::IntoResponse;
 use axum::{
-    extract::{Query, State},
+    extract::{Json as AxumJson, Query, State},
     response::sse::{Event as SseEvent, KeepAlive, Sse},
     Json,
 };
@@ -291,6 +291,50 @@ pub async fn events_sse(
         .headers_mut()
         .insert("x-request-id", request_id.parse().unwrap());
     response
+}
+
+/// Emit a lightweight test event to the SSE bus (admin only).
+/// Useful for manual deep-check workflows to guarantee at least one event.
+#[utoipa::path(
+    post,
+    path = "/admin/events/test",
+    tag = "Events",
+    operation_id = "events_emit_test",
+    description = "Emit a lightweight service.test event for health verification.",
+    request_body = Option<serde_json::Value>,
+    responses(
+        (status = 200, description = "OK", body = serde_json::Value),
+        (status = 401, description = "Unauthorized", body = arw_protocol::ProblemDetails)
+    )
+)]
+pub async fn events_admin_test(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    maybe_body: Option<AxumJson<serde_json::Value>>,
+) -> axum::response::Response {
+    if !crate::admin_ok(&headers).await {
+        return crate::responses::unauthorized(None);
+    }
+    let ts = chrono::Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true);
+    let payload = {
+        let mut base = serde_json::json!({
+            "ts": ts,
+            "who": "admin",
+            "message": "manual test event",
+        });
+        if let Some(AxumJson(body)) = maybe_body {
+            if let Some(obj) = body.as_object() {
+                if let Some(p) = base.as_object_mut() {
+                    for (k, v) in obj.iter() {
+                        p.insert(k.clone(), v.clone());
+                    }
+                }
+            }
+        }
+        base
+    };
+    state.bus().publish(topics::TOPIC_SERVICE_TEST, &payload);
+    crate::responses::json_ok(payload).into_response()
 }
 
 #[derive(Debug, Deserialize, ToSchema, Default)]
