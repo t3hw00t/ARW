@@ -241,7 +241,7 @@ persona-seed base="http://127.0.0.1:8091" id="persona.alpha" name="" archetype="
 
 # Mini dashboard (economy read-model watcher)
 mini-dashboard base='http://127.0.0.1:8091' token='' id='economy_ledger' limit='25':
-  ARW_ADMIN_TOKEN='{{token}}' cargo run -p arw-mini-dashboard -- --base '{{base}}' --id '{{id}}' --limit {{limit}}
+	ARW_ADMIN_TOKEN='{{token}}' cargo run -p arw-mini-dashboard -- --base '{{base}}' --id '{{id}}' --limit {{limit}}
   args=(admin persona seed --base "$base" --id "$id"); \
   if [ -n "$name" ]; then args+=(--name "$name"); fi; \
   if [ -n "$archetype" ]; then args+=(--archetype "$archetype"); fi; \
@@ -281,16 +281,16 @@ ts-economy-smoke base='http://127.0.0.1:8091' timeout='10000' token='':
 
 # Adapter gallery smokes
 adapters-smoke:
-  bash scripts/adapter_smoke.sh
+	bash scripts/adapter_smoke.sh
 
 # One-shot: build + start mock server, run smoke with health, stop server
 adapters-smoke-oneshot port='8081':
-  set -euo pipefail; \
-  ARW_MOCK_ADAPTER_PORT='{{port}}' bash scripts/adapter_smoke_oneshot.sh
+	set -euo pipefail; \
+	ARW_MOCK_ADAPTER_PORT='{{port}}' bash scripts/adapter_smoke_oneshot.sh
 
 adapters-smoke-docs port='8081' out='docs/static/adapters-smoke.json':
-  set -euo pipefail; \
-  ARW_MOCK_ADAPTER_PORT='{{port}}' ADAPTER_SMOKE_OUT='{{out}}' bash scripts/adapter_smoke_oneshot.sh
+	set -euo pipefail; \
+	ARW_MOCK_ADAPTER_PORT='{{port}}' ADAPTER_SMOKE_OUT='{{out}}' bash scripts/adapter_smoke_oneshot.sh
 
 adapters-sign manifest key:
 	set -euo pipefail; \
