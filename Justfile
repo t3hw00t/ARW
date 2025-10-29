@@ -756,7 +756,7 @@ tokens-rebuild:
 	bash scripts/check_tokens_sync.sh
 
 tokens-tailwind:
-  python3 scripts/gen_tailwind_tokens.py
+	python3 scripts/gen_tailwind_tokens.py
 
 tokens-sd:
   bash scripts/build_tokens_sd.sh
