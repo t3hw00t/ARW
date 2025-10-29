@@ -180,7 +180,7 @@ EOF
     export ARW_ENV_SOURCE="implicit"
   fi
   case "$desired_mode" in
-    windows-*)
+    windows-host)
       export ARW_EXE_SUFFIX=".exe"
       ;;
     *)
