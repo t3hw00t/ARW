@@ -681,6 +681,16 @@ terminate_pid() {
 }
 
 cleanup() {
+  local pid
+  if [[ -f "$PID_FILE" ]]; then
+    while read -r pid; do
+      if [[ -n "$pid" ]]; then
+        kill "$pid" 2>/dev/null || true
+        kill -9 "$pid" 2>/dev/null || true
+      fi
+    done <"$PID_FILE"
+    rm -f "$PID_FILE"
+  fi
   local status=$?
   status=$(smoke_timeout::cleanup "$status")
   if [[ -n "$SERVER_PID" ]]; then
@@ -745,6 +755,7 @@ s.close()' 2>"$LOOPBACK_ERR_FILE"; then
 fi
 
 smoke_timeout::init "runtime-smoke" 600 "RUNTIME_SMOKE_TIMEOUT_SECS"
+PID_FILE="$TMP_DIR/runtime_smoke.pids"
 
 pick_port() {
   python3 -c 'import socket; s = socket.socket();
@@ -758,6 +769,9 @@ print(port)' || {
 }
 
 start_stub() {
+  echo $$ >>"$PID_FILE"
+  echo $$ >>"$PID_FILE"
+  echo $$ >>"$PID_FILE"
   local port_file="$TMP_DIR/stub-port"
   python3 - "$port_file" "$BACKEND_LOG" "$BACKEND_REQ" <<'PY' >"$BACKEND_LOG" 2>&1 &
 import json
