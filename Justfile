@@ -744,14 +744,16 @@ cli-events-tail base="http://127.0.0.1:8091" prefix="service.,state.read.model.p
   cargo run -p arw-cli -- events tail --base {{base}} --prefix {{prefix}} --replay {{replay}} --store {{store}} {{if structured == 'true' { "--structured" }}}
 
 tokens-sd:
-  bash scripts/build_tokens_sd.sh
+	bash scripts/build_tokens_sd.sh
+
 
 # Task metadata
 tasks-sync:
-  python3 scripts/tasks_sync.py
+	python3 scripts/tasks_sync.py
 
 tasks-check:
-  python3 scripts/check_tasks_sync.py
+	python3 scripts/check_tasks_sync.py
+
 
 # Release: bump versions are already committed; tag and push
 release-tag v:
