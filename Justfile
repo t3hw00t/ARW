@@ -303,34 +303,6 @@ preset-diag base='http://127.0.0.1:8091' token='':
 	set -euo pipefail; \
 	BASE='{{base}}' TOKEN='{{token}}' bash scripts/preset_diag.sh
 
-# Tail events via TS bin (arw-events); forward flags via *args
-ts-events base='http://127.0.0.1:8091' token='' *args:
-	set -euo pipefail; \
-	base='{{base}}'; token='{{token}}'; \
-	pushd clients/typescript >/dev/null; \
-	npm run -s build; \
-	if [ -n "$token" ]; then \
-		ARW_ADMIN_TOKEN="$token" BASE="$base" node dist/bin/arw-events.js {{args}}; \
-	else \
-	BASE="$base" node dist/bin/arw-events.js {{args}}; \
-	fi; \
-	popd >/dev/null
-
-# Convenience: tail read-model patches with resume storage
-ts-events-patches store='.arw/last-event-id' base='http://127.0.0.1:8091' replay='25' token='' structured='false':
-	set -euo pipefail; \
-	base='{{base}}'; store='{{store}}'; replay='{{replay}}'; token='{{token}}'; structured='{{structured}}'; \
-	pushd clients/typescript >/dev/null; \
-	npm run -s build; \
-	flags=(--prefix 'state.read.model.patch' --replay "$replay" --store "$store"); \
-	case "$structured" in 1|true|yes|on) flags+=(--structured);; esac; \
-	if [ -n "$token" ]; then \
-		ARW_ADMIN_TOKEN="$token" BASE="$base" node dist/bin/arw-events.js "${flags[@]}"; \
-	else \
-	BASE="$base" node dist/bin/arw-events.js "${flags[@]}"; \
-	fi; \
-	popd >/dev/null
-
 # CLI: economy ledger view/export
 cli-economy-ledger base='http://127.0.0.1:8091' limit='' offset='' currency='' json='false' pretty='false' csv='false' token='':
 	set -euo pipefail; \
