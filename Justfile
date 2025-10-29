@@ -274,7 +274,7 @@ ts-economy-smoke base='http://127.0.0.1:8091' timeout='10000' token='':
 	if [ -n "$token" ]; then \
 		ARW_ADMIN_TOKEN="$token" BASE="$base" node dist/examples/smoke_watch_economy_ledger.js --timeout "$timeout"; \
 	else \
-		BASE="$base" node dist/examples/smoke_watch_economy_ledger.js --timeout "$timeout"; \
+	BASE="$base" node dist/examples/smoke_watch_economy_ledger.js --timeout "$timeout"; \
 	fi; \
 	popd >/dev/null
 
@@ -312,7 +312,7 @@ ts-events base='http://127.0.0.1:8091' token='' *args:
 	if [ -n "$token" ]; then \
 		ARW_ADMIN_TOKEN="$token" BASE="$base" node dist/bin/arw-events.js {{args}}; \
 	else \
-		BASE="$base" node dist/bin/arw-events.js {{args}}; \
+	BASE="$base" node dist/bin/arw-events.js {{args}}; \
 	fi; \
 	popd >/dev/null
 
@@ -327,7 +327,7 @@ ts-events-patches store='.arw/last-event-id' base='http://127.0.0.1:8091' replay
 	if [ -n "$token" ]; then \
 		ARW_ADMIN_TOKEN="$token" BASE="$base" node dist/bin/arw-events.js "${flags[@]}"; \
 	else \
-		BASE="$base" node dist/bin/arw-events.js "${flags[@]}"; \
+	BASE="$base" node dist/bin/arw-events.js "${flags[@]}"; \
 	fi; \
 	popd >/dev/null
 
@@ -358,7 +358,7 @@ ts-readmodel-watch id='' base='http://127.0.0.1:8091' snapshot='' timeout='0' to
 	if [ -n "$token" ]; then \
 		ARW_ADMIN_TOKEN="$token" BASE="$base" node dist/examples/readmodel_watch.js "${args[@]}"; \
 	else \
-		BASE="$base" node dist/examples/readmodel_watch.js "${args[@]}"; \
+	BASE="$base" node dist/examples/readmodel_watch.js "${args[@]}"; \
 	fi; \
 	popd >/dev/null
 
@@ -828,17 +828,17 @@ requirements-lock:
 	fi
 
 # Adapter gallery smokes
-adsapters-smoke:
+adapters-smoke:
 	bash scripts/adapter_smoke.sh
 
 # Run mock adapter health server
-adapters-mock-up port=8081:
+adapters-mock-up port='8081':
 	set -euo pipefail; port='{{port}}'; cargo run -p arw-mock-adapter --bin mock-adapter-health --quiet --color never
 
 ocr-smoke base=http://127.0.0.1:8103 token='' timeout=8:
-		BASE={{base}} TOKEN={{token}} TIMEOUT={{timeout}} bash scripts/ocr_smoke.sh
+	BASE={{base}} TOKEN={{token}} TIMEOUT={{timeout}} bash scripts/ocr_smoke.sh
 deep-checks base="http://127.0.0.1:8099":
-		BASE={{base}} bash scripts/deep_checks_local.sh
+	BASE={{base}} bash scripts/deep_checks_local.sh
 
 deep-checks-ps base="http://127.0.0.1:8099":
 		pwsh -NoLogo -File scripts/deep_checks_local.ps1 -ErrorAction Stop
