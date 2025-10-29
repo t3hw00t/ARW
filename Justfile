@@ -743,10 +743,7 @@ mini-dashboard-smoke base="http://127.0.0.1:8091":
 cli-events-tail base="http://127.0.0.1:8091" prefix="service.,state.read.model.patch" replay="25" store=".arw/last-event-id" structured="false":
   cargo run -p arw-cli -- events tail --base {{base}} --prefix {{prefix}} --replay {{replay}} --store {{store}} {{if structured == 'true' { "--structured" }}}
 
-tokens-sd:
-	bash scripts/build_tokens_sd.sh
-
-
+# Task metadata
 # Task metadata
 tasks-sync:
 	python3 scripts/tasks_sync.py
