@@ -278,10 +278,7 @@ ts-economy-smoke base='http://127.0.0.1:8091' timeout='10000' token='':
 	fi; \
 	popd >/dev/null
 
-# Adapter gallery smokes
-adapters-smoke:
-	bash scripts/adapter_smoke.sh
-
+# Adapter gallery bonus smokes
 # One-shot: build + start mock server, run smoke with health, stop server
 adapters-smoke-oneshot port='8081':
 	set -euo pipefail; \
@@ -799,10 +796,7 @@ requirements-lock:
 		exit 1; \
 	fi
 
-# Adapter gallery smokes
-adapters-smoke:
-	bash scripts/adapter_smoke.sh
-
+# Adapter gallery bonus smokes
 # Run mock adapter health server
 adapters-mock-up port='8081':
 	set -euo pipefail; port='{{port}}'; cargo run -p arw-mock-adapter --bin mock-adapter-health --quiet --color never
