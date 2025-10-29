@@ -835,10 +835,10 @@ adapters-smoke:
 adapters-mock-up port='8081':
 	set -euo pipefail; port='{{port}}'; cargo run -p arw-mock-adapter --bin mock-adapter-health --quiet --color never
 
-ocr-smoke base=http://127.0.0.1:8103 token='' timeout=8:
+ocr-smoke base='http://127.0.0.1:8103' token='' timeout='8':
 	BASE={{base}} TOKEN={{token}} TIMEOUT={{timeout}} bash scripts/ocr_smoke.sh
 deep-checks base="http://127.0.0.1:8099":
 	BASE={{base}} bash scripts/deep_checks_local.sh
 
-deep-checks-ps base="http://127.0.0.1:8099":
-		pwsh -NoLogo -File scripts/deep_checks_local.ps1 -ErrorAction Stop
+deep-checks-ps base='http://127.0.0.1:8099':
+	pwsh -NoLogo -File scripts/deep_checks_local.ps1 -ErrorAction Stop
