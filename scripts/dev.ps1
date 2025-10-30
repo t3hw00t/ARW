@@ -39,6 +39,7 @@ Commands:
   docs-cache         Build offline docs wheel cache (writes dist/docs-wheels.tar.gz).
   verify             Run the standard fmt → clippy → tests → docs guardrail sequence.
                      Flags: -Fast (skip docs/UI), -WithLauncher (include Tauri crate), -Ci (CI parity: registries, docgens --check, env-guard, smokes)
+                     Tip: new to the repo? Start with -Fast and follow docs/guide/quick_smoke.md.
   hooks              Install git hooks (cross-platform wrapper).
   status             Generate workspace status page (docgen).
 

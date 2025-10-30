@@ -51,6 +51,7 @@ nav:
       - Concepts: guide/concepts.md
   - Tutorials:
       - Quickstart: guide/quickstart.md
+      - Quick Smoke: guide/quick_smoke.md
       - Runtime Quickstart (Non-Technical): guide/runtime_quickstart.md
       - Shortcuts: guide/shortcuts.md
       - Universal Access Starter Kit: guide/universal_access_kit.md

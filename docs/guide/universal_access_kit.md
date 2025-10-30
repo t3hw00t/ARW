@@ -39,5 +39,7 @@ CI
 Quick start
 1) Source `config/eco-preset.env` before launching the server.
 2) Seed a persona: `arw-cli admin persona seed --from ./config/persona_seed.json`.
-3) Start the server and verify `/healthz` and `/about`.
+3) Start the server and verify `/healthz` and `/about`. When Rust tooling is available, run the [Quick Smoke](quick_smoke.md) helper (`bash scripts/dev.sh verify --fast`) to confirm fmt/clippy/tests without installing the full docs or UI stack.
 4) (Optional) Run the mini dashboard: `./bin/arw-mini-dashboard --base http://127.0.0.1:8091`.
+5) (Optional) Capture a verification log: `mkdir -p logs && just quick-smoke | tee logs/quick-smoke.log` (or `mise run quick:smoke | tee logs/quick-smoke.log`) so offline operators can review the guardrail output later.
+   On PowerShell, run `New-Item -ItemType Directory -Force logs; just quick-smoke | Tee-Object logs/quick-smoke.log`.

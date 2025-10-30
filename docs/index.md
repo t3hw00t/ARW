@@ -61,6 +61,7 @@ Assistant quickstart: [Agent Onboarding](ai/AGENT_ONBOARDING.md)
 - Managed runtime supervisor (in progress) respects guardrails: accelerator access is lease-gated, telemetry is recorded, and fallbacks never break privacy promises as the supervisor matures toward full automation.
 
 ## Get Started
+- [Quick Smoke](guide/quick_smoke.md): confirm the Rust toolchain with `verify --fast` before installing optional stacks.
 - [Runtime Quickstart (Non-Technical)](guide/runtime_quickstart.md): step-by-step operator checklist (includes zero-auth mirrors and checksum guidance).
 - [Persona Preview Quickstart](guide/persona_quickstart.md): enable the optional persona stack, seed an initial persona, and review consent notes before collecting vibe telemetry.
 - [Quickstart](guide/quickstart.md): run ARW locally in minutes.
@@ -80,6 +81,7 @@ Tip: ARW treats context as a just‑in‑time working set assembled from layered
 - Not a monolithic “one‑true‑agent” — compose via recipes and tools.
 
 ## Choose Your Path
+- [Quick Smoke](guide/quick_smoke.md)
 - [Run Locally](guide/quickstart.md)
 - [Operate & Secure](guide/security_hardening.md) · [Deployment](guide/deployment.md) · [Admin Endpoints](guide/admin_endpoints.md)
 - [Vision Runtime Preview](guide/vision_runtime.md)

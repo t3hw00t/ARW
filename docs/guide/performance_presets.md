@@ -38,6 +38,7 @@ echo $ARW_PERF_PRESET_TIER
 - Runtime watcher cooldown: `ARW_RUNTIME_WATCHER_COOLDOWN_MS=1500` to reduce churn.
 - Memory embed backfill: smaller batches and longer idle (`ARW_MEMORY_EMBED_BACKFILL_BATCH=64`, `ARW_MEMORY_EMBED_BACKFILL_IDLE_SEC=600`).
 - OpenTelemetry exporters remain opt‑in (no preset change) — set `ARW_OTEL=1`/`ARW_OTEL_METRICS=1` explicitly if desired.
+- Sanity-check the Rust toolchain on low-spec hosts with [Quick Smoke](quick_smoke.md) (`just quick-smoke` / `mise run quick:smoke`) before installing the full docs/UI toolchain.
 - Honors `ARW_PERSONA_VIBE_HISTORY_RETAIN` so persona telemetry history stays lean on eco hosts.
 - Guardrails such as `scripts/triad_smoke.sh` can default to the eco preset; override with `TRIAD_SMOKE_PERF_PRESET` or `ARW_PERF_PRESET` when you need other tiers during smoke runs.
 - Override any value manually when a workload needs more headroom; explicit env vars always win over preset defaults.

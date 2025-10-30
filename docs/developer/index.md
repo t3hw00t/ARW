@@ -20,6 +20,8 @@ Type: Reference
 cargo install cargo-nextest
 cargo build --workspace --all-targets --locked
 cargo nextest run --workspace --locked
+# Fast guardrail (fmt → clippy → tests)
+bash scripts/dev.sh verify --fast    # see guide/quick_smoke.md for setup tips
 # Regenerate OpenAPI + schemas from annotations (writes spec/*)
 just openapi-gen
 # Full docs/spec refresh (triggers openapi-gen internally)

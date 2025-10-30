@@ -30,6 +30,7 @@ Assistant quickstart → [Agent Onboarding](docs/ai/AGENT_ONBOARDING.md)
 ## Quick Links
 - [Agent Onboarding](docs/ai/AGENT_ONBOARDING.md) - Workflow primer for assistants and new contributors.
 - [Quickstart](docs/guide/quickstart.md) - Run the unified server locally.
+- [Quick Smoke](docs/guide/quick_smoke.md) - Fast guardrail (`verify --fast`) to confirm the toolchain before full setup.
 - [Runtime Quickstart](docs/guide/runtime_quickstart.md) - Non-technical checklist for preparing managed runtimes (zero-auth mirrors + checksum validation).
 - [Persona Preview Quickstart](docs/guide/persona_quickstart.md) - Enable the optional persona stack and seed your first preview persona safely.
 - [Universal Access Starter Kit](docs/guide/universal_access_kit.md) - Generate an offline-ready bundle (eco presets, docs, starter persona) for low-spec installs.
@@ -53,6 +54,7 @@ Assistant quickstart → [Agent Onboarding](docs/ai/AGENT_ONBOARDING.md)
 
 ## Getting Started
 - Clone the repo and install Rust 1.90+ via `rustup`.
+- Validate your toolchain quickly with the [Quick Smoke](docs/guide/quick_smoke.md) flow (`bash scripts/dev.sh verify --fast`) before installing optional stacks.
 - Prebuilt installers are currently unavailable; build locally with `scripts/dev.{sh,ps1} setup` or produce a bundle via `scripts/package.{sh,ps1}` if you need a portable archive.
 - For source builds, run `scripts/dev.{sh,ps1} setup` (defaults to headless + non-interactive `-Yes`) or follow docs/guide/quickstart.md; pass `--with-launcher` / `-WithLauncher` when desktop UI prerequisites are ready.
 - Prefer an all-in-one toolchain bootstrap? Install [mise](https://mise.jdx.dev) and run `mise install` to pin Rust 1.90, Python 3.12, Node.js 18, jq, and ripgrep; `mise run verify`, `mise run verify:fast`, and `mise run verify:ci` wrap the guardrail helpers.
@@ -60,7 +62,7 @@ Assistant quickstart → [Agent Onboarding](docs/ai/AGENT_ONBOARDING.md)
 ## Build & Test
 - Native Windows flow: run `scripts\dev.ps1` from PowerShell; switch to WSL only when you need Linux-only tooling.
 - Unified helper: `scripts/dev.{sh,ps1}` wraps the common workflow (e.g., `scripts/dev.ps1 build`, `scripts/dev.ps1 verify`).
-- Guardrail sweep: `scripts/dev.sh verify` (headless default skips the Tauri crate; pass `--with-launcher` or set `ARW_VERIFY_INCLUDE_LAUNCHER=1` to include it). Use `--fast` to skip docs/UI checks, or `--ci` for a CI-parity sweep (registry integrity, docgens in `--check` mode, env-guard, and smokes). Missing Node.js auto-skips the launcher UI smoke; set `ARW_VERIFY_REQUIRE_DOCS=1` to require Python/PyYAML for doc checks.
+- Guardrail sweep: `scripts/dev.sh verify` (headless default skips the Tauri crate; pass `--with-launcher` or set `ARW_VERIFY_INCLUDE_LAUNCHER=1` to include it). Just validating your Rust toolchain? Start with [Quick Smoke](docs/guide/quick_smoke.md) for `scripts/dev.sh verify --fast`. Use `--ci` for a CI-parity sweep (registry integrity, docgens in `--check` mode, env-guard, and smokes). Missing Node.js auto-skips the launcher UI smoke; set `ARW_VERIFY_REQUIRE_DOCS=1` to require Python/PyYAML for doc checks.
 - TypeScript client: when Node.js and npm are available and you do not pass `--fast`, `verify` also builds the minimal TypeScript client and `arw-events` bin under `clients/typescript` (skips automatically if Node/npm are missing).
 - Build: `scripts/build.sh` (Linux/macOS) or `scripts/build.ps1` (Windows). Both default to a headless build that skips the Tauri launcher; add `--with-launcher` / `-WithLauncher` or set `ARW_BUILD_LAUNCHER=1` when you need the desktop UI (requires WebKitGTK 4.1 + libsoup3 on Linux or WebView2 on Windows). `make build` / `just build` follow the same headless default, with `make build-launcher` / `just build-launcher` opting into the full workspace build.
 - Format: `cargo fmt --all`

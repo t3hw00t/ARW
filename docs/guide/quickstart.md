@@ -9,6 +9,9 @@ Type: Tutorial
 
 Run the unified ARW server locally in minutes. The architecture centres on the `/actions` → `/events` → `/state/*` triad; enable `ARW_DEBUG=1` to serve the browser debug panels.
 
+!!! tip "Need a faster first pass?"
+    Just want to confirm your Rust toolchain before installing docs/UI stacks? Follow the [Quick Smoke](quick_smoke.md) tutorial for `bash scripts/dev.sh verify --fast`, then return here for the full setup.
+
 !!! warning "Minimum Secure Setup"
     - Set an admin token: `ARW_ADMIN_TOKEN=your-secret`
     - Keep the service private: bind to `127.0.0.1` or front with TLS
@@ -31,6 +34,7 @@ Need a single command that brings in Rust, Python, Node.js, jq, and ripgrep? Ins
 - Export `ARW_PERF_PRESET=eco` before running `scripts/start.{sh,ps1}` when you only have a CPU and limited RAM.
 - Eco caps background workers (`ARW_WORKERS_MAX=4`), trims the action/tool cache (5 minute TTL, ~256 entries), and turns off OpenTelemetry exporters unless you opt back in with `ARW_OTEL=1`.
 - Use `ARW_PERSONA_VIBE_HISTORY_RETAIN=<limit>` to clamp persona feedback history (default 50 samples) when disk space or memory is tight. This knob has no effect unless the persona preview (`ARW_PERSONA_ENABLE=1`) is active.
+- Before pulling down Python/Node dependencies, run [Quick Smoke](quick_smoke.md) (`just quick-smoke`, `mise run quick:smoke`, or `bash scripts/dev.sh verify --fast`) to confirm the Rust toolchain on the low-spec host.
 - You can still raise individual knobs later (for example `ARW_HTTP_MAX_CONC`, `ARW_TOOLS_CACHE_CAP`) if a workload needs more throughput.
 - Clear the preset or set `ARW_PERF_PRESET=balanced` once you move to a machine with more cores or a dedicated GPU.
 - Check the active tier anytime:

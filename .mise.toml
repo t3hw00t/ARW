@@ -21,6 +21,10 @@ run = """pwsh -NoLogo -File scripts/deep_checks_local.ps1"""
 description = "Run the fast guardrail (fmt → clippy → tests only)."
 run = """bash scripts/dev.sh verify --fast"""
 
+[tasks."quick:smoke"]
+description = "Alias for the Quick Smoke flow (fmt → clippy → tests)."
+run = """bash scripts/dev.sh verify --fast"""
+
 [tasks."verify:ci"]
 description = "Run CI-parity guardrails (registries, docgens --check, env-guard, smokes)."
 run = """bash scripts/dev.sh verify --ci"""
@@ -136,4 +140,3 @@ run = """bash -lc 'set -euo pipefail; python3 scripts/universal_access_kit.py --
 [tasks."access:kit:lite"]
 description = "Assemble kit skipping optional extras (set ARW_KIT_SKIP_OPTIONAL=1)"
 run = """bash -lc 'set -euo pipefail; ARW_KIT_SKIP_OPTIONAL=${ARW_KIT_SKIP_OPTIONAL:-1} python3 scripts/universal_access_kit.py --force --zip || ARW_KIT_SKIP_OPTIONAL=${ARW_KIT_SKIP_OPTIONAL:-1} python scripts/universal_access_kit.py --force --zip'"""
-

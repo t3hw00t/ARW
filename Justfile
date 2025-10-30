@@ -7,6 +7,9 @@ verify:
 verify-fast:
 	bash scripts/dev.sh verify --fast
 
+quick-smoke: # See docs/guide/quick_smoke.md for context.
+	bash scripts/dev.sh verify --fast
+
 verify-ci:
 	bash scripts/dev.sh verify --ci
 
