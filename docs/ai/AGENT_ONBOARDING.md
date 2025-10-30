@@ -39,7 +39,7 @@ Microsummary: Fast orientation for assistants working in the ARW repo—where to
 ### WSL Notes
 - Clone the repo inside the Linux filesystem (`/home/<user>`). Running builds from `/mnt/c` keeps NTFS semantics and slows `cargo`.
 - Before building or testing, align the environment mode with `bash scripts/env/switch.sh windows-wsl`; do the same on the Windows host (`scripts\env\switch.ps1 windows-host`) when you jump back. This prevents Rust and Python artefacts from crossing between Windows and WSL.
-- Treat WSL as Linux for tooling: use the `.sh` helpers (`scripts/dev.sh verify`, `just verify`) and install packages via `apt`/`pip` rather than Windows installers.
+- Treat WSL as Linux for tooling: use the `.sh` helpers (`scripts/dev.sh verify`, `just verify`) and install packages via `apt`/`pip` rather than Windows installers. Do not expect sudo permissions and do not use pip outside the venv.
 
 ## Tooling Checklist
 - Rust toolchain 1.90+ with `cargo`, `rustfmt`, `clippy`, and ideally `cargo-nextest`.
