@@ -16,9 +16,14 @@ This project follows Keep a Changelog and Semantic Versioning. All notable chang
 - Dev UX: Justfile helpers, optional verify integration, pre-commit hook.
 
 ### Changed
+- Config watcher loops now back off exponentially and surface a single warning when runtime configs are missing, reducing log noise until files appear.
+- Context cascade defaults were trimmed (2 K events / 512 per episode) to tame memory pressure on low-spec hosts; docs call out the env overrides when wider windows are needed.
+- Egress proxy restarts await graceful shutdown before rebinding, avoiding transient “address already in use” errors during reloads.
 - README: added Adapters Guide badge and links.
 
 ### Housekeeping
+- MkDocs nav includes the persona preview, empathy research plan, DeepSeek OCR pipeline, and maintenance guides so preview surfaces are easier to discover.
+- `.gitignore` now ignores local `apps/arw-server/state/` artifacts along with transient server logs, keeping the worktree clean after local runs.
 - Retired all published bundles through `v0.1.4`, refreshed the workspace to the `0.2.0-dev` pre-release train, and removed legacy artifacts from the tree.
 - Hardened bus fan-out to survive broadcast lag (SSE replay, metrics, and state observers now recover after channel overflows) and tightened filtered subscriber logging.
 - Auto-scale the action worker pool (defaults to roughly 2× host cores, configurable via `ARW_WORKERS` with an optional `ARW_WORKERS_MAX` cap) and added SQLite indexes for the actions table to keep queue drains fast as workloads grow.

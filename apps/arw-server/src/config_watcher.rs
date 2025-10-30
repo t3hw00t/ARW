@@ -9,11 +9,25 @@ use once_cell::sync::Lazy;
 use serde_json::json;
 use sha2::{Digest, Sha256};
 use std::sync::Mutex;
-use tokio::time::{interval, Duration, MissedTickBehavior};
+use tokio::time::{Duration, MissedTickBehavior};
 use tracing::{debug, info, warn};
 
 const POLL_INTERVAL: Duration = Duration::from_secs(3);
+const MISSING_BACKOFF_BASE: Duration = Duration::from_secs(15);
+const MISSING_BACKOFF_MAX: Duration = Duration::from_secs(120);
 const HISTORY_LIMIT: usize = 64;
+
+fn next_missing_backoff(current: Duration) -> Duration {
+    let adjusted = if current < MISSING_BACKOFF_BASE {
+        MISSING_BACKOFF_BASE
+    } else {
+        current
+    };
+    adjusted
+        .checked_mul(2)
+        .unwrap_or(MISSING_BACKOFF_MAX)
+        .min(MISSING_BACKOFF_MAX)
+}
 
 #[derive(Default, Clone)]
 struct ReloadState {
@@ -83,12 +97,15 @@ fn watch_runtime_config(state: AppState, path: PathBuf) -> TaskHandle {
     TaskHandle::new(
         "config.watch.runtime",
         tokio::spawn(async move {
-            let mut ticker = interval(POLL_INTERVAL);
-            ticker.set_missed_tick_behavior(MissedTickBehavior::Delay);
+            let mut sleep = Duration::from_secs(0);
             let mut last_hash: Option<String> = None;
             let mut last_status: Option<&'static str> = None;
             loop {
-                ticker.tick().await;
+                if !sleep.is_zero() {
+                    tokio::time::sleep(sleep).await;
+                }
+                let prev_sleep = sleep;
+                let mut next_sleep = POLL_INTERVAL;
                 match tokio::fs::read(&path).await {
                     Ok(bytes) => {
                         if last_status != Some("ok") {
@@ -97,6 +114,7 @@ fn watch_runtime_config(state: AppState, path: PathBuf) -> TaskHandle {
                         last_status = Some("ok");
                         let digest = hash_bytes(&bytes);
                         if last_hash.as_ref() == Some(&digest) {
+                            sleep = next_sleep;
                             continue;
                         }
                         match reload_runtime_config(&state, &path, &digest).await {
@@ -114,8 +132,10 @@ fn watch_runtime_config(state: AppState, path: PathBuf) -> TaskHandle {
                         }
                         last_status = Some("missing");
                         last_hash = None;
+                        next_sleep = next_missing_backoff(prev_sleep);
                     }
                 }
+                sleep = next_sleep;
             }
         }),
     )
@@ -125,11 +145,14 @@ fn watch_gating_config(state: AppState, path: PathBuf) -> TaskHandle {
     TaskHandle::new(
         "config.watch.gating",
         tokio::spawn(async move {
-            let mut ticker = interval(POLL_INTERVAL);
-            ticker.set_missed_tick_behavior(MissedTickBehavior::Delay);
+            let mut sleep = Duration::from_secs(0);
             let mut last_modified: Option<SystemTime> = None;
             loop {
-                ticker.tick().await;
+                if !sleep.is_zero() {
+                    tokio::time::sleep(sleep).await;
+                }
+                let prev_sleep = sleep;
+                let mut next_sleep = POLL_INTERVAL;
                 match tokio::fs::metadata(&path).await {
                     Ok(md) => {
                         let modified = md.modified().ok();
@@ -139,6 +162,7 @@ fn watch_gating_config(state: AppState, path: PathBuf) -> TaskHandle {
                         last_modified = modified;
                         if let Err(err) = reload_gating().await {
                             warn!(path = %path.display(), %err, "gating policy reload failed");
+                            sleep = next_sleep;
                             continue;
                         }
                         state.bus().publish(
@@ -155,8 +179,10 @@ fn watch_gating_config(state: AppState, path: PathBuf) -> TaskHandle {
                             warn!(path = %path.display(), error = %err, "gating policy metadata unavailable");
                         }
                         last_modified = None;
+                        next_sleep = next_missing_backoff(prev_sleep);
                     }
                 }
+                sleep = next_sleep;
             }
         }),
     )
@@ -166,11 +192,14 @@ fn watch_cache_policy(state: AppState, path: PathBuf) -> TaskHandle {
     TaskHandle::new(
         "config.watch.cache_policy",
         tokio::spawn(async move {
-            let mut ticker = interval(POLL_INTERVAL);
-            ticker.set_missed_tick_behavior(MissedTickBehavior::Delay);
+            let mut sleep = Duration::from_secs(0);
             let mut last_modified: Option<SystemTime> = None;
             loop {
-                ticker.tick().await;
+                if !sleep.is_zero() {
+                    tokio::time::sleep(sleep).await;
+                }
+                let prev_sleep = sleep;
+                let mut next_sleep = POLL_INTERVAL;
                 match tokio::fs::metadata(&path).await {
                     Ok(md) => {
                         let modified = md.modified().ok();
@@ -180,6 +209,7 @@ fn watch_cache_policy(state: AppState, path: PathBuf) -> TaskHandle {
                         last_modified = modified;
                         if let Err(err) = reload_cache_policy().await {
                             warn!(path = %path.display(), %err, "cache policy reload failed");
+                            sleep = next_sleep;
                             continue;
                         }
                         state.bus().publish(
@@ -196,8 +226,10 @@ fn watch_cache_policy(state: AppState, path: PathBuf) -> TaskHandle {
                             warn!(path = %path.display(), error = %err, "cache policy metadata unavailable");
                         }
                         last_modified = None;
+                        next_sleep = next_missing_backoff(prev_sleep);
                     }
                 }
+                sleep = next_sleep;
             }
         }),
     )

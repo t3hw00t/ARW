@@ -84,6 +84,7 @@ Implementation notes (ARW)
 - API snapshot now includes `slot_budgets` and per-slot counts/budgets inside `working_set.summary.slots`, enabling coverage checks (e.g., flagging `slot_underfilled:instructions`).
 - Retrieval: add MMR‑style selector over vector/graph mounts and the world belief graph.
 - Compression: background job to summarize episodes and roll up entities; write summaries to mounts with provenance.
+- Cascade guardrails: the default sweep now caps `context.cascade` at ~2 K events per pass (512 per episode) so low-core hosts stay responsive. Bump via `ARW_CONTEXT_CASCADE_EVENT_LIMIT`, `ARW_CONTEXT_CASCADE_EPISODE_LIMIT`, or `ARW_CONTEXT_CASCADE_EPISODE_EVENT_LIMIT` when you need broader windows.
 - Failure detectors: emit `context.recall.risk` and `context.coverage` events; surface in UI and adjust next‑turn retrieval.
   - `context.recall.risk` emits a normalized `score` (`0.0–1.0`), a coarse `level` (`low`/`medium`/`high`), and component gaps (`coverage_shortfall`, `lane_gap`, `slot_gap`, `quality_gap`) so downstream dashboards can highlight _why_ recall may be at risk. Each event carries the trimmed spec/summary snapshot plus project/query metadata for cross-linking back to the originating run.
     ```json

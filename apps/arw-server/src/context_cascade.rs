@@ -15,9 +15,12 @@ use crate::{api::state, story_threads, tasks::TaskHandle, util, AppState};
 const TASK_NAME: &str = "context.cascade";
 const CURSOR_FILE: &str = "context_cascade.cursor";
 const DEFAULT_INTERVAL_SECS: u64 = 300;
-const DEFAULT_EVENT_LIMIT: usize = 4096;
-const DEFAULT_EPISODE_LIMIT: usize = 128;
-const DEFAULT_PER_EPISODE_EVENT_LIMIT: usize = 2000;
+// Defaults keep per-pass memory bounded on low-core hosts; override via
+// ARW_CONTEXT_CASCADE_EVENT_LIMIT / *_EPISODE_* env vars when a deployment
+// needs wider batches.
+const DEFAULT_EVENT_LIMIT: usize = 2048;
+const DEFAULT_EPISODE_LIMIT: usize = 64;
+const DEFAULT_PER_EPISODE_EVENT_LIMIT: usize = 512;
 const DEFAULT_COOLDOWN_SECS: i64 = 45;
 const DEFAULT_MIN_EVENTS: usize = 3;
 const DEFAULT_TTL_SECS: i64 = 60 * 60 * 24 * 30; // 30 days

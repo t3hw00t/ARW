@@ -162,4 +162,6 @@ Both commands should report the preview persona id and show `enabled: true` with
 
 Report feedback in the Persona & Empathy backlog or via the empathy research issue tracker so we can graduate the feature safely.
 
+## See also
+- [Empathy Feedback Loop Research Plan](../ai/empathy_feedback_research_plan.md) — preview guardrails, consent copy, and telemetry rollout checklist.
 

@@ -52,6 +52,7 @@ nav:
   - Tutorials:
       - Quickstart: guide/quickstart.md
       - Quick Smoke: guide/quick_smoke.md
+      - Persona Preview Quickstart: guide/persona_quickstart.md
       - Runtime Quickstart (Non-Technical): guide/runtime_quickstart.md
       - Shortcuts: guide/shortcuts.md
       - Universal Access Starter Kit: guide/universal_access_kit.md
@@ -99,6 +100,7 @@ nav:
       - Runtime Matrix: guide/runtime_matrix.md
       - Runtime Manager: guide/runtime_manager.md
       - Vision Runtime Preview: guide/vision_runtime.md
+      - DeepSeek OCR Pipeline: ops/deepseek_ocr_pipeline.md
       - Security Posture: guide/security_posture.md
       - Threat Model: guide/threat_model.md
       - UI Architecture: guide/ui_architecture.md
@@ -114,6 +116,7 @@ nav:
       - Deep Checks (Local): guide/deep_checks.md
       - Mini Dashboard (TUI): guide/mini_dashboard.md
       - Monitoring & Alerts: ops/monitoring.md
+      - Maintenance & Scheduling: ops/maintenance.md
       - Runtime Bundle Runbook: ops/runtime_bundle_runbook.md
       - Cluster Runbook: ops/cluster_runbook.md
       - Automation Ops Handbook: ops/automation_ops.md
@@ -193,11 +196,13 @@ nav:
       - Unified Object Graph: architecture/object_graph.md
       - Events Vocabulary: architecture/events_vocabulary.md
       - Restructure Handbook: RESTRUCTURE.md
+      - Empathy Feedback Loop Research Plan: ai/empathy_feedback_research_plan.md
       - Screenshot Capture Pipeline: architecture/screenshot_capture_pipeline.md
       - UI Architecture Options (ASCII): architecture/ui_architecture_options.md
       - Companion Hub Roadmap: architecture/companion_hub_plan.md
       - Kernel (Journal + CAS): architecture/kernel.md
       - Self‑Model (Metacognition): architecture/self_model.md
+      - Persona Self-Model RFC: architecture/persona_self_model_rfc.md
       - Logic Units: architecture/logic_units.md
       - Modular Cognitive Stack: architecture/modular_cognitive_stack.md
       - Agent Orchestrator: architecture/agent_orchestrator.md

@@ -1,6 +1,8 @@
 # Local smoke/test state
 .smoke/
 .install.log
+server.out
+server.err
 .venv/
 .venv-*/
 .venv.*/
@@ -9,6 +11,7 @@
 .cargo/config.local-*
 apps/arw-launcher/src-tauri/bin/
 apps/arw-launcher/src-tauri/gen/
+apps/arw-server/state/
 configs/runtime/runtimes.toml
 scripts/__pycache__/
 site/

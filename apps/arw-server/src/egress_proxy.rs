@@ -90,23 +90,37 @@ pub async fn apply_current(state: AppState) {
 
 pub async fn apply(enable: bool, port: u16, state: AppState) {
     let desired_timeout = http_timeout::get_secs();
-    let mut guard = PROXY.lock().unwrap();
-    if let Some(current) = guard.as_ref() {
-        if !enable {
-            if let Some(current) = guard.take() {
-                current.cancel.cancel();
-                current.handle.abort();
+    let mut to_stop: Option<ProxyRuntime> = None;
+    {
+        let mut guard = PROXY.lock().unwrap();
+        match guard.as_ref() {
+            Some(_) if !enable => {
+                to_stop = guard.take();
             }
-            return;
+            Some(current) if current.port != port || current.timeout_secs != desired_timeout => {
+                to_stop = guard.take();
+            }
+            Some(_) => {
+                return;
+            }
+            None if !enable => {
+                return;
+            }
+            _ => {}
         }
-        if current.port == port && current.timeout_secs == desired_timeout {
-            return;
+    }
+
+    if let Some(runtime) = to_stop {
+        runtime.cancel.cancel();
+        let handle = runtime.handle;
+        if let Err(err) = handle.await {
+            if !err.is_cancelled() {
+                warn!("egress proxy shutdown join error: {err}");
+            }
         }
-        if let Some(current) = guard.take() {
-            current.cancel.cancel();
-            current.handle.abort();
-        }
-    } else if !enable {
+    }
+
+    if !enable {
         return;
     }
     let bind = format!("127.0.0.1:{}", port);
@@ -149,6 +163,7 @@ pub async fn apply(enable: bool, port: u16, state: AppState) {
             }
         }
     });
+    let mut guard = PROXY.lock().unwrap();
     *guard = Some(ProxyRuntime {
         port,
         timeout_secs: desired_timeout,
