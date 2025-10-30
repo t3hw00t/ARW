@@ -1,5 +1,5 @@
 # Deep Checks (Local)
-Updated: 2025-10-27
+Updated: 2025-10-30
 Type: How‑to
 
 Use these local harnesses to validate the alpha core surfaces before running CI deep checks.
@@ -33,3 +33,4 @@ Notes
 
 - Set `BASE` and `ARW_ADMIN_TOKEN` if you’re not using defaults.
 - These checks mirror the CI “Build + Deep Checks (Manual)” workflow, but keep everything on your machine.
+- macOS note: the helper falls back to an internal timer when GNU `timeout` isn’t installed; install `coreutils` if you prefer the GNU tooling.

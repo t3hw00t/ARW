@@ -55,15 +55,35 @@ fi
 
 echo "[deep-checks] events tail (SSE via curl)"
 TAIL_SECS=${DEEP_TAIL_SECS:-10}
-timeout "$TAIL_SECS"s curl -fsS -N \
-  -H "Accept: text/event-stream" \
-  -H "Authorization: Bearer $ARW_ADMIN_TOKEN" \
-  "$BASE/events?prefix=service.,state." > /tmp/events_raw.sse || true
-awk '/^data:/{sub(/^data:[ ]*/, ""); print}' /tmp/events_raw.sse > /tmp/events_tail.json || true
-if ! head -n 1 /tmp/events_tail.json | grep -q '{'; then
-  echo "no events output"; exit 1;
+EVENTS_RAW=/tmp/events_raw.sse
+EVENTS_JSON=/tmp/events_tail.json
+rm -f "$EVENTS_RAW" "$EVENTS_JSON"
+
+curl_args=(
+  -fsS -N
+  -H "Accept: text/event-stream"
+  -H "Authorization: Bearer $ARW_ADMIN_TOKEN"
+  "$BASE/events?prefix=service.,state."
+)
+
+if command -v timeout >/dev/null 2>&1; then
+  timeout "${TAIL_SECS}s" curl "${curl_args[@]}" > "$EVENTS_RAW" || true
+elif command -v gtimeout >/dev/null 2>&1; then
+  gtimeout "${TAIL_SECS}s" curl "${curl_args[@]}" > "$EVENTS_RAW" || true
+else
+  curl "${curl_args[@]}" > "$EVENTS_RAW" &
+  curl_pid=$!
+  (
+    sleep "$TAIL_SECS"
+    kill "$curl_pid" >/dev/null 2>&1 || true
+  ) &
+  guard_pid=$!
+  wait "$curl_pid" 2>/dev/null || true
+  kill "$guard_pid" >/dev/null 2>&1 || true
 fi
-if ! head -n 1 /tmp/events_tail.json | grep -q '{'; then
+
+awk '/^data:/{sub(/^data:[ ]*/, ""); print}' "$EVENTS_RAW" > "$EVENTS_JSON" || true
+if ! head -n 1 "$EVENTS_JSON" | grep -q '{'; then
   if [ "${DEEP_SOFT:-0}" = "1" ]; then
     echo "[deep-checks][soft] no events output; continuing due to DEEP_SOFT=1"
   else

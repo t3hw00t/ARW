@@ -28,6 +28,7 @@ Prerequisites
 
 Build scripts default to a headless profile that skips the Tauri launcher. Pass `--with-launcher` / `-WithLauncher` (or export `ARW_BUILD_LAUNCHER=1`) when you specifically need the desktop UI and have the platform dependencies installed.
 The Makefile and Justfile mirror this behavior: `make build` / `just build` run headless by default, while `make build-launcher` or `just build-launcher` opt into compiling the desktop UI.
+Treat the Justfile as the canonical task catalog. When you add or rename a recipe, update the thin wrappers in the Makefile and `.mise.toml` (or have them shell out to the new `just` recipe) so all entry points stay aligned.
 
 ## Test fixtures
 - Prefer `test_support::begin_state_env` (optionally paired with `build_state`) whenever a test needs `AppState`; this keeps `ARW_STATE_DIR` scoped and restores env vars automatically.

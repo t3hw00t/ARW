@@ -100,5 +100,3 @@ Assistant quickstart → [Agent Onboarding](docs/ai/AGENT_ONBOARDING.md)
 - Issues and discussions live on GitHub.
 - Automation dashboards and task tracking sit under .arw/ (large generated files are excluded from releases).
 - For status badges, CI pipelines, and deployment artifacts, see the badges at the top of this README.
-
-\n- Mini dashboard (economy watcher): just mini-dashboard base=http://127.0.0.1:8091\n

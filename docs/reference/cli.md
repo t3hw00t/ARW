@@ -1,10 +1,10 @@
 # CLI Reference
-Updated: 2025-10-27
+Updated: 2025-10-30
 Type: Reference
 
 Microsummary: Commands, subcommands, and flags for `arw-cli` with pointers to tutorials. Beta.
 
-- Install: built with the workspace; see `just dev` and `nix develop` in `README.md`.
+- Install: built with the workspace; use `cargo build -p arw-cli` or the workspace helpers (for example `just dev-build`, `mise run dev-build`).
 - Common flows: see Tutorials (Quickstart) and How‑to pages.
 
 Commands (summary)

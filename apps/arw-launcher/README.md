@@ -31,7 +31,7 @@ From the repository root:
 cargo build -p arw-launcher --release
 
 # or use the Just recipe
-just dev-build
+just build-launcher
 ```
 
 Run the launcher binary once built:
