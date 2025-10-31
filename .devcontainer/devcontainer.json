@@ -1,20 +1,16 @@
 {
-  "name": "ARW Dev",
+  "name": "ARW",
+  "image": "mcr.microsoft.com/devcontainers/base:ubuntu-24.04",
   "features": {
-    "ghcr.io/devcontainers/features/nix:1": {}
+    "ghcr.io/devcontainers/features/rust:1": {},
+    "ghcr.io/devcontainers/features/node:1": { "version": "lts" }
   },
-  "customizations": {
-    "vscode": {
-      "extensions": [
-        "rust-lang.rust-analyzer",
-        "serayuzgur.crates",
-        "tamasfe.even-better-toml",
-        "ms-vscode.powershell"
-      ]
-    }
+  "remoteUser": "vscode",
+  "runArgs": ["--gpus","all"],
+  "containerEnv": {
+    "NVIDIA_VISIBLE_DEVICES": "all",
+    "NVIDIA_DRIVER_CAPABILITIES": "compute,utility"
   },
-  "forwardPorts": [8090],
-  "postCreateCommand": "bash -lc 'nix --version && nix develop --command cargo build --workspace --locked || true'",
-  "remoteUser": "vscode"
+  "postCreateCommand": "bash -lc 'set -euo pipefail; mkdir -p ~/.local/bin; curl -fsSL https://mise.run | sh; echo \"export PATH=$HOME/.local/bin:$PATH\" >> ~/.bashrc; export PATH=$HOME/.local/bin:$PATH; ~/.local/bin/mise --version; ~/.local/bin/mise install'"
 }
 

@@ -24,7 +24,7 @@ Microsummary: Fast orientation for assistants working in the ARW repo—where to
 - CI parity sweep: `scripts/dev.sh verify --ci` (PowerShell: `scripts\dev.ps1 verify -Ci`) runs the extended guards from GitHub Actions—registry integrity checks, doc generators in `--check` mode, env-guard lint, snappy bench, triad/context/runtime smokes, and legacy surface checks. This mode requires Python 3.11+, Git Bash, and the Rust binaries built locally.
 - Runtime smoke safety: before touching the runtime smoke, apply the safe defaults (`just runtime-smoke-safe` or `source scripts/smoke_safe.sh`) so runs stay low-impact (`RUNTIME_SMOKE_SKIP_BUILD=1`, `RUNTIME_SMOKE_USE_RELEASE=1`, `RUNTIME_SMOKE_NICE=1`, `ARW_WORKERS=1/ARW_WORKERS_MAX=1`, GPU policy `skip`). Run `just runtime-smoke-dry-run` to snapshot the plan, then bump `RUNTIME_SMOKE_GPU_POLICY` only with explicit operator approval (and export `RUNTIME_SMOKE_ALLOW_GPU=1`).
 - Doc metadata helper: `python scripts/update_doc_metadata.py docs/path/to/page.md` refreshes the `Updated:` stamp (add `--dry-run` to see needed changes without writing).
-- Docs bootstrap: `mise run bootstrap:docs` (or `bash scripts/bootstrap_docs.sh`) installs the pinned MkDocs/Material toolchain.
+- Docs bootstrap: `mise run bootstrap:docs` (or `bash scripts/bootstrap_docs.sh`) installs the pinned MkDocs/Material toolchain in `.venv/docs`; activate that venv before layering optional Python extras so PEP 668 protections stay intact.
 - Offline docs cache: `mise run docs:cache:build` or `scripts/dev.{sh,ps1} docs-cache` produces `dist/docs-wheels.tar.gz`; releases include the same bundle for reuse. Extract it and pass `--wheel-dir` to `bootstrap_docs.sh` when PyPI is unavailable.
 
 ## Windows Development Tips

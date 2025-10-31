@@ -20,6 +20,6 @@ Top‑level
 Key concepts from README
 - Local-first service with Debug UI at `/admin/debug`, state at `/state/*`, SSE events.
 - “Commons Kit” recipes and tool schemas; recipe manifest schema in `spec/schemas`.
-- Tooling: `scripts/dev.{sh,ps1}` for guardrails, `scripts/bootstrap_docs.sh` (or `mise run bootstrap:docs`) for MkDocs dependencies, `scripts/dev.{sh,ps1} docs-cache` / `scripts/build_docs_wheels.sh` (`mise run docs:cache:build`) for offline wheel bundles.
+- Tooling: `scripts/dev.{sh,ps1}` for guardrails, `scripts/bootstrap_docs.sh` (or `mise run bootstrap:docs`) for MkDocs dependencies in `.venv/docs`, `scripts/dev.{sh,ps1} docs-cache` / `scripts/build_docs_wheels.sh` (`mise run docs:cache:build`) for offline wheel bundles.
 
 (Use this map as the first chunk for retrieval; keep headings stable.)

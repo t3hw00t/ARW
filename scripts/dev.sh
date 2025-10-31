@@ -19,6 +19,17 @@ arw_env_init
 # Preflight: emit environment mode summary for users and agents
 echo "[env] mode=${ARW_ENV_MODE} source=${ARW_ENV_SOURCE:-unknown} exe=${ARW_EXE_SUFFIX:-}"
 
+# Ensure docs venv bin dir is present so mkdocs/docs_check import reliably.
+if [[ -z "${ARW_DOCS_VENV:-}" ]]; then
+  export ARW_DOCS_VENV="$REPO_ROOT/.venv/docs"
+fi
+if [[ -d "$ARW_DOCS_VENV/bin" ]]; then
+  case ":$PATH:" in
+    *":$ARW_DOCS_VENV/bin:"*) : ;; # already in PATH
+    *) PATH="$ARW_DOCS_VENV/bin:$PATH"; export PATH ;;
+  esac
+fi
+
 command="${1:-help}"
 if [[ $# -gt 0 ]]; then
   shift

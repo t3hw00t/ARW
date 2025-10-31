@@ -17,6 +17,6 @@ Conflicts
 - Last‑writer‑wins only for non‑critical state; 3‑way merges for notes/config.
 
 - Docs bootstrap
-  - Releases include `docs-wheels.tar.gz`; extract and run `scripts/bootstrap_docs.sh --wheel-dir <dir>` to hydrate MkDocs offline (or use `mise run bootstrap:docs -- --wheel-dir <dir>`).
+  - Releases include `docs-wheels.tar.gz`; extract and run `scripts/bootstrap_docs.sh --wheel-dir <dir>` to hydrate `.venv/docs` offline (or use `mise run bootstrap:docs -- --wheel-dir <dir>`).
 
 See also: Artifacts & Provenance, Naming & IDs.

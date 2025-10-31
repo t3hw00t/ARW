@@ -8,6 +8,13 @@ set -euo pipefail
 #   events tail structured output, and SSE metrics presence
 # - Stops server and writes logs to /tmp
 
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+DOCS_VENV="${ARW_DOCS_VENV:-$ROOT_DIR/.venv/docs}"
+
+if [[ -z "${LLMLINGUA_PYTHON:-}" && -x "$DOCS_VENV/bin/python" ]]; then
+  export LLMLINGUA_PYTHON="$DOCS_VENV/bin/python"
+fi
+
 BASE="${BASE:-http://127.0.0.1:8099}"
 ARW_ADMIN_TOKEN="${ARW_ADMIN_TOKEN:-test-admin-token}"
 export ARW_ADMIN_TOKEN
