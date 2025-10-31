@@ -29,6 +29,11 @@ Need a single command that brings in Rust, Python, Node.js, jq, and ripgrep? Ins
 !!! note
     The first launch compiles `arw-server` (and the optional launcher). Expect a multi-minute build on initial setup; subsequent runs reuse the cached binaries.
 
+### GitHub Access
+- Prefer SSH remotes (`git@github.com:t3hw00t/ARW.git`) so CI guardrails and pushes never prompt for credentials mid-run. The bootstrap helpers place an `id_ed25519` key in `~/.ssh/` and add GitHub’s host key automatically.
+- Interactive shells now auto-start `ssh-agent`, restore the cached socket from `~/.ssh/agent_env`, and add the repo key (`codex-agent@local`) on the first command. Open a terminal and `git push` works—no extra `ssh-add` step required.
+- Rotating credentials? Replace `~/.ssh/id_ed25519(.pub)`, run `ssh-add ~/.ssh/id_ed25519`, and the automation will refresh the cache on your next shell.
+
 ## Low-Spec Laptops
 
 - Export `ARW_PERF_PRESET=eco` before running `scripts/start.{sh,ps1}` when you only have a CPU and limited RAM.
