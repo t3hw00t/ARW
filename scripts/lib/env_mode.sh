@@ -187,6 +187,15 @@ EOF
       export ARW_EXE_SUFFIX=""
       ;;
   esac
+
+  if [[ "$desired_mode" == "linux" ]]; then
+    if [[ -z "${LOCALAPPDATA:-}" && -n "${HOME:-}" ]]; then
+      export LOCALAPPDATA="$HOME/.local/share"
+    fi
+  fi
+  if [[ -z "${APPDATA:-}" && -n "${LOCALAPPDATA:-}" ]]; then
+    export APPDATA="$LOCALAPPDATA"
+  fi
 }
 
 arw_target_profile_dir() {
