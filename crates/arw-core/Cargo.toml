@@ -32,7 +32,7 @@ directories = "5"
 sysinfo = { workspace = true }
 
 # Optional runtime for loading WASM plug‑ins
-wasmtime = { version = "37.0.2", optional = true, features = ["component-model"] }
+wasmtime = { version = "37.0.3", optional = true, features = ["component-model"] }
 wit-bindgen = { version = "0.46.0", optional = true }
 
 [features]
