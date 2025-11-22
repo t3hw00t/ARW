@@ -71,7 +71,7 @@ bash scripts/dev.sh setup-agent
 scripts\dev.ps1 setup-agent
 ```
 
-This path pins `--headless --minimal --no-docs`, exports `ARW_DOCGEN_SKIP_BUILDS=1`, and compiles `arw-server` in the debug profile to keep turnaround short for autonomous runs (append `--with-cli` / `-WithCli` when you also need `arw-cli`). It also installs PyYAML via `pip` (setting `PIP_BREAK_SYSTEM_PACKAGES=1` when the host enforces PEP 668) so `scripts/dev.{sh,ps1} verify` can run without extra manual steps.
+This path pins `--headless --minimal --no-docs`, exports `ARW_DOCGEN_SKIP_BUILDS=1`, and compiles `arw-server` in the debug profile to keep turnaround short for autonomous runs (append `--with-cli` / `-WithCli` when you also need `arw-cli`). It also sets up a repo-local `.venv` and installs PyYAML there so `scripts/dev.{sh,ps1} verify` can run without touching system Python or pip user-sites.
 
 ### Option 1 — Portable bundle (self-built)
 

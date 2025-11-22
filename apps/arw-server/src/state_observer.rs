@@ -104,7 +104,17 @@ pub(crate) fn start(state: AppState) -> Vec<TaskHandle> {
     }
     let handle = tokio::spawn(async move {
         let bus = state.bus();
-        let mut rx = bus.subscribe();
+        // Narrow to the prefixes this observer actually cares about to reduce bus pressure.
+        let mut rx = bus.subscribe_filtered(
+            vec![
+                "state.".into(),
+                "actions.".into(),
+                "intents.".into(),
+                "beliefs.".into(),
+                "feedback.".into(),
+            ],
+            Some(512),
+        );
         while let Some(env) =
             crate::util::next_bus_event(&mut rx, &bus, "state_observer.bus_listener").await
         {

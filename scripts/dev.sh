@@ -30,6 +30,11 @@ if [[ -d "$ARW_DOCS_VENV/bin" ]]; then
   esac
 fi
 
+# Prefer the repo venv for llmlingua if it exists and the caller has not set one.
+if [[ -z "${LLMLINGUA_PYTHON:-}" && -x "$REPO_ROOT/.venv/bin/python" ]]; then
+  export LLMLINGUA_PYTHON="$REPO_ROOT/.venv/bin/python"
+fi
+
 command="${1:-help}"
 if [[ $# -gt 0 ]]; then
   shift

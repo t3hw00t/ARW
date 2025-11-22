@@ -12,6 +12,11 @@ $ErrorActionPreference = 'Stop'
 
 $ScriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 $RepoRoot = (Resolve-Path (Join-Path $ScriptRoot '..')).Path
+$DefaultVenvPy = Join-Path $RepoRoot '.venv\Scripts\python.exe'
+if (-not (Test-Path $DefaultVenvPy)) { $DefaultVenvPy = Join-Path $RepoRoot '.venv/bin/python' }
+if (-not $env:LLMLINGUA_PYTHON -and (Test-Path $DefaultVenvPy)) {
+  $env:LLMLINGUA_PYTHON = $DefaultVenvPy
+}
 
 function Show-Help {
   Write-Host @'

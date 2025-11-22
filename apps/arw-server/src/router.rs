@@ -336,6 +336,9 @@ pub(crate) mod paths {
 pub(crate) fn build_router() -> (Router<AppState>, Vec<String>, Vec<Value>) {
     let mut builder = RouterBuilder::new();
     builder.route_get(paths::HEALTHZ, api::meta::healthz, Some(Stability::Stable));
+    builder
+        .route_get("/dev/bus/lag", api::meta::bus_lag, None)
+        .route_get("/dev/bus/stats", api::meta::bus_stats, None);
     builder.route_get(paths::ABOUT, api::meta::about, Some(Stability::Stable));
     builder.route_get(
         "/shutdown",

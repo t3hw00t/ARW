@@ -5,6 +5,12 @@ Param(
 )
 
 $ErrorActionPreference = 'Stop'
+$root = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
+$docsVenvPy = Join-Path $root '.venv\docs\Scripts\python.exe'
+if (-not (Test-Path $docsVenvPy)) { $docsVenvPy = Join-Path $root '.venv/docs/bin/python' }
+if (-not $env:LLMLINGUA_PYTHON -and (Test-Path $docsVenvPy)) {
+  $env:LLMLINGUA_PYTHON = $docsVenvPy
+}
 
 Write-Host "[deep-checks] building (release)" -ForegroundColor Cyan
 cargo build -p arw-server -p arw-cli -p arw-mini-dashboard --release

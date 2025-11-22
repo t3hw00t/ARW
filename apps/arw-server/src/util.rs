@@ -4,10 +4,12 @@ use once_cell::sync::{Lazy, OnceCell};
 #[cfg(test)]
 use parking_lot::{ReentrantMutex, ReentrantMutexGuard};
 use serde_json::{json, Value};
+use std::collections::HashMap;
 #[cfg(test)]
 use std::path::Path;
 use std::path::PathBuf;
 use std::sync::Mutex;
+use std::time::Instant;
 use tokio::sync::broadcast;
 
 static STATE_DIR: Lazy<Mutex<OnceCell<PathBuf>>> = Lazy::new(|| Mutex::new(OnceCell::new()));
@@ -132,17 +134,31 @@ pub async fn next_bus_event(
     bus: &arw_events::Bus,
     task: &str,
 ) -> Option<arw_events::Envelope> {
+    const LAG_LOG_INTERVAL_MS: u128 = 2_000;
+    const LAG_LOG_THRESHOLD: u64 = 500;
     loop {
         match rx.recv().await {
             Ok(env) => return Some(env),
             Err(broadcast::error::RecvError::Lagged(skipped)) => {
                 bus.note_lag(skipped);
-                tracing::warn!(
-                    target: "arw::bus",
-                    %task,
-                    skipped,
-                    "bus receiver lagged; skipped events"
-                );
+                let mut tracker = LAG_TRACKER.lock().unwrap_or_else(|p| p.into_inner());
+                let state = tracker
+                    .entry(task.to_string())
+                    .or_insert_with(LagState::default);
+                state.accum = state.accum.saturating_add(skipped);
+                if state.last.elapsed().as_millis() >= LAG_LOG_INTERVAL_MS
+                    || state.accum >= LAG_LOG_THRESHOLD
+                {
+                    tracing::warn!(
+                        target: "arw::bus",
+                        %task,
+                        skipped = state.accum,
+                        "bus receiver lagged; skipped events (aggregated)"
+                    );
+                    state.total = state.total.saturating_add(state.accum);
+                    state.accum = 0;
+                    state.last = Instant::now();
+                }
                 continue;
             }
             Err(broadcast::error::RecvError::Closed) => {
@@ -151,6 +167,34 @@ pub async fn next_bus_event(
             }
         }
     }
+}
+
+struct LagState {
+    last: Instant,
+    accum: u64,
+    total: u64,
+}
+
+impl Default for LagState {
+    fn default() -> Self {
+        Self {
+            last: Instant::now(),
+            accum: 0,
+            total: 0,
+        }
+    }
+}
+
+static LAG_TRACKER: Lazy<Mutex<HashMap<String, LagState>>> =
+    Lazy::new(|| Mutex::new(HashMap::new()));
+
+/// Snapshot of bus lag per task for diagnostics.
+pub fn bus_lag_stats() -> Vec<(String, u64)> {
+    let tracker = LAG_TRACKER.lock().unwrap_or_else(|p| p.into_inner());
+    tracker
+        .iter()
+        .map(|(k, v)| (k.clone(), v.total + v.accum))
+        .collect()
 }
 
 #[cfg(test)]

@@ -34,4 +34,4 @@ Notes
 - Set `BASE` and `ARW_ADMIN_TOKEN` if you’re not using defaults.
 - These checks mirror the CI “Build + Deep Checks (Manual)” workflow, but keep everything on your machine.
 - macOS note: the helper falls back to an internal timer when GNU `timeout` isn’t installed; install `coreutils` if you prefer the GNU tooling.
-- Prompt compression is optional but recommended: after running `scripts/bootstrap_docs.sh`, install `llmlingua` into `.venv/docs` (`source .venv/docs/bin/activate && pip install llmlingua`) so the helper can export `LLMLINGUA_PYTHON` automatically and avoid the noop fallback warning.
+- Prompt compression is optional but recommended. To avoid huge CUDA downloads by default, install llmlingua with the CPU torch wheel via `bash scripts/llmlingua_setup.sh` (uses `.venv` and sets `LLMLINGUA_PYTHON` compat). If you prefer a docs-only venv, you can still `source .venv/docs/bin/activate && pip install llmlingua`.

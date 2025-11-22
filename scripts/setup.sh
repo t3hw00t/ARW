@@ -52,7 +52,9 @@ info(){ echo -e "\033[36m[setup]\033[0m $*"; }
 warn(){ WARNINGS+=("$*"); }
 pause(){ [[ $yes_flag -eq 1 ]] || read -rp "$*" _; }
 
-PYTHON_BIN="$(command -v python3 || command -v python || true)"
+VENV="${ARW_VENV:-$ROOT/.venv}"
+PYTHON_BOOTSTRAP="$(command -v python3 || command -v python || true)"
+PYTHON_BIN=""
 build_mode="$(printf '%s' "${ARW_BUILD_MODE:-release}" | tr '[:upper:]' '[:lower:]')"
 case "$build_mode" in
   release|debug) ;;
@@ -60,10 +62,35 @@ case "$build_mode" in
 esac
 build_label="$build_mode"
 
+ensure_venv() {
+  if [[ -n "$PYTHON_BIN" && -x "$PYTHON_BIN" ]]; then
+    return 0
+  fi
+  if [[ -z "$PYTHON_BOOTSTRAP" ]]; then
+    warn "python3 not found; unable to create venv at $VENV"
+    return 1
+  fi
+  if [[ ! -d "$VENV" ]]; then
+    info "Creating venv at $VENV"
+    if ! "$PYTHON_BOOTSTRAP" -m venv "$VENV"; then
+      warn "Failed to create venv at $VENV"
+      return 1
+    fi
+  fi
+  PYTHON_BIN="$VENV/bin/python"
+  if [[ ! -x "$PYTHON_BIN" ]]; then
+    warn "venv exists at $VENV but python binary missing"
+    return 1
+  fi
+  "$PYTHON_BIN" -m ensurepip --upgrade >/dev/null 2>&1 || true
+  "$PYTHON_BIN" -m pip install --upgrade pip >/dev/null 2>&1 || true
+  return 0
+}
+
 ensure_python_module() {
   local module="$1"
   local package="${2:-$1}"
-  if [[ -z "$PYTHON_BIN" ]]; then
+  if ! ensure_venv; then
     return 1
   fi
   if "$PYTHON_BIN" - <<PY >/dev/null 2>&1
@@ -74,19 +101,12 @@ PY
   then
     return 0
   fi
-  if ! "$PYTHON_BIN" -m pip --version >/dev/null 2>&1; then
-    info "Bootstrapping pip to install Python module ${package}"
-    if ! "$PYTHON_BIN" -m ensurepip --upgrade --user >/dev/null 2>&1; then
-      warn "Unable to bootstrap pip; install '${package}' manually with '$PYTHON_BIN -m pip install --user ${package}'."
-      return 1
-    fi
-  fi
-  info "Installing Python module ${package} (pip --user)"
-  if PIP_BREAK_SYSTEM_PACKAGES=1 "$PYTHON_BIN" -m pip install --user "${package}"; then
-    printf 'PIP_USER %s\n' "$package" >> "$INSTALL_LOG"
+  info "Installing Python module ${package} in venv ($VENV)"
+  if "$PYTHON_BIN" -m pip install "${package}"; then
+    printf 'VENV %s\n' "$package" >> "$INSTALL_LOG"
     return 0
   fi
-  warn "Failed to install Python module ${package}; run '$PYTHON_BIN -m pip install --user ${package}' manually."
+  warn "Failed to install Python module ${package}; run '$PYTHON_BIN -m pip install ${package}' manually."
   return 1
 }
 
@@ -120,6 +140,14 @@ if ! command -v cargo >/dev/null 2>&1; then
   echo "Install Rust via rustup: https://rustup.rs"
   pause "Press Enter after installing Rust (or Ctrl+C to abort)"
 fi
+if ensure_venv; then
+  case ":$PATH:" in
+    *":$VENV/bin:"*) : ;;
+    *) PATH="$VENV/bin:$PATH"; export PATH ;;
+  esac
+else
+  warn "Proceeding without repo venv; Python-based steps may be skipped."
+fi
 
 if [[ $minimal -eq 1 ]]; then
   info "Minimal mode enabled: skipping docs toolchain, docgen, and packaging."
@@ -137,31 +165,26 @@ if [[ "$build_mode" == "debug" ]]; then
 fi
 
 mkdocs_ok=0
-if command -v mkdocs >/dev/null 2>&1; then mkdocs_ok=1; fi
+if ensure_venv && "$PYTHON_BIN" - <<'PY' >/dev/null 2>&1
+import importlib.util
+import sys
+mods = ["mkdocs", "mkdocs_material", "mkdocs_git_revision_date_localized_plugin"]
+sys.exit(0 if all(importlib.util.find_spec(m) for m in mods) else 1)
+PY
+then
+  mkdocs_ok=1
+fi
 if [[ $no_docs -eq 0 && $mkdocs_ok -eq 0 ]]; then
-  if [[ -n "$PYTHON_BIN" ]]; then
-    info "Installing MkDocs via pip (user site)"
-    if ! "$PYTHON_BIN" -m pip --version >/dev/null 2>&1; then
-      info "Bootstrapping pip in user site"
-      if "$PYTHON_BIN" -m ensurepip --upgrade --user >/dev/null 2>&1; then
-        :
-      else
-        warn "Unable to bootstrap pip; docs site generation will be skipped unless MkDocs is installed manually."
-      fi
-    fi
-    if "$PYTHON_BIN" -m pip install --user mkdocs mkdocs-material mkdocs-git-revision-date-localized-plugin; then
+  if ensure_venv; then
+    info "Installing MkDocs toolchain in venv ($VENV)"
+    if "$PYTHON_BIN" -m pip install mkdocs mkdocs-material mkdocs-git-revision-date-localized-plugin; then
       mkdocs_ok=1
-      printf 'PIP_USER %s\n' mkdocs mkdocs-material mkdocs-git-revision-date-localized-plugin >> "$INSTALL_LOG"
-      user_base="$("$PYTHON_BIN" -m site --user-base 2>/dev/null || true)"
-      user_bin="${user_base:+$user_base/bin}"
-      if [[ -n "$user_bin" && -d "$user_bin" && ":$PATH:" != *":$user_bin:"* ]]; then
-        warn "MkDocs installed to $user_bin. Add it to PATH to run mkdocs directly."
-      fi
+      printf 'VENV %s\n' mkdocs mkdocs-material mkdocs-git-revision-date-localized-plugin >> "$INSTALL_LOG"
     else
-      warn "MkDocs install failed or pip is unavailable; docs site build will be skipped."
+      warn "MkDocs install failed; docs site build will be skipped."
     fi
   else
-    warn "python not found; skipping docs site build"
+    warn "python/venv unavailable; skipping docs site build"
   fi
 fi
 if [[ -n "$PYTHON_BIN" ]]; then

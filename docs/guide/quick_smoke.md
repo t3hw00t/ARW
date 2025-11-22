@@ -25,6 +25,7 @@ Once the quick smoke succeeds, graduate to the full [Quickstart](quickstart.md) 
 - `just` or [mise](https://mise.jdx.dev) (optional convenience wrappers). The commands below use the raw scripts so you can copy/paste without either tool.
 
 No Python, Node.js, or MkDocs dependencies are needed for this smoke.
+If you later add prompt compression (llmlingua), the repo uses a local `.venv` by default; no pip user/site installs are needed.
 
 ## One-Time Setup
 ```bash

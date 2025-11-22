@@ -55,6 +55,12 @@ function Show-GeneratedToken {
 }
 
 $root = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
+# Prefer repo venv python for llmlingua if available
+$defaultVenvPy = Join-Path $root '.venv\Scripts\python.exe'
+if (-not (Test-Path $defaultVenvPy)) { $defaultVenvPy = Join-Path $root '.venv/bin/python' }
+if (-not $env:LLMLINGUA_PYTHON -and (Test-Path $defaultVenvPy)) {
+  $env:LLMLINGUA_PYTHON = $defaultVenvPy
+}
 # Add project-local Rust cargo bin to PATH if present (isolated, no admin)
 $localRustCargoBin = Join-Path $root '.arw\rust\cargo\bin'
 New-Item -ItemType Directory -Force $localRustCargoBin | Out-Null

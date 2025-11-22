@@ -534,10 +534,12 @@ impl Drop for BlockingPoolState {
 
 impl KernelPragmas {
     fn from_env() -> Self {
+        // Default to a generously long busy timeout so dev setups don't drown in SQLITE_BUSY
+        // churn when multiple threads contend on WAL. Can still be overridden via env.
         let busy_timeout_ms: u64 = std::env::var("ARW_SQLITE_BUSY_MS")
             .ok()
             .and_then(|s| s.parse().ok())
-            .unwrap_or(5000);
+            .unwrap_or(15_000);
         let cache_pages: i64 = std::env::var("ARW_SQLITE_CACHE_PAGES")
             .ok()
             .and_then(|s| s.parse().ok())
@@ -563,9 +565,11 @@ fn blocking_worker_count() -> usize {
         .and_then(|s| s.parse::<usize>().ok())
         .filter(|v| *v > 0)
         .unwrap_or_else(|| {
+            // Avoid oversubscribing SQLite: a modest pool helps prevent lock storms.
             std::thread::available_parallelism()
-                .map(|n| n.get().clamp(2, 16))
-                .unwrap_or(4)
+                .map(|n| n.get().clamp(2, 4))
+                // In the worst case, keep it predictable and small.
+                .unwrap_or(2)
         })
 }
 
@@ -633,6 +637,7 @@ impl Kernel {
         let db_path = dir.join("events.sqlite");
         let need_init = !db_path.exists();
         let pragmas = Arc::new(KernelPragmas::from_env());
+        // Keep the SQLite pool small by default to avoid lock storms in dev/local runs.
         let pool_min_size = std::env::var("ARW_SQLITE_POOL_MIN")
             .ok()
             .and_then(|s| s.parse::<usize>().ok())
@@ -642,14 +647,16 @@ impl Kernel {
             .ok()
             .and_then(|s| s.parse::<usize>().ok())
             .filter(|v| *v > 0)
-            .unwrap_or(32)
+            .unwrap_or(8)
             .max(pool_min_size);
+        // Default to a very small pool in dev to reduce contention; can be overridden via env.
         let initial_target = std::env::var("ARW_SQLITE_POOL_SIZE")
             .ok()
             .and_then(|s| s.parse::<usize>().ok())
             .filter(|v| *v > 0)
-            .unwrap_or(8)
-            .clamp(pool_min_size, pool_max_ceiling);
+            .unwrap_or(2)
+            .clamp(pool_min_size, pool_max_ceiling)
+            .min(4);
         let conn = Connection::open(&db_path)?;
         Kernel::apply_pragmas(&conn, &pragmas)?;
         if need_init {

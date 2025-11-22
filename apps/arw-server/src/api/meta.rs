@@ -2,6 +2,7 @@ use std::collections::BTreeSet;
 
 use axum::http::HeaderMap;
 use axum::response::IntoResponse;
+use axum::response::Response;
 use axum::{extract::State, Json};
 use serde_json::json;
 
@@ -20,6 +21,51 @@ use arw_core::list_admin_endpoints;
 )]
 pub async fn healthz() -> impl IntoResponse {
     crate::responses::json_ok(json!({"ok": true}))
+}
+
+/// Bus lag diagnostics (dev-only; hidden).
+#[utoipa::path(
+    get,
+    path = "/dev/bus/lag",
+    tag = "Meta",
+    operation_id = "bus_lag_doc",
+    description = "Aggregated bus lag per subscriber (dev only; admin)",
+    responses(
+        (status = 200, description = "Lag stats", body = serde_json::Value),
+        (status = 401, description = "Unauthorized"),
+    )
+)]
+pub async fn bus_lag(headers: HeaderMap) -> Response {
+    if !crate::admin_ok(&headers).await {
+        return crate::responses::unauthorized(None);
+    }
+    let stats = crate::util::bus_lag_stats();
+    crate::responses::json_ok(json!({ "lag": stats })).into_response()
+}
+
+/// Bus counters + lag (dev-only; hidden).
+#[utoipa::path(
+    get,
+    path = "/dev/bus/stats",
+    tag = "Meta",
+    operation_id = "bus_stats_doc",
+    description = "Bus counters and lag totals (dev only; admin).",
+    responses(
+        (status = 200, description = "Bus stats", body = serde_json::Value),
+        (status = 401, description = "Unauthorized"),
+    )
+)]
+pub async fn bus_stats(headers: HeaderMap, State(state): State<crate::AppState>) -> Response {
+    if !crate::admin_ok(&headers).await {
+        return crate::responses::unauthorized(None);
+    }
+    let counters = state.bus().stats();
+    let lag = crate::util::bus_lag_stats();
+    crate::responses::json_ok(json!({
+        "counters": counters,
+        "lag": lag,
+    }))
+    .into_response()
 }
 
 /// Service metadata and endpoints index.

@@ -56,7 +56,15 @@ pub(crate) async fn build() -> BootstrapOutput {
     config::init_cache_policy_from_manifest();
     let smoke_mode = smoke_mode_enabled();
 
-    let bus = Bus::new_with_replay(256, 256);
+    let bus_cap = std::env::var("ARW_BUS_CAPACITY")
+        .ok()
+        .and_then(|v| v.parse::<usize>().ok())
+        .unwrap_or(1024);
+    let bus_replay = std::env::var("ARW_BUS_REPLAY")
+        .ok()
+        .and_then(|v| v.parse::<usize>().ok())
+        .unwrap_or(256);
+    let bus = Bus::new_with_replay(bus_cap, bus_replay);
     let kernel = Kernel::open(&crate::util::state_dir()).expect("init kernel");
     let kernel_enabled = config::kernel_enabled_from_env();
     let persona_enabled = kernel_enabled && config::persona_enabled_from_env();

@@ -1073,9 +1073,10 @@ fn spawn_service_health(state: &AppState) -> TaskHandle {
         move || {
             let bus = bus_for_task.clone();
             async move {
+                // Larger buffer to reduce lag on busy buses
                 let mut rx = bus.subscribe_filtered(
                     vec![arw_topics::TOPIC_SERVICE_HEALTH.to_string()],
-                    Some(64),
+                    Some(256),
                 );
                 let mut history: std::collections::VecDeque<Value> =
                     std::collections::VecDeque::with_capacity(50);

@@ -17,51 +17,75 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
+$root = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
+$venvRoot = if ($env:ARW_VENV) { $env:ARW_VENV } else { Join-Path $root '.venv' }
+$venvPython = $null
+
 $script:warnings = @()
 function Title($t){ Write-Host "`n=== $t ===" -ForegroundColor Cyan }
 function Info($m){ Write-Host "[setup] $m" -ForegroundColor DarkCyan }
 function Warn($m){ $script:warnings += $m }
 function Pause($m){ if(-not $Yes){ Read-Host $m | Out-Null } }
 
+function Get-VenvPythonPath {
+  if (Test-Path (Join-Path $venvRoot 'Scripts/python.exe')) {
+    return (Join-Path $venvRoot 'Scripts/python.exe')
+  }
+  if (Test-Path (Join-Path $venvRoot 'bin/python')) {
+    return (Join-Path $venvRoot 'bin/python')
+  }
+  return $null
+}
+
+function Ensure-Venv {
+  if ($venvPython -and (Test-Path $venvPython)) {
+    return $true
+  }
+  $pyBootstrap = Get-Command python3 -ErrorAction SilentlyContinue
+  if (-not $pyBootstrap) { $pyBootstrap = Get-Command python -ErrorAction SilentlyContinue }
+  if (-not $pyBootstrap) {
+    Warn "Python not found; unable to create venv at $venvRoot"
+    return $false
+  }
+  if (-not (Test-Path $venvRoot)) {
+    Info "Creating venv at $venvRoot"
+    try {
+      & $pyBootstrap.Path -m venv $venvRoot | Out-Null
+    } catch {
+      Warn "Failed to create venv at $venvRoot: $($_.Exception.Message)"
+      return $false
+    }
+  }
+  $venvPython = Get-VenvPythonPath
+  if (-not $venvPython) {
+    Warn "venv exists at $venvRoot but python executable not found"
+    return $false
+  }
+  try { & $venvPython -m ensurepip --upgrade | Out-Null } catch {}
+  try { & $venvPython -m pip install --upgrade pip | Out-Null } catch {}
+  return $true
+}
+
 function Ensure-PythonModule {
   param(
-    [Parameter(Mandatory=$true)][string]$PythonPath,
     [Parameter(Mandatory=$true)][string]$Module,
     [Parameter()][string]$Package
   )
   if (-not $Package) { $Package = $Module }
-  try {
-    & $PythonPath -c "import importlib, sys; sys.exit(0 if importlib.util.find_spec('$Module') else 1)" | Out-Null
-    if ($LASTEXITCODE -eq 0) { return $true }
-  } catch {}
-  Info "Installing Python module $Package (pip --user)"
-  try {
-    & $PythonPath -m pip --version | Out-Null
-  } catch {
-    Info 'Bootstrapping pip (ensurepip --user)'
-    try {
-      & $PythonPath -m ensurepip --upgrade --user | Out-Null
-    } catch {
-      Warn "Unable to bootstrap pip; install $Package manually via `$PythonPath -m pip install --user $Package`."
-      return $false
-    }
+  if (-not (Ensure-Venv)) {
+    return $false
   }
   try {
-    $prevBreak = $env:PIP_BREAK_SYSTEM_PACKAGES
-    $env:PIP_BREAK_SYSTEM_PACKAGES = '1'
-    try {
-      & $PythonPath -m pip install --user $Package | Out-Null
-    } finally {
-      if ([string]::IsNullOrEmpty($prevBreak)) {
-        Remove-Item Env:PIP_BREAK_SYSTEM_PACKAGES -ErrorAction SilentlyContinue
-      } else {
-        $env:PIP_BREAK_SYSTEM_PACKAGES = $prevBreak
-      }
-    }
-    Add-Content $installLog "PIP $Package"
+    & $venvPython -c "import importlib, sys; sys.exit(0 if importlib.util.find_spec('$Module') else 1)" | Out-Null
+    if ($LASTEXITCODE -eq 0) { return $true }
+  } catch {}
+  Info "Installing Python module $Package in venv ($venvRoot)"
+  try {
+    & $venvPython -m pip install $Package | Out-Null
+    Add-Content $installLog "VENV $Package"
     return $true
   } catch {
-    Warn "Failed to install Python module $Package; run `$PythonPath -m pip install --user $Package` manually."
+    Warn "Failed to install Python module $Package; run `$venvPython -m pip install $Package` manually."
     return $false
   }
 }
@@ -102,7 +126,6 @@ if ($buildMode -eq 'debug' -and -not $MaxPerf) {
 }
 
 Title 'Prerequisites'
-$root = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 Push-Location $root
 # Record install actions for uninstall.ps1
 $installLog = Join-Path $root '.install.log'
@@ -164,29 +187,39 @@ if ($cl) {
   }
 }
 
-$py = Get-Command python -ErrorAction SilentlyContinue
-if (-not $py) { $py = Get-Command python3 -ErrorAction SilentlyContinue }
-if (-not $py) {
-  Warn 'Python not found. Docs/site build and docgen extras may be skipped.'
+if (-not (Ensure-Venv)) {
+  Warn 'Python/venv not available. Docs/site build and docgen extras may be skipped.'
 } else {
-  if (-not (Get-Command mkdocs -ErrorAction SilentlyContinue)) {
-    if ($NoDocs) { Warn 'Skipping MkDocs install because -NoDocs was provided.' }
-    else {
-      Info 'MkDocs not found. Attempting to install via pip...'
-      try { & $py.Path -m pip install --upgrade --user pip | Out-Null } catch { Warn 'pip upgrade failed (continuing).'}
-      try { & $py.Path -m pip install --user mkdocs mkdocs-material mkdocs-git-revision-date-localized-plugin } catch { Warn 'pip install for mkdocs failed. Docs site will be skipped.' }
-      $mkOnPath = Get-Command mkdocs -ErrorAction SilentlyContinue
-      $mkViaPy = $false
-      try { & $py.Path -m mkdocs --version | Out-Null; $mkViaPy = $true } catch { $mkViaPy = $false }
-      if ($mkOnPath -or $mkViaPy) {
-        foreach($pkg in 'mkdocs','mkdocs-material','mkdocs-git-revision-date-localized-plugin') { Add-Content $installLog "PIP $pkg" }
-      } else {
-        Warn 'MkDocs install failed. Docs site will be skipped.'
-      }
-    }
+  $venvBin = Join-Path $venvRoot 'Scripts'
+  if (-not (Test-Path $venvBin)) { $venvBin = Join-Path $venvRoot 'bin' }
+  if (Test-Path $venvBin) {
+    $env:PATH = "$venvBin;$env:PATH"
   }
-  Ensure-PythonModule -PythonPath $py.Path -Module 'yaml' -Package 'pyyaml' | Out-Null
+  $mkdocsReady = $false
+  try {
+    $mkProbe = @"
+import importlib.util, sys
+mods = ["mkdocs", "mkdocs_material", "mkdocs_git_revision_date_localized_plugin"]
+sys.exit(0 if all(importlib.util.find_spec(m) for m in mods) else 1)
+"@
+    & $venvPython -c $mkProbe | Out-Null
+    if ($LASTEXITCODE -eq 0) { $mkdocsReady = $true }
+  } catch {}
+  if (-not $mkdocsReady -and -not $NoDocs) {
+    Info "Installing MkDocs toolchain in venv ($venvRoot)"
+    try {
+      & $venvPython -m pip install mkdocs mkdocs-material mkdocs-git-revision-date-localized-plugin | Out-Null
+      foreach($pkg in 'mkdocs','mkdocs-material','mkdocs-git-revision-date-localized-plugin') { Add-Content $installLog "VENV $pkg" }
+      $mkdocsReady = $true
+    } catch {
+      Warn "MkDocs install failed in venv ($venvRoot): $($_.Exception.Message)"
+    }
+  } elseif ($NoDocs) {
+    Warn 'Skipping MkDocs install because -NoDocs was provided.'
+  }
+  Ensure-PythonModule -Module 'yaml' -Package 'pyyaml' | Out-Null
 }
+
 Title 'Clean previous build artifacts'
 if ($Clean) {
   try { & cargo clean } catch {}
@@ -348,4 +381,3 @@ if ($Minimal) {
 } else {
   Info 'Done. See dist\ for portable bundle.'
 }
-

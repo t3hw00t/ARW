@@ -1,6 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+if [[ -z "${LLMLINGUA_PYTHON:-}" ]]; then
+  repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+  if [[ -x "$repo_root/.venv/bin/python" ]]; then
+    export LLMLINGUA_PYTHON="$repo_root/.venv/bin/python"
+  fi
+fi
+
 port=""
 port_set=0
 debug=0
