@@ -142,9 +142,7 @@ pub async fn next_bus_event(
             Err(broadcast::error::RecvError::Lagged(skipped)) => {
                 bus.note_lag(skipped);
                 let mut tracker = LAG_TRACKER.lock().unwrap_or_else(|p| p.into_inner());
-                let state = tracker
-                    .entry(task.to_string())
-                    .or_insert_with(LagState::default);
+                let state = tracker.entry(task.to_string()).or_default();
                 state.accum = state.accum.saturating_add(skipped);
                 if state.last.elapsed().as_millis() >= LAG_LOG_INTERVAL_MS
                     || state.accum >= LAG_LOG_THRESHOLD
