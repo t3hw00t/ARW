@@ -83,6 +83,8 @@ setTimeout(() => stream.close(), 30_000);
 Example runner:
 - `ts-node clients/typescript/examples/managed_stream.ts --topic service. --replay 10 --max-queue 500 --duration 15000`
 - Or via Just/Mise tasks below.
+  - `just ts-managed-stream base=http://127.0.0.1:8091 topics=service. replay=10 max_queue=500 duration=15000`
+  - `mise run ts:managed:stream BASE=http://127.0.0.1:8091 TOPICS=service. REPLAY=10 MAX_QUEUE=500 DURATION=15000`
 
 ## Usage
 
