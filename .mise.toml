@@ -125,6 +125,10 @@ run = """bash -lc 'set -euo pipefail; BASE=${BASE:-http://127.0.0.1:8091} ID=${I
 description = "Mini dashboard route_stats JSON once smoke"
 run = """bash -lc 'set -euo pipefail; BASE=${BASE:-http://127.0.0.1:8091} cargo run -p arw-mini-dashboard -- --base \"$BASE\" --id route_stats --json --once'"""
 
+[tasks."ts:managed:stream"]
+description = "Run TS managed stream example with drop logging/metrics"
+run = """bash -lc 'set -euo pipefail; base=${BASE:-http://127.0.0.1:8091}; token=${ARW_ADMIN_TOKEN:-${TOKEN:-}}; topics=${TOPICS:-service.}; replay=${REPLAY:-10}; max_queue=${MAX_QUEUE:-500}; duration=${DURATION:-15000}; pushd clients/typescript >/dev/null; if [ -f package-lock.json ]; then npm ci --no-audit --no-fund; else npm install --no-audit --no-fund; fi; npm run -s build; args=(--topic \"$topics\" --replay \"$replay\" --max-queue \"$max_queue\" --duration \"$duration\"); if [ -n \"$token\" ]; then ARW_ADMIN_TOKEN=\"$token\" BASE=\"$base\" node dist/examples/managed_stream.js \"${args[@]}\"; else BASE=\"$base\" node dist/examples/managed_stream.js \"${args[@]}\"; fi; popd >/dev/null'"""
+
 [tasks."cli:events:tail"]
 description = "arw-cli events tail with common defaults"
 run = """bash -lc 'set -euo pipefail; BASE=${BASE:-http://127.0.0.1:8091} PREFIX=${PREFIX:-service.,state.read.model.patch} REPLAY=${REPLAY:-25} STORE=${STORE:-.arw/last-event-id} STRUCTURED=${STRUCTURED:-0}; cargo run -p arw-cli -- events tail --base \"$BASE\" --prefix \"$PREFIX\" --replay \"$REPLAY\" --store \"$STORE\" ${STRUCTURED:+--structured}'"""
