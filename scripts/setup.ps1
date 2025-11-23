@@ -58,8 +58,20 @@ function Ensure-Venv {
   }
   $venvPython = Get-VenvPythonPath
   if (-not $venvPython) {
-    Warn "venv exists at $venvRoot but python executable not found"
-    return $false
+    if ($pyBootstrap) {
+      Info "Repairing venv at $venvRoot (python executable missing)"
+      try {
+        & $pyBootstrap.Path -m venv $venvRoot | Out-Null
+      } catch {
+        Warn "Failed to repair venv at ${venvRoot}: $($_.Exception.Message)"
+        return $false
+      }
+      $venvPython = Get-VenvPythonPath
+    }
+    if (-not $venvPython) {
+      Warn "venv exists at $venvRoot but python executable not found"
+      return $false
+    }
   }
   try { & $venvPython -m ensurepip --upgrade | Out-Null } catch {}
   try { & $venvPython -m pip install --upgrade pip | Out-Null } catch {}

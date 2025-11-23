@@ -93,6 +93,60 @@ function Contains-Switch {
   return $false
 }
 
+function Parse-SetupSwitches {
+  param([string[]]$Values)
+  $known = @{
+    'yes'               = 'Yes'
+    'runtests'          = 'RunTests'
+    'nodocs'            = 'NoDocs'
+    'minimal'           = 'Minimal'
+    'headless'          = 'Headless'
+    'withlauncher'      = 'WithLauncher'
+    'skipbuild'         = 'SkipBuild'
+    'skipcli'           = 'SkipCli'
+    'withcli'           = 'WithCli'
+    'maxperf'           = 'MaxPerf'
+    'strictreleasegate' = 'StrictReleaseGate'
+    'skipreleasegate'   = 'SkipReleaseGate'
+    'clean'             = 'Clean'
+  }
+
+  $switches = @{}
+  $unknown = @()
+  if ($Values) {
+    for ($i = 0; $i -lt $Values.Count; $i++) {
+      $raw = $Values[$i]
+      if ([string]::IsNullOrWhiteSpace($raw)) { continue }
+      if (-not ($raw.StartsWith('-') -or $raw.StartsWith('/'))) {
+        $unknown += $raw
+        continue
+      }
+
+      $trimmed = $raw.TrimStart('-', '/')
+      $name = $trimmed
+      $value = $true
+      if ($trimmed -match '[:=]') {
+        $parts = $trimmed -split '[:=]', 2
+        $name = $parts[0]
+        $valText = $parts[1]
+        try { $value = [System.Management.Automation.LanguagePrimitives]::ConvertTo($valText, [bool]) } catch { $value = $valText }
+      }
+
+      $key = $known[$name.ToLowerInvariant()]
+      if ($key) {
+        $switches[$key] = $value
+      } else {
+        $unknown += $raw
+      }
+    }
+  }
+
+  return [pscustomobject]@{
+    Switches = $switches
+    Unknown  = $unknown
+  }
+}
+
 function Invoke-Program {
   param(
     [Parameter(Mandatory = $true)][System.Management.Automation.CommandInfo]$Executable,
@@ -558,23 +612,39 @@ switch ($commandKey) {
     Show-Help
   }
   'setup' {
-    $defaults = @()
-    $hasYes = Contains-Switch -Values $Args -Switches @('yes')
-    $hasHeadless = Contains-Switch -Values $Args -Switches @('headless')
-    $hasWithLauncher = Contains-Switch -Values $Args -Switches @('withlauncher')
-    if (-not $hasYes) { $defaults += '-Yes' }
-    if (-not $hasHeadless -and -not $hasWithLauncher) { $defaults += '-Headless' }
-    & (Join-Path $ScriptRoot 'setup.ps1') @defaults @Args
+    $parsed = Parse-SetupSwitches -Values $Args
+    $splat = @{}
+    foreach ($key in $parsed.Switches.Keys) { $splat[$key] = $parsed.Switches[$key] }
+    if (-not $splat.ContainsKey('Yes')) { $splat['Yes'] = $true }
+    $hasHeadless = $splat.ContainsKey('Headless')
+    $hasWithLauncher = $splat.ContainsKey('WithLauncher')
+    if (-not $hasHeadless -and -not $hasWithLauncher) { $splat['Headless'] = $true }
+    if ($parsed.Unknown.Count -gt 0) {
+      Write-Warning ('[setup] Unrecognized options ignored: {0}' -f ($parsed.Unknown -join ' '))
+    }
+    & (Join-Path $ScriptRoot 'setup.ps1') @splat
   }
   'setup-agent' {
     $previousDocgen = $env:ARW_DOCGEN_SKIP_BUILDS
     $previousBuildMode = $env:ARW_BUILD_MODE
     $previousAgentFlag = $env:ARW_SETUP_AGENT
+    $parsed = Parse-SetupSwitches -Values $Args
+    $splat = @{
+      Headless  = $true
+      Minimal   = $true
+      NoDocs    = $true
+      SkipCli   = $true
+      Yes       = $true
+    }
+    foreach ($key in $parsed.Switches.Keys) { $splat[$key] = $parsed.Switches[$key] }
     try {
       $env:ARW_DOCGEN_SKIP_BUILDS = '1'
       $env:ARW_BUILD_MODE = 'debug'
       $env:ARW_SETUP_AGENT = '1'
-      & (Join-Path $ScriptRoot 'setup.ps1') -Headless -Minimal -NoDocs -SkipCli -Yes @Args
+      if ($parsed.Unknown.Count -gt 0) {
+        Write-Warning ('[setup-agent] Unrecognized options ignored: {0}' -f ($parsed.Unknown -join ' '))
+      }
+      & (Join-Path $ScriptRoot 'setup.ps1') @splat
     } finally {
       if ($null -eq $previousDocgen) {
         Remove-Item Env:ARW_DOCGEN_SKIP_BUILDS -ErrorAction SilentlyContinue
