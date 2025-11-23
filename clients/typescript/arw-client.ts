@@ -1425,10 +1425,42 @@ export class ArwClient {
     watchDailyBrief: (
       options: Omit<SubscribeReadModelOptions, 'loadInitial'> & { loadInitial?: () => Promise<DailyBriefSnapshot> } = {},
     ): { close(): void; getSnapshot(): DailyBriefSnapshot | undefined; onUpdate(handler: (snap?: DailyBriefSnapshot) => void): () => void } => {
-      const { loadInitial, onStateChange, inactivityTimeoutMs, autoReconnect, reconnectInitialDelayMs, reconnectMaxDelayMs, reconnectJitterMs } = options as any;
+      const {
+        loadInitial,
+        onStateChange,
+        inactivityTimeoutMs,
+        autoReconnect,
+        reconnectInitialDelayMs,
+        reconnectMaxDelayMs,
+        reconnectJitterMs,
+        onDrop,
+        onMetrics,
+        maxPendingPatches,
+        throttleMs,
+      } = options as any;
       let snapshot: DailyBriefSnapshot | undefined;
       const listeners = new Set<(snap?: DailyBriefSnapshot) => void>();
       const emit = () => { for (const fn of Array.from(listeners)) { try { fn(snapshot); } catch {} } };
+
+      let pending = 0;
+      let dropped = 0;
+      let applied = 0;
+      let lastEventId: string | undefined;
+      const publishMetrics = () => {
+        try { onMetrics?.({ pending, dropped, applied, lastEventId }); } catch {}
+      };
+
+      let notifyTimer: ReturnType<typeof setTimeout> | null = null;
+      const scheduleNotify = () => {
+        if (!listeners.size) return;
+        const delay = Math.max(0, Math.floor(throttleMs ?? 0));
+        if (delay === 0) {
+          emit();
+          return;
+        }
+        if (notifyTimer) return;
+        notifyTimer = setTimeout(() => { notifyTimer = null; emit(); }, delay);
+      };
 
       let sub: any = null;
       const start = async () => {
@@ -1449,16 +1481,28 @@ export class ArwClient {
         const handler = (e: any) => {
           try {
             const data = e?.data;
+            const evtId = e?.lastEventId;
             if (data && typeof data === 'object') {
+              pending += 1;
+              if (typeof maxPendingPatches === 'number' && maxPendingPatches > 0 && pending > maxPendingPatches) {
+                const drop = pending - maxPendingPatches;
+                dropped += drop;
+                pending = maxPendingPatches;
+                try { onDrop?.({ dropped: drop, reason: 'pending-cap', readModelId: 'daily_brief' }); } catch {}
+              }
               snapshot = data as DailyBriefSnapshot;
-              emit();
+              applied += 1;
+              pending = Math.max(0, pending - 1);
+              if (evtId) lastEventId = evtId;
+              publishMetrics();
+              scheduleNotify();
             }
           } catch {}
         };
         // Browser EventSource
         if (typeof (globalThis as any).EventSource !== 'undefined') {
           (sub as EventSource).onmessage = (evt: MessageEvent) => {
-            try { handler({ data: JSON.parse((evt.data as any) || '{}') }); } catch {}
+            try { handler({ data: JSON.parse((evt.data as any) || '{}'), lastEventId: (evt as any).lastEventId }); } catch {}
           };
         } else {
           // Node fallback returns { close, onmessage, onerror }
@@ -1467,7 +1511,13 @@ export class ArwClient {
       };
       start();
       return {
-        close: () => { try { sub?.close?.(); } catch {} },
+        close: () => {
+          try { sub?.close?.(); } catch {}
+          if (notifyTimer) {
+            clearTimeout(notifyTimer);
+            notifyTimer = null;
+          }
+        },
         getSnapshot: () => snapshot,
         onUpdate: (fn: (snap?: DailyBriefSnapshot) => void) => { listeners.add(fn); return () => listeners.delete(fn); },
       };

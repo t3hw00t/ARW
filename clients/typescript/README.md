@@ -28,6 +28,11 @@ Pass `--refresh` (`-Refresh` in PowerShell) to force a fresh cache and tarball.
 
 If you find a checked-in `.tooling/node-*/` folder on the machine, you can temporarily add its `node.exe` directory to `PATH` to use that pinned Node/npm for installs and builds (keeps tooling consistent without requiring a global install).
 
+Backpressure/metrics knobs:
+- `events.stream`: `maxQueue` (soft cap, drops oldest), `onDrop` (notified on drops), `onStats` (pending+dropped counters), `parseJson` (default true), `signal` for cancellation.
+- `events.subscribeReadModel`: `maxPendingPatches` (cap pre-hydration backlog), `onDrop` (drops when cap exceeded), `throttleMs` (coalesce onUpdate), `onMetrics` (pending/applied/dropped/lastEventId), plus `initial`, `loadInitial`, `reconnect*`, `inactivityTimeoutMs`.
+- Watch helpers (`watch*`) accept the same backpressure/metrics options; `watchDailyBrief` also respects `maxPendingPatches`, `onDrop`, `onMetrics`, and `throttleMs`.
+
 ## Usage
 
 ```ts
