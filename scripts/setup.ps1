@@ -52,7 +52,7 @@ function Ensure-Venv {
     try {
       & $pyBootstrap.Path -m venv $venvRoot | Out-Null
     } catch {
-      Warn "Failed to create venv at $venvRoot: $($_.Exception.Message)"
+      Warn "Failed to create venv at ${venvRoot}: $($_.Exception.Message)"
       return $false
     }
   }
