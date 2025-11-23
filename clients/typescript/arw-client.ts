@@ -101,6 +101,8 @@ export interface SubscribeReadModelOptions {
   onMetrics?: (stats: ReadModelMetrics) => void;
   /** Apply at most N patches per tick; remaining patches queue and flush on future ticks. */
   maxApplyPerTick?: number;
+  /** Emit console warnings on drops (for dev). */
+  logDrops?: boolean;
 }
 
 export interface ReadModelSubscription {
@@ -136,6 +138,8 @@ export interface StreamOptions extends EventsOptions {
   onDrop?: (info: { dropped: number; reason: 'stream-backpressure' }) => void;
   /** Optional callback for lightweight queue stats (invoked on drops). */
   onStats?: (stats: StreamMetrics) => void;
+  /** Emit console warnings on drops (for dev). */
+  logDrops?: boolean;
 }
 
 export interface StreamEvent<T = Json> {
@@ -143,6 +147,11 @@ export interface StreamEvent<T = Json> {
   raw: string | null;
   lastEventId?: string;
   type?: string;
+}
+
+export interface ManagedStream<T = Json> extends AsyncGenerator<StreamEvent<T>> {
+  close(): void;
+  stats(): StreamMetrics;
 }
 
 // Daily Brief types
@@ -974,6 +983,9 @@ export class ArwClient {
         } catch {
           // swallow observer errors
         }
+        if (opts.logDrops) {
+          console.warn(`read-model ${id} dropped ${dropped} patch(es) (${reason})`);
+        }
       };
       const publishMetrics = () => {
         try {
@@ -1254,6 +1266,9 @@ export class ArwClient {
         } catch {
           // ignore observer errors
         }
+        if (options?.logDrops) {
+          console.warn(`events.stream dropped ${dropped} event(s); pending=${Math.max(0, queue.length - queueHead)}`);
+        }
       };
 
       const detach = () => {
@@ -1401,6 +1416,25 @@ export class ArwClient {
       };
 
       return iterator;
+    },
+
+    managedStream: <T = Json>(
+      options?: Omit<StreamOptions, 'onStats'>,
+    ): ManagedStream<T> => {
+      const metrics = createStreamMetricsCollector();
+      const stream = this.events.stream<T>({ ...(options ?? {}), onStats: metrics.onStats, onDrop: (info) => {
+        metrics.onDrop(info);
+        options?.onDrop?.(info);
+      } });
+      const iterable: ManagedStream<T> = Object.assign(stream, {
+        close: () => {
+          try {
+            (stream as any).return?.();
+          } catch {}
+        },
+        stats: () => metrics.snapshot(),
+      });
+      return iterable;
     },
   };
 

@@ -34,6 +34,49 @@ Backpressure/metrics knobs:
 - Watch helpers (`watch*`) accept the same backpressure/metrics options; `watchDailyBrief` also respects `maxPendingPatches`, `onDrop`, `onMetrics`, and `throttleMs`.
 - Helpers: `createStreamMetricsCollector()` / `createReadModelMetricsCollector()` return reusable `onDrop`/`onStats`/`onMetrics` hooks and `snapshot()`/`reset()` accessors for quick telemetry wiring.
 
+Example: cap/read-model metrics
+
+```ts
+import { ArwClient, createReadModelMetricsCollector } from '@arw/client';
+
+const client = new ArwClient(process.env.BASE!, process.env.ARW_ADMIN_TOKEN);
+const metrics = createReadModelMetricsCollector();
+
+const sub = client.events.subscribeReadModel('projects', {
+  maxPendingPatches: 200,
+  maxApplyPerTick: 10,
+  throttleMs: 50,
+  onDrop: ({ dropped }) => console.warn('dropped patches', dropped),
+  onMetrics: metrics.onMetrics,
+  onUpdate: (snap) => console.log('version', snap?.version),
+});
+
+setInterval(() => {
+  console.log('metrics', metrics.snapshot());
+}, 5000);
+```
+
+Example: managed stream with defaults
+
+```ts
+import { ArwClient } from '@arw/client';
+
+const client = new ArwClient(process.env.BASE!, process.env.ARW_ADMIN_TOKEN);
+
+const stream = client.events.managedStream({
+  topics: ['service.*'],
+  replay: 10,
+  maxQueue: 500,
+  logDrops: true,
+});
+
+for await (const evt of stream) {
+  console.log(evt.type, evt.data);
+}
+
+console.log('final stats', stream.stats());
+```
+
 ## Usage
 
 ```ts
