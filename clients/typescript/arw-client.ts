@@ -97,6 +97,8 @@ export interface SubscribeReadModelOptions {
   onDrop?: (info: { dropped: number; reason: 'pending-cap'; readModelId: string }) => void;
   /** Throttle onUpdate callbacks (ms). Set to 0 to emit immediately. */
   throttleMs?: number;
+  /** Optional callback for read-model metrics (called on drop/apply/hydrate). */
+  onMetrics?: (stats: { pending: number; dropped: number; applied: number; lastEventId?: string }) => void;
 }
 
 export interface ReadModelSubscription {
@@ -118,6 +120,8 @@ export interface StreamOptions extends EventsOptions {
   maxQueue?: number;
   /** Optional callback when events are dropped due to backpressure limits. */
   onDrop?: (info: { dropped: number; reason: 'stream-backpressure' }) => void;
+  /** Optional callback for lightweight queue stats (invoked on drops). */
+  onStats?: (stats: { dropped: number; pending: number }) => void;
 }
 
 export interface StreamEvent<T = Json> {
@@ -877,6 +881,12 @@ export class ArwClient {
         opts.initial !== undefined ? deepClone(opts.initial) : undefined;
       let hasSnapshot = opts.initial !== undefined;
       let lastEventId = opts.lastEventId;
+      const metrics = {
+        pending: 0,
+        dropped: 0,
+        applied: 0,
+        lastEventId: opts.lastEventId,
+      };
       const listeners = new Set<(value: Json) => void>();
       if (opts.onUpdate) {
         listeners.add(opts.onUpdate);
@@ -889,6 +899,13 @@ export class ArwClient {
           opts.onDrop?.({ dropped, reason, readModelId: id });
         } catch {
           // swallow observer errors
+        }
+      };
+      const publishMetrics = () => {
+        try {
+          opts.onMetrics?.({ ...metrics, lastEventId });
+        } catch {
+          // ignore observer errors
         }
       };
 
@@ -964,18 +981,26 @@ export class ArwClient {
             if (maxPending > 0 && pending.length >= maxPending) {
               const drop = pending.length - maxPending + 1;
               pending.splice(0, drop);
+              metrics.dropped += drop;
               emitDrop(drop, 'pending-cap');
             }
             pending.push({ patch: patchOps, eventId });
+            metrics.pending = pending.length;
+            publishMetrics();
             if (eventId) {
               lastEventId = eventId;
+              metrics.lastEventId = lastEventId;
             }
             return;
           }
           snapshot = applyJsonPatchMutable(snapshot ?? {}, patchOps);
           if (eventId) {
             lastEventId = eventId;
+            metrics.lastEventId = lastEventId;
           }
+          metrics.applied += 1;
+          metrics.pending = pending.length;
+          publishMetrics();
           scheduleNotify();
         } catch {
           // ignore parse errors
@@ -1050,8 +1075,12 @@ export class ArwClient {
             if (entry.eventId) {
               lastEventId = entry.eventId;
             }
+            metrics.applied += 1;
           }
         }
+        metrics.lastEventId = lastEventId;
+        metrics.pending = pending.length;
+        publishMetrics();
         scheduleNotify();
       };
 
@@ -1079,7 +1108,7 @@ export class ArwClient {
       if (typeof (globalThis as any).EventSource !== 'undefined') {
         throw new Error('events.stream() is intended for Node environments without EventSource');
       }
-      const { signal, parseJson = true, maxQueue, onDrop, ...eventOpts } = options ?? {};
+      const { signal, parseJson = true, maxQueue, onDrop, onStats, ...eventOpts } = options ?? {};
       const sub = this.events.subscribe(eventOpts as EventsOptions);
       if (typeof (sub as any).addEventListener === 'function') {
         throw new Error('events.stream() cannot operate on EventSource instances; use subscribe() instead.');
@@ -1094,6 +1123,7 @@ export class ArwClient {
 
       const queue: StreamEvent<T>[] = [];
       let queueHead = 0;
+      let droppedCount = 0;
       const waiters: Array<{
         resolve: (value: IteratorResult<StreamEvent<T>>) => void;
         reject: (err: any) => void;
@@ -1104,6 +1134,12 @@ export class ArwClient {
       const emitDrop = (dropped: number) => {
         if (dropped <= 0) {
           return;
+        }
+        droppedCount += dropped;
+        try {
+          onStats?.({ dropped: droppedCount, pending: Math.max(0, queue.length - queueHead) });
+        } catch {
+          // ignore observer errors
         }
         try {
           onDrop?.({ dropped, reason: 'stream-backpressure' });
