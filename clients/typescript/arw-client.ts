@@ -108,6 +108,8 @@ export type WatchActionsOptions = StateActionsOptions & SubscribeReadModelOption
 export interface StreamOptions extends EventsOptions {
   signal?: AbortSignal;
   parseJson?: boolean;
+  /** Soft cap for buffered events; older events are dropped when exceeded to avoid unbounded memory. */
+  maxQueue?: number;
 }
 
 export interface StreamEvent<T = Json> {
@@ -725,6 +727,10 @@ export class ArwClient {
         },
       };
 
+      // Reuse decoder/buffer across reconnects to avoid reallocating for long-lived streams.
+      const decoder = new TextDecoder();
+      let buffer = '';
+
       const startStream = async () => {
         if (closed) {
           return;
@@ -745,8 +751,6 @@ export class ArwClient {
           emitState({ state: 'open', attempt: 0 });
           armInactivity();
           const reader = (response.body as any).getReader();
-          const decoder = new TextDecoder();
-          let buffer = '';
           let event: { id?: string; event?: string; data?: string } = {};
           const flush = () => {
             if (event.data == null) {
@@ -1031,7 +1035,7 @@ export class ArwClient {
       if (typeof (globalThis as any).EventSource !== 'undefined') {
         throw new Error('events.stream() is intended for Node environments without EventSource');
       }
-      const { signal, parseJson = true, ...eventOpts } = options ?? {};
+      const { signal, parseJson = true, maxQueue, ...eventOpts } = options ?? {};
       const sub = this.events.subscribe(eventOpts as EventsOptions);
       if (typeof (sub as any).addEventListener === 'function') {
         throw new Error('events.stream() cannot operate on EventSource instances; use subscribe() instead.');
@@ -1118,6 +1122,11 @@ export class ArwClient {
           const { resolve } = waiters.shift()!;
           resolve({ value: event, done: false });
         } else {
+          const limit = typeof maxQueue === 'number' && maxQueue > 0 ? Math.floor(maxQueue) : null;
+          if (limit !== null && queue.length - queueHead >= limit) {
+            // Drop oldest to stay within soft cap; prefer graceful degradation over throw.
+            queueHead = Math.min(queue.length, queueHead + 1);
+          }
           queue.push(event);
         }
       };
