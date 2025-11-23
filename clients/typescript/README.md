@@ -26,6 +26,8 @@ Behaviour:
 
 Pass `--refresh` (`-Refresh` in PowerShell) to force a fresh cache and tarball.
 
+If you find a checked-in `.tooling/node-*/` folder on the machine, you can temporarily add its `node.exe` directory to `PATH` to use that pinned Node/npm for installs and builds (keeps tooling consistent without requiring a global install).
+
 ## Usage
 
 ```ts
