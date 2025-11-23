@@ -91,6 +91,12 @@ export interface SubscribeReadModelOptions {
   reconnectJitterMs?: number;
   onStateChange?: (change: EventsStateChange) => void;
   inactivityTimeoutMs?: number;
+  /** Cap the number of pending patches buffered before the initial snapshot is hydrated. */
+  maxPendingPatches?: number;
+  /** Optional callback when patches/events are dropped due to backpressure limits. */
+  onDrop?: (info: { dropped: number; reason: 'pending-cap'; readModelId: string }) => void;
+  /** Throttle onUpdate callbacks (ms). Set to 0 to emit immediately. */
+  throttleMs?: number;
 }
 
 export interface ReadModelSubscription {
@@ -110,6 +116,8 @@ export interface StreamOptions extends EventsOptions {
   parseJson?: boolean;
   /** Soft cap for buffered events; older events are dropped when exceeded to avoid unbounded memory. */
   maxQueue?: number;
+  /** Optional callback when events are dropped due to backpressure limits. */
+  onDrop?: (info: { dropped: number; reason: 'stream-backpressure' }) => void;
 }
 
 export interface StreamEvent<T = Json> {
@@ -863,6 +871,8 @@ export class ArwClient {
       options?: SubscribeReadModelOptions,
     ): ReadModelSubscription => {
       const opts = options ?? {};
+      const throttleMs = Math.max(0, Math.floor(opts.throttleMs ?? 0));
+      const maxPending = Math.max(0, Math.floor(opts.maxPendingPatches ?? 0));
       let snapshot: Json | undefined =
         opts.initial !== undefined ? deepClone(opts.initial) : undefined;
       let hasSnapshot = opts.initial !== undefined;
@@ -872,7 +882,18 @@ export class ArwClient {
         listeners.add(opts.onUpdate);
       }
 
-      const notify = () => {
+      let notifyTimer: ReturnType<typeof setTimeout> | null = null;
+      const emitDrop = (dropped: number, reason: 'pending-cap') => {
+        if (dropped <= 0) return;
+        try {
+          opts.onDrop?.({ dropped, reason, readModelId: id });
+        } catch {
+          // swallow observer errors
+        }
+      };
+
+      const deliver = () => {
+        notifyTimer = null;
         if (!listeners.size || !hasSnapshot) {
           return;
         }
@@ -888,6 +909,20 @@ export class ArwClient {
             // ignore listener errors
           }
         }
+      };
+
+      const scheduleNotify = () => {
+        if (!listeners.size || !hasSnapshot) {
+          return;
+        }
+        if (throttleMs <= 0) {
+          deliver();
+          return;
+        }
+        if (notifyTimer) {
+          return;
+        }
+        notifyTimer = setTimeout(deliver, throttleMs);
       };
 
       const pending: { patch: JsonPatchOp[]; eventId?: string }[] = [];
@@ -926,6 +961,11 @@ export class ArwClient {
           }
           const patchOps = patch as JsonPatchOp[];
           if (!hasSnapshot) {
+            if (maxPending > 0 && pending.length >= maxPending) {
+              const drop = pending.length - maxPending + 1;
+              pending.splice(0, drop);
+              emitDrop(drop, 'pending-cap');
+            }
             pending.push({ patch: patchOps, eventId });
             if (eventId) {
               lastEventId = eventId;
@@ -936,7 +976,7 @@ export class ArwClient {
           if (eventId) {
             lastEventId = eventId;
           }
-          notify();
+          scheduleNotify();
         } catch {
           // ignore parse errors
         }
@@ -977,6 +1017,10 @@ export class ArwClient {
           }
           closed = true;
           detach?.();
+          if (notifyTimer) {
+            clearTimeout(notifyTimer);
+            notifyTimer = null;
+          }
           listeners.clear();
         },
         getSnapshot: () => (hasSnapshot ? deepClone(snapshot) : undefined),
@@ -1008,7 +1052,7 @@ export class ArwClient {
             }
           }
         }
-        notify();
+        scheduleNotify();
       };
 
       if (opts.initial !== undefined) {
@@ -1035,7 +1079,7 @@ export class ArwClient {
       if (typeof (globalThis as any).EventSource !== 'undefined') {
         throw new Error('events.stream() is intended for Node environments without EventSource');
       }
-      const { signal, parseJson = true, maxQueue, ...eventOpts } = options ?? {};
+      const { signal, parseJson = true, maxQueue, onDrop, ...eventOpts } = options ?? {};
       const sub = this.events.subscribe(eventOpts as EventsOptions);
       if (typeof (sub as any).addEventListener === 'function') {
         throw new Error('events.stream() cannot operate on EventSource instances; use subscribe() instead.');
@@ -1057,6 +1101,16 @@ export class ArwClient {
       let finished = false;
       let storedError: any = null;
       let abortHandler: (() => void) | null = null;
+      const emitDrop = (dropped: number) => {
+        if (dropped <= 0) {
+          return;
+        }
+        try {
+          onDrop?.({ dropped, reason: 'stream-backpressure' });
+        } catch {
+          // ignore observer errors
+        }
+      };
 
       const detach = () => {
         sink.onmessage = prevOnMessage;
@@ -1121,14 +1175,18 @@ export class ArwClient {
         if (waiters.length) {
           const { resolve } = waiters.shift()!;
           resolve({ value: event, done: false });
-        } else {
-          const limit = typeof maxQueue === 'number' && maxQueue > 0 ? Math.floor(maxQueue) : null;
-          if (limit !== null && queue.length - queueHead >= limit) {
-            // Drop oldest to stay within soft cap; prefer graceful degradation over throw.
-            queueHead = Math.min(queue.length, queueHead + 1);
-          }
-          queue.push(event);
+          return;
         }
+        const limit = typeof maxQueue === 'number' && maxQueue > 0 ? Math.floor(maxQueue) : null;
+        if (limit !== null) {
+          const backlog = queue.length - queueHead;
+          if (backlog >= limit) {
+            const drop = backlog - limit + 1;
+            queueHead = Math.min(queue.length, queueHead + drop);
+            emitDrop(drop);
+          }
+        }
+        queue.push(event);
       };
 
       sink.onerror = (err) => {
