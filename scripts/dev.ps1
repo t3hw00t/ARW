@@ -64,8 +64,18 @@ function Resolve-Tool {
 # Preflight: summarize environment mode for users and agents
 try {
   $bash = Resolve-Tool @((Join-Path ${env:ProgramFiles} 'Git\bin\bash.exe'), 'bash')
-  if ($bash) {
-    & $bash.Source (Join-Path $RepoRoot 'scripts\env\status.sh')
+  $envStatusPath = Join-Path $RepoRoot 'scripts\env\status.sh'
+  $hasEnvStatus = Test-Path $envStatusPath
+  $isGitBash = $bash -and ($bash.Source -like '*Git\\bin\\bash.exe')
+  $psStatus = Join-Path $RepoRoot 'scripts\env\status.ps1'
+  if ($isGitBash -and $hasEnvStatus) {
+    & $bash.Source ($envStatusPath.Replace('\','/'))
+  } elseif (Test-Path $psStatus) {
+    & $psStatus
+  } elseif ($bash -and $hasEnvStatus) {
+    Write-Host '[env] status skipped: Git Bash not found; install Git for Windows or run from pwsh' -ForegroundColor Yellow
+  } elseif ($bash) {
+    Write-Host '[env] status skipped: scripts/env/status.sh missing' -ForegroundColor Yellow
   } else {
     $arwEnvPath = Join-Path $RepoRoot '.arw-env'
     $mode = 'unknown'
@@ -91,6 +101,39 @@ function Contains-Switch {
     }
   }
   return $false
+}
+
+function Ensure-PyYAML {
+  param([string]$PythonPath, [string]$RepoRoot)
+
+  if (-not $PythonPath) { return $false }
+
+  $probe = {
+    param($py)
+    & $py -c "import yaml" | Out-Null
+    return $LASTEXITCODE -eq 0
+  }
+
+  if (& $probe $PythonPath) { return $true }
+
+  $targetVenv = $false
+  if (-not [string]::IsNullOrEmpty($RepoRoot)) {
+    $escaped = [regex]::Escape($RepoRoot)
+    if ($PythonPath -match "${escaped}.*\.venv") { $targetVenv = $true }
+  }
+
+  Write-Host ('[env] Installing PyYAML for {0}...' -f $PythonPath) -ForegroundColor Yellow
+  $args = @('-m','pip','install','pyyaml')
+  if (-not $targetVenv) { $args += '--user' }
+
+  try {
+    & $PythonPath @args | Out-Null
+    if ($LASTEXITCODE -ne 0) { return $false }
+    return & $probe $PythonPath
+  } catch {
+    Write-Warning ('[env] PyYAML install failed: {0}' -f $_.Exception.Message)
+    return $false
+  }
 }
 
 function Parse-SetupSwitches {
@@ -230,15 +273,7 @@ function Invoke-Verify {
     (Join-Path $RepoRoot '.venv/bin/python'),
     'python','python3'
   )
-  $pythonHasYaml = $false
-  if ($python) {
-    try {
-      & $python -c "import yaml" | Out-Null
-      if ($LASTEXITCODE -eq 0) { $pythonHasYaml = $true }
-    } catch {
-      $pythonHasYaml = $false
-    }
-  }
+  $pythonHasYaml = if ($python) { Ensure-PyYAML -PythonPath $python.Source -RepoRoot $RepoRoot } else { $false }
   $bash = Resolve-Tool @((Join-Path ${env:ProgramFiles} 'Git\bin\bash.exe'), 'bash')
 
   if (-not $cargo) {
