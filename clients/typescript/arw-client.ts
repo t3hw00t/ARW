@@ -920,15 +920,15 @@ export class ArwClient {
           if (!Array.isArray(patch)) {
             return;
           }
-          const normalized = JSON.parse(JSON.stringify(patch)) as JsonPatchOp[];
+          const patchOps = patch as JsonPatchOp[];
           if (!hasSnapshot) {
-            pending.push({ patch: normalized, eventId });
+            pending.push({ patch: patchOps, eventId });
             if (eventId) {
               lastEventId = eventId;
             }
             return;
           }
-          snapshot = applyJsonPatchMutable(snapshot ?? {}, normalized);
+          snapshot = applyJsonPatchMutable(snapshot ?? {}, patchOps);
           if (eventId) {
             lastEventId = eventId;
           }
@@ -1045,6 +1045,7 @@ export class ArwClient {
       const prevOnError = sink.onerror;
 
       const queue: StreamEvent<T>[] = [];
+      let queueHead = 0;
       const waiters: Array<{
         resolve: (value: IteratorResult<StreamEvent<T>>) => void;
         reject: (err: any) => void;
@@ -1060,6 +1061,20 @@ export class ArwClient {
           signal.removeEventListener('abort', abortHandler);
         }
         abortHandler = null;
+      };
+
+      const dequeue = (): StreamEvent<T> | undefined => {
+        if (queueHead >= queue.length) {
+          return undefined;
+        }
+        const value = queue[queueHead];
+        queueHead += 1;
+        // Periodically compact so long-running streams do not grow an ever-shifting array.
+        if (queueHead > 32 && queueHead * 2 >= queue.length) {
+          queue.splice(0, queueHead);
+          queueHead = 0;
+        }
+        return value;
       };
 
       const closeSink = () => {
@@ -1137,8 +1152,8 @@ export class ArwClient {
 
       const iterator: AsyncGenerator<StreamEvent<T>> = {
         async next(): Promise<IteratorResult<StreamEvent<T>>> {
-          if (queue.length) {
-            const value = queue.shift()!;
+          const value = dequeue();
+          if (value !== undefined) {
             return { value, done: false };
           }
           if (storedError) {
