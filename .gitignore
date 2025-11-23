@@ -6,6 +6,7 @@ server.err
 .venv/
 .venv-*/
 .venv.*/
+.tooling/
 .arw-env
 .cargo/config.local.toml
 .cargo/config.local-*
@@ -24,3 +25,7 @@ ops/out-*/
 .arw-data/
 .arw/
 %LOCALAPPDATA%/
+node_modules/
+clients/typescript/node_modules/
+clients/typescript/.npm-cache/
+clients/typescript/npm-cache.tgz

@@ -12,6 +12,20 @@ This is a lightweight, hand‑written client for `arw-server` focusing on the co
 
 It does not rely on a generator and has no runtime dependencies beyond the standard browser/Node `fetch` and `EventSource` APIs.
 
+## Install (offline-first)
+
+Use the helper scripts so installs default to offline when the cache exists and refresh it otherwise:
+
+- Bash: `clients/typescript/scripts/install-offline.sh`
+- PowerShell: `clients/typescript/scripts/install-offline.ps1`
+
+Behaviour:
+- If `npm-cache.tgz` is present it is expanded into `.npm-cache/` and `npm ci --offline --prefer-offline --cache .npm-cache` runs.
+- If no cache is present it falls back to `npm ci --prefer-offline --cache .npm-cache` to seed the cache.
+- After a successful install the cache is repacked into `npm-cache.tgz` so you can share or attach it to a release artifact.
+
+Pass `--refresh` (`-Refresh` in PowerShell) to force a fresh cache and tarball.
+
 ## Usage
 
 ```ts
