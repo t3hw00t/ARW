@@ -6,9 +6,7 @@ title: Workspace Status
 
 <!-- GENERATED FILE: scripts/docgen_core.py; do not edit by hand -->
 
-Updated: 2025-10-27
-Type: Reference
-Generated: 2025-10-27 19:38 UTC
+Generated: 2025-11-23 20:41 UTC
 
 ## Libraries
 - **arw-compress**: 0.2.0-dev — [crates/compress/Cargo.toml](https://github.com/t3hw00t/ARW/blob/main/crates/compress/Cargo.toml)

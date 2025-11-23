@@ -12,8 +12,12 @@ use tauri::Manager;
 #[cfg(all(desktop, not(test)))]
 fn create_tray<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> tauri::Result<()> {
     use std::time::Duration;
+    use tauri::image::Image;
     use tauri::menu::{Menu, MenuItem, Submenu};
     use tauri::tray::TrayIconBuilder;
+
+    let tray_icon =
+        Image::from_bytes(include_bytes!("../icons/32x32.png")).expect("invalid tray icon");
 
     // Service submenu
     let svc_start = MenuItem::with_id(app, "svc-start", "Start Service", true, None::<&str>)?;
@@ -70,6 +74,7 @@ fn create_tray<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> tauri::Result<()
     let menu = Menu::with_items(app, &[&svc_sub, &dbg_sub, &windows_sub, &quit_i])?;
 
     let _ = TrayIconBuilder::with_id("arw-launcher-tray")
+        .icon(tray_icon)
         .tooltip("Agent Hub (ARW)")
         .menu(&menu)
         .on_menu_event(|app, event| match event.id.as_ref() {
