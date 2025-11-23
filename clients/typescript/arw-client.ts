@@ -98,7 +98,7 @@ export interface SubscribeReadModelOptions {
   /** Throttle onUpdate callbacks (ms). Set to 0 to emit immediately. */
   throttleMs?: number;
   /** Optional callback for read-model metrics (called on drop/apply/hydrate). */
-  onMetrics?: (stats: { pending: number; dropped: number; applied: number; lastEventId?: string }) => void;
+  onMetrics?: (stats: ReadModelMetrics) => void;
 }
 
 export interface ReadModelSubscription {
@@ -113,6 +113,18 @@ export type WatchBeliefsOptions = SubscribeReadModelOptions;
 export type WatchIntentsOptions = SubscribeReadModelOptions;
 export type WatchActionsOptions = StateActionsOptions & SubscribeReadModelOptions;
 
+export interface StreamMetrics {
+  dropped: number;
+  pending: number;
+}
+
+export interface ReadModelMetrics {
+  pending: number;
+  dropped: number;
+  applied: number;
+  lastEventId?: string;
+}
+
 export interface StreamOptions extends EventsOptions {
   signal?: AbortSignal;
   parseJson?: boolean;
@@ -121,7 +133,7 @@ export interface StreamOptions extends EventsOptions {
   /** Optional callback when events are dropped due to backpressure limits. */
   onDrop?: (info: { dropped: number; reason: 'stream-backpressure' }) => void;
   /** Optional callback for lightweight queue stats (invoked on drops). */
-  onStats?: (stats: { dropped: number; pending: number }) => void;
+  onStats?: (stats: StreamMetrics) => void;
 }
 
 export interface StreamEvent<T = Json> {
@@ -245,6 +257,56 @@ export interface EconomyLedgerOptions {
 }
 
 const READ_MODEL_TOPIC = 'state.read.model.patch';
+
+export function createStreamMetricsCollector(): {
+  onDrop: Required<StreamOptions>['onDrop'];
+  onStats: Required<StreamOptions>['onStats'];
+  snapshot(): StreamMetrics;
+  reset(): void;
+} {
+  const state: StreamMetrics = { dropped: 0, pending: 0 };
+  return {
+    onDrop: (info) => {
+      state.dropped += info.dropped ?? 0;
+    },
+    onStats: (stats) => {
+      state.dropped = stats.dropped;
+      state.pending = stats.pending;
+    },
+    snapshot: () => ({ ...state }),
+    reset: () => {
+      state.dropped = 0;
+      state.pending = 0;
+    },
+  };
+}
+
+export function createReadModelMetricsCollector(): {
+  onDrop: Required<SubscribeReadModelOptions>['onDrop'];
+  onMetrics: Required<SubscribeReadModelOptions>['onMetrics'];
+  snapshot(): ReadModelMetrics;
+  reset(): void;
+} {
+  const state: ReadModelMetrics = { pending: 0, dropped: 0, applied: 0, lastEventId: undefined };
+  return {
+    onDrop: (info) => {
+      state.dropped += info.dropped ?? 0;
+    },
+    onMetrics: (stats) => {
+      state.pending = stats.pending;
+      state.dropped = stats.dropped;
+      state.applied = stats.applied;
+      state.lastEventId = stats.lastEventId;
+    },
+    snapshot: () => ({ ...state }),
+    reset: () => {
+      state.pending = 0;
+      state.dropped = 0;
+      state.applied = 0;
+      state.lastEventId = undefined;
+    },
+  };
+}
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return Object.prototype.toString.call(value) === '[object Object]';
