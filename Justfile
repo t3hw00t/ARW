@@ -345,6 +345,16 @@ ts-daily-brief-watch base='http://127.0.0.1:8091' timeout='8000' token='' json='
 	args=(); if [ "$json" = "true" ]; then args+=(--json); fi; if [ -n "$timeout" ]; then args+=(--timeout "$timeout"); fi; \
 	node dist/examples/daily_brief.js "${args[@]}"; \
 	popd >/dev/null
+
+# Managed stream helper (Node)
+ts-managed-stream base='http://127.0.0.1:8091' token='' topics='service.' replay='10' max_queue='500' duration='15000':
+	set -euo pipefail; \
+	base='{{base}}'; token='{{token}}'; topics='{{topics}}'; replay='{{replay}}'; max_queue='{{max_queue}}'; duration='{{duration}}'; \
+	pushd clients/typescript >/dev/null; \
+	npm run -s build; \
+	args=(--topic "$topics" --replay "$replay" --max-queue "$max_queue" --duration "$duration"); \
+	if [ -n "$token" ]; then ARW_ADMIN_TOKEN="$token" BASE="$base" node dist/examples/managed_stream.js "${args[@]}"; else BASE="$base" node dist/examples/managed_stream.js "${args[@]}"; fi; \
+	popd >/dev/null
 	# Real GPU helper: skips stub stage, keeps artifacts, and enforces the CUDA-capable llama-server.
 	RUNTIME_SMOKE_KEEP_TMP=1 \
 	RUNTIME_SMOKE_GPU_POLICY=require \

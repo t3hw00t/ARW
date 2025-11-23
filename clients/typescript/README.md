@@ -80,6 +80,10 @@ console.log('final stats', stream.stats());
 setTimeout(() => stream.close(), 30_000);
 ```
 
+Example runner:
+- `ts-node clients/typescript/examples/managed_stream.ts --topic service. --replay 10 --max-queue 500 --duration 15000`
+- Or via Just/Mise tasks below.
+
 ## Usage
 
 ```ts
