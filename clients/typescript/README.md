@@ -30,7 +30,7 @@ If you find a checked-in `.tooling/node-*/` folder on the machine, you can tempo
 
 Backpressure/metrics knobs:
 - `events.stream`: `maxQueue` (soft cap, drops oldest), `onDrop` (notified on drops), `onStats` (pending+dropped counters), `parseJson` (default true), `signal` for cancellation.
-- `events.subscribeReadModel`: `maxPendingPatches` (cap pre-hydration backlog), `onDrop` (drops when cap exceeded), `throttleMs` (coalesce onUpdate), `onMetrics` (pending/applied/dropped/lastEventId), plus `initial`, `loadInitial`, `reconnect*`, `inactivityTimeoutMs`.
+- `events.subscribeReadModel`: `maxPendingPatches` (cap pre-hydration backlog), `maxApplyPerTick` (queue excess patches per tick), `onDrop` (drops when cap exceeded), `throttleMs` (coalesce onUpdate), `onMetrics` (pending/applied/dropped/lastEventId), plus `initial`, `loadInitial`, `reconnect*`, `inactivityTimeoutMs`.
 - Watch helpers (`watch*`) accept the same backpressure/metrics options; `watchDailyBrief` also respects `maxPendingPatches`, `onDrop`, `onMetrics`, and `throttleMs`.
 - Helpers: `createStreamMetricsCollector()` / `createReadModelMetricsCollector()` return reusable `onDrop`/`onStats`/`onMetrics` hooks and `snapshot()`/`reset()` accessors for quick telemetry wiring.
 

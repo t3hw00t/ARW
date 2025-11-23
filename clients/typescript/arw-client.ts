@@ -99,6 +99,8 @@ export interface SubscribeReadModelOptions {
   throttleMs?: number;
   /** Optional callback for read-model metrics (called on drop/apply/hydrate). */
   onMetrics?: (stats: ReadModelMetrics) => void;
+  /** Apply at most N patches per tick; remaining patches queue and flush on future ticks. */
+  maxApplyPerTick?: number;
 }
 
 export interface ReadModelSubscription {
@@ -503,6 +505,9 @@ function setAt(
 }
 
 function applyJsonPatchMutable(target: Json, patch: JsonPatchOp[]): Json {
+  if (!patch || patch.length === 0) {
+    return target ?? {};
+  }
   let root: Json = target;
   let rootChanged = false;
   if (root === undefined || root === null) {
@@ -825,7 +830,7 @@ export class ArwClient {
           emitState({ state: 'open', attempt: 0 });
           armInactivity();
           const reader = (response.body as any).getReader();
-          let event: { id?: string; event?: string; data?: string } = {};
+          const event: { id?: string; event?: string; data?: string } = {};
           const flush = () => {
             if (event.data == null) {
               return;
@@ -840,7 +845,9 @@ export class ArwClient {
               type: event.event || 'message',
             };
             out.onmessage?.(msg);
-            event = {};
+            event.id = undefined;
+            event.event = undefined;
+            event.data = undefined;
           };
           while (!closed) {
             const { done, value } = await reader.read();
@@ -939,6 +946,11 @@ export class ArwClient {
       const opts = options ?? {};
       const throttleMs = Math.max(0, Math.floor(opts.throttleMs ?? 0));
       const maxPending = Math.max(0, Math.floor(opts.maxPendingPatches ?? 0));
+      const maxApplyPerTick =
+        opts.maxApplyPerTick !== undefined && opts.maxApplyPerTick > 0
+          ? Math.floor(opts.maxApplyPerTick)
+          : Number.POSITIVE_INFINITY;
+      let applyBudget = maxApplyPerTick;
       let snapshot: Json | undefined =
         opts.initial !== undefined ? deepClone(opts.initial) : undefined;
       let hasSnapshot = opts.initial !== undefined;
@@ -1005,6 +1017,8 @@ export class ArwClient {
       };
 
       const pending: { patch: JsonPatchOp[]; eventId?: string }[] = [];
+      const applyBacklog: { patch: JsonPatchOp[]; eventId?: string }[] = [];
+      let drainingBacklog = false;
 
       const replay = opts.lastEventId ? opts.replay ?? 0 : opts.replay ?? 50;
       const sub = this.events.subscribe({
@@ -1020,6 +1034,40 @@ export class ArwClient {
       });
 
       let closed = false;
+
+      const applyEntry = (entry: { patch: JsonPatchOp[]; eventId?: string }) => {
+        snapshot = applyJsonPatchMutable(snapshot ?? {}, entry.patch);
+        if (entry.eventId) {
+          lastEventId = entry.eventId;
+          metrics.lastEventId = lastEventId;
+        }
+        metrics.applied += 1;
+        metrics.pending = pending.length + applyBacklog.length;
+        publishMetrics();
+      };
+
+      const drainBacklog = () => {
+        if (drainingBacklog || !applyBacklog.length || closed) {
+          return;
+        }
+        drainingBacklog = true;
+        setTimeout(() => {
+          applyBudget = maxApplyPerTick;
+          while (applyBacklog.length && applyBudget > 0 && !closed) {
+            const entry = applyBacklog.shift()!;
+            applyBudget -= 1;
+            applyEntry(entry);
+          }
+          drainingBacklog = false;
+          metrics.pending = pending.length + applyBacklog.length;
+          publishMetrics();
+          if (applyBacklog.length) {
+            drainBacklog();
+          } else {
+            scheduleNotify();
+          }
+        }, 0);
+      };
 
       const handleEvent = (payload: string | null, eventId?: string) => {
         if (!payload) {
@@ -1047,7 +1095,7 @@ export class ArwClient {
               emitDrop(drop, 'pending-cap');
             }
             pending.push({ patch: patchOps, eventId });
-            metrics.pending = pending.length;
+            metrics.pending = pending.length + applyBacklog.length;
             publishMetrics();
             if (eventId) {
               lastEventId = eventId;
@@ -1055,15 +1103,16 @@ export class ArwClient {
             }
             return;
           }
-          snapshot = applyJsonPatchMutable(snapshot ?? {}, patchOps);
-          if (eventId) {
-            lastEventId = eventId;
-            metrics.lastEventId = lastEventId;
+          if (applyBudget > 0) {
+            applyBudget -= 1;
+            applyEntry({ patch: patchOps, eventId });
+            scheduleNotify();
+          } else {
+            applyBacklog.push({ patch: patchOps, eventId });
+            metrics.pending = pending.length + applyBacklog.length;
+            publishMetrics();
+            drainBacklog();
           }
-          metrics.applied += 1;
-          metrics.pending = pending.length;
-          publishMetrics();
-          scheduleNotify();
         } catch {
           // ignore parse errors
         }
@@ -1131,17 +1180,14 @@ export class ArwClient {
       const hydrateFromInitial = (initialValue: Json | undefined) => {
         snapshot = initialValue !== undefined ? deepClone(initialValue) : {};
         hasSnapshot = true;
+        applyBudget = maxApplyPerTick;
         if (pending.length) {
           for (const entry of pending.splice(0)) {
-            snapshot = applyJsonPatchMutable(snapshot ?? {}, entry.patch);
-            if (entry.eventId) {
-              lastEventId = entry.eventId;
-            }
-            metrics.applied += 1;
+            applyEntry(entry);
           }
         }
         metrics.lastEventId = lastEventId;
-        metrics.pending = pending.length;
+        metrics.pending = pending.length + applyBacklog.length;
         publishMetrics();
         scheduleNotify();
       };
