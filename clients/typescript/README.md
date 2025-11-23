@@ -75,6 +75,9 @@ for await (const evt of stream) {
 }
 
 console.log('final stats', stream.stats());
+
+// Optional: stop after 30s
+setTimeout(() => stream.close(), 30_000);
 ```
 
 ## Usage

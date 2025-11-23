@@ -1503,6 +1503,7 @@ export class ArwClient {
         loadInitial ?? (() => this.state.observations({ limit, kindPrefix, since }));
       return this.events.subscribeReadModel('observations', {
         ...rest,
+        logDrops: rest.logDrops ?? true,
         loadInitial: loader,
       });
     },
@@ -1511,6 +1512,7 @@ export class ArwClient {
       const loader = loadInitial ?? (() => this.state.beliefs());
       return this.events.subscribeReadModel('beliefs', {
         ...rest,
+        logDrops: rest.logDrops ?? true,
         loadInitial: loader,
       });
     },
@@ -1519,6 +1521,7 @@ export class ArwClient {
       const loader = loadInitial ?? (() => this.state.intents());
       return this.events.subscribeReadModel('intents', {
         ...rest,
+        logDrops: rest.logDrops ?? true,
         loadInitial: loader,
       });
     },
@@ -1530,6 +1533,7 @@ export class ArwClient {
         );
       return this.events.subscribeReadModel('actions', {
         ...rest,
+        logDrops: rest.logDrops ?? true,
         loadInitial: loader,
       });
     },
@@ -1559,6 +1563,7 @@ export class ArwClient {
         (loadInitial as any) ?? (() => this.state.economyLedger({ limit, offset }));
       return this.events.subscribeReadModel('economy_ledger', {
         ...(rest as SubscribeReadModelOptions),
+        logDrops: (rest as SubscribeReadModelOptions).logDrops ?? true,
         loadInitial: loader,
       });
     },
@@ -1579,6 +1584,7 @@ export class ArwClient {
         onMetrics,
         maxPendingPatches,
         throttleMs,
+        logDrops = true,
       } = options as any;
       let snapshot: DailyBriefSnapshot | undefined;
       const listeners = new Set<(snap?: DailyBriefSnapshot) => void>();
@@ -1631,6 +1637,9 @@ export class ArwClient {
                 dropped += drop;
                 pending = maxPendingPatches;
                 try { onDrop?.({ dropped: drop, reason: 'pending-cap', readModelId: 'daily_brief' }); } catch {}
+                if (logDrops) {
+                  console.warn(`read-model daily_brief dropped ${drop} patch(es) (pending-cap)`);
+                }
               }
               snapshot = data as DailyBriefSnapshot;
               applied += 1;
