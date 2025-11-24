@@ -123,11 +123,18 @@ function Ensure-PyYAML {
   }
 
   Write-Host ('[env] Installing PyYAML for {0}...' -f $PythonPath) -ForegroundColor Yellow
-  $args = @('-m','pip','install','pyyaml')
-  if (-not $targetVenv) { $args += '--user' }
+  $wheelArgs = @('-m','pip','install','--only-binary=:all:','pyyaml')
+  $fallbackArgs = @('-m','pip','install','pyyaml')
+  if (-not $targetVenv) {
+    $wheelArgs += '--user'
+    $fallbackArgs += '--user'
+  }
 
   try {
-    & $PythonPath @args | Out-Null
+    & $PythonPath @($wheelArgs) | Out-Null
+    if ($LASTEXITCODE -eq 0 -and (& $probe $PythonPath)) { return $true }
+    Write-Warning '[env] PyYAML wheel install failed; retrying with source build (requires compiler on Windows)'
+    & $PythonPath @($fallbackArgs) | Out-Null
     if ($LASTEXITCODE -ne 0) { return $false }
     return & $probe $PythonPath
   } catch {

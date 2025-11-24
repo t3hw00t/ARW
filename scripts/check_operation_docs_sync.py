@@ -6,6 +6,16 @@ from pathlib import Path
 import sys
 import yaml
 
+def _ensure_utf8_stdio():
+    """Best-effort: avoid Windows console encoding errors when printing Unicode."""
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(encoding="utf-8", errors="backslashreplace")
+        except Exception:
+            # If reconfigure is unavailable, fall back silently.
+            pass
+
+
 REPO = Path(__file__).resolve().parent.parent
 SPEC_PATH = REPO / "spec" / "openapi.yaml"
 CURATED_PATH = REPO / "spec" / "operation_docs.yaml"
@@ -34,6 +44,7 @@ def collect_ops(doc: dict[str, object]):
 
 
 def main() -> int:
+    _ensure_utf8_stdio()
     spec = load_yaml(SPEC_PATH)
     curated = load_yaml(CURATED_PATH) or {}
 

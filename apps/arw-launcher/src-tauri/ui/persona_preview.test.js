@@ -79,8 +79,17 @@ function extractArrowFunction(source, name) {
   const start = source.indexOf(marker);
   if (start === -1) throw new Error(`Unable to locate ${name}`);
   const afterMarker = start + marker.length;
-  const nextBlank = source.indexOf('\n\n', afterMarker);
-  const segment = source.slice(afterMarker, nextBlank === -1 ? source.length : nextBlank).trim();
+  const braceStart = source.indexOf('{', afterMarker);
+  if (braceStart !== -1) {
+    const braceEnd = findMatchingBrace(source, braceStart);
+    const end = source[braceEnd + 1] === ';' ? braceEnd + 1 : braceEnd;
+    const segment = source.slice(afterMarker, end + 1).trim();
+    const expression = segment.endsWith(';') ? segment.slice(0, -1) : segment;
+    return eval(expression); // eslint-disable-line no-eval
+  }
+
+  const terminator = source.indexOf(';\n\n', afterMarker);
+  const segment = source.slice(afterMarker, terminator === -1 ? source.length : terminator).trim();
   const expression = segment.endsWith(';') ? segment.slice(0, -1) : segment;
   return eval(expression); // eslint-disable-line no-eval
 }

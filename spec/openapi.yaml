@@ -11,8 +11,9 @@ paths:
     get:
       tags:
       - Meta
-      summary: Service metadata and endpoints index.
-      description: Service metadata, endpoints index, and performance preset.
+      summary: Inspect service metadata
+      description: Return version, build information, endpoint counts, and the enumerated
+        public/admin routes announced by the server.
       operationId: about_doc
       responses:
         '200':
@@ -39,6 +40,9 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ProblemDetails'
+      description: Retrieve the active admin chat transcript, including message history
+        and tool metadata.
+      summary: Fetch chat transcript
   /admin/chat/clear:
     post:
       tags:
@@ -56,6 +60,9 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ProblemDetails'
+      description: Wipe the stored admin chat transcript and reset associated tool
+        context for a fresh session.
+      summary: Clear chat transcript
   /admin/chat/send:
     post:
       tags:
@@ -80,6 +87,9 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ProblemDetails'
+      description: Submit a message to the admin chat lane and receive the synthesized
+        assistant response.
+      summary: Send chat message
   /admin/chat/status:
     get:
       tags:
@@ -105,11 +115,14 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ProblemDetails'
+      description: Report chat lane health, including the most recent latency probe;
+        optionally trigger a new probe.
+      summary: Query chat status
   /admin/distill:
     post:
       tags:
       - Distill
-      summary: Trigger a manual distillation pass.
+      summary: Run distillation pass
       operationId: distill_run_doc
       responses:
         '200':
@@ -123,6 +136,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ProblemDetails'
+      description: Trigger the manual distillation pipeline to snapshot playbooks,
+        refresh beliefs, and regenerate derived notebooks.
   /admin/events/journal:
     get:
       tags:
@@ -167,6 +182,9 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ProblemDetails'
+      description: Retrieve the latest persisted event entries with optional prefix
+        filters for focused inspection.
+      summary: Tail event journal
   /admin/experiments/activate:
     post:
       tags:
@@ -188,6 +206,9 @@ paths:
           description: Unauthorized
         '404':
           description: Unknown experiment
+      description: Mark a variant as the active choice for the experiment and persist
+        the rollout decision.
+      summary: Activate experiment variant
   /admin/experiments/assign:
     post:
       tags:
@@ -207,6 +228,9 @@ paths:
               schema: {}
         '401':
           description: Unauthorized
+      description: Record or override an experiment assignment for a participant or
+        agent and broadcast the decision.
+      summary: Assign experiment variant
   /admin/experiments/define:
     post:
       tags:
@@ -226,6 +250,9 @@ paths:
               schema: {}
         '401':
           description: Unauthorized
+      description: Create or update an experiment definition with the supplied variants
+        and configuration payload.
+      summary: Define experiment
   /admin/experiments/list:
     get:
       tags:
@@ -240,6 +267,9 @@ paths:
                 $ref: '#/components/schemas/ExperimentsListResponse'
         '401':
           description: Unauthorized
+      description: Return all experiment definitions currently registered with their
+        variant metadata.
+      summary: List experiments
   /admin/experiments/run:
     post:
       tags:
@@ -260,6 +290,9 @@ paths:
                 $ref: '#/components/schemas/RunOutcome'
         '401':
           description: Unauthorized
+      description: Execute the requested experiment variants against the chosen golden
+        project and return the evaluation outcome.
+      summary: Run experiment on goldens
   /admin/experiments/scoreboard:
     get:
       tags:
@@ -274,6 +307,9 @@ paths:
                 $ref: '#/components/schemas/ExperimentsScoreboardResponse'
         '401':
           description: Unauthorized
+      description: Provide aggregated performance metrics for each experiment variant
+        to compare recent runs.
+      summary: Fetch experiment scoreboard
   /admin/experiments/start:
     post:
       tags:
@@ -293,6 +329,9 @@ paths:
               schema: {}
         '401':
           description: Unauthorized
+      description: Publish a start event for a new experiment with optional assignment,
+        budget, and variant hints.
+      summary: Start experiment run
   /admin/experiments/stop:
     post:
       tags:
@@ -312,6 +351,9 @@ paths:
               schema: {}
         '401':
           description: Unauthorized
+      description: Halt an experiment run by emitting a stop event for the provided
+        experiment identifier.
+      summary: Stop experiment
   /admin/experiments/winners:
     get:
       tags:
@@ -326,6 +368,9 @@ paths:
                 $ref: '#/components/schemas/ExperimentsWinnersResponse'
         '401':
           description: Unauthorized
+      description: Return the top-performing variants for experiments based on the
+        latest evaluation data.
+      summary: List experiment winners
   /admin/feedback/analyze:
     post:
       tags:
@@ -340,6 +385,9 @@ paths:
                 $ref: '#/components/schemas/FeedbackState'
         '401':
           description: Unauthorized
+      description: Trigger an immediate feedback analysis pass to refresh suggestions
+        from the latest signals.
+      summary: Recompute feedback suggestions
   /admin/feedback/apply:
     post:
       tags:
@@ -365,6 +413,9 @@ paths:
           description: Policy denied
         '404':
           description: Unknown suggestion
+      description: Apply the identified suggestion and let the engine reconcile policy
+        and audit outcomes.
+      summary: Apply feedback suggestion
   /admin/feedback/auto:
     post:
       tags:
@@ -384,6 +435,8 @@ paths:
               schema: {}
         '401':
           description: Unauthorized
+      description: Enable or disable automatic application of approved feedback suggestions.
+      summary: Toggle automatic feedback application
   /admin/feedback/policy:
     get:
       tags:
@@ -397,6 +450,9 @@ paths:
               schema: {}
         '401':
           description: Unauthorized
+      description: Return the effective feedback application policy after merging
+        defaults and overrides.
+      summary: Fetch feedback policy
   /admin/feedback/reset:
     post:
       tags:
@@ -410,6 +466,9 @@ paths:
               schema: {}
         '401':
           description: Unauthorized
+      description: Clear feedback signals, suggestions, and cached state for a cold
+        start.
+      summary: Reset feedback engine
   /admin/feedback/rollback:
     post:
       tags:
@@ -433,6 +492,9 @@ paths:
           description: Unauthorized
         '404':
           description: Snapshot not found
+      description: Restore feedback state to the requested snapshot version and return
+        the resulting suggestion set.
+      summary: Roll back feedback snapshot
   /admin/feedback/signal:
     post:
       tags:
@@ -453,6 +515,9 @@ paths:
                 $ref: '#/components/schemas/FeedbackState'
         '401':
           description: Unauthorized
+      description: Submit a feedback signal with confidence and severity so it influences
+        subsequent analysis.
+      summary: Record feedback signal
   /admin/feedback/state:
     get:
       tags:
@@ -467,6 +532,9 @@ paths:
                 $ref: '#/components/schemas/FeedbackState'
         '401':
           description: Unauthorized
+      description: Return the current feedback engine snapshot, including signals,
+        suggestions, and configuration.
+      summary: Inspect feedback state
   /admin/feedback/suggestions:
     get:
       tags:
@@ -480,6 +548,9 @@ paths:
               schema: {}
         '401':
           description: Unauthorized
+      description: Return the current queue of actionable feedback suggestions with
+        their metadata.
+      summary: List feedback suggestions
   /admin/feedback/updates:
     get:
       tags:
@@ -503,6 +574,9 @@ paths:
           description: No changes since provided version
         '401':
           description: Unauthorized
+      description: Retrieve feedback suggestions updated since a provided version
+        cursor, enabling incremental refresh.
+      summary: Fetch feedback updates
   /admin/feedback/versions:
     get:
       tags:
@@ -516,6 +590,9 @@ paths:
               schema: {}
         '401':
           description: Unauthorized
+      description: Enumerate available feedback snapshots that can be inspected or
+        rolled back to.
+      summary: List feedback snapshots
   /admin/goldens/add:
     post:
       tags:
@@ -537,6 +614,9 @@ paths:
           description: Persist failed
         '401':
           description: Unauthorized
+      description: Append a golden item to the specified project collection and persist
+        the updated set.
+      summary: Add golden record
   /admin/goldens/list:
     get:
       tags:
@@ -557,6 +637,9 @@ paths:
                 $ref: '#/components/schemas/GoldensListResponse'
         '401':
           description: Unauthorized
+      description: Return the golden dataset for the requested project, including
+        individual test cases.
+      summary: List golden records
   /admin/goldens/run:
     post:
       tags:
@@ -577,6 +660,9 @@ paths:
                 $ref: '#/components/schemas/EvalSummary'
         '401':
           description: Unauthorized
+      description: Run the supplied golden dataset against the current chat runtime
+        and report evaluation metrics.
+      summary: Evaluate golden set
   /admin/governor/hints:
     get:
       tags:
@@ -591,6 +677,9 @@ paths:
                 $ref: '#/components/schemas/Hints'
         '401':
           description: Unauthorized
+      description: Return the currently effective governor hints that shape scheduling
+        and retrieval behaviour.
+      summary: Inspect governor hints
     post:
       tags:
       - Admin/Introspect
@@ -609,6 +698,9 @@ paths:
               schema: {}
         '401':
           description: Unauthorized
+      description: Apply new governor hints to adjust scheduling, retrieval, and context
+        construction parameters.
+      summary: Update governor hints
   /admin/governor/profile:
     get:
       tags:
@@ -623,6 +715,8 @@ paths:
                 $ref: '#/components/schemas/GovernorProfileResponse'
         '401':
           description: Unauthorized
+      description: Return the active governor profile name configured for the node.
+      summary: Get governor profile
     post:
       tags:
       - Admin/Introspect
@@ -641,6 +735,9 @@ paths:
               schema: {}
         '401':
           description: Unauthorized
+      description: Switch the governor to the requested profile and broadcast the
+        change.
+      summary: Set governor profile
   /admin/hierarchy/accept:
     post:
       tags:
@@ -660,6 +757,9 @@ paths:
               schema: {}
         '401':
           description: Unauthorized
+      description: Accept a hierarchy offer message to finalize a connection with
+        the given participant.
+      summary: Accept hierarchy offer
   /admin/hierarchy/hello:
     post:
       tags:
@@ -679,6 +779,9 @@ paths:
               schema: {}
         '401':
           description: Unauthorized
+      description: Emit the initial hello message in the hierarchy handshake with
+        another participant.
+      summary: Send hierarchy hello
   /admin/hierarchy/offer:
     post:
       tags:
@@ -698,6 +801,9 @@ paths:
               schema: {}
         '401':
           description: Unauthorized
+      description: Publish a hierarchy offer to negotiate roles and capabilities with
+        a peer.
+      summary: Offer hierarchy connection
   /admin/hierarchy/role:
     post:
       tags:
@@ -717,6 +823,9 @@ paths:
               schema: {}
         '401':
           description: Unauthorized
+      description: Update hierarchy role assignments for a participant and persist
+        the change.
+      summary: Set hierarchy roles
   /admin/hierarchy/state:
     get:
       tags:
@@ -730,11 +839,14 @@ paths:
               schema: {}
         '401':
           description: Unauthorized
+      description: Return the current hierarchy session map, including offers, participants,
+        and active roles.
+      summary: Inspect hierarchy state
   /admin/memory:
     get:
       tags:
       - Admin/Memory
-      summary: List recent memory items (admin helper).
+      summary: List recent memory records
       operationId: admin_memory_list_doc
       parameters:
       - name: lane
@@ -766,11 +878,13 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ProblemDetails'
+      description: Return the latest memory items for inspection; supports lane and
+        limit filters for debugging.
   /admin/memory/apply:
     post:
       tags:
       - Admin/Memory
-      summary: Insert a memory item (admin helper).
+      summary: Upsert memory record
       operationId: admin_memory_apply_doc
       requestBody:
         content:
@@ -796,6 +910,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ProblemDetails'
+      description: Insert or update a memory item via the admin helper and emit the
+        associated memory events for auditing.
   /admin/memory/quarantine:
     get:
       tags:
@@ -809,6 +925,8 @@ paths:
               schema: {}
         '401':
           description: Unauthorized
+      description: Return entries awaiting review in the memory quarantine queue.
+      summary: List quarantined memories
     post:
       tags:
       - Review
@@ -829,6 +947,9 @@ paths:
           description: Unauthorized
         '500':
           description: Storage error
+      description: Enqueue a memory item for quarantine review and emit the appropriate
+        audit event.
+      summary: Queue memory for review
   /admin/memory/quarantine/admit:
     post:
       tags:
@@ -851,6 +972,9 @@ paths:
           description: Unauthorized
         '500':
           description: Storage error
+      description: Remove a memory from quarantine, optionally admitting or rejecting
+        it, and report the outcome.
+      summary: Admit quarantined memory
   /admin/models:
     get:
       tags:
@@ -866,6 +990,8 @@ paths:
                 items: {}
         '401':
           description: Unauthorized
+      description: Return the configured model entries including provider metadata.
+      summary: List models
   /admin/models/add:
     post:
       tags:
@@ -885,6 +1011,9 @@ paths:
               schema: {}
         '400':
           description: Invalid input
+      description: Register a model entry with optional provider, path, and status
+        metadata.
+      summary: Add model entry
   /admin/models/by-hash/{sha256}:
     get:
       tags:
@@ -921,6 +1050,9 @@ paths:
           content:
             application/json:
               schema: {}
+      description: Stream a CAS-stored model blob by SHA-256 with caching headers
+        and partial range support.
+      summary: Download model blob
   /admin/models/cas_gc:
     post:
       tags:
@@ -940,6 +1072,9 @@ paths:
               schema: {}
         '501':
           description: CAS GC unavailable
+      description: Execute a content-addressed store cleanup pass and report removed
+        blobs.
+      summary: Run CAS garbage collection
   /admin/models/concurrency:
     get:
       tags:
@@ -952,6 +1087,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ModelsConcurrencySnapshot'
+      description: Return the current model concurrency settings and snapshot telemetry.
+      summary: Inspect model concurrency
     post:
       tags:
       - Models
@@ -969,6 +1106,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ModelsConcurrencySnapshot'
+      description: Apply new concurrency limits or blocking behaviour for model execution.
+      summary: Update model concurrency
   /admin/models/default:
     get:
       tags:
@@ -980,6 +1119,8 @@ paths:
           content:
             application/json:
               schema: {}
+      description: Return the identifier of the default model selection.
+      summary: Get default model
     post:
       tags:
       - Models
@@ -998,6 +1139,8 @@ paths:
               schema: {}
         '400':
           description: Unknown model
+      description: Select the default model to be used for future requests.
+      summary: Set default model
   /admin/models/download:
     post:
       tags:
@@ -1017,6 +1160,9 @@ paths:
               schema: {}
         '501':
           description: Download unavailable
+      description: Request download or import of a model artifact and enqueue the
+        job if supported.
+      summary: Start model download
   /admin/models/download/cancel:
     post:
       tags:
@@ -1036,6 +1182,9 @@ paths:
               schema: {}
         '501':
           description: Cancel unavailable
+      description: Cancel an in-flight model download job when the backend supports
+        it.
+      summary: Cancel model download
   /admin/models/jobs:
     get:
       tags:
@@ -1047,6 +1196,9 @@ paths:
           content:
             application/json:
               schema: {}
+      description: Return the current queue of model download and load jobs with their
+        statuses.
+      summary: Inspect model jobs
   /admin/models/load:
     post:
       tags:
@@ -1062,6 +1214,8 @@ paths:
                 items: {}
         '404':
           description: Missing models.json
+      description: Load model entries from the persisted manifest on disk.
+      summary: Load model manifest
   /admin/models/refresh:
     post:
       tags:
@@ -1075,6 +1229,9 @@ paths:
               schema:
                 type: array
                 items: {}
+      description: Refresh the live model list from runtime state and return the updated
+        entries.
+      summary: Refresh models list
   /admin/models/remove:
     post:
       tags:
@@ -1092,6 +1249,8 @@ paths:
           content:
             application/json:
               schema: {}
+      description: Remove a model entry by identifier and report whether it existed.
+      summary: Remove model entry
   /admin/models/save:
     post:
       tags:
@@ -1103,6 +1262,8 @@ paths:
           content:
             application/json:
               schema: {}
+      description: Persist the current model registry to the on-disk manifest.
+      summary: Save model manifest
   /admin/models/summary:
     get:
       tags:
@@ -1116,11 +1277,14 @@ paths:
               schema: {}
         '401':
           description: Unauthorized
+      description: Return aggregate statistics about installed models, storage usage,
+        and capabilities.
+      summary: Summarize model catalog
   /admin/probe:
     get:
       tags:
       - Admin/Introspect
-      summary: Effective path probe (successor to `/admin/probe`).
+      summary: Inspect effective paths
       operationId: probe_effective_paths_doc
       responses:
         '200':
@@ -1130,11 +1294,13 @@ paths:
               schema: {}
         '401':
           description: Unauthorized
+      description: Return the resolved state, cache, and config directories plus runtime
+        metadata so operators can confirm filesystem layout.
   /admin/probe/hw:
     get:
       tags:
       - Admin/Introspect
-      summary: Hardware/software probe (`/admin/probe/hw`).
+      summary: Probe runtime hardware
       operationId: probe_hw_doc
       responses:
         '200':
@@ -1144,11 +1310,13 @@ paths:
               schema: {}
         '401':
           description: Unauthorized
+      description: "Report detected hardware and OS capabilities\u2014including CPU,\
+        \ GPU, and accelerators\u2014to confirm what the node can access."
   /admin/probe/metrics:
     get:
       tags:
       - Admin/Introspect
-      summary: Metrics snapshot probe (`/admin/probe/metrics`).
+      summary: Probe metrics snapshot
       operationId: probe_metrics_doc
       responses:
         '200':
@@ -1158,6 +1326,8 @@ paths:
               schema: {}
         '401':
           description: Unauthorized
+      description: Return the current metrics summary (Prometheus-style counters and
+        histograms) for quick diagnostics.
   /admin/self_model/apply:
     post:
       tags:
@@ -1190,6 +1360,8 @@ paths:
           content:
             application/json:
               schema: {}
+      description: Apply a previously proposed self-model change and notify subscribers.
+      summary: Apply self-model proposal
   /admin/self_model/propose:
     post:
       tags:
@@ -1217,6 +1389,9 @@ paths:
           content:
             application/json:
               schema: {}
+      description: Submit a self-model patch proposal for an agent and emit the proposal
+        event.
+      summary: Propose self-model update
   /admin/tools:
     get:
       tags:
@@ -1230,6 +1405,9 @@ paths:
               schema: {}
         '401':
           description: Unauthorized
+      description: Return the catalog of available tools with stability and capability
+        metadata.
+      summary: List registered tools
   /admin/tools/cache_stats:
     get:
       tags:
@@ -1243,6 +1421,8 @@ paths:
               schema: {}
         '401':
           description: Unauthorized
+      description: Return cache utilisation metrics for the shared tool cache.
+      summary: Inspect tool cache statistics
   /admin/tools/run:
     post:
       tags:
@@ -1270,6 +1450,9 @@ paths:
           description: Unknown tool
         '500':
           description: Tool runtime error
+      description: Execute a registered tool with the provided input payload and return
+        its output.
+      summary: Run tool
   /admin/world_diffs:
     get:
       tags:
@@ -1283,6 +1466,8 @@ paths:
               schema: {}
         '401':
           description: Unauthorized
+      description: Return the queue of pending world diffs awaiting review.
+      summary: List world diffs
   /admin/world_diffs/decision:
     post:
       tags:
@@ -1306,6 +1491,8 @@ paths:
           description: Diff not found
         '500':
           description: Storage error
+      description: Accept or reject a queued world diff and persist the decision outcome.
+      summary: Record world diff decision
   /admin/world_diffs/queue:
     post:
       tags:
@@ -1327,12 +1514,15 @@ paths:
           description: Unauthorized
         '500':
           description: Storage error
+      description: Enqueue a world diff for review with the supplied metadata.
+      summary: Queue world diff
   /events:
     get:
       tags:
       - Events
-      summary: Server‑Sent Events stream of envelopes.
-      description: Server‑Sent Events stream of envelopes; supports replay and prefix filters.
+      summary: Stream event feed
+      description: Open the Server-Sent Events stream of normalized envelopes; supports
+        prefix filtering and Last-Event-ID replay.
       operationId: events_sse_doc
       parameters:
       - name: after
@@ -1384,8 +1574,9 @@ paths:
     get:
       tags:
       - Meta
-      summary: Health probe.
-      description: Service readiness probe.
+      summary: Readiness probe
+      description: 'Return a simple readiness payload (`{"ok": true}`) suitable for
+        health checks and load balancers.'
       operationId: healthz_doc
       responses:
         '200':
@@ -1406,11 +1597,14 @@ paths:
             text/plain:
               schema:
                 type: string
+      description: Serve Prometheus-formatted metrics for the unified server, including
+        tool cache counters.
+      summary: Export Prometheus metrics
   /orchestrator/mini_agents:
     get:
       tags:
       - Orchestrator
-      summary: List available mini-agents and their training defaults.
+      summary: List cataloged mini-agents
       operationId: orchestrator_mini_agents_doc
       responses:
         '200':
@@ -1425,11 +1619,13 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ProblemDetails'
+      description: Return the curated mini-agent catalog with training defaults, requirements,
+        and documentation pointers.
   /orchestrator/mini_agents/start_training:
     post:
       tags:
       - Orchestrator
-      summary: Start a training job that results in a suggested Logic Unit (admin).
+      summary: Start mini-agent training
       operationId: orchestrator_start_training_doc
       requestBody:
         content:
@@ -1455,6 +1651,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ProblemDetails'
+      description: Kick off a training job that will propose a Logic Unit configuration
+        once complete; returns an async job handle when accepted.
   /projects:
     post:
       tags:
@@ -1478,6 +1676,9 @@ paths:
           description: Unauthorized
         '500':
           description: Error
+      description: Create a new project directory, seed default notes, and emit the
+        creation event.
+      summary: Create project
   /projects/{proj}/file:
     put:
       tags:
@@ -1516,6 +1717,9 @@ paths:
           description: Conflict
         '500':
           description: Error
+      description: Create or replace a project file at the given path, enforcing optimistic
+        concurrency and quotas.
+      summary: Write project file
     patch:
       tags:
       - Projects
@@ -1553,6 +1757,9 @@ paths:
           description: Conflict
         '500':
           description: Error
+      description: Apply a JSON patch or diff patch to an existing project file while
+        checking version guards.
+      summary: Patch project file
   /projects/{proj}/import:
     post:
       tags:
@@ -1585,6 +1792,9 @@ paths:
           description: Forbidden
         '500':
           description: Error
+      description: Copy or move a file from the staging area into the project workspace
+        and emit audit events.
+      summary: Import project asset
   /projects/{proj}/notes:
     put:
       tags:
@@ -1616,6 +1826,9 @@ paths:
           description: Unauthorized
         '500':
           description: Error
+      description: Replace the project notes document and return metadata for the
+        updated file.
+      summary: Save project notes
   /research_watcher/{id}/approve:
     post:
       tags:
@@ -1646,6 +1859,9 @@ paths:
           description: Not found
         '500':
           description: Error
+      description: Mark a research watcher entry as approved, optionally attaching
+        an operator note.
+      summary: Approve research watcher item
   /research_watcher/{id}/archive:
     post:
       tags:
@@ -1676,11 +1892,14 @@ paths:
           description: Not found
         '500':
           description: Error
+      description: Archive a research watcher entry to remove it from the active queue
+        while preserving audit history.
+      summary: Archive research watcher item
   /spec/health:
     get:
       tags:
       - Specs
-      summary: Health summary for spec artifacts (presence/size).
+      summary: Inspect spec artifacts
       operationId: spec_health_doc
       responses:
         '200':
@@ -1688,6 +1907,8 @@ paths:
           content:
             application/json:
               schema: {}
+      description: Report presence, size, and checksum information for bundled OpenAPI,
+        AsyncAPI, and schema artifacts.
   /staging/actions/{id}/approve:
     post:
       tags:
@@ -1718,6 +1939,9 @@ paths:
           description: Not found
         '500':
           description: Error
+      description: Approve a staged action so it can execute and emit the resulting
+        workflow job.
+      summary: Approve staging action
   /staging/actions/{id}/deny:
     post:
       tags:
@@ -1748,12 +1972,16 @@ paths:
           description: Not found
         '500':
           description: Error
+      description: Deny a staged action with an optional reason, preventing it from
+        executing.
+      summary: Deny staging action
   /state/actions:
     get:
       tags:
       - State
-      summary: Recent actions list.
-      description: Recent actions list (most recent first).
+      summary: List recent actions
+      description: Return the rolling window of actions emitted by the kernel, ordered
+        from newest to oldest.
       operationId: state_actions_doc
       parameters:
       - name: limit
@@ -1775,7 +2003,8 @@ paths:
           - 'null'
       - name: kind_prefix
         in: query
-        description: Restrict results to action kinds beginning with this prefix (e.g., `chat.`).
+        description: Restrict results to action kinds beginning with this prefix (e.g.,
+          `chat.`).
         required: false
         schema:
           type:
@@ -1804,8 +2033,9 @@ paths:
     get:
       tags:
       - State
-      summary: Current beliefs snapshot derived from events.
-      description: Current beliefs snapshot derived from events.
+      summary: Inspect belief store
+      description: Return the current belief entries derived from events so clients
+        can reason over world facts.
       operationId: state_beliefs_doc
       responses:
         '200':
@@ -1822,8 +2052,9 @@ paths:
     get:
       tags:
       - State
-      summary: Cluster nodes snapshot.
-      description: Cluster nodes snapshot (admin-only).
+      summary: Inspect cluster nodes
+      description: Return the snapshot of known cluster nodes, their roles, and health
+        metadata.
       operationId: state_cluster_doc
       responses:
         '200':
@@ -1840,7 +2071,7 @@ paths:
     get:
       tags:
       - State
-      summary: Experiment events snapshot (public read-model).
+      summary: List experiment events
       operationId: state_experiments_doc
       responses:
         '200':
@@ -1848,11 +2079,13 @@ paths:
           content:
             application/json:
               schema: {}
+      description: Expose the experiment read-model summarizing variants, assignments,
+        and recent outcomes.
   /state/guardrails_metrics:
     get:
       tags:
       - State
-      summary: Guardrails circuit-breaker metrics snapshot.
+      summary: Inspect guardrail metrics
       operationId: state_guardrails_metrics_doc
       responses:
         '200':
@@ -1865,12 +2098,14 @@ paths:
           content:
             application/json:
               schema: {}
+      description: Return guardrail circuit-breaker counters and latency measurements
+        for monitoring automation health.
   /state/intents:
     get:
       tags:
       - State
-      summary: Recent intents stream (rolling window) with a monotonic version counter.
-      description: Recent intents stream (rolling window) with a monotonic version counter.
+      summary: List recent intents
+      description: Return the rolling window of intent events emitted by the kernel.
       operationId: state_intents_doc
       responses:
         '200':
@@ -1887,8 +2122,9 @@ paths:
     get:
       tags:
       - State
-      summary: Model catalog read-model.
-      description: Model catalog read-model.
+      summary: Inspect model catalog
+      description: Return the derived model catalog with provider metadata, install
+        status, and version details.
       operationId: state_models_doc
       responses:
         '200':
@@ -1948,11 +2184,15 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HashPage'
+      description: Return a paginated view of installed model blobs with filters for
+        provider, size, and hash.
+      summary: List installed model hashes
   /state/models_metrics:
     get:
       tags:
       - State
-      description: Models metrics snapshot.
+      description: Return model runtime metrics, including cache hits and latency
+        data, for observability dashboards.
       operationId: state_models_metrics_doc
       responses:
         '200':
@@ -1966,17 +2206,20 @@ paths:
           content:
             application/json:
               schema: {}
+      summary: Inspect model metrics
   /state/observations:
     get:
       tags:
       - State
-      summary: Recent observations from the event bus.
-      description: Recent observations from the event bus.
+      summary: List recent observations
+      description: Return the rolling window of observation events captured from the
+        live event bus.
       operationId: state_observations_doc
       parameters:
       - name: limit
         in: query
-        description: Limit the number of items returned (most recent first); defaults to all retained observations.
+        description: Limit the number of items returned (most recent first); defaults
+          to all retained observations.
         required: false
         schema:
           type:
@@ -2014,7 +2257,7 @@ paths:
     get:
       tags:
       - Orchestrator
-      summary: Orchestrator jobs snapshot.
+      summary: Orchestrator jobs snapshot
       operationId: state_orchestrator_jobs_doc
       parameters:
       - name: limit
@@ -2035,6 +2278,9 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ProblemDetails'
+      description: Return the current orchestrator job queue with statuses, progress,
+        and the submitted training hints (preset/diversity/recency/compression) for
+        each run.
   /state/projects:
     get:
       tags:
@@ -2046,6 +2292,9 @@ paths:
           content:
             application/json:
               schema: {}
+      description: Return the cached project snapshot with file tree, notes, and metadata
+        for quick reads.
+      summary: Snapshot project catalog
   /state/projects/{proj}/file:
     get:
       tags:
@@ -2076,6 +2325,9 @@ paths:
           description: Unauthorized
         '404':
           description: Not found
+      description: Return the latest stored contents for a project file identified
+        by project and relative path.
+      summary: Fetch project file snapshot
   /state/projects/{proj}/notes:
     get:
       tags:
@@ -2099,6 +2351,9 @@ paths:
           description: Invalid request
         '401':
           description: Unauthorized
+      description: Return the current project notes document with metadata such as
+        checksum and size.
+      summary: Fetch project notes
   /state/projects/{proj}/tree:
     get:
       tags:
@@ -2129,11 +2384,14 @@ paths:
           description: Unauthorized
         '404':
           description: Not found
+      description: Return a directory listing for a project path to help clients explore
+        workspace structure.
+      summary: Browse project tree
   /state/research_watcher:
     get:
       tags:
       - State
-      summary: Research watcher queue snapshot.
+      summary: Inspect research watcher
       operationId: state_research_watcher_doc
       parameters:
       - name: status
@@ -2162,11 +2420,13 @@ paths:
           content:
             application/json:
               schema: {}
+      description: Return the research watcher queue snapshot with pending items,
+        statuses, and telemetry.
   /state/route_stats:
     get:
       tags:
       - State
-      summary: Bus and per-route counters snapshot.
+      summary: Inspect route metrics
       operationId: state_route_stats_doc
       responses:
         '200':
@@ -2174,11 +2434,13 @@ paths:
           content:
             application/json:
               schema: {}
+      description: Return per-route counters, durations, and cache statistics aggregated
+        by the server.
   /state/runtime_matrix:
     get:
       tags:
       - State
-      summary: Runtime matrix snapshot.
+      summary: Inspect runtime matrix
       operationId: state_runtime_matrix_doc
       responses:
         '200':
@@ -2192,11 +2454,13 @@ paths:
           content:
             application/json:
               schema: {}
+      description: Return the runtime matrix covering available runtimes, capabilities,
+        and health signals.
   /state/staging/actions:
     get:
       tags:
       - State
-      summary: Staging queue snapshot.
+      summary: Inspect staging actions
       operationId: state_staging_actions_doc
       parameters:
       - name: status
@@ -2225,11 +2489,13 @@ paths:
           content:
             application/json:
               schema: {}
+      description: Return staged actions awaiting review or execution in the staging
+        queue.
   /state/tasks:
     get:
       tags:
       - State
-      summary: Background tasks status snapshot.
+      summary: Inspect background tasks
       operationId: state_tasks_doc
       responses:
         '200':
@@ -2237,11 +2503,13 @@ paths:
           content:
             application/json:
               schema: {}
+      description: Return the background task registry with progress, retry counts,
+        and assigned workers.
   /state/training/telemetry:
     get:
       tags:
       - State
-      summary: Training telemetry snapshot.
+      summary: Inspect training telemetry
       operationId: state_training_telemetry_doc
       responses:
         '200':
@@ -2251,12 +2519,15 @@ paths:
               schema: {}
         '401':
           description: Unauthorized
+      description: Return aggregated Training Park telemetry, including success ratios,
+        recall, and coverage metrics.
   /state/world:
     get:
       tags:
       - State
-      summary: Project world model snapshot (belief graph view).
-      description: Project world model snapshot (belief graph view).
+      summary: Inspect world model
+      description: Return the active world graph snapshot with claims, provenance
+        metadata, and belief relationships.
       operationId: state_world_doc
       parameters:
       - name: proj
@@ -2280,8 +2551,9 @@ paths:
     get:
       tags:
       - State
-      summary: Select top-k claims for a query.
-      description: Select top-k claims for a query.
+      summary: Select world claims
+      description: Evaluate a query against the world graph and return the top-k claims
+        that match the provided filters.
       operationId: state_world_select_doc
       parameters:
       - name: proj
@@ -2345,6 +2617,9 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ProblemDetails'
+      description: Validate a proposed run, apply policy and context assembly, and
+        return the computed plan without executing it.
+      summary: Assemble run plan
   /v1/run:
     post:
       tags:
@@ -2369,6 +2644,9 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ProblemDetails'
+      description: Plan and execute the requested run in a single call, returning
+        the applied plan and run outcome.
+      summary: Plan and execute run
 components:
   schemas:
     AboutCounts:
@@ -4834,11 +5112,11 @@ tags:
 - name: Meta
   description: Service metadata and health
 - name: State
-  description: Read‑models (actions, models, egress, episodes)
+  description: "Read\u2011models (actions, models, egress, episodes)"
 - name: State/Projects
   description: Project tree and notes read-models
 - name: Events
-  description: Server‑Sent Events stream
+  description: "Server\u2011Sent Events stream"
 - name: Models
   description: Model steward admin endpoints
 - name: Projects
@@ -4875,3 +5153,5 @@ tags:
   description: Research watcher workflow
 - name: Staging
   description: Human-in-the-loop approvals queue
+- name: Planning
+  description: Planning endpoints

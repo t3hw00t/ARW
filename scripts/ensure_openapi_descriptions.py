@@ -114,10 +114,9 @@ def main():
     if changed:
         save_yaml(SPEC, doc)
         print('updated spec/openapi.yaml')
-        return 1
-    else:
-        print('no changes')
         return 0
+    print('no changes')
+    return 0
 
 
 if __name__ == '__main__':

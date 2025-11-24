@@ -6,7 +6,7 @@ title: Tasks Status
 
 <!-- GENERATED FILE: scripts/docgen_core.py; do not edit by hand -->
 
-Updated: 2025-11-23 20:41 UTC
+Updated: 2025-11-24 13:05 UTC
 
 ## To Do
 - [t-20251017-persona-telemetry] Empathy signal loop instrumentation — todo
