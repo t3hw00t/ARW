@@ -1,6 +1,6 @@
 use crate::util::env_bool;
 use axum::extract::ConnectInfo;
-use axum::http::{header, HeaderMap, HeaderName, HeaderValue, Request};
+use axum::http::{header, HeaderMap, HeaderName, HeaderValue, Method, Request, Uri};
 use axum::middleware::Next;
 use axum::response::Response;
 use base64::Engine;
@@ -10,6 +10,7 @@ use std::net::SocketAddr;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
+use tower_http::cors::{AllowHeaders, AllowMethods, AllowOrigin, CorsLayer};
 
 #[derive(Clone, Debug, Default)]
 pub struct ClientAddrs {
@@ -200,6 +201,80 @@ fn is_loopback_ip(addr: &str) -> bool {
 
 fn trust_forward_headers() -> bool {
     env_bool("ARW_TRUST_FORWARD_HEADERS").unwrap_or(false)
+}
+
+pub fn cors_layer() -> CorsLayer {
+    let allow_any = env_bool("ARW_CORS_ANY").unwrap_or(false);
+    let extra_hosts: Vec<String> = std::env::var("ARW_CORS_ALLOW")
+        .ok()
+        .map(|raw| {
+            raw.split(',')
+                .filter_map(|s| {
+                    let trimmed = s.trim();
+                    if trimmed.is_empty() {
+                        None
+                    } else {
+                        Some(trimmed.to_ascii_lowercase())
+                    }
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    let defaults: Vec<String> = vec![
+        "tauri.localhost".into(),
+        "localhost".into(),
+        "127.0.0.1".into(),
+        "::1".into(),
+    ];
+    if allow_any {
+        return CorsLayer::new()
+            .allow_origin(AllowOrigin::any())
+            .allow_methods(AllowMethods::any())
+            .allow_headers(AllowHeaders::any())
+            .allow_credentials(true);
+    }
+    let allow_hosts: Vec<String> = defaults
+        .into_iter()
+        .chain(extra_hosts.into_iter())
+        .collect();
+    let allow_origin = AllowOrigin::predicate(move |origin: &HeaderValue, _| {
+        let raw = match origin.to_str() {
+            Ok(v) => v,
+            Err(_) => return false,
+        };
+        if raw.eq_ignore_ascii_case("null") {
+            return false;
+        }
+        if allow_hosts.iter().any(|h| raw.eq_ignore_ascii_case(h)) {
+            return true;
+        }
+        let host = raw
+            .parse::<Uri>()
+            .ok()
+            .and_then(|u| u.host().map(|h| h.to_ascii_lowercase()));
+        let Some(host) = host else {
+            return false;
+        };
+        if allow_hosts.iter().any(|h| h == &host) {
+            return true;
+        }
+        if host.ends_with(".localhost") || host.starts_with("127.") || host == "::1" {
+            return true;
+        }
+        false
+    });
+    CorsLayer::new()
+        .allow_origin(allow_origin)
+        .allow_methods([
+            Method::GET,
+            Method::POST,
+            Method::PUT,
+            Method::PATCH,
+            Method::DELETE,
+            Method::OPTIONS,
+        ])
+        .allow_headers(AllowHeaders::any())
+        .allow_credentials(true)
 }
 
 pub async fn headers_mw(req: Request<axum::body::Body>, next: Next) -> Response {

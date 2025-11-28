@@ -239,7 +239,12 @@ $tokenFile = Join-Path $stateDir 'admin-token.txt'
 function New-AdminToken {
   $bytes = New-Object byte[] 32
   [System.Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($bytes)
-  return ([System.Convert]::ToHexString($bytes)).ToLowerInvariant()
+  # PowerShell 5 (full .NET Framework) lacks Convert::ToHexString, so fall back to BitConverter when needed.
+  try {
+    $hasHex = [System.Convert].GetMethod('ToHexString', [Type[]]@([byte[]]))
+    if ($hasHex) { return ([System.Convert]::ToHexString($bytes)).ToLowerInvariant() }
+  } catch {}
+  return ([System.BitConverter]::ToString($bytes) -replace '-', '').ToLowerInvariant()
 }
 
 $startService = $true
@@ -478,7 +483,7 @@ function Start-ServiceBinary([string]$message) {
     Ensure-ParentDir $env:ARW_LOG_FILE
     $startArgs.WindowStyle = $windowStyle
     $startArgs.RedirectStandardOutput = $env:ARW_LOG_FILE
-    $startArgs.RedirectStandardError = $env:ARW_LOG_FILE
+    $startArgs.RedirectStandardError = ('{0}.err' -f $env:ARW_LOG_FILE)
   } elseif ($HideWindow) {
     $startArgs.WindowStyle = $windowStyle
   } else {

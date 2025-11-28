@@ -67,27 +67,25 @@ pub async fn events_sse(
     if !crate::admin_ok(&headers).await {
         return crate::responses::unauthorized(None);
     }
-    if !state.kernel_enabled()
-        && (q.contains_key("after")
-            || q.contains_key("replay")
-            || headers.get("last-event-id").is_some())
-    {
-        return crate::responses::problem_response(
-            axum::http::StatusCode::NOT_IMPLEMENTED,
-            "Kernel Disabled",
-            Some("Event replay is unavailable when ARW_KERNEL_ENABLE=0"),
-        );
-    }
-    let (tx, rx) = tokio::sync::mpsc::channel::<(arw_events::Envelope, Option<String>)>(128);
-    let last_event_id_hdr: Option<String> = headers
-        .get("last-event-id")
-        .and_then(|h| h.to_str().ok())
-        .map(|s| s.to_string());
-    let resume_from = q.get("after").cloned().or(last_event_id_hdr.clone());
-    let replay_param = q
+    let kernel_enabled = state.kernel_enabled();
+    let mut resume_from = q.get("after").cloned();
+    let mut replay_param = q
         .get("replay")
         .and_then(|s| s.parse::<usize>().ok())
         .unwrap_or_default();
+    let mut last_event_id_hdr: Option<String> = headers
+        .get("last-event-id")
+        .and_then(|h| h.to_str().ok())
+        .map(|s| s.to_string());
+    if !kernel_enabled {
+        // When kernel persistence is disabled we cannot honor replay/resume.
+        // Fall back to live streaming instead of returning 501s to keep UIs stable.
+        resume_from = None;
+        replay_param = 0;
+        last_event_id_hdr = None;
+    }
+    let (tx, rx) = tokio::sync::mpsc::channel::<(arw_events::Envelope, Option<String>)>(128);
+    let resume_from = resume_from.or(last_event_id_hdr.clone());
     let prefixes: Vec<String> = q
         .get("prefix")
         .map(|s| {

@@ -50,14 +50,20 @@ if (-not $DebugBuild) { $cargoArgs += '--release' }
 & cargo @cargoArgs
 
 if (-not $NoTests) {
+  $nextestArgs = @('nextest','run','--workspace','--locked','--test-threads=1')
+  $testArgs = @('test','--workspace','--locked')
+  if (-not $includeLauncher) {
+    $nextestArgs += @('--exclude','arw-launcher')
+    $testArgs += @('--exclude','arw-launcher')
+  }
   $nextest = Get-Command cargo-nextest -ErrorAction SilentlyContinue
   if ($nextest) {
     Info 'Running tests (workspace via nextest)'
-    & $nextest.Source run --workspace --locked --test-threads=1
+    & cargo @nextestArgs
   } else {
     Warn "cargo-nextest not found; falling back to 'cargo test --workspace --locked'."
     Warn "Install it with 'cargo install --locked cargo-nextest' for faster runs."
-    & cargo test --workspace --locked -- --test-threads=1
+    & cargo @($testArgs + @('--','--test-threads=1'))
   }
 }
 

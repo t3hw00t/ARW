@@ -7,7 +7,7 @@ Run `cargo build -p arw-launcher --features launcher-linux-ui` or exclude the la
 
 use arw_core::util::env_bool;
 use arw_tauri::{plugin as arw_plugin, ServiceState};
-use tauri::Manager;
+use tauri::{Manager, WindowEvent};
 
 #[cfg(all(desktop, not(test)))]
 fn create_tray<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> tauri::Result<()> {
@@ -233,9 +233,49 @@ fn main() {
             .title("Agent Hub (ARW) Launcher")
             .inner_size(480.0, 320.0)
             .build()?;
+            // Keep tray/process alive when user closes the window: hide instead of exiting.
+            let main_c = main.clone();
+            main.on_window_event(move |event| {
+                if let WindowEvent::CloseRequested { api, .. } = event {
+                    api.prevent_close();
+                    let _ = main_c.hide();
+                }
+            });
             #[cfg(all(desktop, not(test)))]
             {
                 create_tray(app.handle())?;
+            }
+            // Seed admin token + base override into localStorage after window creation (safer than initialization_script).
+            if let Ok(tok) = std::env::var("ARW_ADMIN_TOKEN") {
+                let trimmed = tok.trim();
+                if !trimmed.is_empty() {
+                    let script = format!(
+                        "try{{window.__ARW_ADMIN_TOKEN={t:?};localStorage.setItem('arw.admin.token',{t:?});localStorage.setItem('arw.admin.remember','true');}}catch(_e){{}}",
+                        t = trimmed
+                    );
+                    let _ = main.eval(&script);
+                }
+            }
+            let base_override = std::env::var("ARW_BASE_OVERRIDE")
+                .ok()
+                .and_then(|v| {
+                    let trimmed = v.trim();
+                    if trimmed.is_empty() { None } else { Some(trimmed.to_string()) }
+                })
+                .or_else(|| {
+                    let prefs = arw_tauri::load_prefs(Some("launcher"));
+                    prefs
+                        .get("baseOverride")
+                        .and_then(|v| v.as_str())
+                        .map(|s| s.trim().to_string())
+                        .filter(|s| !s.is_empty())
+                });
+            if let Some(base) = base_override {
+                let script = format!(
+                    "try{{window.__ARW_BASE_OVERRIDE={b:?};localStorage.setItem('arw:base:override',{b:?});}}catch(_e){{}}",
+                    b = base
+                );
+                let _ = main.eval(&script);
             }
             // Show mascot-only mode when ARW_MASCOT_ONLY=1
             if env_bool("ARW_MASCOT_ONLY").unwrap_or(false) {

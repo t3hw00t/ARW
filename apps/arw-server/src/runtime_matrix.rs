@@ -6,7 +6,7 @@ use chrono::SecondsFormat;
 use once_cell::sync::OnceCell;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::time::{Duration as StdDuration, Instant};
 use tokio::sync::RwLock;
 use tokio::time::{interval, Duration};
@@ -523,6 +523,23 @@ fn finalize_status_strings(
     status_code: &str,
     mut reasons: Vec<String>,
 ) -> (Vec<String>, String, String) {
+    let mut seen = HashSet::new();
+    let mut cleaned = Vec::new();
+    for reason in reasons.drain(..) {
+        let trimmed = reason.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        let truncated = truncate(trimmed, 240);
+        if seen.insert(truncated.clone()) {
+            cleaned.push(truncated);
+        }
+        if cleaned.len() >= 8 {
+            break;
+        }
+    }
+    reasons = cleaned;
+
     if reasons.is_empty() {
         reasons.push("Running within expected ranges".to_string());
     }
@@ -632,13 +649,25 @@ fn runtime_label(record: &RuntimeRecord) -> String {
         .unwrap_or_else(|| record.descriptor.id.clone())
 }
 
+fn truncate(input: &str, max: usize) -> String {
+    if max == 0 {
+        return String::new();
+    }
+    let mut chars = input.chars();
+    let mut out: String = chars.by_ref().take(max.saturating_sub(1)).collect();
+    if chars.next().is_some() {
+        out.push('…');
+    }
+    out
+}
+
 fn runtime_alert_line(record: &RuntimeRecord) -> String {
     let label = runtime_label(record);
     let summary_raw = record.status.summary.trim();
     let summary_text = if summary_raw.is_empty() {
         runtime_state_label(&record.status.state).to_string()
     } else {
-        summary_raw.to_string()
+        truncate(summary_raw, 200)
     };
     if let Some(detail) = record
         .status
@@ -646,6 +675,7 @@ fn runtime_alert_line(record: &RuntimeRecord) -> String {
         .iter()
         .find(|detail| !detail.trim().is_empty())
     {
+        let detail = truncate(detail, 200);
         format!("{}: {} ({})", label, summary_text, detail)
     } else {
         format!("{}: {}", label, summary_text)

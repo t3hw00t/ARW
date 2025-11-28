@@ -55,6 +55,7 @@ pub(crate) async fn build() -> BootstrapOutput {
     config::init_gating_from_configs();
     config::init_cache_policy_from_manifest();
     let smoke_mode = smoke_mode_enabled();
+    let quiet_start = crate::util::env_bool("ARW_QUIET_START").unwrap_or(false);
 
     let bus_cap = std::env::var("ARW_BUS_CAPACITY")
         .ok()
@@ -141,7 +142,7 @@ pub(crate) async fn build() -> BootstrapOutput {
         .build()
         .await;
 
-    if kernel_enabled {
+    if kernel_enabled && !quiet_start {
         if let Ok(depth) = state.kernel().count_actions_by_state_async("queued").await {
             state.metrics().queue_reset(depth.max(0) as u64);
         }
@@ -186,7 +187,7 @@ pub(crate) async fn build() -> BootstrapOutput {
     crate::logic_units_builtin::seed(&state).await;
 
     background_tasks.merge(initialise_state(&state, kernel_enabled, smoke_mode).await);
-    if kernel_enabled {
+    if kernel_enabled && !quiet_start {
         if let Some(handle) = spawn_embed_backfill_task(
             state.clone(),
             embed_backfill_batch_from_env(),
@@ -195,18 +196,20 @@ pub(crate) async fn build() -> BootstrapOutput {
             background_tasks.push(handle);
         }
     }
-    if !smoke_mode {
+    if !smoke_mode && !quiet_start {
         background_tasks.extend(config_watcher::start(state.clone()));
         if let Some(handle) = identity_registry.watch() {
             background_tasks.push(handle);
         }
     }
 
-    if kernel_enabled && !smoke_mode {
+    if kernel_enabled && !smoke_mode && !quiet_start {
         background_tasks.push(crate::economy_sync::start(state.clone()));
         background_tasks.push(crate::daily_brief::start(state.clone()));
-    } else if kernel_enabled {
+    } else if kernel_enabled && !quiet_start {
         background_tasks.push(crate::economy_sync::start(state.clone()));
+    } else if quiet_start {
+        info!(target: "arw::bootstrap", "quiet start: heavy background tasks deferred (config watcher, identity watch, embed backfill, economy, daily_brief)");
     }
 
     BootstrapOutput {
@@ -247,6 +250,7 @@ pub(crate) fn attach_http_layers(
     use tower_http::{compression::CompressionLayer, trace::TraceLayer};
 
     router
+        .layer(security::cors_layer())
         .layer(CompressionLayer::new())
         .layer(TraceLayer::new_for_http())
         .layer(ConcurrencyLimitLayer::new(concurrency_limit))

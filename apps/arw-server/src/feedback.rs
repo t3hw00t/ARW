@@ -131,9 +131,20 @@ impl FeedbackHub {
             engine_backup_path,
             engine_versions_dir: state_dir,
         });
-        hub.load_engine_snapshot().await;
-        hub.spawn_engine_loop();
-        hub.spawn_auto_apply_listener();
+        // Allow disabling noisy feedback loops on constrained/dev nodes.
+        let enabled = util::env_bool("ARW_FEEDBACK_ENABLE").unwrap_or(true);
+        let auto_apply_env = util::env_bool("ARW_FEEDBACK_AUTO_APPLY");
+        if let Some(flag) = auto_apply_env {
+            let mut state = hub.state.write().await;
+            state.auto_apply = flag;
+        }
+        if enabled {
+            hub.load_engine_snapshot().await;
+            hub.spawn_engine_loop();
+            hub.spawn_auto_apply_listener();
+        } else {
+            info!(target: "feedback", "feedback engine disabled via ARW_FEEDBACK_ENABLE=0");
+        }
         hub
     }
 
@@ -954,14 +965,15 @@ async fn load_version_bytes(
 fn load_tick_ms() -> u64 {
     static CACHE: OnceCell<u64> = OnceCell::new();
     *CACHE.get_or_init(|| {
-        policy::config()
+        let val = policy::config()
             .and_then(|c| c.tick_ms)
             .or_else(|| {
                 std::env::var("ARW_FEEDBACK_TICK_MS")
                     .ok()
                     .and_then(|s| s.parse().ok())
             })
-            .unwrap_or(500)
+            .unwrap_or(30_000);
+        val.clamp(100, 300_000)
     })
 }
 

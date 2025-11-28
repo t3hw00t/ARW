@@ -18,7 +18,7 @@ Centralized reference for ARW environment variables and common flags. Defaults f
  - `ARW_CONFIG`: absolute path to the primary config TOML (overrides discovery).
 - `ARW_CONFIG_DIR`: base directory to search for additional configs (e.g., `configs/gating.toml`, `configs/feedback.toml`). When unset, the service also probes beside the executable and the current directory.
 - `ARW_GATING_FILE`: optional absolute or relative path to the immutable gating policy TOML. Defaults to the discovery chain described below.
-- `ARW_KERNEL_ENABLE`: enable the SQLite journal/CAS kernel (default `1`). When enabled, the service dual‑writes events to the kernel and exposes `/events?replay=N`. When disabled (`0`/`false`), journaling and replay endpoints fall back to in-memory delivery only and `/events?replay` returns `501 Not Implemented`.
+- `ARW_KERNEL_ENABLE`: enable the SQLite journal/CAS kernel (default `1`). When enabled, the service dual-writes events to the kernel and exposes `/events?replay=N`. When disabled (`0`/`false`), journaling and replay endpoints fall back to in-memory delivery only; live SSE remains available but replay/resume hints are ignored.
 - `ARW_SQLITE_POOL_SIZE`: starting target for SQLite connections in the pool (default `8`). Requests beyond the current limit block until a handle is returned.
 - `ARW_SQLITE_POOL_MIN`: lower bound for the autotuner/shrinker (default `2`).
 - `ARW_SQLITE_POOL_MAX`: absolute ceiling for pool expansion (default `32`).
@@ -229,6 +229,11 @@ SSE contract: see `architecture/sse_patch_contract.md` for `Last-Event-ID` and J
 - Normalized kinds appear in the CloudEvents `ce.type` and envelope `kind` fields.
 - SSE filters should use normalized prefixes (e.g., `?prefix=models.`).
 
+## Feedback Engine
+- `ARW_FEEDBACK_ENABLE`: `0` disables the feedback engine loop and auto-apply listener entirely (default `1`).
+- `ARW_FEEDBACK_AUTO_APPLY`: force auto-apply on/off regardless of persisted state (`0|1`).
+- `ARW_FEEDBACK_TICK_MS`: feedback evaluation interval in milliseconds (default `30000`; clamped `100-300000`; overridden by `configs/feedback.toml` `tick_ms` when present).
+
 ## Hardware Probes & Metrics
 - `ARW_ROCM_SMI`: `1` enables ROCm SMI enrichment for AMD GPU metrics on Linux (best‑effort).
 - `ARW_DXCORE_NPU`: `1` enables DXCore probe for NPUs on Windows when built with `npu_dxcore` feature.
@@ -236,17 +241,18 @@ SSE contract: see `architecture/sse_patch_contract.md` for `Last-Event-ID` and J
 _Planned:_ `ARW_METRICS_INTERVAL_SECS` will expose the `probe.metrics` interval once metrics streaming moves out of the debug surfaces.
 
 ## CORS, Headers & Networking
-- `ARW_CSP_AUTO`: `1` to auto‑inject a CSP for `text/html` responses (default `1`).
+- `ARW_CSP_AUTO`: `1` to auto-inject a CSP for `text/html` responses (default `1`).
 - `ARW_CSP_PRESET`: CSP preset `relaxed|strict` (default `relaxed`).
 - `ARW_CSP`: explicit CSP policy string; set to `off`/`0` to disable.
 - `ARW_TRUST_FORWARD_HEADERS`: `1` to trust `X-Forwarded-For`/`Forwarded` (access log client IP) when behind a trusted proxy.
-
-_Planned:_ `ARW_CORS_ANY` returns once we finish the hardened CORS story for the debug UI and launcher windows. For now CORS remains strict.
+- `ARW_CORS_ALLOW`: comma-separated hosts/origins to allow in addition to the loopback/localhost defaults (`tauri.localhost`, `*.localhost`, `127.0.0.1`).
+- `ARW_CORS_ANY`: `1` to allow any Origin (development only; avoid in production).
+- `ARW_QUIET_START`: `1` to defer heavy background tasks (config watcher, identity watch, economy/daily loops, embed backfill) for a fast/quiet startup; enable features on demand.
 
 ### Access Logs (stdout)
 - `ARW_ACCESS_LOG`: `1` to enable JSON access logs to stdout.
 - `ARW_ACCESS_SAMPLE_N`: sample every Nth request (default `1`).
-- `ARW_ACCESS_UA`: `1` to include User‑Agent; `ARW_ACCESS_UA_HASH=1` to include only a SHA‑256 hash.
+- `ARW_ACCESS_UA`: `1` to include User-Agent; `ARW_ACCESS_UA_HASH=1` to include only a SHA-256 hash.
 - `ARW_ACCESS_REF`: `1` to include Referer; `ARW_ACCESS_REF_STRIP_QS=1` to drop the query string.
 
 ### Network Posture & Egress (Planned)

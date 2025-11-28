@@ -3298,7 +3298,9 @@ ARW.personaPanel = (() => {
           this.loadingDetails = null;
         }
       }
-    }\r\n\r\n    renderMetrics(metrics, detail, message) {
+    }
+
+    renderMetrics(metrics, detail, message) {
       if (!this.metrics) return;
       const fragments = [];
       if (message) {
