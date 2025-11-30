@@ -1158,9 +1158,20 @@ fn spawn_snappy(state: &AppState) -> TaskHandle {
             async move {
                 let mut governor = SnappyGovernorState::new(SnappyConfig::from_env());
                 let period = Duration::from_millis(governor.config.publish_ms.max(1));
+                if governor.config.warmup_ms > 0 {
+                    let jitter_ms: u64 = (rand::random::<u32>() % 50) as u64;
+                    let total = governor.config.warmup_ms.saturating_add(jitter_ms);
+                    time::sleep(Duration::from_millis(total)).await;
+                }
                 let mut tick = time::interval(period);
                 loop {
                     tick.tick().await;
+                    if governor.config.skip_if_lagged_over > 0 {
+                        let lagged = state.bus().stats().lagged;
+                        if lagged > governor.config.skip_if_lagged_over {
+                            continue;
+                        }
+                    }
                     let summary = state.metrics().snapshot();
                     let snapshot = SnappySnapshot::from_metrics(&governor.config, &summary);
                     let bus = state.bus();
@@ -1203,6 +1214,8 @@ struct SnappyConfig {
     publish_ms: u64,
     protected_prefixes: Vec<String>,
     detail_every: Option<Duration>,
+    warmup_ms: u64,
+    skip_if_lagged_over: u64,
 }
 
 impl SnappyConfig {
@@ -1224,6 +1237,8 @@ impl SnappyConfig {
                     Some(Duration::from_secs(secs))
                 }
             }),
+            warmup_ms: env_u64("ARW_SNAPPY_WARMUP_MS", 250),
+            skip_if_lagged_over: env_u64("ARW_SNAPPY_SKIP_IF_LAGGED", 512),
         }
     }
 
@@ -2702,6 +2717,8 @@ workflows:
             ("ARW_SNAPPY_FULL_RESULT_P95_MS", Some("15")),
             ("ARW_SNAPPY_PROTECTED_ENDPOINTS", Some("/state/")),
             ("ARW_SNAPPY_DETAIL_EVERY", Some("0")),
+            ("ARW_SNAPPY_WARMUP_MS", Some("0")),
+            ("ARW_SNAPPY_SKIP_IF_LAGGED", Some("0")),
         ]);
 
         state.metrics().record_route("/state/routes", 200, 30);

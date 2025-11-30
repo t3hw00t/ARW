@@ -68,15 +68,24 @@ pub async fn events_sse(
         return crate::responses::unauthorized(None);
     }
     let kernel_enabled = state.kernel_enabled();
-    let mut resume_from = q.get("after").cloned();
-    let mut replay_param = q
+    let after_param = q.get("after").cloned();
+    let replay_param_raw = q
         .get("replay")
         .and_then(|s| s.parse::<usize>().ok())
         .unwrap_or_default();
-    let mut last_event_id_hdr: Option<String> = headers
+    let last_event_id_hdr_raw: Option<String> = headers
         .get("last-event-id")
         .and_then(|h| h.to_str().ok())
         .map(|s| s.to_string());
+    if !kernel_enabled
+        && (after_param.is_some() || replay_param_raw > 0 || last_event_id_hdr_raw.is_some())
+    {
+        return crate::responses::kernel_disabled();
+    }
+
+    let mut resume_from = after_param;
+    let mut replay_param = replay_param_raw;
+    let mut last_event_id_hdr = last_event_id_hdr_raw;
     if !kernel_enabled {
         // When kernel persistence is disabled we cannot honor replay/resume.
         // Fall back to live streaming instead of returning 501s to keep UIs stable.

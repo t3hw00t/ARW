@@ -211,6 +211,10 @@ These knobs prioritize perceived latency and streaming cadence.
 - `ARW_SNAPPY_COLD_START_MS`: cold start budget for control plane (default `500`)
 - `ARW_SNAPPY_FULL_RESULT_P95_MS`: p95 full result target (default `2000`)
 - `ARW_SNAPPY_PROTECTED_ENDPOINTS`: CSV prefixes for interactive surface (default `/admin/debug,/state/,/chat/,/events`)
+- `ARW_SNAPPY_WARMUP_MS`: optional warmup delay before snappy read-model emits (default `250`)
+- `ARW_SNAPPY_SKIP_IF_LAGGED`: skip snappy emissions while bus lag exceeds this threshold (events; default `512`; set to `0` to always emit)
+- `ARW_LLMLINGUA_AUTO_INSTALL`: `1` (default) auto-installs `llmlingua` with the detected Python interpreter when missing; set to `0` to skip auto-installation and fall back to the noop compressor.
+- `ARW_SILENCE_RATE_LIMIT_LOGS`: `1` to suppress admin rate-limit warnings (useful in test/CI spammy loops).
 - `ARW_ROUTE_HIST_MS`: CSV millisecond buckets for route latency histograms (default `5,10,25,50,100,200,500,1000,2000,5000,10000`)
 - `ARW_NATS_URL`: NATS URL, e.g. `nats://127.0.0.1:4222`
 - `ARW_NODE_ID`: node identifier for NATS subjects (defaults to hostname)
@@ -247,7 +251,9 @@ _Planned:_ `ARW_METRICS_INTERVAL_SECS` will expose the `probe.metrics` interval 
 - `ARW_TRUST_FORWARD_HEADERS`: `1` to trust `X-Forwarded-For`/`Forwarded` (access log client IP) when behind a trusted proxy.
 - `ARW_CORS_ALLOW`: comma-separated hosts/origins to allow in addition to the loopback/localhost defaults (`tauri.localhost`, `*.localhost`, `127.0.0.1`).
 - `ARW_CORS_ANY`: `1` to allow any Origin (development only; avoid in production).
-- `ARW_QUIET_START`: `1` to defer heavy background tasks (config watcher, identity watch, economy/daily loops, embed backfill) for a fast/quiet startup; enable features on demand.
+- `ARW_QUIET_START`: `1` to defer heavy background tasks (config watcher, identity watch, economy/daily loops, embed backfill) for a fast/quiet startup; defaults to `1` when unset.
+- `ARW_QUIET_RESUME_AFTER_MS`: optional delay before deferred tasks auto-enable (default `5000` ms). Set to `0` to keep them paused until manual restart.
+- `ARW_QUIET_RESUME_MAX_LAG`: bus lag threshold (events) tolerated before resuming deferred tasks (default `128`).
 
 ### Access Logs (stdout)
 - `ARW_ACCESS_LOG`: `1` to enable JSON access logs to stdout.

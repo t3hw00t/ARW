@@ -55,12 +55,25 @@ pub(crate) async fn build() -> BootstrapOutput {
     config::init_gating_from_configs();
     config::init_cache_policy_from_manifest();
     let smoke_mode = smoke_mode_enabled();
-    let quiet_start = crate::util::env_bool("ARW_QUIET_START").unwrap_or(false);
+    let quiet_start = crate::util::env_bool("ARW_QUIET_START").unwrap_or(true);
+    let quiet_resume_after = std::env::var("ARW_QUIET_RESUME_AFTER_MS")
+        .ok()
+        .and_then(|v| v.parse::<u64>().ok())
+        .map(Duration::from_millis);
+    let quiet_resume_after = match quiet_resume_after {
+        Some(delay) if delay.is_zero() => None,
+        Some(delay) => Some(delay),
+        None => Some(Duration::from_millis(5000)),
+    };
+    let quiet_resume_max_lag = std::env::var("ARW_QUIET_RESUME_MAX_LAG")
+        .ok()
+        .and_then(|v| v.parse::<u64>().ok())
+        .unwrap_or(128);
 
     let bus_cap = std::env::var("ARW_BUS_CAPACITY")
         .ok()
         .and_then(|v| v.parse::<usize>().ok())
-        .unwrap_or(1024);
+        .unwrap_or(4096);
     let bus_replay = std::env::var("ARW_BUS_REPLAY")
         .ok()
         .and_then(|v| v.parse::<usize>().ok())
@@ -187,29 +200,45 @@ pub(crate) async fn build() -> BootstrapOutput {
     crate::logic_units_builtin::seed(&state).await;
 
     background_tasks.merge(initialise_state(&state, kernel_enabled, smoke_mode).await);
-    if kernel_enabled && !quiet_start {
-        if let Some(handle) = spawn_embed_backfill_task(
-            state.clone(),
-            embed_backfill_batch_from_env(),
-            embed_backfill_idle_from_env(),
-        ) {
-            background_tasks.push(handle);
-        }
-    }
-    if !smoke_mode && !quiet_start {
-        background_tasks.extend(config_watcher::start(state.clone()));
-        if let Some(handle) = identity_registry.watch() {
-            background_tasks.push(handle);
-        }
-    }
+    let embed_backfill_batch = embed_backfill_batch_from_env();
+    let embed_backfill_idle = embed_backfill_idle_from_env();
 
-    if kernel_enabled && !smoke_mode && !quiet_start {
-        background_tasks.push(crate::economy_sync::start(state.clone()));
-        background_tasks.push(crate::daily_brief::start(state.clone()));
-    } else if kernel_enabled && !quiet_start {
-        background_tasks.push(crate::economy_sync::start(state.clone()));
-    } else if quiet_start {
-        info!(target: "arw::bootstrap", "quiet start: heavy background tasks deferred (config watcher, identity watch, embed backfill, economy, daily_brief)");
+    if quiet_start {
+        if let Some(delay) = quiet_resume_after {
+            background_tasks.push(spawn_deferred_heavy_tasks(
+                state.clone(),
+                identity_registry.clone(),
+                kernel_enabled,
+                smoke_mode,
+                embed_backfill_batch,
+                embed_backfill_idle,
+                delay,
+                quiet_resume_max_lag,
+            ));
+            info!(target: "arw::bootstrap", resume_after_ms = delay.as_millis(), max_lag = quiet_resume_max_lag, "quiet start: heavy background tasks deferred (config watcher, identity watch, embed backfill, economy, daily_brief)");
+        } else {
+            info!(target: "arw::bootstrap", "quiet start: heavy background tasks paused (config watcher, identity watch, embed backfill, economy, daily_brief)");
+        }
+    } else {
+        if kernel_enabled {
+            if let Some(handle) =
+                spawn_embed_backfill_task(state.clone(), embed_backfill_batch, embed_backfill_idle)
+            {
+                background_tasks.push(handle);
+            }
+        }
+        if !smoke_mode {
+            background_tasks.extend(config_watcher::start(state.clone()));
+            if let Some(handle) = identity_registry.watch() {
+                background_tasks.push(handle);
+            }
+        }
+        if kernel_enabled && !smoke_mode {
+            background_tasks.push(crate::economy_sync::start(state.clone()));
+            background_tasks.push(crate::daily_brief::start(state.clone()));
+        } else if kernel_enabled {
+            background_tasks.push(crate::economy_sync::start(state.clone()));
+        }
     }
 
     BootstrapOutput {
@@ -718,6 +747,66 @@ fn spawn_trust_store_watcher(state: AppState) -> TaskHandle {
 
                 tokio::time::sleep(Duration::from_secs(5)).await;
             }
+        }
+    })
+}
+
+fn spawn_deferred_heavy_tasks(
+    state: AppState,
+    identity_registry: Arc<identity::IdentityRegistry>,
+    kernel_enabled: bool,
+    smoke_mode: bool,
+    embed_backfill_batch: usize,
+    embed_backfill_idle: Duration,
+    delay: Duration,
+    max_lag: u64,
+) -> TaskHandle {
+    crate::tasks::spawn_supervised("bootstrap.deferred_heavy", move || {
+        let state = state.clone();
+        let identity_registry = identity_registry.clone();
+        async move {
+            if !delay.is_zero() {
+                tokio::time::sleep(delay).await;
+            }
+            let mut attempts = 0u32;
+            while attempts < 5 {
+                let stats = state.bus().stats();
+                if stats.lagged <= max_lag {
+                    break;
+                }
+                attempts = attempts.saturating_add(1);
+                tokio::time::sleep(Duration::from_millis(500)).await;
+            }
+
+            let mut tasks = TaskManager::with_metrics(state.metrics());
+            if kernel_enabled && embed_backfill_batch > 0 {
+                if let Some(handle) = spawn_embed_backfill_task(
+                    state.clone(),
+                    embed_backfill_batch,
+                    embed_backfill_idle,
+                ) {
+                    tasks.push(handle);
+                }
+            }
+            if !smoke_mode {
+                tasks.extend(config_watcher::start(state.clone()));
+                if let Some(handle) = identity_registry.watch() {
+                    tasks.push(handle);
+                }
+            }
+            if kernel_enabled && !smoke_mode {
+                tasks.push(crate::economy_sync::start(state.clone()));
+                tasks.push(crate::daily_brief::start(state.clone()));
+            } else if kernel_enabled {
+                tasks.push(crate::economy_sync::start(state.clone()));
+            }
+            info!(
+                target: "arw::bootstrap",
+                lagged = state.bus().stats().lagged,
+                "deferred heavy background tasks enabled"
+            );
+            let _ = std::future::pending::<()>().await;
+            drop(tasks);
         }
     })
 }

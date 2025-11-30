@@ -11,6 +11,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 use tower_http::cors::{AllowHeaders, AllowMethods, AllowOrigin, CorsLayer};
+use tracing::warn;
 
 #[derive(Clone, Debug, Default)]
 pub struct ClientAddrs {
@@ -352,6 +353,9 @@ fn rate_limit_config() -> RateLimitConfig {
 
 static ADMIN_RATE_LIMITER: Lazy<Mutex<HashMap<String, VecDeque<Instant>>>> =
     Lazy::new(|| Mutex::new(HashMap::new()));
+static RATE_LIMIT_LOG_COOLDOWN: Lazy<Mutex<HashMap<String, Instant>>> =
+    Lazy::new(|| Mutex::new(HashMap::new()));
+const RATE_LIMIT_LOG_DEDUP_MS: u64 = 5_000;
 
 pub(crate) fn admin_rate_limit_allow(fingerprint: &str, addrs: &ClientAddrs) -> bool {
     let cfg = rate_limit_config();
@@ -402,6 +406,29 @@ pub(crate) fn admin_rate_limit_allow(fingerprint: &str, addrs: &ClientAddrs) -> 
         map.entry(key).or_default().push_back(now);
     }
     true
+}
+
+pub(crate) fn maybe_log_rate_limit(addrs: &ClientAddrs) {
+    if crate::util::env_bool("ARW_SILENCE_RATE_LIMIT_LOGS").unwrap_or(false) {
+        return;
+    }
+    let remote = addrs.remote().unwrap_or("unknown");
+    let forwarded = addrs.forwarded().unwrap_or("none");
+    let key = format!("{}|{}", remote, forwarded);
+    let now = Instant::now();
+    let mut map = RATE_LIMIT_LOG_COOLDOWN.lock().unwrap_or_else(|p| p.into_inner());
+    if let Some(prev) = map.get(&key) {
+        if now.duration_since(*prev).as_millis() < RATE_LIMIT_LOG_DEDUP_MS as u128 {
+            return;
+        }
+    }
+    map.insert(key, now);
+    warn!(
+        target: "arw::security",
+        remote = remote,
+        forwarded = forwarded,
+        "admin auth rate limit exceeded"
+    );
 }
 
 #[cfg(test)]

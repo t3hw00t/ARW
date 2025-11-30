@@ -18,16 +18,43 @@ pub(crate) mod env {
 
     pub(crate) fn guard() -> EnvGuard {
         // Avoid indefinite hangs if another test leaked the ENV lock.
-        // Wait up to 10s, then panic with a clear message.
+        // Wait with backoff and emit a hint before giving up.
         #[cfg(test)]
         {
-            if let Some(lock) = ENV_LOCK.try_lock_for(std::time::Duration::from_secs(30)) {
-                return EnvGuard {
-                    _lock: lock,
-                    saved: HashMap::new(),
-                };
+            use std::time::{Duration, Instant};
+            let deadline = Duration::from_secs(120);
+            let start = Instant::now();
+            let mut warned = false;
+            loop {
+                if let Some(lock) = ENV_LOCK.try_lock_for(Duration::from_millis(200)) {
+                    let mut guard = EnvGuard {
+                        _lock: lock,
+                        saved: HashMap::new(),
+                    };
+                    // Silence rate-limit log spam during tests unless explicitly overridden or verbose.
+                    let verbose = std::env::var("ARW_TEST_VERBOSE").is_ok();
+                    if !verbose && std::env::var("ARW_SILENCE_RATE_LIMIT_LOGS").is_err() {
+                        guard.set("ARW_SILENCE_RATE_LIMIT_LOGS", "1");
+                    }
+                    return guard;
+                }
+                let elapsed = start.elapsed();
+                if !warned && elapsed >= Duration::from_secs(15) {
+                    if std::env::var("ARW_TEST_VERBOSE").is_ok() {
+                        eprintln!(
+                            "waiting on test ENV lock for {:?}; continuing to wait (max {:?})",
+                            elapsed, deadline
+                        );
+                    }
+                    warned = true;
+                }
+                if elapsed >= deadline {
+                    panic!(
+                        "test ENV lock could not be acquired within {:?}; another test may be stuck while holding it",
+                        deadline
+                    );
+                }
             }
-            panic!("test ENV lock could not be acquired within 30s; another test may be stuck while holding it");
         }
         #[allow(unreachable_code)]
         EnvGuard {

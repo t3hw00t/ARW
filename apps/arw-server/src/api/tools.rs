@@ -197,20 +197,27 @@ mod tests {
     use axum::body::to_bytes;
     use axum::extract::State;
     use axum::http::{header, HeaderMap, HeaderValue, StatusCode};
+    use once_cell::sync::Lazy;
     use serde_json::json;
     use std::path::Path;
-    use std::sync::Arc;
+    use std::sync::{Arc, Mutex};
     use tempfile::tempdir;
 
     struct GatingReset {
         path: String,
+        _lock: std::sync::MutexGuard<'static, ()>,
     }
+
+    static GATING_TEST_LOCK: Lazy<Mutex<()>> = Lazy::new(|| Mutex::new(()));
 
     impl GatingReset {
         fn new<P: Into<String>>(path: P) -> Self {
             let path = path.into();
+            let lock = GATING_TEST_LOCK
+                .lock()
+                .unwrap_or_else(|poison| poison.into_inner());
             gating::reload_from_config(&path);
-            Self { path }
+            Self { path, _lock: lock }
         }
     }
 

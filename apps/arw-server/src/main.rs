@@ -880,12 +880,7 @@ pub(crate) async fn admin_ok(headers: &HeaderMap) -> bool {
     };
     let fingerprint = sha256_hex(&presented);
     if !crate::security::admin_rate_limit_allow(&fingerprint, &addrs) {
-        warn!(
-            target: "arw::security",
-            remote = addrs.remote().unwrap_or("unknown"),
-            forwarded = addrs.forwarded().unwrap_or("none"),
-            "admin auth rate limit exceeded"
-        );
+        crate::security::maybe_log_rate_limit(&addrs);
         return false;
     }
 

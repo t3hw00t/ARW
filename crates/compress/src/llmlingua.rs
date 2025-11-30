@@ -1,3 +1,4 @@
+use once_cell::sync::OnceCell;
 use std::io::Write;
 use std::process::{Command, Stdio};
 
@@ -7,14 +8,16 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Map, Value};
 
 /// Error returned when LLMLingua cannot be initialised.
-#[derive(thiserror::Error, Debug)]
+#[derive(thiserror::Error, Debug, Clone)]
 pub enum LlmlinguaDetectError {
     #[error("no python interpreter found for llmlingua")]
     NoInterpreter,
     #[error("llmlingua module unavailable via {interpreter}: {error}")]
     ModuleUnavailable { interpreter: String, error: String },
+    #[error("llmlingua auto-install via {interpreter} failed: {error}")]
+    InstallFailed { interpreter: String, error: String },
     #[error("failed to spawn python probe: {0}")]
-    Spawn(#[from] std::io::Error),
+    Spawn(String),
     #[error("python probe terminated abnormally: {0}")]
     ProbeFailed(String),
 }
@@ -60,7 +63,7 @@ impl PythonInterpreter {
                 if err.kind() == std::io::ErrorKind::NotFound {
                     Err(LlmlinguaDetectError::NoInterpreter)
                 } else {
-                    Err(LlmlinguaDetectError::Spawn(err))
+                    Err(LlmlinguaDetectError::Spawn(err.to_string()))
                 }
             }
         }
@@ -68,6 +71,7 @@ impl PythonInterpreter {
 }
 
 /// LLMLingua-backed prompt compressor.
+#[derive(Clone)]
 pub struct LlmlinguaCompressor {
     interpreter: PythonInterpreter,
 }
@@ -75,6 +79,13 @@ pub struct LlmlinguaCompressor {
 impl LlmlinguaCompressor {
     /// Try to locate a usable python + llmlingua environment.
     pub fn detect() -> Result<Self, LlmlinguaDetectError> {
+        static DETECT: OnceCell<Result<LlmlinguaCompressor, LlmlinguaDetectError>> =
+            OnceCell::new();
+        let cached = DETECT.get_or_init(|| Self::detect_inner());
+        cached.clone()
+    }
+
+    fn detect_inner() -> Result<Self, LlmlinguaDetectError> {
         let env = std::env::var("LLMLINGUA_PYTHON").ok();
         let mut candidates = Vec::new();
         if let Some(bin) = env {
@@ -89,6 +100,17 @@ impl LlmlinguaCompressor {
                 Ok(()) => return Ok(Self { interpreter }),
                 Err(LlmlinguaDetectError::NoInterpreter) => continue,
                 Err(err) => {
+                    if matches!(err, LlmlinguaDetectError::ModuleUnavailable { .. })
+                        && auto_install_enabled()
+                    {
+                        if let Err(inst_err) = ensure_llmlingua_installed(&interpreter) {
+                            last_error = Some(inst_err);
+                            continue;
+                        }
+                        if interpreter.probe_module("llmlingua").is_ok() {
+                            return Ok(Self { interpreter });
+                        }
+                    }
                     last_error = Some(err);
                 }
             }
@@ -105,6 +127,59 @@ impl LlmlinguaCompressor {
 }
 
 const DRIVER_SCRIPT: &str = include_str!("llmlingua_driver.py");
+
+fn auto_install_enabled() -> bool {
+    if cfg!(test) {
+        return false;
+    }
+    std::env::var("ARW_LLMLINGUA_AUTO_INSTALL")
+        .ok()
+        .map(|v| v.trim().to_ascii_lowercase())
+        .map(|v| matches!(v.as_str(), "" | "1" | "true" | "yes" | "on"))
+        .unwrap_or(true)
+}
+
+fn ensure_llmlingua_installed(
+    interpreter: &PythonInterpreter,
+) -> Result<(), LlmlinguaDetectError> {
+    // If the interpreter itself cannot import pip, bail early to avoid noisy failures.
+    let mut probe_pip = interpreter.spawn();
+    probe_pip.args(["-m", "pip", "--version"]).stdout(Stdio::null()).stderr(Stdio::null());
+    if let Ok(output) = probe_pip.output() {
+        if !output.status.success() {
+            return Err(LlmlinguaDetectError::InstallFailed {
+                interpreter: interpreter.program.clone(),
+                error: "pip unavailable on interpreter".to_string(),
+            });
+        }
+    }
+
+    let mut cmd = interpreter.spawn();
+    cmd.args(["-m", "pip", "install", "--quiet", "llmlingua>=0.2,<1.0"])
+        .stdout(Stdio::null())
+        .stderr(Stdio::piped());
+    match cmd.output() {
+        Ok(output) => {
+            if output.status.success() {
+                Ok(())
+            } else {
+                let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+                Err(LlmlinguaDetectError::InstallFailed {
+                    interpreter: interpreter.program.clone(),
+                    error: if stderr.is_empty() {
+                        format!("pip exited with {}", output.status)
+                    } else {
+                        stderr
+                    },
+                })
+            }
+        }
+        Err(err) => Err(LlmlinguaDetectError::InstallFailed {
+            interpreter: interpreter.program.clone(),
+            error: err.to_string(),
+        }),
+    }
+}
 
 #[derive(Debug, Serialize)]
 struct BridgePayload<'a> {

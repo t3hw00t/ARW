@@ -731,7 +731,11 @@ mod cmds {
             .unwrap_or_else(|| service_url("healthz", port));
         match client.get(url).send().await {
             Ok(resp) => Ok(resp.status().is_success()),
-            Err(err) => Err(format!("health request failed: {}", err)),
+            Err(err) => {
+                #[cfg(debug_assertions)]
+                eprintln!("health request failed: {}", err);
+                Ok(false)
+            }
         }
     }
 
@@ -1504,6 +1508,9 @@ mod cmds {
         let port_value = effective_port(port);
         let mut cmd = Command::new(svc_bin);
         cmd.env("ARW_PORT", format!("{port_value}"));
+        if std::env::var("ARW_QUIET_START").is_err() {
+            cmd.env("ARW_QUIET_START", "1");
+        }
         if let Some(token) = admin_token() {
             cmd.env("ARW_ADMIN_TOKEN", token);
         }
