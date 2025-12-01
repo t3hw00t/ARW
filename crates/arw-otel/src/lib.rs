@@ -3,7 +3,6 @@ use once_cell::sync::OnceCell;
 #[cfg(feature = "otlp")]
 use opentelemetry::trace::TracerProvider as _;
 use tracing_subscriber::filter::Targets;
-use tracing_subscriber::fmt::writer::MakeWriterExt;
 use tracing_subscriber::{
     fmt,
     layer::{Layer, SubscriberExt},
@@ -26,12 +25,18 @@ fn resolve_logs_dir() -> String {
 }
 
 pub fn init() {
+    init_with_service("arw-server");
+}
+
+/// Initialise tracing with a supplied service name for OTLP resource metadata.
+/// Falls back to console/file logging when OTLP is disabled or fails.
+pub fn init_with_service(service_name: &str) {
     let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
 
     #[cfg(feature = "otlp")]
     {
         if env_bool("ARW_OTEL").unwrap_or(false) {
-            match init_with_otlp(filter.clone()) {
+            match init_with_otlp(filter.clone(), service_name) {
                 Ok(()) => return,
                 Err(err) => {
                     tracing::warn!(
@@ -43,45 +48,54 @@ pub fn init() {
         }
     }
 
-    install_console(filter);
+    install_console(filter, service_name);
 }
 
-fn install_console(filter: EnvFilter) {
+fn access_writer() -> Option<(
+    tracing_appender::non_blocking::NonBlocking,
+    tracing_appender::non_blocking::WorkerGuard,
+)> {
+    if !env_bool("ARW_ACCESS_LOG_ROLL").unwrap_or(false) {
+        return None;
+    }
+    let dir = std::env::var("ARW_ACCESS_LOG_DIR")
+        .ok()
+        .or_else(|| std::env::var("ARW_LOGS_DIR").ok())
+        .unwrap_or_else(resolve_logs_dir);
+    if std::fs::create_dir_all(&dir).is_err() {
+        tracing::warn!(directory = %dir, "failed to create access log directory");
+    }
+    let prefix = std::env::var("ARW_ACCESS_LOG_PREFIX").unwrap_or_else(|_| "http-access".into());
+    let rotation = std::env::var("ARW_ACCESS_LOG_ROTATION").unwrap_or_else(|_| "daily".into());
+    let writer = match rotation.to_lowercase().as_str() {
+        "hourly" => tracing_appender::rolling::hourly(&dir, &prefix),
+        "minutely" => tracing_appender::rolling::minutely(&dir, &prefix),
+        _ => tracing_appender::rolling::daily(&dir, &prefix),
+    };
+    let (nb, guard) = tracing_appender::non_blocking(writer);
+    Some((nb, guard))
+}
+
+fn install_console(filter: EnvFilter, _service_name: &str) {
     let logs_dir = resolve_logs_dir();
     if let Err(err) = std::fs::create_dir_all(&logs_dir) {
         eprintln!("warn: failed to create log directory {logs_dir}: {err}");
-        let fmt_layer = fmt::layer().with_filter(filter.clone());
-        if env_bool("ARW_ACCESS_LOG_ROLL").unwrap_or(false) {
-            let registry = tracing_subscriber::registry().with(fmt_layer);
-            let dir = std::env::var("ARW_ACCESS_LOG_DIR")
-                .ok()
-                .or_else(|| std::env::var("ARW_LOGS_DIR").ok())
-                .unwrap_or_else(resolve_logs_dir);
-            let prefix =
-                std::env::var("ARW_ACCESS_LOG_PREFIX").unwrap_or_else(|_| "http-access".into());
-            let rotation =
-                std::env::var("ARW_ACCESS_LOG_ROTATION").unwrap_or_else(|_| "daily".into());
-            if std::fs::create_dir_all(&dir).is_err() {
-                tracing::warn!(directory = %dir, "failed to create access log directory");
-            }
-            let writer = match rotation.to_lowercase().as_str() {
-                "hourly" => tracing_appender::rolling::hourly(&dir, &prefix),
-                "minutely" => tracing_appender::rolling::minutely(&dir, &prefix),
-                _ => tracing_appender::rolling::daily(&dir, &prefix),
-            };
-            let (nb, guard) = tracing_appender::non_blocking(writer);
+        let fmt_layer = fmt::layer();
+        let subscriber = tracing_subscriber::registry()
+            .with(filter.clone())
+            .with(fmt_layer);
+        if let Some((writer, guard)) = access_writer() {
             let _ = ACCESS_GUARD.set(guard);
             let targets = Targets::new().with_target("http.access", tracing::Level::INFO);
             let access_layer = fmt::layer()
                 .with_ansi(false)
                 .with_target(false)
-                .with_writer(nb)
+                .with_writer(writer)
                 .with_filter(targets);
-            let subscriber = registry.with(access_layer);
+            let subscriber = subscriber.with(access_layer);
             let _ = subscriber.try_init();
         } else {
-            let registry = tracing_subscriber::registry().with(fmt_layer);
-            let _ = registry.try_init();
+            let _ = subscriber.try_init();
         }
         return;
     }
@@ -89,44 +103,32 @@ fn install_console(filter: EnvFilter) {
     let file_appender = tracing_appender::rolling::daily(&logs_dir, "arw.log");
     let (file_nb, guard) = tracing_appender::non_blocking(file_appender);
     let _ = LOG_GUARD.set(guard);
-    // Fan out to stdout and file so even aborted runs leave a log artifact.
-    let writer = std::io::stdout.and(file_nb);
-    let fmt_layer = fmt::layer().with_writer(writer).with_filter(filter.clone());
-    if env_bool("ARW_ACCESS_LOG_ROLL").unwrap_or(false) {
-        let registry = tracing_subscriber::registry().with(fmt_layer);
-        let dir = std::env::var("ARW_ACCESS_LOG_DIR")
-            .ok()
-            .or_else(|| std::env::var("ARW_LOGS_DIR").ok())
-            .unwrap_or_else(resolve_logs_dir);
-        let prefix =
-            std::env::var("ARW_ACCESS_LOG_PREFIX").unwrap_or_else(|_| "http-access".into());
-        let rotation = std::env::var("ARW_ACCESS_LOG_ROTATION").unwrap_or_else(|_| "daily".into());
-        if std::fs::create_dir_all(&dir).is_err() {
-            tracing::warn!(directory = %dir, "failed to create access log directory");
-        }
-        let writer = match rotation.to_lowercase().as_str() {
-            "hourly" => tracing_appender::rolling::hourly(&dir, &prefix),
-            "minutely" => tracing_appender::rolling::minutely(&dir, &prefix),
-            _ => tracing_appender::rolling::daily(&dir, &prefix),
-        };
-        let (nb, guard) = tracing_appender::non_blocking(writer);
+    let fmt_stdout = fmt::layer().with_writer(std::io::stdout);
+    let fmt_file = fmt::layer().with_ansi(false).with_writer(file_nb);
+    let subscriber = tracing_subscriber::registry()
+        .with(filter.clone())
+        .with(fmt_stdout)
+        .with(fmt_file);
+    if let Some((writer, guard)) = access_writer() {
         let _ = ACCESS_GUARD.set(guard);
         let targets = Targets::new().with_target("http.access", tracing::Level::INFO);
         let access_layer = fmt::layer()
             .with_ansi(false)
             .with_target(false)
-            .with_writer(nb)
+            .with_writer(writer)
             .with_filter(targets);
-        let subscriber = registry.with(access_layer);
+        let subscriber = subscriber.with(access_layer);
         let _ = subscriber.try_init();
     } else {
-        let registry = tracing_subscriber::registry().with(fmt_layer);
-        let _ = registry.try_init();
+        let _ = subscriber.try_init();
     }
 }
 
 #[cfg(feature = "otlp")]
-fn init_with_otlp(filter: EnvFilter) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+fn init_with_otlp(
+    filter: EnvFilter,
+    service_name: &str,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     use opentelemetry::{global, KeyValue};
     use opentelemetry_otlp::{WithExportConfig, OTEL_EXPORTER_OTLP_HEADERS};
     use opentelemetry_sdk::{
@@ -166,7 +168,7 @@ fn init_with_otlp(filter: EnvFilter) -> Result<(), Box<dyn std::error::Error + S
     let exporter = exporter_builder.build()?;
 
     let service_name =
-        std::env::var("ARW_OTEL_SERVICE_NAME").unwrap_or_else(|_| "arw-server".to_string());
+        std::env::var("ARW_OTEL_SERVICE_NAME").unwrap_or_else(|_| service_name.to_string());
     let resource = Resource::builder_empty()
         .with_attributes([
             KeyValue::new("service.name", service_name),
@@ -200,7 +202,7 @@ fn init_with_otlp(filter: EnvFilter) -> Result<(), Box<dyn std::error::Error + S
             .with_temporality(Temporality::Cumulative)
             .build()
         {
-            Ok(exporter) => match MetricsRecorder::builder("arw-server")
+            Ok(exporter) => match MetricsRecorder::builder(&service_name)
                 .with_instrumentation_scope(|scope| scope.with_version(env!("CARGO_PKG_VERSION")))
                 .with_meter_provider(|builder| {
                     builder
@@ -237,7 +239,7 @@ fn init_with_otlp(filter: EnvFilter) -> Result<(), Box<dyn std::error::Error + S
 
     let _ = OTEL_PROVIDER.set(tracer_provider.clone());
     global::set_tracer_provider(tracer_provider.clone());
-    let tracer = tracer_provider.tracer("arw-server");
+    let tracer = tracer_provider.tracer(service_name);
 
     global::set_text_map_propagator(TraceContextPropagator::new());
 
@@ -245,48 +247,52 @@ fn init_with_otlp(filter: EnvFilter) -> Result<(), Box<dyn std::error::Error + S
     let logs_dir = resolve_logs_dir();
     if let Err(err) = std::fs::create_dir_all(&logs_dir) {
         eprintln!("warn: failed to create log directory {logs_dir}: {err}");
-        let fmt_layer = fmt::layer().with_filter(filter.clone());
-        let registry = tracing_subscriber::registry()
+        let fmt_layer = fmt::layer();
+        let subscriber = tracing_subscriber::registry()
+            .with(filter.clone())
             .with(fmt_layer)
             .with(otel_layer);
-        registry.try_init()?;
+        if let Some((writer, guard)) = access_writer() {
+            let _ = ACCESS_GUARD.set(guard);
+            let targets = Targets::new().with_target("http.access", tracing::Level::INFO);
+            let access_layer = fmt::layer()
+                .with_ansi(false)
+                .with_target(false)
+                .with_writer(writer)
+                .with_filter(targets);
+            let subscriber = subscriber.with(access_layer);
+            subscriber.try_init()?;
+        } else {
+            subscriber.try_init()?;
+        }
         tracing::info!(endpoint, "OTLP tracing exporter initialised");
         return Ok(());
     }
 
-    let fmt_layer = fmt::layer().with_filter(filter.clone());
-    let registry = tracing_subscriber::registry()
-        .with(fmt_layer)
+    let file_appender = tracing_appender::rolling::daily(&logs_dir, "arw.log");
+    let (file_nb, guard) = tracing_appender::non_blocking(file_appender);
+    let _ = LOG_GUARD.set(guard);
+
+    let fmt_stdout = fmt::layer().with_writer(std::io::stdout);
+    let fmt_file = fmt::layer().with_ansi(false).with_writer(file_nb);
+    let subscriber = tracing_subscriber::registry()
+        .with(filter.clone())
+        .with(fmt_stdout)
+        .with(fmt_file)
         .with(otel_layer);
 
-    if env_bool("ARW_ACCESS_LOG_ROLL").unwrap_or(false) {
-        let dir = std::env::var("ARW_ACCESS_LOG_DIR")
-            .ok()
-            .or_else(|| std::env::var("ARW_LOGS_DIR").ok())
-            .unwrap_or_else(resolve_logs_dir);
-        let prefix =
-            std::env::var("ARW_ACCESS_LOG_PREFIX").unwrap_or_else(|_| "http-access".into());
-        let rotation = std::env::var("ARW_ACCESS_LOG_ROTATION").unwrap_or_else(|_| "daily".into());
-        if std::fs::create_dir_all(&dir).is_err() {
-            tracing::warn!(directory = %dir, "failed to create access log directory");
-        }
-        let writer = match rotation.to_lowercase().as_str() {
-            "hourly" => tracing_appender::rolling::hourly(&dir, &prefix),
-            "minutely" => tracing_appender::rolling::minutely(&dir, &prefix),
-            _ => tracing_appender::rolling::daily(&dir, &prefix),
-        };
-        let (nb, guard) = tracing_appender::non_blocking(writer);
+    if let Some((writer, guard)) = access_writer() {
         let _ = ACCESS_GUARD.set(guard);
         let targets = Targets::new().with_target("http.access", tracing::Level::INFO);
         let access_layer = fmt::layer()
             .with_ansi(false)
             .with_target(false)
-            .with_writer(nb)
+            .with_writer(writer)
             .with_filter(targets);
-        let subscriber = registry.with(access_layer);
+        let subscriber = subscriber.with(access_layer);
         subscriber.try_init()?;
     } else {
-        registry.try_init()?;
+        subscriber.try_init()?;
     }
 
     tracing::info!(endpoint, "OTLP tracing exporter initialised");

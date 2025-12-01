@@ -4,6 +4,7 @@ mod logic_units;
 mod recipes;
 mod research_watcher;
 use arw_core::{hello_core, load_effective_paths};
+use arw_otel::init_with_service;
 use clap::CommandFactory;
 use clap::{Args, Parser, Subcommand};
 use commands::{
@@ -14,7 +15,6 @@ use commands::{
 use logic_units::LogicUnitsCmd;
 use recipes::RecipesCmd;
 use research_watcher::ResearchWatcherCmd;
-use tracing_subscriber::{fmt, EnvFilter};
 
 #[derive(Parser)]
 #[command(name = "arw-cli", version, about = "ARW CLI utilities")]
@@ -129,9 +129,7 @@ struct CompletionsArgs {
     out_dir: Option<String>,
 }
 fn main() {
-    let _ = fmt()
-        .with_env_filter(EnvFilter::from_default_env())
-        .try_init();
+    init_with_service("arw-cli");
 
     let cli = Cli::parse();
     match cli.command {

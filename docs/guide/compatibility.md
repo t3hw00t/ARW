@@ -141,7 +141,7 @@ ARW collects a best‑effort hardware snapshot for display in the Debug UI and f
 - NPUs
   - Linux: probes `/sys/class/accel` and scans kernel modules for hints (e.g., `intel_vpu`, `amdxdna`).
   - macOS: reports the Apple Neural Engine presence on Apple Silicon.
-  - Windows (optional): when built with `npu_dxcore` and `ARW_DXCORE_NPU=1`, ARW uses DXCore to enumerate compute‑capable adapters as a proxy for NPU presence.
+  - Windows (optional): when built with `npu_dxcore` and `ARW_DXCORE_NPU=1`, ARW uses DXCore to enumerate compute-capable adapters as a proxy for NPU presence. Default Windows builds leave the DXCore bindings disabled to avoid pulling that Win32 surface unless explicitly opted in.
 
 Notes
 - These probes are read‑only and best‑effort; absence of a device in the snapshot does not prevent using an accelerator through a model runtime.

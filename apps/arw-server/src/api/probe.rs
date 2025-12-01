@@ -12,9 +12,9 @@ use arw_topics as topics;
 mod win_npu_dxcore {
     #![allow(non_snake_case, non_camel_case_types, non_upper_case_globals)]
     use serde_json::json;
-    use windows::Win32::Graphics::DXCore::{
-        DXCoreCreateAdapterFactory, DXCoreHardwareID, HardwareID, IDXCoreAdapterFactory,
-        IDXCoreAdapter, IDXCoreAdapterList, DXCORE_ADAPTER_ATTRIBUTE_D3D12_CORE_COMPUTE,
+    use windows_dxcore::Win32::Graphics::DXCore::{
+        DXCoreCreateAdapterFactory, DXCoreHardwareID, HardwareID, IDXCoreAdapter,
+        IDXCoreAdapterFactory, IDXCoreAdapterList, DXCORE_ADAPTER_ATTRIBUTE_D3D12_CORE_COMPUTE,
     };
 
     pub fn probe() -> Vec<serde_json::Value> {

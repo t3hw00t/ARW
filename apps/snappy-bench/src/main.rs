@@ -3,6 +3,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use anyhow::{anyhow, Context, Result};
+use arw_otel::init_with_service;
 use clap::Parser;
 use dashmap::DashMap;
 use futures_util::StreamExt;
@@ -300,6 +301,7 @@ struct Envelope {
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    init_with_service("snappy-bench");
     let args = Args::parse();
     anyhow::ensure!(args.requests > 0, "requests must be > 0");
     anyhow::ensure!(args.concurrency > 0, "concurrency must be > 0");

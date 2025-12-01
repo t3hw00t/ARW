@@ -12,6 +12,7 @@ serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 tokio = { workspace = true, features = ["rt-multi-thread","macros","signal","sync"] }
 arw-core = { path = "../../crates/arw-core", version = "0.2.0-dev", features = ["nats"] }
+arw-otel = { path = "../../crates/arw-otel", version = "0.2.0-dev" }
 chrono = { workspace = true }
 
 [dependencies.async-nats]

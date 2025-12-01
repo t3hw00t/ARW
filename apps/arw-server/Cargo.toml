@@ -88,7 +88,7 @@ default = []
 tool_screenshots = ["dep:screenshots", "dep:image"]
 gpu_nvml = ["dep:nvml-wrapper"]
 gpu_wgpu = ["dep:wgpu"]
-npu_dxcore = []
+npu_dxcore = ["dep:windows-dxcore"]
 ocr_tesseract = ["dep:leptess"]
 ocr_compression = []
 docgen = []
@@ -96,7 +96,8 @@ grpc = ["dep:tonic", "dep:prost", "dep:prost-types", "dep:tonic-prost"]
 context_harness = []
 
 [target.'cfg(target_os = "windows")'.dependencies]
-windows = { version = "0.62", features = ["Win32_Graphics_DXCore","Win32_Graphics_Dxgi"] }
+windows = { version = "0.62", features = ["Win32_Graphics_Dxgi"] }
+windows-dxcore = { package = "windows", version = "0.62", features = ["Win32_Graphics_DXCore", "Win32_Graphics_Dxgi"], optional = true }
 
 [build-dependencies]
 tonic-prost-build = "0.14"

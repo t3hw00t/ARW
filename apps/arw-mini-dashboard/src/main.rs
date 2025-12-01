@@ -1,4 +1,5 @@
 use anyhow::{bail, Context, Result};
+use arw_otel::init_with_service;
 use chrono::Local;
 use clap::Parser;
 use json_patch::Patch;
@@ -354,6 +355,7 @@ fn spawn_sse_poll(client: Client, base: String, token: Option<String>) {
 }
 
 fn main() -> Result<()> {
+    init_with_service("arw-mini-dashboard");
     let args = Args::parse();
     let client = Client::builder()
         .timeout(None)

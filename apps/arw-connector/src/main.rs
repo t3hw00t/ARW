@@ -1,4 +1,4 @@
-use tracing_subscriber::{fmt, EnvFilter};
+use arw_otel::init_with_service;
 
 // Event topic and subject constants (dot.case)
 // Only needed when built with the `nats` feature; guard to avoid dead_code in other builds.
@@ -11,9 +11,7 @@ const SUBJECT_NODE_ROOT: &str = "arw.events.node"; // per-node
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    let _ = fmt()
-        .with_env_filter(EnvFilter::from_default_env())
-        .try_init();
+    init_with_service("arw-connector");
 
     #[cfg(feature = "nats")]
     {

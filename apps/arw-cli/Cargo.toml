@@ -12,6 +12,7 @@ arw-core = { path = "../../crates/arw-core", version = "0.2.0-dev" }
 arw-protocol = { path = "../../crates/arw-protocol", version = "0.2.0-dev" }
 arw-runtime = { path = "../../crates/arw-runtime", version = "0.2.0-dev" }
 arw-runtime-adapter = { path = "../../crates/arw-runtime-adapter", version = "0.2.0-dev" }
+arw-otel = { path = "../../crates/arw-otel", version = "0.2.0-dev" }
 serde_json = { workspace = true }
 serde = { workspace = true }
 base64 = { workspace = true }

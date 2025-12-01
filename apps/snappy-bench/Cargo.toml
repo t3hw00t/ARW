@@ -13,3 +13,4 @@ tokio = { workspace = true }
 reqwest = { workspace = true, default-features = false, features = ["json", "stream", "rustls-tls"] }
 futures-util = { workspace = true }
 dashmap = "5"
+arw-otel = { path = "../../crates/arw-otel", version = "0.2.0-dev" }

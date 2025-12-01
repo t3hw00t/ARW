@@ -24,7 +24,7 @@ pub mod util;
 #[cfg(feature = "wasm")]
 pub mod wasm;
 
-#[cfg(test)]
+#[cfg(any(test, feature = "test_support"))]
 pub mod test_support;
 
 /// Public metadata describing a tool that can be registered into the runtime.

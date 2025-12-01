@@ -358,6 +358,7 @@ dependencies = [
  "anyhow",
  "arw-core",
  "arw-kernel",
+ "arw-otel",
  "arw-protocol",
  "arw-runtime",
  "arw-runtime-adapter",
@@ -410,6 +411,7 @@ version = "0.2.0-dev"
 dependencies = [
  "anyhow",
  "arw-core",
+ "arw-otel",
  "async-nats",
  "chrono",
  "serde",
@@ -466,6 +468,7 @@ dependencies = [
  "tracing",
  "uuid",
  "wasmtime",
+ "which 5.0.0",
  "wit-bindgen",
 ]
 
@@ -561,6 +564,7 @@ name = "arw-mini-dashboard"
 version = "0.2.0-dev"
 dependencies = [
  "anyhow",
+ "arw-otel",
  "chrono",
  "clap",
  "json-patch 4.1.0",
@@ -8051,6 +8055,7 @@ name = "snappy-bench"
 version = "0.2.0-dev"
 dependencies = [
  "anyhow",
+ "arw-otel",
  "clap",
  "dashmap",
  "futures-util",
