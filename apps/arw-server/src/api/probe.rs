@@ -885,10 +885,8 @@ fn probe_npus_best_effort() -> Vec<Value> {
 #[cfg(not(any(target_os = "linux", target_os = "macos")))]
 fn probe_npus_best_effort() -> Vec<Value> {
     #[cfg(all(target_os = "windows", feature = "npu_dxcore"))]
-    {
-        if crate::util::env_bool("ARW_DXCORE_NPU").unwrap_or(false) {
-            return win_npu_dxcore::probe();
-        }
+    if crate::util::env_bool("ARW_DXCORE_NPU").unwrap_or(false) {
+        return win_npu_dxcore::probe();
     }
     Vec::new()
 }
