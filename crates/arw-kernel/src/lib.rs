@@ -22,6 +22,7 @@ pub struct Kernel {
     pragmas: Arc<KernelPragmas>,
     pool: Arc<PoolShared>,
     checkpoint: Option<Arc<CheckpointCtl>>,
+    prune: Option<Arc<PruneCtl>>,
     autotune: Option<Arc<AutotuneCtl>>,
     blocking: BlockingPool,
 }
@@ -66,6 +67,11 @@ struct ManagedConnection {
 }
 
 struct CheckpointCtl {
+    stop: Arc<AtomicBool>,
+    handle: Mutex<Option<thread::JoinHandle<()>>>,
+}
+
+struct PruneCtl {
     stop: Arc<AtomicBool>,
     handle: Mutex<Option<thread::JoinHandle<()>>>,
 }
@@ -366,6 +372,29 @@ impl Drop for AutotuneCtl {
             .handle
             .lock()
             .expect("autotune join mutex poisoned")
+            .take()
+        {
+            let _ = handle.join();
+        }
+    }
+}
+
+impl PruneCtl {
+    fn new(stop: Arc<AtomicBool>, handle: thread::JoinHandle<()>) -> Self {
+        Self {
+            stop,
+            handle: Mutex::new(Some(handle)),
+        }
+    }
+}
+
+impl Drop for PruneCtl {
+    fn drop(&mut self) {
+        self.stop.store(true, Ordering::Relaxed);
+        if let Some(handle) = self
+            .handle
+            .lock()
+            .expect("prune join mutex poisoned")
             .take()
         {
             let _ = handle.join();
@@ -683,16 +712,44 @@ impl Kernel {
             pragmas,
             pool,
             checkpoint: None,
+            prune: None,
             autotune: None,
             blocking,
         };
-        if let Ok(secs) = std::env::var("ARW_SQLITE_CHECKPOINT_SEC") {
-            if let Ok(interval) = secs.parse::<u64>() {
-                if interval > 0 {
-                    let _ = kernel.start_checkpoint_loop(Duration::from_secs(interval));
-                }
-            }
+        let checkpoint_secs = match std::env::var("ARW_SQLITE_CHECKPOINT_SEC")
+            .ok()
+            .and_then(|v| v.parse::<u64>().ok())
+        {
+            Some(0) => None,
+            Some(v) => Some(v),
+            None => Some(60),
+        };
+        if let Some(secs) = checkpoint_secs {
+            let _ = kernel.start_checkpoint_loop(Duration::from_secs(secs));
         }
+
+        let prune_secs = std::env::var("ARW_EVENTS_PRUNE_SEC")
+            .ok()
+            .and_then(|v| v.parse::<u64>().ok())
+            .unwrap_or(300);
+        if prune_secs > 0 {
+            let max_rows = std::env::var("ARW_EVENTS_MAX_ROWS")
+                .ok()
+                .and_then(|v| v.parse::<u64>().ok())
+                .or(Some(100_000))
+                .filter(|v| *v > 0);
+            let max_age_days = std::env::var("ARW_EVENTS_RETENTION_DAYS")
+                .ok()
+                .and_then(|v| v.parse::<u64>().ok())
+                .or(Some(7))
+                .filter(|v| *v > 0);
+            let _ = kernel.start_prune_loop(
+                Duration::from_secs(prune_secs),
+                max_rows,
+                max_age_days.map(|d| Duration::from_secs(d.saturating_mul(86_400))),
+            );
+        }
+
         if std::env::var("ARW_SQLITE_POOL_AUTOTUNE")
             .map(|v| v != "0")
             .unwrap_or(false)
@@ -728,7 +785,15 @@ impl Kernel {
                 if stop_clone.load(Ordering::Relaxed) {
                     break;
                 }
-                thread::sleep(interval);
+                let mut slept = Duration::ZERO;
+                while slept < interval {
+                    if stop_clone.load(Ordering::Relaxed) {
+                        break;
+                    }
+                    let step = Duration::from_millis(500).min(interval.saturating_sub(slept));
+                    thread::sleep(step);
+                    slept = slept.saturating_add(step);
+                }
                 if stop_clone.load(Ordering::Relaxed) {
                     break;
                 }
@@ -749,6 +814,80 @@ impl Kernel {
             })
             .map_err(|e| anyhow!("failed to spawn checkpoint thread: {e}"))?;
         self.checkpoint = Some(Arc::new(CheckpointCtl::new(stop_flag, handle)));
+        Ok(())
+    }
+
+    fn start_prune_loop(
+        &mut self,
+        interval: Duration,
+        max_rows: Option<u64>,
+        max_age: Option<Duration>,
+    ) -> Result<()> {
+        if interval.is_zero() || (max_rows.is_none() && max_age.is_none()) || self.prune.is_some() {
+            return Ok(());
+        }
+        let stop_flag = Arc::new(AtomicBool::new(false));
+        let pool_weak: Weak<PoolShared> = Arc::downgrade(&self.pool);
+        let db_path = self.db_path.clone();
+        let pragmas = self.pragmas.clone();
+        let stop_clone = stop_flag.clone();
+        let handle = thread::Builder::new()
+            .name("arw-kernel-prune".into())
+            .spawn(move || loop {
+                if stop_clone.load(Ordering::Relaxed) {
+                    break;
+                }
+                let mut slept = Duration::ZERO;
+                while slept < interval {
+                    if stop_clone.load(Ordering::Relaxed) {
+                        break;
+                    }
+                    let step = Duration::from_millis(500).min(interval.saturating_sub(slept));
+                    thread::sleep(step);
+                    slept = slept.saturating_add(step);
+                }
+                if stop_clone.load(Ordering::Relaxed) {
+                    break;
+                }
+                let Some(pool) = pool_weak.upgrade() else {
+                    break;
+                };
+                match Kernel::checkout_connection(&db_path, &pragmas, &pool) {
+                    Ok(conn) => {
+                        let _ = Kernel::prune_events(&conn, max_rows, max_age);
+                    }
+                    Err(_) => {
+                        #[cfg(feature = "metrics")]
+                        metrics::counter!("arw_kernel_prune_failures").increment(1);
+                    }
+                }
+            })
+            .map_err(|e| anyhow!("failed to spawn prune thread: {e}"))?;
+        self.prune = Some(Arc::new(PruneCtl::new(stop_flag, handle)));
+        Ok(())
+    }
+
+    fn prune_events(
+        conn: &Connection,
+        max_rows: Option<u64>,
+        max_age: Option<Duration>,
+    ) -> rusqlite::Result<()> {
+        if let Some(age) = max_age {
+            let cutoff = chrono::Utc::now() - age;
+            let cutoff_str = cutoff.to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+            let _ = conn.execute("DELETE FROM events WHERE time < ?", [cutoff_str]);
+        }
+        if let Some(max_rows) = max_rows {
+            let total: i64 = conn.query_row("SELECT COUNT(*) FROM events", [], |row| row.get(0))?;
+            let excess = total.saturating_sub(max_rows as i64);
+            if excess > 0 {
+                let _ = conn.execute(
+                    "DELETE FROM events WHERE id IN (SELECT id FROM events ORDER BY id ASC LIMIT ?)",
+                    [excess],
+                );
+                let _ = conn.execute("PRAGMA wal_checkpoint(TRUNCATE);", []);
+            }
+        }
         Ok(())
     }
 
@@ -3953,5 +4092,48 @@ mod tests {
         assert_eq!(record.status, "denied");
         assert_eq!(record.decision.as_deref(), Some("unsupported"));
         assert_eq!(record.action_id, None);
+    }
+
+    #[tokio::test]
+    async fn events_prune_respects_max_rows() {
+        let dir = TempDir::new().expect("temp dir");
+        let prev_max = std::env::var("ARW_EVENTS_MAX_ROWS").ok();
+        let prev_sec = std::env::var("ARW_EVENTS_PRUNE_SEC").ok();
+        std::env::set_var("ARW_EVENTS_MAX_ROWS", "5");
+        std::env::set_var("ARW_EVENTS_PRUNE_SEC", "1");
+        let kernel = Kernel::open(dir.path()).expect("kernel open");
+        for i in 0..12 {
+            let env = arw_events::Envelope {
+                time: chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
+                kind: "prune.test".into(),
+                payload: json!({ "i": i }),
+                policy: None,
+                ce: None,
+            };
+            kernel.append_event_async(&env).await.expect("append event");
+        }
+        {
+            let mut conn = kernel.conn().expect("checkout connection for prune");
+            Kernel::prune_events(&mut conn, Some(5), None).expect("prune events");
+        }
+        let remaining = kernel
+            .recent_events_async(20, None)
+            .await
+            .expect("recent events");
+        assert!(
+            remaining.len() as u64 <= 5,
+            "expected prune to cap events, got {}",
+            remaining.len()
+        );
+        if let Some(prev) = prev_max {
+            std::env::set_var("ARW_EVENTS_MAX_ROWS", prev);
+        } else {
+            std::env::remove_var("ARW_EVENTS_MAX_ROWS");
+        }
+        if let Some(prev) = prev_sec {
+            std::env::set_var("ARW_EVENTS_PRUNE_SEC", prev);
+        } else {
+            std::env::remove_var("ARW_EVENTS_PRUNE_SEC");
+        }
     }
 }

@@ -139,12 +139,13 @@ fn auto_install_enabled() -> bool {
         .unwrap_or(true)
 }
 
-fn ensure_llmlingua_installed(
-    interpreter: &PythonInterpreter,
-) -> Result<(), LlmlinguaDetectError> {
+fn ensure_llmlingua_installed(interpreter: &PythonInterpreter) -> Result<(), LlmlinguaDetectError> {
     // If the interpreter itself cannot import pip, bail early to avoid noisy failures.
     let mut probe_pip = interpreter.spawn();
-    probe_pip.args(["-m", "pip", "--version"]).stdout(Stdio::null()).stderr(Stdio::null());
+    probe_pip
+        .args(["-m", "pip", "--version"])
+        .stdout(Stdio::null())
+        .stderr(Stdio::null());
     if let Ok(output) = probe_pip.output() {
         if !output.status.success() {
             return Err(LlmlinguaDetectError::InstallFailed {
