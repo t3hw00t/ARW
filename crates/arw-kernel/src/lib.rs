@@ -4113,8 +4113,8 @@ mod tests {
             kernel.append_event_async(&env).await.expect("append event");
         }
         {
-            let mut conn = kernel.conn().expect("checkout connection for prune");
-            Kernel::prune_events(&mut conn, Some(5), None).expect("prune events");
+            let conn = kernel.conn().expect("checkout connection for prune");
+            Kernel::prune_events(&conn, Some(5), None).expect("prune events");
         }
         let remaining = kernel
             .recent_events_async(20, None)

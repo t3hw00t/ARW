@@ -757,6 +757,7 @@ fn spawn_trust_store_watcher(state: AppState) -> TaskHandle {
     })
 }
 
+#[allow(clippy::too_many_arguments)]
 fn spawn_deferred_heavy_tasks(
     state: AppState,
     identity_registry: Arc<identity::IdentityRegistry>,

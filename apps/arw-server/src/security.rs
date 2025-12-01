@@ -244,10 +244,7 @@ pub fn cors_layer() -> CorsLayer {
             .allow_headers(allow_headers_list.clone())
             .allow_credentials(true);
     }
-    let allow_hosts: Vec<String> = defaults
-        .into_iter()
-        .chain(extra_hosts.into_iter())
-        .collect();
+    let allow_hosts: Vec<String> = defaults.into_iter().chain(extra_hosts).collect();
     let allow_origin = AllowOrigin::predicate(move |origin: &HeaderValue, _| {
         let raw = match origin.to_str() {
             Ok(v) => v,

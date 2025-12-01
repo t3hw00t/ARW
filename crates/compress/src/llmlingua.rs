@@ -81,7 +81,7 @@ impl LlmlinguaCompressor {
     pub fn detect() -> Result<Self, LlmlinguaDetectError> {
         static DETECT: OnceCell<Result<LlmlinguaCompressor, LlmlinguaDetectError>> =
             OnceCell::new();
-        let cached = DETECT.get_or_init(|| Self::detect_inner());
+        let cached = DETECT.get_or_init(Self::detect_inner);
         cached.clone()
     }
 
