@@ -35,10 +35,11 @@ impl BackendKind {
     }
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum QualityTier {
     Lite,
+    #[default]
     Balanced,
     Full,
 }
@@ -60,12 +61,6 @@ impl QualityTier {
             "full" | "high" | "max" => Some(QualityTier::Full),
             _ => None,
         }
-    }
-}
-
-impl Default for QualityTier {
-    fn default() -> Self {
-        QualityTier::Balanced
     }
 }
 

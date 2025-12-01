@@ -21,6 +21,9 @@ async fn nats_queue_round_trip() -> Result<()> {
         Result::<String>::Ok(task.kind)
     });
 
+    // Give the worker a moment to establish the subscription before publishing.
+    tokio::time::sleep(Duration::from_millis(200)).await;
+
     orchestrator
         .admit(Task::new("nats_test", json!({"value": "nats"})))
         .await?;

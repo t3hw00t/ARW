@@ -12,43 +12,42 @@ use arw_topics as topics;
 mod win_npu_dxcore {
     #![allow(non_snake_case, non_camel_case_types, non_upper_case_globals)]
     use serde_json::json;
-    use windows::Win32::Graphics::DxCore::*;
+    use windows::Win32::Graphics::DXCore::{
+        DXCoreCreateAdapterFactory, DXCoreHardwareID, HardwareID, IDXCoreAdapterFactory,
+        IDXCoreAdapter, IDXCoreAdapterList, DXCORE_ADAPTER_ATTRIBUTE_D3D12_CORE_COMPUTE,
+    };
 
     pub fn probe() -> Vec<serde_json::Value> {
         unsafe {
             let mut out: Vec<serde_json::Value> = Vec::new();
-            let Ok(factory) = CreateDXCoreAdapterFactory() else {
+            let Ok(factory) = DXCoreCreateAdapterFactory::<IDXCoreAdapterFactory>() else {
                 return out;
             };
             let attrs = [DXCORE_ADAPTER_ATTRIBUTE_D3D12_CORE_COMPUTE];
-            let Ok(list) = factory.CreateAdapterList(&attrs) else {
+            let Ok(list) = factory.CreateAdapterList::<IDXCoreAdapterList>(&attrs) else {
                 return out;
             };
             let count = list.GetAdapterCount();
             for i in 0..count {
-                if let Ok(adapter) = list.GetAdapter(i) {
+                if let Ok(adapter) = list.GetAdapter::<IDXCoreAdapter>(i) {
                     if adapter.IsAttributeSupported(&DXCORE_ADAPTER_ATTRIBUTE_D3D12_CORE_COMPUTE) {
                         // vendor/device ids when available
                         let mut ven = 0u32;
                         let mut dev = 0u32;
-                        let mut sz: usize = 0;
-                        if adapter.IsPropertySupported(DXCoreAdapterProperty::HardwareID) {
-                            if adapter
-                                .GetPropertySize(DXCoreAdapterProperty::HardwareID, &mut sz)
-                                .is_ok()
-                                && sz >= std::mem::size_of::<DXCoreHardwareID>()
-                            {
+                        if adapter.IsPropertySupported(HardwareID) {
+                            let sz = adapter.GetPropertySize(HardwareID).unwrap_or_default();
+                            if sz >= std::mem::size_of::<DXCoreHardwareID>() {
                                 let mut hwid: DXCoreHardwareID = std::mem::zeroed();
                                 if adapter
                                     .GetProperty(
-                                        DXCoreAdapterProperty::HardwareID,
+                                        HardwareID,
                                         std::mem::size_of::<DXCoreHardwareID>(),
                                         &mut hwid as *mut _ as *mut std::ffi::c_void,
                                     )
                                     .is_ok()
                                 {
-                                    ven = hwid.VendorID;
-                                    dev = hwid.DeviceID;
+                                    ven = hwid.vendorID;
+                                    dev = hwid.deviceID;
                                 }
                             }
                         }
@@ -322,12 +321,12 @@ fn probe_gpus_best_effort() -> Vec<Value> {
 #[cfg(feature = "gpu_wgpu")]
 fn probe_gpus_wgpu() -> Vec<Value> {
     use serde_json::json;
-    let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::default());
+    let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor::default());
     let mut out = Vec::new();
     for adapter in instance.enumerate_adapters(wgpu::Backends::all()) {
         let info = adapter.get_info();
         let backend = match info.backend {
-            wgpu::Backend::Empty => "empty",
+            wgpu::Backend::Noop => "noop",
             wgpu::Backend::Vulkan => "vulkan",
             wgpu::Backend::Metal => "metal",
             wgpu::Backend::Dx12 => "dx12",

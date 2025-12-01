@@ -1085,6 +1085,7 @@ fn metric_quality_label(raw: Option<&str>) -> &'static str {
 }
 
 #[cfg(test)]
+#[allow(clippy::items_after_test_module)]
 mod tests {
     use super::ocr_support::{BackendKind, CapabilityProfile, GpuKind, QualityTier, RuntimeClass};
     use super::*;
@@ -1149,7 +1150,7 @@ mod tests {
 
     #[test]
     fn prepare_lite_quality_downscales_and_creates_temp_file() {
-        let mut tmp = TempFileBuilder::new()
+        let tmp = TempFileBuilder::new()
             .prefix("arw-test-orig-")
             .suffix(".png")
             .tempfile()
@@ -1173,7 +1174,7 @@ mod tests {
 
     #[test]
     fn prepare_balanced_quality_is_noop() {
-        let mut tmp = TempFileBuilder::new()
+        let tmp = TempFileBuilder::new()
             .prefix("arw-test-orig-")
             .suffix(".png")
             .tempfile()

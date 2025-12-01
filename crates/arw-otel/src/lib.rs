@@ -254,11 +254,7 @@ fn init_with_otlp(filter: EnvFilter) -> Result<(), Box<dyn std::error::Error + S
         return Ok(());
     }
 
-    let file_appender = tracing_appender::rolling::daily(&logs_dir, "arw.log");
-    let (file_nb, guard) = tracing_appender::non_blocking(file_appender);
-    let _ = LOG_GUARD.set(guard);
-    let writer = std::io::stdout.and(file_nb);
-    let fmt_layer = fmt::layer().with_writer(writer).with_filter(filter.clone());
+    let fmt_layer = fmt::layer().with_filter(filter.clone());
     let registry = tracing_subscriber::registry()
         .with(fmt_layer)
         .with(otel_layer);
