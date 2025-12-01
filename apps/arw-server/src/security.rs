@@ -227,11 +227,21 @@ pub fn cors_layer() -> CorsLayer {
         "127.0.0.1".into(),
         "::1".into(),
     ];
+    let allow_headers_list = AllowHeaders::list(vec![
+        header::CONTENT_TYPE,
+        header::AUTHORIZATION,
+        header::ACCEPT,
+        header::ACCEPT_ENCODING,
+        header::USER_AGENT,
+        header::CACHE_CONTROL,
+        header::PRAGMA,
+    ]);
     if allow_any {
         return CorsLayer::new()
             .allow_origin(AllowOrigin::any())
             .allow_methods(AllowMethods::any())
-            .allow_headers(AllowHeaders::any())
+            // Avoid '*' with credentials per RFC: use a sensible explicit list.
+            .allow_headers(allow_headers_list.clone())
             .allow_credentials(true);
     }
     let allow_hosts: Vec<String> = defaults
@@ -274,7 +284,7 @@ pub fn cors_layer() -> CorsLayer {
             Method::DELETE,
             Method::OPTIONS,
         ])
-        .allow_headers(AllowHeaders::any())
+        .allow_headers(allow_headers_list)
         .allow_credentials(true)
 }
 
@@ -416,7 +426,9 @@ pub(crate) fn maybe_log_rate_limit(addrs: &ClientAddrs) {
     let forwarded = addrs.forwarded().unwrap_or("none");
     let key = format!("{}|{}", remote, forwarded);
     let now = Instant::now();
-    let mut map = RATE_LIMIT_LOG_COOLDOWN.lock().unwrap_or_else(|p| p.into_inner());
+    let mut map = RATE_LIMIT_LOG_COOLDOWN
+        .lock()
+        .unwrap_or_else(|p| p.into_inner());
     if let Some(prev) = map.get(&key) {
         if now.duration_since(*prev).as_millis() < RATE_LIMIT_LOG_DEDUP_MS as u128 {
             return;

@@ -255,6 +255,12 @@ pub(crate) fn attach_stateful_layers(
     metrics: Arc<metrics::Metrics>,
 ) -> axum::Router<()> {
     let router = router.with_state::<()>(state.clone());
+    let router = router.layer(axum::middleware::from_fn(
+        |req: axum::http::Request<_>, next: axum::middleware::Next| async move {
+            crate::read_models::mark_activity_now();
+            next.run(req).await
+        },
+    ));
     let capsule_state = state.clone();
     let router = router.layer(axum::middleware::from_fn(move |req, next| {
         let state = capsule_state.clone();

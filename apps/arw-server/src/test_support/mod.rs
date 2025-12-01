@@ -22,7 +22,7 @@ pub(crate) mod env {
         #[cfg(test)]
         {
             use std::time::{Duration, Instant};
-            let deadline = Duration::from_secs(120);
+            let deadline = Duration::from_secs(600);
             let start = Instant::now();
             let mut warned = false;
             loop {

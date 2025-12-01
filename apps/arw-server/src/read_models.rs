@@ -1,6 +1,6 @@
 use anyhow::Result as AnyResult;
 use arw_core::recipes;
-use chrono::{DateTime, SecondsFormat, Utc};
+use chrono::{DateTime, SecondsFormat, TimeZone, Utc};
 use once_cell::sync::{Lazy, OnceCell};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
@@ -26,6 +26,7 @@ const SCREENSHOT_CAPTURE_EXTENSIONS: [&str; 5] = ["png", "jpg", "jpeg", "webp", 
 const METRIC_READ_MODEL_COALESCED_WAITERS: &str = "arw_read_model_coalesced_waiters";
 
 static READ_MODEL_FLIGHTS: Lazy<Singleflight> = Lazy::new(Singleflight::default);
+static IDLE_ACTIVITY_MS: Lazy<AtomicU64> = Lazy::new(|| AtomicU64::new(0));
 
 #[derive(Default)]
 struct NotesSnapshot {
@@ -62,6 +63,62 @@ pub(crate) const MEMORY_LANE_IDS: [(&str, &str); 6] = [
     ("memory_lane_semantic", "semantic"),
     ("memory_lane_profile", "profile"),
 ];
+
+fn read_model_lag_skip_threshold() -> u64 {
+    std::env::var("ARW_READMODELS_SKIP_IF_LAGGED")
+        .ok()
+        .and_then(|v| v.parse::<u64>().ok())
+        .unwrap_or(500)
+}
+
+fn idle_timeout_ms() -> u64 {
+    std::env::var("ARW_IDLE_PUBLISH_MS")
+        .ok()
+        .and_then(|v| v.parse::<u64>().ok())
+        .unwrap_or(60_000)
+}
+
+pub(crate) fn mark_activity_now() {
+    let now_ms = Utc::now().timestamp_millis().max(0) as u64;
+    IDLE_ACTIVITY_MS.store(now_ms, Ordering::Relaxed);
+}
+
+fn should_publish_read_models() -> bool {
+    let last = IDLE_ACTIVITY_MS.load(Ordering::Relaxed);
+    if last == 0 {
+        // initialize on first check to avoid always-on churn when idle
+        mark_activity_now();
+        return false;
+    }
+    let now_ms = Utc::now().timestamp_millis().max(0) as u64;
+    let idle_ms = now_ms.saturating_sub(last);
+    idle_ms < idle_timeout_ms()
+}
+
+fn latest_created_ms(items: &[Value]) -> Option<i64> {
+    items
+        .iter()
+        .filter_map(|item| {
+            item.get("value")
+                .and_then(|v| v.get("created_ms"))
+                .and_then(|v| v.as_i64())
+        })
+        .max()
+}
+
+fn generated_from_items(items: &[Value]) -> (String, u64) {
+    if let Some(ms) = latest_created_ms(items) {
+        if let chrono::LocalResult::Single(dt) = chrono::Utc.timestamp_millis_opt(ms) {
+            let ts = dt.to_rfc3339_opts(SecondsFormat::Millis, true);
+            return (ts, ms.max(0) as u64);
+        }
+    }
+    let now = Utc::now();
+    (
+        now.to_rfc3339_opts(SecondsFormat::Millis, true),
+        now.timestamp_millis().max(0) as u64,
+    )
+}
 
 pub(crate) fn summarize_memory_recent_items(items: &[Value]) -> Value {
     let mut lane_counts: BTreeMap<String, usize> = BTreeMap::new();
@@ -198,9 +255,7 @@ pub(crate) fn summarize_memory_recent_items(items: &[Value]) -> Value {
 pub(crate) fn build_memory_recent_bundle(mut items: Vec<Value>) -> MemoryRecentBundle {
     memory_service::attach_memory_ptrs(&mut items);
     let summary = summarize_memory_recent_items(&items);
-    let now = Utc::now();
-    let generated = now.to_rfc3339_opts(SecondsFormat::Millis, true);
-    let generated_ms = now.timestamp_millis().max(0) as u64;
+    let (generated, generated_ms) = generated_from_items(&items);
     let snapshot = json!({
         "items": items,
         "summary": summary,
@@ -248,13 +303,14 @@ pub(crate) fn build_memory_recent_bundle(mut items: Vec<Value>) -> MemoryRecentB
                     .collect()
             })
             .unwrap_or_default();
+        let (lane_generated, lane_generated_ms) = generated_from_items(&filtered);
         lane_snapshots.insert(
             (*lane).to_string(),
             json!({
                 "lane": lane,
                 "items": filtered,
-                "generated": generated.clone(),
-                "generated_ms": generated_ms,
+                "generated": lane_generated,
+                "generated_ms": lane_generated_ms,
             }),
         );
     }
@@ -268,6 +324,9 @@ pub(crate) fn build_memory_recent_bundle(mut items: Vec<Value>) -> MemoryRecentB
 }
 
 pub(crate) fn publish_memory_bundle(bus: &arw_events::Bus, bundle: &MemoryRecentBundle) {
+    if !should_publish_read_models() {
+        return;
+    }
     publish_read_model_patch(bus, "memory_recent", &bundle.snapshot);
     publish_read_model_patch(bus, "memory_modular_review", &bundle.modular);
     for (id, lane) in MEMORY_LANE_IDS.iter() {
@@ -286,6 +345,8 @@ pub(crate) fn publish_memory_bundle(bus: &arw_events::Bus, bundle: &MemoryRecent
 }
 
 pub(crate) fn start_read_models(state: AppState) -> Vec<TaskHandle> {
+    // Seed idle marker to "now" so idle gating can engage.
+    mark_activity_now();
     if util::smoke_profile_enabled() {
         return start_read_models_smoke(state);
     }
@@ -294,7 +355,7 @@ pub(crate) fn start_read_models(state: AppState) -> Vec<TaskHandle> {
     handles.push(spawn_read_model(
         &state,
         "logic_units",
-        Duration::from_millis(1500),
+        Duration::from_millis(4_000),
         |st| async move {
             if !st.kernel_enabled() {
                 return None;
@@ -309,7 +370,7 @@ pub(crate) fn start_read_models(state: AppState) -> Vec<TaskHandle> {
     handles.push(spawn_read_model(
         &state,
         "orchestrator_jobs",
-        Duration::from_millis(2000),
+        Duration::from_millis(5_000),
         |st| async move {
             if !st.kernel_enabled() {
                 return None;
@@ -324,7 +385,7 @@ pub(crate) fn start_read_models(state: AppState) -> Vec<TaskHandle> {
     handles.push(spawn_read_model(
         &state,
         "memory_recent",
-        Duration::from_millis(2500),
+        Duration::from_millis(5_000),
         |st| async move {
             if !st.kernel_enabled() {
                 return None;
@@ -341,7 +402,7 @@ pub(crate) fn start_read_models(state: AppState) -> Vec<TaskHandle> {
     handles.push(spawn_read_model(
         &state,
         "kernel_pool_wait",
-        Duration::from_millis(2000),
+        Duration::from_millis(5_000),
         |st| async move {
             if !st.kernel_enabled() {
                 return None;
@@ -365,7 +426,7 @@ pub(crate) fn start_read_models(state: AppState) -> Vec<TaskHandle> {
         handles.push(spawn_read_model(
             &state,
             id,
-            Duration::from_millis(2500),
+            Duration::from_millis(5_000),
             move |st| {
                 let lane_clone = lane_name.clone();
                 async move {
@@ -399,7 +460,7 @@ pub(crate) fn start_read_models(state: AppState) -> Vec<TaskHandle> {
     handles.push(spawn_read_model(
         &state,
         "memory_modular_review",
-        Duration::from_millis(2500),
+        Duration::from_millis(5_000),
         |st| async move {
             if !st.kernel_enabled() {
                 return None;
@@ -415,7 +476,7 @@ pub(crate) fn start_read_models(state: AppState) -> Vec<TaskHandle> {
     handles.push(spawn_read_model(
         &state,
         "episodes",
-        Duration::from_millis(2500),
+        Duration::from_millis(5_000),
         |st| async move {
             if !st.kernel_enabled() {
                 return None;
@@ -431,21 +492,21 @@ pub(crate) fn start_read_models(state: AppState) -> Vec<TaskHandle> {
     handles.push(spawn_read_model(
         &state,
         "screenshots_index",
-        Duration::from_millis(5000),
+        Duration::from_millis(8_000),
         |_st| async move { Some(screenshots_snapshot().await) },
     ));
 
     handles.push(spawn_read_model(
         &state,
         "recipes_gallery",
-        Duration::from_millis(5000),
+        Duration::from_millis(8_000),
         |_st| async move { Some(recipes_snapshot().await) },
     ));
 
     handles.push(spawn_read_model(
         &state,
         "route_stats",
-        Duration::from_millis(4000),
+        Duration::from_millis(12_000),
         |st| async move {
             let summary = st.metrics().snapshot();
             let bus = st.bus().stats();
@@ -457,7 +518,7 @@ pub(crate) fn start_read_models(state: AppState) -> Vec<TaskHandle> {
     handles.push(spawn_read_model(
         &state,
         "background_tasks",
-        Duration::from_millis(5000),
+        Duration::from_millis(8_000),
         |st| async move {
             let (version, tasks) = st.metrics().tasks_snapshot_with_version();
             Some(json!({ "version": version, "tasks": tasks }))
@@ -467,7 +528,7 @@ pub(crate) fn start_read_models(state: AppState) -> Vec<TaskHandle> {
     handles.push(spawn_read_model(
         &state,
         "cluster_nodes",
-        Duration::from_millis(5000),
+        Duration::from_millis(12_000),
         |st| async move {
             let nodes = st.cluster().snapshot().await;
             let now = chrono::Utc::now();
@@ -490,14 +551,14 @@ pub(crate) fn start_read_models(state: AppState) -> Vec<TaskHandle> {
     handles.push(spawn_read_model(
         &state,
         "runtime_bundles",
-        Duration::from_millis(8000),
+        Duration::from_millis(15_000),
         |st| async move { Some(st.runtime_bundles().snapshot().await) },
     ));
 
     handles.push(spawn_read_model(
         &state,
         "research_watcher",
-        Duration::from_millis(5000),
+        Duration::from_millis(10_000),
         |st| async move {
             if !st.kernel_enabled() {
                 return None;
@@ -530,7 +591,7 @@ pub(crate) fn start_read_models(state: AppState) -> Vec<TaskHandle> {
     handles.push(spawn_read_model(
         &state,
         "staging_actions",
-        Duration::from_millis(4000),
+        Duration::from_millis(8_000),
         |st| async move {
             if !st.kernel_enabled() {
                 return None;
@@ -565,21 +626,21 @@ pub(crate) fn start_read_models(state: AppState) -> Vec<TaskHandle> {
     handles.push(spawn_read_model(
         &state,
         "training_metrics",
-        Duration::from_millis(4000),
+        Duration::from_millis(8_000),
         |st| async move { Some(training::telemetry_snapshot(&st).await) },
     ));
 
     handles.push(spawn_read_model(
         &state,
         "context_metrics",
-        Duration::from_millis(2500),
+        Duration::from_millis(6_000),
         |st| async move { Some(crate::context_metrics::snapshot(&st.bus())) },
     ));
 
     handles.push(spawn_read_model(
         &state,
         "policy_leases",
-        Duration::from_millis(4000),
+        Duration::from_millis(8_000),
         |st| async move {
             if !st.kernel_enabled() {
                 return None;
@@ -592,7 +653,7 @@ pub(crate) fn start_read_models(state: AppState) -> Vec<TaskHandle> {
     handles.push(spawn_read_model(
         &state,
         "observations",
-        Duration::from_millis(1500),
+        Duration::from_millis(4_000),
         {
             let last = observations_last.clone();
             move |_st| {
@@ -618,7 +679,7 @@ pub(crate) fn start_read_models(state: AppState) -> Vec<TaskHandle> {
     handles.push(spawn_read_model(
         &state,
         "beliefs",
-        Duration::from_millis(1500),
+        Duration::from_millis(4_000),
         {
             let last = beliefs_last.clone();
             move |_st| {
@@ -643,7 +704,7 @@ pub(crate) fn start_read_models(state: AppState) -> Vec<TaskHandle> {
     handles.push(spawn_read_model(
         &state,
         "intents",
-        Duration::from_millis(1500),
+        Duration::from_millis(4_000),
         {
             let last = intents_last.clone();
             move |_st| {
@@ -668,7 +729,7 @@ pub(crate) fn start_read_models(state: AppState) -> Vec<TaskHandle> {
     handles.push(spawn_read_model(
         &state,
         "actions",
-        Duration::from_millis(2000),
+        Duration::from_millis(6_000),
         {
             let last = actions_last.clone();
             move |st| {
@@ -706,7 +767,7 @@ pub(crate) fn start_read_models(state: AppState) -> Vec<TaskHandle> {
     handles.push(spawn_read_model(
         &state,
         "crashlog",
-        Duration::from_millis(5_000),
+        Duration::from_millis(12_000),
         |_st| async move { Some(crashlog_snapshot().await) },
     ));
 
@@ -719,11 +780,12 @@ pub(crate) fn start_read_models(state: AppState) -> Vec<TaskHandle> {
 }
 
 fn start_read_models_smoke(state: AppState) -> Vec<TaskHandle> {
+    mark_activity_now();
     let mut handles = Vec::new();
     handles.push(spawn_read_model(
         &state,
         "route_stats",
-        Duration::from_millis(4_000),
+        Duration::from_millis(10_000),
         |st| async move {
             let summary = st.metrics().snapshot();
             let bus = st.bus().stats();
@@ -735,7 +797,7 @@ fn start_read_models_smoke(state: AppState) -> Vec<TaskHandle> {
     handles.push(spawn_read_model(
         &state,
         "background_tasks",
-        Duration::from_millis(5_000),
+        Duration::from_millis(8_000),
         |st| async move {
             let (version, tasks) = st.metrics().tasks_snapshot_with_version();
             Some(json!({ "version": version, "tasks": tasks }))
@@ -745,7 +807,7 @@ fn start_read_models_smoke(state: AppState) -> Vec<TaskHandle> {
     handles.push(spawn_read_model(
         &state,
         "runtime_bundles",
-        Duration::from_millis(8_000),
+        Duration::from_millis(12_000),
         |st| async move { Some(st.runtime_bundles().snapshot().await) },
     ));
 
@@ -777,6 +839,7 @@ where
     let bus_for_cb = bus; // move into callback
     let state = state.clone();
     let name = format!("read_model::{id}");
+    let lag_threshold = read_model_lag_skip_threshold();
     crate::tasks::spawn_supervised_with(
         name.clone(),
         move || {
@@ -785,8 +848,18 @@ where
             let builder = builder.clone();
             async move {
                 let mut tick = time::interval(period);
+                let mut last_lagged = 0u64;
                 loop {
                     tick.tick().await;
+                    if !should_publish_read_models() {
+                        continue;
+                    }
+                    let stats = bus.stats();
+                    let delta = stats.lagged.saturating_sub(last_lagged);
+                    last_lagged = stats.lagged;
+                    if lag_threshold > 0 && delta >= lag_threshold {
+                        continue;
+                    }
                     let state_clone = state.clone();
                     if let Some(value) = builder(state_clone).await {
                         publish_read_model_patch(&bus, id, &value);
@@ -1164,11 +1237,17 @@ fn spawn_snappy(state: &AppState) -> TaskHandle {
                     time::sleep(Duration::from_millis(total)).await;
                 }
                 let mut tick = time::interval(period);
+                let mut last_lagged = 0u64;
                 loop {
                     tick.tick().await;
+                    if !should_publish_read_models() {
+                        continue;
+                    }
                     if governor.config.skip_if_lagged_over > 0 {
-                        let lagged = state.bus().stats().lagged;
-                        if lagged > governor.config.skip_if_lagged_over {
+                        let stats = state.bus().stats();
+                        let delta = stats.lagged.saturating_sub(last_lagged);
+                        last_lagged = stats.lagged;
+                        if delta >= governor.config.skip_if_lagged_over {
                             continue;
                         }
                     }
@@ -1225,7 +1304,7 @@ impl SnappyConfig {
             budget_first_partial_p95_ms: env_u64("ARW_SNAPPY_FIRST_PARTIAL_P95_MS", 150),
             budget_full_result_p95_ms: env_u64("ARW_SNAPPY_FULL_RESULT_P95_MS", 2000),
             cadence_ms: env_u64("ARW_SNAPPY_CADENCE_MS", 250),
-            publish_ms: env_u64("ARW_SNAPPY_PUBLISH_MS", 2000),
+            publish_ms: env_u64("ARW_SNAPPY_PUBLISH_MS", 5000),
             protected_prefixes: env_csv(
                 "ARW_SNAPPY_PROTECTED_ENDPOINTS",
                 "/admin/debug,/state/,/chat/,/events",

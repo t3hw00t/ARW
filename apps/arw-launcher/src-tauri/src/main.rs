@@ -7,7 +7,11 @@ Run `cargo build -p arw-launcher --features launcher-linux-ui` or exclude the la
 
 use arw_core::util::env_bool;
 use arw_tauri::{plugin as arw_plugin, ServiceState};
+use once_cell::sync::Lazy;
 use tauri::{Manager, WindowEvent};
+
+static STARTING_MARKER: Lazy<std::sync::Mutex<Option<std::time::Instant>>> =
+    Lazy::new(|| std::sync::Mutex::new(None));
 
 #[cfg(all(desktop, not(test)))]
 fn create_tray<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> tauri::Result<()> {
@@ -81,6 +85,18 @@ fn create_tray<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> tauri::Result<()
             // Service
             "svc-start" => {
                 let st = app.state::<ServiceState>();
+                if let Ok(mut mark) = STARTING_MARKER.lock() {
+                    *mark = Some(std::time::Instant::now());
+                }
+                {
+                    use tauri_plugin_notification::NotificationExt;
+                    let _ = app
+                        .notification()
+                        .builder()
+                        .title("Agent Hub (ARW) Service")
+                        .body("Service is starting…")
+                        .show();
+                }
                 let _ = arw_tauri::start_service(app.clone(), st, None);
             }
             "svc-stop" => {
@@ -139,7 +155,14 @@ fn create_tray<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> tauri::Result<()
     let stop_h = svc_stop.clone();
     let app_h = app.clone();
     tauri::async_runtime::spawn(async move {
-        let mut prev = None;
+        #[derive(Clone, Copy, PartialEq, Eq, Debug)]
+        enum Phase {
+            Unknown,
+            Starting,
+            Online,
+            Offline,
+        }
+        let mut prev = Phase::Unknown;
         let mut delay = Duration::from_secs(2);
         let mut last_prefs = std::time::Instant::now() - Duration::from_secs(60);
         let mut port_pref: Option<u16> = None;
@@ -167,28 +190,46 @@ fn create_tray<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> tauri::Result<()
             let is_up = arw_tauri::check_service_health(base_pref.clone(), port_pref)
                 .await
                 .unwrap_or(false);
+            // derive phase (online/offline/starting)
+            let mut phase = if is_up { Phase::Online } else { Phase::Offline };
+            if !is_up {
+                if let Ok(mut mark) = STARTING_MARKER.lock() {
+                    if let Some(ts) = *mark {
+                        if ts.elapsed() <= Duration::from_secs(120) {
+                            phase = Phase::Starting;
+                        } else {
+                            // clear stale marker after timeout
+                            *mark = None;
+                        }
+                    }
+                }
+            } else if let Ok(mut mark) = STARTING_MARKER.lock() {
+                *mark = None;
+            }
             let _ = start_h.set_enabled(!is_up);
             let _ = stop_h.set_enabled(is_up);
             if let Some(tray) = app_h.tray_by_id("arw-launcher-tray") {
-                let _ = tray.set_tooltip(Some(if is_up {
-                    "Agent Hub (ARW): online"
-                } else {
-                    "Agent Hub (ARW): offline"
+                let _ = tray.set_tooltip(Some(match phase {
+                    Phase::Online => "Agent Hub (ARW): online",
+                    Phase::Offline => "Agent Hub (ARW): offline",
+                    Phase::Starting => "Agent Hub (ARW): starting…",
+                    Phase::Unknown => "Agent Hub (ARW)",
                 }));
             }
-            if prev != Some(is_up) {
+            if prev != phase {
                 // Only notify on real changes and if enabled in prefs
-                prev = Some(is_up);
+                prev = phase;
                 if notify_pref {
                     use tauri_plugin_notification::NotificationExt;
                     let _ = app_h
                         .notification()
                         .builder()
                         .title("Agent Hub (ARW) Service")
-                        .body(if is_up {
-                            "Service is online"
-                        } else {
-                            "Service is offline"
+                        .body(match phase {
+                            Phase::Online => "Service is online",
+                            Phase::Offline => "Service is offline",
+                            Phase::Starting => "Service is starting…",
+                            Phase::Unknown => "Service status changed",
                         })
                         .show();
                 }
