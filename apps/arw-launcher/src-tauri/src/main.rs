@@ -7,9 +7,11 @@ Run `cargo build -p arw-launcher --features launcher-linux-ui` or exclude the la
 
 use arw_core::util::env_bool;
 use arw_tauri::{plugin as arw_plugin, ServiceState};
+#[cfg(not(test))]
 use once_cell::sync::Lazy;
 use tauri::{Manager, WindowEvent};
 
+#[cfg(not(test))]
 static STARTING_MARKER: Lazy<std::sync::Mutex<Option<std::time::Instant>>> =
     Lazy::new(|| std::sync::Mutex::new(None));
 
